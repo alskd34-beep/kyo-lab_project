@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { StatusKey, TestRow, KpiItem } from '@shared/qc'
 import { Button } from '@frontend/components/ui/button'
 import { Card, CardContent } from '@frontend/components/ui/card'
@@ -13,18 +13,24 @@ import {
   TableRow,
 } from '@frontend/components/ui/table'
 import { Avatar, AvatarFallback } from '@frontend/components/ui/avatar'
-import Sidebar from '@frontend/components/dashboard/sidebar'
-import Chatbot from '@frontend/components/dashboard/chatbot'
+import { Calendar } from '@frontend/components/ui/calendar'
 import {
-  Bell,
-  ChevronDown,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@frontend/components/ui/popover'
+import { ko } from 'date-fns/locale'
+import { format, subMonths } from 'date-fns'
+import type { DateRange } from 'react-day-picker'
+import {
   Star,
-  Pin,
-  PinOff,
   Filter,
   Download,
-  Calendar,
+  Calendar as CalendarIcon,
   Search,
+  Pin,
+  PinOff,
+  X,
 } from 'lucide-react'
 
 // ─── Static Data ──────────────────────────────────────────────────────────────
@@ -48,7 +54,7 @@ const KPI_DATA: KpiItem[] = [
   { label: '평균처리일', value: '2.4', unit: '일',  sub: '처리 소요일',    accent: 'text-amber-600',   bg: 'bg-amber-50/60',    border: 'border-amber-100'  },
 ]
 
-const TABLE_DATA: TestRow[] = [
+const DEMO_TABLE_DATA: TestRow[] = [
   { id:1,  category:'완제품', type:'이화학시험',  product:'경옥고 프리미엄',        testNo:'QC-2024-0312', items:'pH, 점도, 비중',       contractor:'광동제약(주)', manager:'김수현', managerInit:'김', receiveDate:'2024.03.01', dueDate:'2024.03.15', status:'completed'  },
   { id:2,  category:'원료',   type:'미생물시험',  product:'비타500 원액',           testNo:'QC-2024-0318', items:'총균수, 대장균',       contractor:'광동제약(주)', manager:'박지민', managerInit:'박', receiveDate:'2024.03.05', dueDate:'2024.03.20', status:'reviewing'  },
   { id:3,  category:'완제품', type:'안정성시험',  product:'홍삼농축액 에브리타임',  testNo:'QC-2024-0325', items:'함량, 순도',           contractor:'광동제약(주)', manager:'이서연', managerInit:'이', receiveDate:'2024.03.08', dueDate:'2024.04.08', status:'inprogress' },
@@ -68,12 +74,53 @@ const AVATAR_COLORS: Record<string, string> = {
 export default function QCDashboard() {
   const [activeTab, setActiveTab]         = useState<string>('시험현황')
   const [pinnedTabs, setPinnedTabs]       = useState<Set<string>>(new Set(['시험현황', '제품시험']))
+  const [closedTabs, setClosedTabs]       = useState<Set<string>>(new Set())
   const [stickyHeader, setStickyHeader]   = useState(true)
   const [selectedRows, setSelectedRows]   = useState<Set<number>>(new Set())
   const [searchValue, setSearchValue]     = useState('')
-  const [dateFrom, setDateFrom]           = useState('2024-03-01')
-  const [dateTo, setDateTo]               = useState('2024-03-31')
-  const [activeNav, setActiveNav]         = useState('test-mgmt')
+  const [dateRange, setDateRange]         = useState<DateRange | undefined>(undefined)
+
+  useEffect(() => {
+    const today = new Date()
+    setDateRange({ from: subMonths(today, 1), to: today })
+  }, [])
+  const [tableData, setTableData]         = useState<TestRow[]>(DEMO_TABLE_DATA)
+  const [isLoading, setIsLoading]         = useState(false)
+  const [usingDemo, setUsingDemo]         = useState(true)
+
+  // ─── Fetch from API (fallback to demo data on error) ──────────────────────
+  useEffect(() => {
+    let cancelled = false
+    const params = new URLSearchParams()
+    if (dateRange?.from) params.set('from', format(dateRange.from, 'yyyy-MM-dd'))
+    if (dateRange?.to)   params.set('to',   format(dateRange.to,   'yyyy-MM-dd'))
+    if (searchValue)     params.set('search', searchValue)
+
+    setIsLoading(true)
+    fetch(`/api/tests?${params.toString()}`)
+      .then(async r => {
+        if (!r.ok) throw new Error(await r.text())
+        return r.json() as Promise<{ rows: TestRow[] }>
+      })
+      .then(({ rows }) => {
+        if (cancelled) return
+        if (rows.length > 0) {
+          setTableData(rows)
+          setUsingDemo(false)
+        } else {
+          setTableData(DEMO_TABLE_DATA)
+          setUsingDemo(true)
+        }
+      })
+      .catch(() => {
+        if (cancelled) return
+        setTableData(DEMO_TABLE_DATA)
+        setUsingDemo(true)
+      })
+      .finally(() => { if (!cancelled) setIsLoading(false) })
+
+    return () => { cancelled = true }
+  }, [dateRange, searchValue])
 
   const toggleTab = (tab: string) => {
     setPinnedTabs(prev => {
@@ -92,114 +139,123 @@ export default function QCDashboard() {
   }
 
   const toggleAll = () => {
-    setSelectedRows(selectedRows.size === TABLE_DATA.length ? new Set() : new Set(TABLE_DATA.map(r => r.id)))
+    setSelectedRows(selectedRows.size === tableData.length ? new Set() : new Set(tableData.map(r => r.id)))
   }
 
-  const filtered = TABLE_DATA.filter(
-    row =>
-      !searchValue ||
-      row.product.includes(searchValue) ||
-      row.testNo.includes(searchValue) ||
-      row.manager.includes(searchValue),
-  )
+  // 서버에서 이미 검색이 적용되지만, 데모 모드(서버 미연결)에서도 동작하도록 클라이언트 필터를 유지합니다.
+  const filtered = usingDemo
+    ? tableData.filter(
+        row =>
+          !searchValue ||
+          row.product.includes(searchValue) ||
+          row.testNo.includes(searchValue) ||
+          row.manager.includes(searchValue),
+      )
+    : tableData
 
-  // Sorted tabs: pinned first, then rest
+  const closeTab = (tab: string) => {
+    setClosedTabs(prev => {
+      const next = new Set(prev)
+      next.add(tab)
+      return next
+    })
+    if (activeTab === tab) {
+      const remaining = ALL_TABS.filter(t => t !== tab && !closedTabs.has(t))
+      if (remaining.length > 0) setActiveTab(remaining[0])
+    }
+  }
+
+  // Sorted tabs: pinned first, then rest. Hide closed tabs.
   const sortedTabs = [
-    ...ALL_TABS.filter(t => pinnedTabs.has(t)),
-    ...ALL_TABS.filter(t => !pinnedTabs.has(t)),
+    ...ALL_TABS.filter(t => pinnedTabs.has(t) && !closedTabs.has(t)),
+    ...ALL_TABS.filter(t => !pinnedTabs.has(t) && !closedTabs.has(t)),
   ]
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-100 font-sans">
-
-      {/* ── Sidebar ────────────────────────────────────────────────────────── */}
-      <Sidebar
-        activeItem={activeNav}
-        onNavigate={(navId) => setActiveNav(navId)}
-      />
-
-      {/* ── Main area ──────────────────────────────────────────────────────── */}
-      <div className="flex flex-1 flex-col overflow-hidden">
-
-        {/* ── Top bar ──────────────────────────────────────────────────────── */}
-        <header className="flex h-12 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-5 shadow-sm z-20">
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 leading-none">광동제약</p>
-            <h1 className="text-[14px] font-semibold text-slate-800 leading-tight mt-0.5">QC 시험 관리 시스템</h1>
-          </div>
-
-          <div className="flex items-center gap-2.5">
-            {/* Sticky toggle */}
-            <button
-              onClick={() => setStickyHeader(p => !p)}
-              title={stickyHeader ? '헤더 고정 해제' : '헤더 고정'}
-              className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs transition-colors ${
-                stickyHeader
-                  ? 'border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100'
-                  : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
-              }`}
-            >
-              {stickyHeader ? <Pin size={11} /> : <PinOff size={11} />}
-              <span>헤더 {stickyHeader ? '고정' : '해제'}</span>
-            </button>
-
-            <button className="relative rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors">
-              <Bell size={16} />
-              <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-red-500" />
-            </button>
-
-            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 cursor-pointer hover:bg-slate-100 transition-colors">
-              <Avatar className="h-6 w-6">
-                <AvatarFallback className="bg-blue-600 text-white text-[10px] font-bold">관</AvatarFallback>
-              </Avatar>
-              <span className="text-xs font-medium text-slate-700">관리자</span>
-              <ChevronDown size={12} className="text-slate-400" />
-            </div>
-          </div>
-        </header>
-
-        {/* ── Scrollable body ──────────────────────────────────────────────── */}
-        <div className="flex flex-1 flex-col overflow-y-auto">
+    <>
+      {/* ── Scrollable body ──────────────────────────────────────────────── */}
+      <div className="flex flex-1 flex-col">
 
           {/* ── KPI + Tab header (optionally sticky) ─────────────────────── */}
           <div className={`bg-white border-b border-slate-200 shadow-sm z-10 ${stickyHeader ? 'sticky top-0' : ''}`}>
 
             {/* Tabs */}
-            <div className="flex items-center gap-0 overflow-x-auto px-5 scrollbar-none border-b border-slate-100">
-              {sortedTabs.map(tab => {
-                const isPinned = pinnedTabs.has(tab)
-                const isActive = activeTab === tab
-                return (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={`
-                      group relative flex shrink-0 items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors
-                      ${isActive
-                        ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600 after:rounded-t-full'
-                        : 'text-slate-500 hover:text-slate-700'}
-                    `}
-                  >
-                    <span>{tab}</span>
-                    {tab === '일탈관리' && (
-                      <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-red-100 text-[10px] font-bold text-red-600">3</span>
-                    )}
-                    {/* Pin / Star toggle */}
+            <div className="flex items-center gap-0 px-5 border-b border-slate-100">
+              <div className="flex flex-1 items-center gap-0 overflow-x-auto scrollbar-none">
+                {sortedTabs.map(tab => {
+                  const isPinned = pinnedTabs.has(tab)
+                  const isActive = activeTab === tab
+                  return (
                     <button
-                      onClick={e => { e.stopPropagation(); toggleTab(tab) }}
-                      title={isPinned ? '즐겨찾기 해제' : '즐겨찾기'}
+                      key={tab}
+                      onClick={() => setActiveTab(tab)}
                       className={`
-                        ml-0.5 rounded p-0.5 transition-all
-                        ${isPinned
-                          ? 'text-amber-400 hover:text-amber-500'
-                          : 'text-transparent group-hover:text-slate-300 hover:!text-amber-400'}
+                        group relative flex shrink-0 items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors
+                        ${isActive
+                          ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600 after:rounded-t-full'
+                          : 'text-slate-500 hover:text-slate-700'}
                       `}
                     >
-                      <Star size={11} fill={isPinned ? 'currentColor' : 'none'} />
+                      <span>{tab}</span>
+                      {tab === '일탈관리' && (
+                        <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-red-100 text-[10px] font-bold text-red-600">3</span>
+                      )}
+                      {/* Pin / Star toggle */}
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={e => { e.stopPropagation(); toggleTab(tab) }}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            toggleTab(tab)
+                          }
+                        }}
+                        title={isPinned ? '즐겨찾기 해제' : '즐겨찾기'}
+                        className={`
+                          ml-0.5 inline-flex rounded p-0.5 transition-all cursor-pointer
+                          ${isPinned
+                            ? 'text-amber-400 hover:text-amber-500'
+                            : 'text-transparent group-hover:text-slate-300 hover:!text-amber-400'}
+                        `}
+                      >
+                        <Star size={11} fill={isPinned ? 'currentColor' : 'none'} />
+                      </span>
+                      {/* Close (X) button */}
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={e => { e.stopPropagation(); closeTab(tab) }}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            closeTab(tab)
+                          }
+                        }}
+                        title="탭 닫기"
+                        className="ml-0.5 inline-flex rounded p-0.5 text-transparent transition-all cursor-pointer group-hover:text-slate-400 hover:!bg-slate-100 hover:!text-slate-700"
+                      >
+                        <X size={11} />
+                      </span>
                     </button>
-                  </button>
-                )
-              })}
+                  )
+                })}
+              </div>
+              {/* Sticky header toggle — moved here from global header */}
+              <button
+                onClick={() => setStickyHeader(p => !p)}
+                title={stickyHeader ? '헤더 고정 해제' : '헤더 고정'}
+                className={`ml-2 shrink-0 flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition-colors ${
+                  stickyHeader
+                    ? 'border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100'
+                    : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
+                }`}
+              >
+                {stickyHeader ? <Pin size={11} /> : <PinOff size={11} />}
+                <span>헤더 {stickyHeader ? '고정' : '해제'}</span>
+              </button>
             </div>
 
             {/* KPI Cards */}
@@ -229,22 +285,33 @@ export default function QCDashboard() {
               {/* Toolbar */}
               <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-2.5">
                 {/* Date range */}
-                <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-600">
-                  <Calendar size={13} className="text-slate-400" />
-                  <input
-                    type="date"
-                    value={dateFrom}
-                    onChange={e => setDateFrom(e.target.value)}
-                    className="w-[96px] bg-transparent outline-none text-xs tabular-nums"
-                  />
-                  <span className="text-slate-300">~</span>
-                  <input
-                    type="date"
-                    value={dateTo}
-                    onChange={e => setDateTo(e.target.value)}
-                    className="w-[96px] bg-transparent outline-none text-xs tabular-nums"
-                  />
-                </div>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 transition-colors"
+                    >
+                      <CalendarIcon size={13} className="text-slate-400" />
+                      <span className="tabular-nums">
+                        {dateRange?.from ? format(dateRange.from, 'yyyy.MM.dd') : '시작일'}
+                      </span>
+                      <span className="text-slate-300">~</span>
+                      <span className="tabular-nums">
+                        {dateRange?.to ? format(dateRange.to, 'yyyy.MM.dd') : '종료일'}
+                      </span>
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-auto p-0">
+                    <Calendar
+                      mode="range"
+                      selected={dateRange}
+                      onSelect={setDateRange}
+                      numberOfMonths={2}
+                      locale={ko}
+                      defaultMonth={dateRange?.from}
+                    />
+                  </PopoverContent>
+                </Popover>
 
                 {/* Search */}
                 <div className="flex max-w-[240px] flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
@@ -281,7 +348,7 @@ export default function QCDashboard() {
                     <TableHead className="w-10 px-4">
                       <input
                         type="checkbox"
-                        checked={selectedRows.size === TABLE_DATA.length && TABLE_DATA.length > 0}
+                        checked={selectedRows.size === tableData.length && tableData.length > 0}
                         onChange={toggleAll}
                         className="cb-custom"
                       />
@@ -357,10 +424,16 @@ export default function QCDashboard() {
               {/* Footer */}
               <div className="flex items-center justify-between border-t border-slate-100 px-4 py-2.5 bg-slate-50/50">
                 <p className="text-xs text-slate-500">
+                  {isLoading && <span className="mr-2 text-slate-400">로딩 중…</span>}
                   총 <span className="font-semibold text-slate-700">{filtered.length}</span>건
                   {selectedRows.size > 0 && (
                     <span className="ml-2 text-blue-600">
                       · <span className="font-semibold">{selectedRows.size}</span>건 선택됨
+                    </span>
+                  )}
+                  {usingDemo && (
+                    <span className="ml-2 inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700 border border-amber-200">
+                      데모 모드
                     </span>
                   )}
                 </p>
@@ -368,11 +441,7 @@ export default function QCDashboard() {
               </div>
             </Card>
           </div>
-        </div>
       </div>
-
-      {/* ── Floating Chatbot ───────────────────────────────────────────────── */}
-      <Chatbot />
-    </div>
+    </>
   )
 }

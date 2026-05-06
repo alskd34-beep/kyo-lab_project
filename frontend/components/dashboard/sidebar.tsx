@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Home,
   FlaskConical,
@@ -126,6 +127,48 @@ const BOTTOM_NAV: NavItem[] = [
 
 const ALL_NAV = [...NAV_ITEMS, ...BOTTOM_NAV]
 
+// ─── Route map ────────────────────────────────────────────────────────────────
+// Maps nav IDs (top-level + sub) to actual app router paths.
+const PATH_MAP: Record<string, string> = {
+  home: '/home',
+  // 시험관리
+  'test-status': '/test-mgmt/test-status',
+  'test-reg':    '/test-mgmt/test-reg',
+  'test-result': '/test-mgmt/test-result',
+  'test-cert':   '/test-mgmt/test-cert',
+  'test-items':  '/test-mgmt/test-items',
+  // 제품시험
+  'prod-status': '/product-test/prod-status',
+  'prod-reg':    '/product-test/prod-reg',
+  'prod-std':    '/product-test/prod-std',
+  // 안정성시험
+  'stab-status': '/stability/stab-status',
+  'stab-plan':   '/stability/stab-plan',
+  'stab-report': '/stability/stab-report',
+  // 일탈관리
+  'oos':        '/deviation/oos',
+  'capa':       '/deviation/capa',
+  'inv-report': '/deviation/inv-report',
+  // 문서관리
+  'doc-cert':      '/documents/doc-cert',
+  'doc-std':       '/documents/doc-std',
+  'doc-sop':       '/documents/doc-sop',
+  'doc-checklist': '/documents/doc-checklist',
+  // 인사이트
+  'dash':       '/insights/dash',
+  'stats':      '/insights/stats',
+  'ins-report': '/insights/ins-report',
+  // 장비관리
+  'equip-operation': '/equipment/equip-operation',
+  'equip-backup':    '/equipment/equip-backup',
+  'equip-usage':     '/equipment/equip-usage',
+  'equip-ai-maint':  '/equipment/equip-ai-maint',
+  // 설정
+  'users':        '/settings/users',
+  'roles':        '/settings/roles',
+  'sys-settings': '/settings/sys-settings',
+}
+
 // ─── Props ────────────────────────────────────────────────────────────────────
 interface SidebarProps {
   activeItem?: string
@@ -134,10 +177,11 @@ interface SidebarProps {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function Sidebar({ activeItem = 'test-mgmt', onNavigate }: SidebarProps) {
+  const router = useRouter()
   const [openMenu,   setOpenMenu]   = useState<string | null>(activeItem)
   const [hoverMenu,  setHoverMenu]  = useState<string | null>(null)
   const [favorites,  setFavorites]  = useState<Set<string>>(new Set())
-  const [collapsed,  setCollapsed]  = useState(false)
+  const [panelOpen,  setPanelOpen]  = useState(true)
 
   const hoverTimer   = useRef<ReturnType<typeof setTimeout> | null>(null)
   const leaveTimer   = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -178,11 +222,23 @@ export default function Sidebar({ activeItem = 'test-mgmt', onNavigate }: Sideba
       setOpenMenu(null)
       setHoverMenu(null)
       onNavigate?.(item.id)
+      const path = PATH_MAP[item.id]
+      if (path) router.push(path)
       return
     }
     // Toggle: clicking active item closes it
-    setOpenMenu(prev => (prev === item.id ? null : item.id))
+    setOpenMenu(prev => {
+      const next = prev === item.id ? null : item.id
+      setPanelOpen(next !== null)
+      return next
+    })
     setHoverMenu(null)
+  }
+
+  const handleSubItemSelect = (navId: string, subId: string) => {
+    onNavigate?.(navId, subId)
+    const path = PATH_MAP[subId]
+    if (path) router.push(path)
   }
 
   const clearTimers = () => {
@@ -193,7 +249,10 @@ export default function Sidebar({ activeItem = 'test-mgmt', onNavigate }: Sideba
   const handleItemMouseEnter = (itemId: string, hasSubItems: boolean) => {
     clearTimers()
     if (hasSubItems && openMenu !== itemId) {
-      hoverTimer.current = setTimeout(() => setHoverMenu(itemId), 180)
+      hoverTimer.current = setTimeout(() => {
+        setHoverMenu(itemId)
+        setPanelOpen(true)
+      }, 180)
     }
   }
 
@@ -209,42 +268,58 @@ export default function Sidebar({ activeItem = 'test-mgmt', onNavigate }: Sideba
     leaveTimer.current = setTimeout(() => setHoverMenu(null), 300)
   }
 
-  const handleCollapse = () => {
-    setCollapsed(true)
-    setOpenMenu(null)
-    setHoverMenu(null)
+  const togglePanel = () => {
+    setPanelOpen(prev => {
+      const next = !prev
+      if (!next) {
+        setOpenMenu(null)
+        setHoverMenu(null)
+      }
+      return next
+    })
   }
 
   // Panel to display: explicit click wins over hover
   const visibleMenuId   = openMenu ?? hoverMenu
   const activeMenuData  = visibleMenuId ? ALL_NAV.find(n => n.id === visibleMenuId) : null
-  const isPanelOpen     = !!activeMenuData?.subItems && !collapsed
+  // Panel visibility controlled by user toggle
+  const isPanelOpen     = panelOpen
+
+  // Aggregated favorites across all categories (for the always-on favorites view)
+  const favoritesByCategory = ALL_NAV
+    .map(nav => ({
+      nav,
+      favItems: nav.subItems?.filter(si => favorites.has(si.id)) ?? [],
+    }))
+    .filter(group => group.favItems.length > 0)
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <>
-      {/* Collapsed toggle button */}
-      {collapsed && (
-        <button
-          onClick={() => setCollapsed(false)}
-          className="fixed left-0 top-1/2 z-50 -translate-y-1/2 flex h-10 w-5 items-center justify-center rounded-r-lg bg-slate-700 text-slate-300 shadow-xl hover:bg-slate-600 transition-colors"
-        >
-          <ChevronRight size={14} />
-        </button>
-      )}
 
       {/*
         ── Flex row wrapper ───────────────────────────────────────────────────
         Both the icon-rail and the submenu panel live here as flex siblings.
         The wrapper's total width expands/contracts → main content auto-adjusts.
       */}
-      <div ref={wrapperRef} className="flex h-full shrink-0 z-40">
+      <div ref={wrapperRef} className="relative flex h-full shrink-0 z-40">
+
+        {/* Floating expand button — visible when 2nd panel is collapsed */}
+        {!isPanelOpen && (
+          <button
+            onClick={togglePanel}
+            title="패널 펼치기"
+            className="absolute left-[65px] top-1/2 z-50 -translate-y-1/2 flex h-10 w-5 items-center justify-center rounded-r-lg bg-slate-700 text-slate-300 shadow-xl hover:bg-slate-600 transition-colors"
+          >
+            <ChevronRight size={14} />
+          </button>
+        )}
 
         {/* ── Icon rail ──────────────────────────────────────────────────── */}
         <aside
           onMouseLeave={handleSidebarMouseLeave}
           className="flex flex-col shrink-0 h-full transition-[width] duration-300 overflow-hidden"
-          style={{ width: collapsed ? 0 : 65, backgroundColor: '#1a1f2e' } as React.CSSProperties}
+          style={{ width: 65, backgroundColor: '#1a1f2e' } as React.CSSProperties}
         >
           {/* Logo */}
           <div className="flex items-center justify-center py-3.5 shrink-0">
@@ -313,21 +388,6 @@ export default function Sidebar({ activeItem = 'test-mgmt', onNavigate }: Sideba
               </button>
             ))}
 
-            <button
-              onClick={handleCollapse}
-              title="사이드바 접기"
-              className="flex w-full flex-col items-center gap-1 rounded-xl px-1 py-2 text-slate-600 hover:bg-white/7 hover:text-slate-400 transition-colors"
-            >
-              <ChevronLeft size={15} />
-              <span className="text-[9px] leading-none">접기</span>
-            </button>
-
-            <button
-              title="관리자"
-              className="mt-1 flex h-8 w-8 items-center justify-center rounded-full bg-blue-600/80 text-[11px] font-bold text-white hover:bg-blue-600 transition-colors"
-            >
-              관
-            </button>
           </div>
         </aside>
 
@@ -340,73 +400,69 @@ export default function Sidebar({ activeItem = 'test-mgmt', onNavigate }: Sideba
         >
           {/* Fixed-width inner prevents layout jitter during transition */}
           <div className="flex flex-col h-full" style={{ width: 210 }}>
-            {activeMenuData && (
-              <>
-                {/* Panel header */}
-                <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3.5 shrink-0">
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-5 w-5 items-center justify-center text-slate-400">
-                      {ALL_NAV.find(n => n.id === visibleMenuId)?.icon}
-                    </span>
-                    <span className="text-sm font-semibold text-slate-800">{activeMenuData.label}</span>
-                  </div>
-                  <button
-                    onClick={() => { setOpenMenu(null); setHoverMenu(null) }}
-                    className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
-                  >
-                    <X size={13} />
-                  </button>
-                </div>
+            {/* Panel header — always shows. Title reflects selected menu, defaults to 즐겨찾기 */}
+            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3.5 shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="flex h-5 w-5 items-center justify-center text-slate-400">
+                  {activeMenuData ? activeMenuData.icon : <Star size={14} fill="currentColor" className="text-amber-400" />}
+                </span>
+                <span className="text-sm font-semibold text-slate-800">
+                  {activeMenuData ? activeMenuData.label : '즐겨찾기'}
+                </span>
+              </div>
+              <button
+                onClick={() => { setOpenMenu(null); setHoverMenu(null); setPanelOpen(false) }}
+                title="패널 닫기"
+                className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+              >
+                <X size={13} />
+              </button>
+            </div>
 
-                <div className="flex-1 overflow-y-auto py-2 px-2">
-                  {/* Favorites section */}
-                  {(() => {
-                    const favItems = activeMenuData.subItems!.filter(si => favorites.has(si.id))
-                    if (!favItems.length) return null
-                    return (
-                      <div className="mb-1">
-                        <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-                          즐겨찾기
-                        </p>
-                        {favItems.map(sub => (
-                          <SubItemRow
-                            key={`fav-${sub.id}`}
-                            sub={sub}
-                            isFav
-                            onFavToggle={toggleFavorite}
-                            onSelect={() => onNavigate?.(activeMenuData.id, sub.id)}
-                          />
-                        ))}
-                        <div className="my-2 mx-2 border-t border-slate-100" />
-                      </div>
-                    )
-                  })()}
+            <div className="flex-1 overflow-y-auto py-2 px-2">
+              {/* ── Favorites: always visible, shared across all menus ──────── */}
+              <div className="mb-1">
+                <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+                  즐겨찾기
+                </p>
+                {favoritesByCategory.length === 0 ? (
+                  <p className="px-2 py-1.5 text-[11px] text-slate-400">
+                    별표를 눌러 즐겨찾기에 추가하세요
+                  </p>
+                ) : (
+                  favoritesByCategory.map(({ nav, favItems }) =>
+                    favItems.map(sub => (
+                      <SubItemRow
+                        key={`fav-${sub.id}`}
+                        sub={sub}
+                        isFav
+                        onFavToggle={toggleFavorite}
+                        onSelect={() => handleSubItemSelect(nav.id, sub.id)}
+                      />
+                    ))
+                  )
+                )}
+                <div className="my-2 mx-2 border-t border-slate-100" />
+              </div>
 
-                  {/* All sub-items */}
-                  {(() => {
-                    const hasFavs = activeMenuData.subItems!.some(si => favorites.has(si.id))
-                    return (
-                      <div>
-                        {hasFavs && (
-                          <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-                            전체
-                          </p>
-                        )}
-                        {activeMenuData.subItems!.map(sub => (
-                          <SubItemRow
-                            key={sub.id}
-                            sub={sub}
-                            isFav={favorites.has(sub.id)}
-                            onFavToggle={toggleFavorite}
-                            onSelect={() => onNavigate?.(activeMenuData.id, sub.id)}
-                          />
-                        ))}
-                      </div>
-                    )
-                  })()}
+              {/* ── Selected menu's sub-items (when a menu is open) ─────────── */}
+              {activeMenuData?.subItems && (
+                <div>
+                  <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+                    {activeMenuData.label}
+                  </p>
+                  {activeMenuData.subItems.map(sub => (
+                    <SubItemRow
+                      key={sub.id}
+                      sub={sub}
+                      isFav={favorites.has(sub.id)}
+                      onFavToggle={toggleFavorite}
+                      onSelect={() => handleSubItemSelect(activeMenuData.id, sub.id)}
+                    />
+                  ))}
                 </div>
-              </>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -424,17 +480,19 @@ interface SubItemRowProps {
 
 function SubItemRow({ sub, isFav, onFavToggle, onSelect }: SubItemRowProps) {
   return (
-    <button
-      onClick={onSelect}
-      className="group flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-slate-50 active:bg-slate-100"
-    >
-      <span className="text-sm text-slate-600 group-hover:text-slate-900 transition-colors">
-        {sub.label}
-      </span>
+    <div className="group relative flex w-full items-center rounded-lg transition-colors hover:bg-slate-50 active:bg-slate-100">
+      <button
+        onClick={onSelect}
+        className="flex-1 min-w-0 rounded-lg px-2.5 py-2 text-left"
+      >
+        <span className="text-sm text-slate-600 group-hover:text-slate-900 transition-colors">
+          {sub.label}
+        </span>
+      </button>
       <button
         onClick={e => onFavToggle(sub.id, e)}
         className={`
-          shrink-0 rounded p-0.5 transition-all
+          shrink-0 rounded p-0.5 mr-2 transition-all
           ${isFav
             ? 'text-amber-400 hover:text-amber-500'
             : 'text-transparent group-hover:text-slate-300 hover:!text-amber-400'}
@@ -442,6 +500,6 @@ function SubItemRow({ sub, isFav, onFavToggle, onSelect }: SubItemRowProps) {
       >
         <Star size={12} fill={isFav ? 'currentColor' : 'none'} />
       </button>
-    </button>
+    </div>
   )
 }

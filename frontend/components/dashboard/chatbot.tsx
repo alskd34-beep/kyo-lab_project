@@ -36,9 +36,42 @@ export default function Chatbot() {
   }, [messages])
 
   useEffect(() => {
-    if (open) {
-      setTimeout(() => inputRef.current?.focus(), 100)
-      if (messages.length === 0) {
+    if (!open) return
+    setTimeout(() => inputRef.current?.focus(), 100)
+    if (messages.length > 0) return
+
+    // 가장 최근 대화 복원 시도. 실패하거나 이력이 없으면 환영 메시지.
+    let cancelled = false
+    ;(async () => {
+      try {
+        const r = await fetch('/api/chat/history')
+        if (!r.ok) throw new Error()
+        const { conversations } = (await r.json()) as {
+          conversations: { id: string; difyConvId: string | null }[]
+        }
+        const latest = conversations?.[0]
+        if (!latest) throw new Error('no history')
+
+        const m = await fetch(`/api/chat/history?conversationId=${latest.id}`)
+        if (!m.ok) throw new Error()
+        const { messages: stored } = (await m.json()) as {
+          messages: { id: string; role: 'user' | 'bot'; content: string; createdAt: string }[]
+        }
+        if (cancelled || stored.length === 0) throw new Error('empty')
+
+        setMessages(
+          stored.map(s => ({
+            id:      s.id,
+            role:    s.role,
+            content: s.content,
+            time:    new Date(s.createdAt).toLocaleTimeString('ko-KR', {
+              hour: '2-digit', minute: '2-digit', hour12: false,
+            }),
+          })),
+        )
+        if (latest.difyConvId) setConversationId(latest.difyConvId)
+      } catch {
+        if (cancelled) return
         setMessages([
           {
             id: 'welcome',
@@ -49,7 +82,9 @@ export default function Chatbot() {
           },
         ])
       }
-    }
+    })()
+
+    return () => { cancelled = true }
   }, [open])
 
   const sendMessage = async () => {
@@ -91,6 +126,8 @@ export default function Chatbot() {
       const reader = res.body!.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
+      let localConvId = conversationId
+      let localBotText = ''
 
       while (true) {
         const { value, done } = await reader.read()
@@ -110,17 +147,32 @@ export default function Chatbot() {
               conversation_id?: string
             }
             if (parsed.event === 'message' && parsed.answer) {
+              localBotText += parsed.answer
               setMessages(prev =>
                 prev.map(m =>
                   m.id === botId ? { ...m, content: m.content + parsed.answer } : m,
                 ),
               )
             }
-            if (parsed.conversation_id && !conversationId) {
+            if (parsed.conversation_id && !localConvId) {
+              localConvId = parsed.conversation_id
               setConversationId(parsed.conversation_id)
             }
           } catch {}
         }
+      }
+
+      // 대화 이력 영속화 (Supabase 미연결 시 서버에서 무시됨)
+      if (localBotText && localConvId) {
+        fetch('/api/chat/history', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            difyConvId: localConvId,
+            userText:   text,
+            botText:    localBotText,
+          }),
+        }).catch(() => {})
       }
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
