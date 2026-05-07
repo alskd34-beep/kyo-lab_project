@@ -23,6 +23,38 @@ export async function listBatches(q: {
   }))
 }
 
+export async function createBatch(input: {
+  productId?: string
+  spec?: string
+  batchNo: string
+  dosageFormId?: string
+  packagingPlannedDate?: string
+  recordReviewDeadline?: string
+  qcPlannedCompletionDate?: string
+  status?: string
+}): Promise<BatchSummary> {
+  const { data, error } = await supabase
+    .from('production_batches')
+    .insert({
+      product_id:                   input.productId,
+      spec:                         input.spec,
+      batch_no:                     input.batchNo,
+      dosage_form_id:               input.dosageFormId,
+      packaging_planned_date:       input.packagingPlannedDate,
+      record_review_deadline:       input.recordReviewDeadline,
+      qc_planned_completion_date:   input.qcPlannedCompletionDate,
+      status:                       input.status ?? 'pending',
+    })
+    .select('*')
+    .single()
+  if (error) throw error
+  return {
+    ...(data as any),
+    dDayRecord: calcDday(data.record_review_deadline),
+    dDayQc:    calcDday(data.qc_planned_completion_date),
+  }
+}
+
 export async function getDashboardStats(): Promise<DashboardStats> {
   const { data, error } = await supabase
     .from('production_batches')
