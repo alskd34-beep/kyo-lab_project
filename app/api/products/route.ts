@@ -1,5 +1,8 @@
 import { NextRequest } from 'next/server'
-import { listProducts, createProduct, updateProduct, deleteProduct } from '@backend/services/products'
+import {
+  listProducts, createProduct, updateProduct, deleteProduct,
+  listProductCategories, listProductClassifications,
+} from '@backend/services/products'
 
 export const runtime = 'nodejs'
 
@@ -10,7 +13,12 @@ export async function GET(req: NextRequest) {
       search: sp.get('search') ?? undefined,
       limit: sp.get('limit') ? Number(sp.get('limit')) : undefined,
     })
-    return Response.json({ rows })
+    // 옵션 데이터도 함께 반환
+    const [categories, classifications] = await Promise.all([
+      listProductCategories(),
+      listProductClassifications(),
+    ])
+    return Response.json({ rows, categories, classifications })
   } catch (err) {
     const msg = err instanceof Error ? err.message : '서버 오류'
     return Response.json({ error: msg }, { status: 500 })
@@ -21,12 +29,16 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const row = await createProduct({
-      productCode: body.productCode,
-      name: body.name,
-      nameAlt: body.nameAlt,
-      unit: body.unit,
-      productType: body.productType,
-      packageSpec: body.packageSpec,
+      productCode:      body.productCode,
+      name:             body.name,
+      nameAlt:          body.nameAlt,
+      abbreviation:     body.abbreviation,
+      difficulty:       body.difficulty,
+      categoryId:       body.categoryId,
+      classificationId: body.classificationId,
+      unit:             body.unit,
+      productType:      body.productType,
+      packageSpec:      body.packageSpec,
     })
     return Response.json({ row }, { status: 201 })
   } catch (err) {
