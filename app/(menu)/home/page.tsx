@@ -117,10 +117,10 @@ export default function HomePage() {
   ]
 
   return (
-    <div className="flex flex-col gap-4 p-5 min-h-0">
+    <div className="flex flex-col gap-4 p-3 md:p-5 min-h-0">
 
       {/* ── KPI 카드 행 ──────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-6 gap-2.5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
         {KPI_CARDS.map(kpi => (
           <Card
             key={kpi.label}
@@ -139,7 +139,7 @@ export default function HomePage() {
       </div>
 
       {/* ── 중단: 기한임박 배치 + 상태 요약 ──────────────────────────── */}
-      <div className="flex gap-4 min-h-0">
+      <div className="flex flex-col lg:flex-row gap-4 min-h-0">
 
         {/* 기한 임박 배치 테이블 (60%) */}
         <Card className="flex-[3] border border-slate-200 shadow-none rounded-xl bg-white overflow-hidden py-0">
@@ -246,7 +246,7 @@ export default function HomePage() {
           <span className="text-sm font-semibold text-slate-800">오늘의 시험 배정 현황</span>
         </div>
         <CardContent className="px-4 py-3">
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-4">
             {DEMO_TESTERS.map(tester => (
               <div
                 key={tester.name}

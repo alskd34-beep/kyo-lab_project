@@ -259,7 +259,7 @@ export default function QCDashboard() {
             </div>
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-7 gap-2.5 px-5 py-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2.5 px-3 md:px-5 py-3">
               {KPI_DATA.map(kpi => (
                 <Card
                   key={kpi.label}
@@ -279,11 +279,11 @@ export default function QCDashboard() {
           </div>
 
           {/* ── Table section ────────────────────────────────────────────── */}
-          <div className="flex-1 p-5">
+          <div className="flex-1 p-3 md:p-5">
             <Card className="border border-slate-200 shadow-none rounded-xl bg-white py-0 overflow-hidden">
 
               {/* Toolbar */}
-              <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-2.5">
+              <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-4 py-2.5">
                 {/* Date range */}
                 <Popover>
                   <PopoverTrigger asChild>
@@ -314,7 +314,7 @@ export default function QCDashboard() {
                 </Popover>
 
                 {/* Search */}
-                <div className="flex max-w-[240px] flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+                <div className="flex w-full md:max-w-[240px] md:flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
                   <Search size={13} className="text-slate-400 shrink-0" />
                   <input
                     type="text"
@@ -342,6 +342,7 @@ export default function QCDashboard() {
               </div>
 
               {/* Table */}
+              <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50/80 hover:bg-slate-50/80 border-slate-100">
@@ -420,6 +421,7 @@ export default function QCDashboard() {
                   })}
                 </TableBody>
               </Table>
+              </div>
 
               {/* Footer */}
               <div className="flex items-center justify-between border-t border-slate-100 px-4 py-2.5 bg-slate-50/50">

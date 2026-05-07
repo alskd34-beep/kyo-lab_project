@@ -183,10 +183,14 @@ const PATH_MAP: Record<string, string> = {
 interface SidebarProps {
   activeItem?: string
   onNavigate?: (navId: string, subId?: string) => void
+  /** Mobile drawer open state. Ignored on lg+ breakpoint (always visible). */
+  isOpen?: boolean
+  /** Called when the drawer requests close (backdrop click, ESC, sub-item nav). */
+  onClose?: () => void
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
-export default function Sidebar({ activeItem = 'test-mgmt', onNavigate }: SidebarProps) {
+export default function Sidebar({ activeItem = 'test-mgmt', onNavigate, isOpen = false, onClose }: SidebarProps) {
   const router = useRouter()
   const [openMenu,   setOpenMenu]   = useState<string | null>(activeItem)
   const [hoverMenu,  setHoverMenu]  = useState<string | null>(null)
@@ -234,6 +238,7 @@ export default function Sidebar({ activeItem = 'test-mgmt', onNavigate }: Sideba
       onNavigate?.(item.id)
       const path = PATH_MAP[item.id]
       if (path) router.push(path)
+      onClose?.()
       return
     }
     // Toggle: clicking active item closes it
@@ -249,6 +254,7 @@ export default function Sidebar({ activeItem = 'test-mgmt', onNavigate }: Sideba
     onNavigate?.(navId, subId)
     const path = PATH_MAP[subId]
     if (path) router.push(path)
+    onClose?.()
   }
 
   const clearTimers = () => {
@@ -311,8 +317,21 @@ export default function Sidebar({ activeItem = 'test-mgmt', onNavigate }: Sideba
         ── Flex row wrapper ───────────────────────────────────────────────────
         Both the icon-rail and the submenu panel live here as flex siblings.
         The wrapper's total width expands/contracts → main content auto-adjusts.
+
+        Responsive:
+        - lg+ (≥1024px): inline flex sibling — pushes main content (existing behavior).
+        - <lg: fixed left drawer, slides in/out via `isOpen` prop, z-50 overlay.
       */}
-      <div ref={wrapperRef} className="relative flex h-full shrink-0 z-40">
+      <div
+        ref={wrapperRef}
+        className={`
+          flex h-full shrink-0
+          max-lg:fixed max-lg:inset-y-0 max-lg:left-0 max-lg:z-50
+          max-lg:transition-transform max-lg:duration-300 max-lg:ease-out
+          ${isOpen ? 'max-lg:translate-x-0' : 'max-lg:-translate-x-full'}
+          lg:relative lg:translate-x-0 lg:z-40
+        `}
+      >
 
         {/* Floating expand button — visible when 2nd panel is collapsed */}
         {!isPanelOpen && (

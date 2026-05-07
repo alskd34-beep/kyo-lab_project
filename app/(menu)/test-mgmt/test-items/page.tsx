@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { Trash2, Plus, Search } from 'lucide-react'
+import { Trash2, Plus, Search, ChevronLeft } from 'lucide-react'
 import { Badge } from '@frontend/components/ui/badge'
 import { Button } from '@frontend/components/ui/button'
 import {
@@ -222,7 +222,7 @@ export default function TestItemsPage() {
   return (
     <div className="flex flex-1 min-h-0 h-full">
       {/* ── Left panel: product selector ──────────────────────────────────────── */}
-      <div className="flex w-72 shrink-0 flex-col border-r border-slate-200 bg-white">
+      <div className={`${selectedProduct ? 'hidden md:flex' : 'flex'} w-full md:w-72 shrink-0 flex-col border-r border-slate-200 bg-white`}>
         <div className="border-b border-slate-100 px-4 py-3 shrink-0">
           <p className="text-sm font-semibold text-slate-700 mb-2.5">품목 선택</p>
           <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
@@ -279,7 +279,7 @@ export default function TestItemsPage() {
       </div>
 
       {/* ── Right panel: linked test items ────────────────────────────────────── */}
-      <div className="flex flex-1 flex-col bg-slate-50 p-5 gap-4 overflow-auto">
+      <div className={`${selectedProduct ? 'flex' : 'hidden md:flex'} flex-1 flex-col bg-slate-50 p-4 md:p-5 gap-4 overflow-auto`}>
         {!selectedProduct ? (
           <div className="flex flex-1 items-center justify-center">
             <div className="text-center text-slate-400">
@@ -288,7 +288,14 @@ export default function TestItemsPage() {
           </div>
         ) : (
           <>
-            <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setSelectedProduct(null)}
+              className="md:hidden inline-flex items-center gap-1 self-start rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50"
+            >
+              <ChevronLeft size={13} /> 목록으로
+            </button>
+            <div className="flex items-center gap-3 flex-wrap">
               <div className="flex-1 min-w-0">
                 <p className="text-[10px] text-slate-500 font-mono mb-0.5">{selectedProduct.productCode}</p>
                 <h2 className="text-base font-semibold text-slate-800 truncate">{selectedProduct.name}</h2>

@@ -229,17 +229,26 @@ export default function Chatbot() {
         )}
       </button>
 
-      {/* ── Chat Panel ────────────────────────────────────────────────────── */}
+      {/* ── Chat Panel ──────────────────────────────────────────────────────
+          Responsive layout:
+          - Mobile (<768px):  full-screen modal (inset-0).
+          - Tablet (md, ≥768): larger floating panel (440 x 70vh, capped 600px).
+          - Desktop (lg, ≥1024): preserves original 360x560 side-panel layout.
+          Visibility is driven by `open` via opacity/transform; sizing is CSS-driven.
+      */}
       <div
-        className="fixed bottom-24 right-6 z-[55] flex flex-col overflow-hidden rounded-2xl bg-white shadow-2xl transition-all duration-300"
+        className={`
+          fixed z-[55] flex flex-col overflow-hidden bg-white shadow-2xl transition-all duration-300
+          inset-0 rounded-none border-0
+          md:inset-auto md:bottom-24 md:right-6 md:rounded-2xl md:border md:border-slate-200
+          md:w-[440px] md:h-[70vh] md:max-h-[600px]
+          lg:w-[360px] lg:h-auto lg:max-h-[560px]
+        `}
         style={{
-          width: 360,
-          maxHeight: open ? 560 : 0,
           opacity: open ? 1 : 0,
           pointerEvents: open ? 'all' : 'none',
           transform: open ? 'translateY(0) scale(1)' : 'translateY(16px) scale(0.97)',
           transformOrigin: 'bottom right',
-          border: '1px solid #e2e8f0',
         }}
       >
         {/* Header */}

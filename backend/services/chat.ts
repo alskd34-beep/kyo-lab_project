@@ -145,6 +145,35 @@ async function buildProductBlock(p: ProductLite): Promise<string> {
 }
 
 async function buildTesterBlock(t: TesterLite): Promise<string> {
+  // 기본 정보 (단독/2인 가능 여부)
+  const { data: testerMeta } = await supabase
+    .from('testers')
+    .select('can_solo, can_duo, is_active')
+    .eq('id', t.id)
+    .maybeSingle()
+
+  // 역량 매트릭스
+  const { data: caps } = await supabase
+    .from('tester_capability_matrix')
+    .select('capability_id, proficiency_level')
+    .eq('tester_id', t.id)
+
+  const capRows = caps ?? []
+  const capIds  = capRows.map(c => c.capability_id as string)
+  const { data: capMeta } = capIds.length
+    ? await supabase.from('test_capabilities').select('id, name, code').in('id', capIds)
+    : { data: [] as { id: string; name: string; code: string }[] }
+  const capNameById = new Map<string, string>(
+    (capMeta ?? []).map(c => [c.id as string, c.name as string]),
+  )
+  const grouped: Record<string, string[]> = { O: [], Y: [], N: [], X: [] }
+  for (const r of capRows) {
+    const lv = (r.proficiency_level as string) ?? 'X'
+    const name = capNameById.get(r.capability_id as string)
+    if (!name) continue
+    if (grouped[lv]) grouped[lv].push(name)
+  }
+
   // 현재 할당된 업무
   const { data: assigns } = await supabase
     .from('batch_test_assignments')
@@ -155,8 +184,31 @@ async function buildTesterBlock(t: TesterLite): Promise<string> {
     .limit(20)
 
   const rows = assigns ?? []
+  const headerLines: string[] = []
+  headerLines.push(`### 시험자: ${t.name} (사번 ${t.employee_no})`)
+  if (testerMeta) {
+    const flags: string[] = []
+    if (testerMeta.can_solo) flags.push('단독시험 가능')
+    if (testerMeta.can_duo)  flags.push('2인시험 가능')
+    if (!testerMeta.is_active) flags.push('비활성')
+    if (flags.length) headerLines.push(`- 자격: ${flags.join(', ')}`)
+  }
+  // 역량 요약 (범례: O=우수, Y=가능, N=불가, X=미평가)
+  const capSummary: string[] = []
+  if (grouped.O.length) capSummary.push(`  · 우수(O) ${grouped.O.length}종: ${grouped.O.join(', ')}`)
+  if (grouped.Y.length) capSummary.push(`  · 가능(Y) ${grouped.Y.length}종: ${grouped.Y.join(', ')}`)
+  if (grouped.N.length) capSummary.push(`  · 불가(N) ${grouped.N.length}종: ${grouped.N.join(', ')}`)
+  if (grouped.X.length) capSummary.push(`  · 미평가(X) ${grouped.X.length}종`)
+  if (capSummary.length) {
+    headerLines.push(`- 역량 매트릭스 (총 ${capRows.length}종):`)
+    headerLines.push(...capSummary)
+  } else {
+    headerLines.push(`- 역량 매트릭스: 등록된 항목 없음`)
+  }
+
   if (rows.length === 0) {
-    return `### 시험자: ${t.name} (사번 ${t.employee_no})\n- 현재 할당된(진행중·대기·보류) 업무 없음`
+    headerLines.push(`- 현재 할당된(진행중·대기·보류) 업무 없음`)
+    return headerLines.join('\n')
   }
 
   // 배치/시험항목 보강
@@ -183,8 +235,7 @@ async function buildTesterBlock(t: TesterLite): Promise<string> {
     (prodRows ?? []).map(p => [p.id as string, { name: p.name as string, product_code: p.product_code as string }]),
   )
 
-  const lines: string[] = []
-  lines.push(`### 시험자: ${t.name} (사번 ${t.employee_no})`)
+  const lines: string[] = [...headerLines]
   lines.push(`- 현재 할당된 업무 ${rows.length}건:`)
   for (const r of rows) {
     const b = batchById.get(r.batch_id as string)

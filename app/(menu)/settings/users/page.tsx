@@ -50,15 +50,15 @@ export default function UsersAdminPage() {
   }
 
   return (
-    <div className="p-8">
-      <div className="mb-4 flex items-center justify-between">
+    <div className="p-3 md:p-8">
+      <div className="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
         <div>
           <h1 className="text-lg font-semibold text-slate-800">사용자 관리</h1>
           <p className="text-xs text-slate-500">총 {users.length}명</p>
         </div>
         <button
           onClick={() => setCreating(true)}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 w-full md:w-auto"
         >
           <UserPlus size={13} />
           사용자 추가
@@ -76,7 +76,7 @@ export default function UsersAdminPage() {
         />
       )}
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-200 bg-white">
         <table className="w-full text-sm">
           <thead className="bg-slate-50/80 text-[11px] uppercase tracking-wide text-slate-500">
             <tr>
@@ -155,7 +155,7 @@ function CreateForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: 
   }
 
   return (
-    <form onSubmit={submit} className="mb-4 grid grid-cols-5 gap-2 rounded-lg border border-blue-200 bg-blue-50/40 p-3 text-xs">
+    <form onSubmit={submit} className="mb-4 grid grid-cols-1 md:grid-cols-5 gap-2 rounded-lg border border-blue-200 bg-blue-50/40 p-3 text-xs">
       <input className="rounded border border-slate-200 px-2 py-1.5 bg-white" placeholder="아이디" value={username} onChange={e => setU(e.target.value)} />
       <input className="rounded border border-slate-200 px-2 py-1.5 bg-white" placeholder="비밀번호" type="password" value={password} onChange={e => setP(e.target.value)} />
       <input className="rounded border border-slate-200 px-2 py-1.5 bg-white" placeholder="이름" value={displayName} onChange={e => setD(e.target.value)} />
@@ -167,7 +167,7 @@ function CreateForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: 
         <button type="submit" disabled={busy || !username || !password} className="flex-1 rounded bg-blue-600 px-2 py-1.5 text-white disabled:opacity-50">생성</button>
         <button type="button" onClick={onCancel} className="rounded border border-slate-200 bg-white px-2 py-1.5"><X size={12} /></button>
       </div>
-      {err && <p className="col-span-5 text-red-600">{err}</p>}
+      {err && <p className="md:col-span-5 text-red-600">{err}</p>}
     </form>
   )
 }

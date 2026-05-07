@@ -203,9 +203,9 @@ export default function TestMasterPage() {
   const ALL_TABS = ['전체', ...CATEGORIES] as const
 
   return (
-    <div className="flex flex-1 flex-col p-5 gap-4">
+    <div className="flex flex-1 flex-col p-3 md:p-5 gap-4">
       {/* Toolbar */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-lg font-semibold text-slate-800 shrink-0">시험항목 마스터</h1>
         <Badge variant="secondary" className="text-xs">
           {filtered.length}건
@@ -217,7 +217,7 @@ export default function TestMasterPage() {
             placeholder="시험항목명 검색..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="pl-9 h-9 w-56 text-sm"
+            className="pl-9 h-9 w-full md:w-56 text-sm"
           />
         </div>
         <Button

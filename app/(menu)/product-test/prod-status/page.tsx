@@ -185,7 +185,7 @@ export default function ProdStatusPage() {
 
       {/* KPI */}
       <div className="sticky top-0 z-10 border-b border-slate-200 bg-white shadow-sm">
-        <div className="grid grid-cols-6 gap-2.5 px-5 py-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 md:gap-2.5 px-3 md:px-5 py-3">
           {KPI_CARDS.map(kpiCard => (
             <Card
               key={kpiCard.label}
@@ -205,11 +205,11 @@ export default function ProdStatusPage() {
       </div>
 
       {/* Table Section */}
-      <div className="flex-1 p-5">
+      <div className="flex-1 p-3 md:p-5">
         <Card className="border border-slate-200 shadow-none rounded-xl bg-white py-0 overflow-hidden">
 
           {/* Toolbar */}
-          <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-2.5 flex-wrap">
+          <div className="flex flex-col md:flex-row md:items-center gap-2 border-b border-slate-100 px-3 md:px-4 py-2.5 md:flex-wrap">
             {/* Date range */}
             <Popover>
               <PopoverTrigger asChild>
@@ -240,7 +240,7 @@ export default function ProdStatusPage() {
             </Popover>
 
             {/* Status filter buttons */}
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 flex-wrap">
               {STATUS_FILTERS.map(f => (
                 <button
                   key={f}
@@ -258,7 +258,7 @@ export default function ProdStatusPage() {
             </div>
 
             {/* Search */}
-            <div className="flex max-w-[220px] flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+            <div className="flex w-full md:max-w-[220px] md:flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
               <Search size={13} className="text-slate-400 shrink-0" />
               <input
                 type="text"
@@ -269,7 +269,7 @@ export default function ProdStatusPage() {
               />
             </div>
 
-            <div className="ml-auto flex items-center gap-1.5">
+            <div className="md:ml-auto flex items-center gap-1.5">
               <Button size="sm" variant="outline" className="h-7 gap-1.5 px-3 text-xs text-emerald-600 border-emerald-200 hover:bg-emerald-50 rounded-lg shadow-none">
                 <Download size={12} />
                 Excel
@@ -277,7 +277,8 @@ export default function ProdStatusPage() {
             </div>
           </div>
 
-          {/* Table */}
+          {/* Table (desktop/tablet) */}
+          <div className="hidden md:block overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow className="bg-slate-50/80 hover:bg-slate-50/80 border-slate-100">
@@ -341,9 +342,61 @@ export default function ProdStatusPage() {
               })}
             </TableBody>
           </Table>
+          </div>
+
+          {/* Mobile cards */}
+          <div className="md:hidden flex flex-col gap-2 p-3">
+            {filtered.length === 0 ? (
+              <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-400">데이터가 없습니다.</div>
+            ) : (
+              filtered.map(row => {
+                const isSelected = selectedRows.has(row.id)
+                const statusCfg = STATUS_CONFIG[row.status]
+                return (
+                  <div
+                    key={row.id}
+                    onClick={() => toggleRow(row.id)}
+                    className={`rounded-xl border p-3 transition-colors ${
+                      isSelected ? 'bg-blue-50/60 border-blue-200' : 'bg-white border-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleRow(row.id)}
+                            onClick={e => e.stopPropagation()}
+                            className="cb-custom"
+                          />
+                          <span className="font-mono text-[11px] text-slate-500">{row.batch_no}</span>
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusCfg.cls}`}>
+                            {statusCfg.label}
+                          </span>
+                          <DDayCell dDayQc={row.dDayQc} status={row.status} />
+                        </div>
+                        <div className="mt-1 text-sm font-medium text-slate-800 break-words">{row.product_name}</div>
+                        <div className="text-[11px] text-slate-500">
+                          <span className="font-mono">{row.product_code}</span>
+                          {' · '}{row.spec}
+                          {' · '}{row.dosage_form}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] text-slate-500 border-t border-slate-100 pt-2 font-mono">
+                      <div><span className="text-slate-400 font-sans">포장일:</span> {row.packaging_date}</div>
+                      <div><span className="text-slate-400 font-sans">QC완료:</span> {row.qc_completion_deadline}</div>
+                      <div className="col-span-2"><span className="text-slate-400 font-sans">기록서검토:</span> {row.record_review_deadline}</div>
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-between border-t border-slate-100 px-4 py-2.5 bg-slate-50/50">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-3 md:px-4 py-2.5 bg-slate-50/50">
             <p className="text-xs text-slate-500">
               {isLoading && <span className="mr-2 text-slate-400">로딩 중…</span>}
               총 <span className="font-semibold text-slate-700">{filtered.length}</span>건

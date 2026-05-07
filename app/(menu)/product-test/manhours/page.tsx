@@ -172,16 +172,18 @@ export default function ManhoursPage() {
 
   return (
     <div className="flex flex-1 flex-col">
-      <div className="flex-1 p-5">
+      <div className="flex-1 p-4 md:p-5">
         <Card className="border border-slate-200 shadow-none rounded-xl bg-white py-0 overflow-hidden">
 
           {/* 툴바 */}
-          <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-3">
-            <h1 className="text-sm font-semibold text-slate-800 shrink-0">평균공수 관리</h1>
-            <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-600 border border-slate-200">
-              {filtered.length}건
-            </span>
-            <div className="flex max-w-[240px] flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all ml-auto">
+          <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 border-b border-slate-100 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <h1 className="text-sm font-semibold text-slate-800 shrink-0">평균공수 관리</h1>
+              <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-600 border border-slate-200">
+                {filtered.length}건
+              </span>
+            </div>
+            <div className="flex w-full md:max-w-[240px] md:flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all md:ml-auto">
               <Search size={13} className="text-slate-400 shrink-0" />
               <input
                 type="text"
@@ -191,7 +193,7 @@ export default function ManhoursPage() {
                 className="w-full bg-transparent text-xs text-slate-700 outline-none placeholder:text-slate-400"
               />
             </div>
-            <Button onClick={openCreate} size="sm" className="bg-blue-600 hover:bg-blue-700 text-white h-8 shrink-0">
+            <Button onClick={openCreate} size="sm" className="bg-blue-600 hover:bg-blue-700 text-white h-8 shrink-0 w-full md:w-auto">
               <Plus size={14} className="mr-1" />신규
             </Button>
           </div>
@@ -200,7 +202,49 @@ export default function ManhoursPage() {
             <div className="mx-4 mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>
           )}
 
-          {/* 테이블 */}
+          {/* 모바일 카드 뷰 */}
+          <div className="md:hidden flex flex-col gap-2 p-3">
+            {isLoading ? (
+              <p className="py-8 text-center text-sm text-slate-400">로딩중...</p>
+            ) : filtered.length === 0 ? (
+              <p className="py-8 text-center text-sm text-slate-400">데이터가 없습니다.</p>
+            ) : (
+              filtered.map(row => (
+                <div key={row.id} className="rounded-lg border border-slate-200 bg-white p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-mono text-[10px] text-slate-400">{row.productCode}</p>
+                      <p className="text-sm font-semibold text-slate-800 truncate">{row.productName}</p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => openEdit(row)}
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-blue-50 hover:text-blue-600"
+                        title="수정"
+                      >
+                        <Pencil size={13} />
+                      </button>
+                      <button
+                        onClick={() => { setError(null); setDeleteTarget(row) }}
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500"
+                        title="삭제"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between text-[11px]">
+                    <span className="text-slate-600">포장: <span className="font-medium text-slate-800">{row.packageUnit}</span></span>
+                    <span className="text-slate-600">평균공수: <span className="font-semibold tabular-nums text-slate-800">{row.avgHours.toFixed(2)}h</span></span>
+                    <span className="font-mono text-slate-400">{formatDate(row.updatedAt)}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* 테이블 (데스크탑) */}
+          <div className="hidden md:block overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow className="bg-slate-900 hover:bg-slate-900 border-0">
@@ -250,6 +294,7 @@ export default function ManhoursPage() {
               )}
             </TableBody>
           </Table>
+          </div>
 
           {/* 푸터 */}
           <div className="flex items-center border-t border-slate-100 px-4 py-2.5 bg-slate-50/50">

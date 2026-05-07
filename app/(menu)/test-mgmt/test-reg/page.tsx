@@ -19,7 +19,11 @@ interface TestItemRow {
   assignee: string
 }
 
-const DEMO_TESTERS = ['김태훈', '박성호', '권택균', '장재훈', '지건희']
+interface TesterOption {
+  id: string
+  name: string
+  employeeNo: string
+}
 const DOSAGE_FORMS: DosageForm[] = ['현탁제', '내용고형제', '전제', '환제', '액제', '주사제']
 const VALIDATION_TYPES: ValidationType[] = ['일반', 'PV', 'CV']
 
@@ -278,6 +282,7 @@ export default function TestRegPage() {
   const [qcPlannedDate, setQcPlannedDate]   = useState('')
   const [validationType, setValidationType] = useState<ValidationType>('일반')
   const [testItems, setTestItems]           = useState<TestItemRow[]>([])
+  const [testerOptions, setTesterOptions]   = useState<TesterOption[]>([])
 
   const [pickerOpen, setPickerOpen] = useState(false)
   const [isLookingUp, setIsLookingUp] = useState(false)
@@ -290,6 +295,20 @@ export default function TestRegPage() {
     setReviewDeadline(auto)
     setQcPlannedDate(auto)
   }, [packagingDate])
+
+  // 활성 시험자 목록 로드 (DB)
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/testers')
+      .then(r => r.ok ? r.json() as Promise<{ rows: { id: string; name: string; employeeNo: string; isActive: boolean }[] }> : Promise.reject(r))
+      .then(data => {
+        if (cancelled) return
+        const active = (data.rows ?? []).filter(t => t.isActive).map(t => ({ id: t.id, name: t.name, employeeNo: t.employeeNo }))
+        setTesterOptions(active)
+      })
+      .catch(err => console.error('[test-reg] 시험자 목록 로드 실패', err))
+    return () => { cancelled = true }
+  }, [])
 
   const loadTestItems = useCallback(async (pid: string) => {
     if (!pid) return
@@ -383,7 +402,7 @@ export default function TestRegPage() {
   const isFormValid = productFound && productCode.trim() && batchNo.trim() && testItems.length > 0
 
   return (
-    <div className="flex flex-col gap-5 p-5 max-w-3xl">
+    <div className="flex flex-col gap-5 p-3 md:p-5 max-w-3xl mx-auto w-full">
 
       <div>
         <h1 className="text-base font-bold text-slate-800">시험등록</h1>
@@ -396,40 +415,42 @@ export default function TestRegPage() {
           <span className="text-sm font-semibold text-slate-800">기본 정보</span>
         </div>
         <CardContent className="px-5 py-5">
-          <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
 
             {/* 품목 검색 */}
-            <div className="col-span-2">
+            <div className="md:col-span-2">
               <label className="mb-1.5 block text-xs font-semibold text-slate-600">
                 품목 <span className="text-red-500">*</span>
                 <span className="ml-1.5 font-normal text-slate-400">— 코드·한글명 입력 또는 🔍로 목록 검색</span>
               </label>
-              <div className="flex gap-2">
+              <div className="flex flex-col md:flex-row gap-2">
                 <Autocomplete
                   value={searchText}
                   onChange={setSearchText}
                   onSelect={selectProduct}
                   onSearch={lookupByText}
                 />
-                {/* 목록 팝업 버튼 */}
-                <Button
-                  type="button"
-                  onClick={() => setPickerOpen(true)}
-                  variant="outline"
-                  className="h-9 w-9 shrink-0 p-0 border-slate-200 rounded-lg shadow-none hover:bg-slate-50"
-                  title="품목 목록에서 선택"
-                >
-                  <Search size={15} className="text-slate-500" />
-                </Button>
-                {/* 직접 조회 버튼 */}
-                <Button
-                  type="button"
-                  onClick={lookupByText}
-                  disabled={isLookingUp || !searchText.trim()}
-                  className="h-9 shrink-0 gap-1.5 bg-blue-600 px-4 text-xs font-medium hover:bg-blue-700 rounded-lg shadow-none disabled:opacity-50"
-                >
-                  {isLookingUp ? '조회중...' : '조회'}
-                </Button>
+                <div className="flex gap-2">
+                  {/* 목록 팝업 버튼 */}
+                  <Button
+                    type="button"
+                    onClick={() => setPickerOpen(true)}
+                    variant="outline"
+                    className="h-9 w-9 shrink-0 p-0 border-slate-200 rounded-lg shadow-none hover:bg-slate-50"
+                    title="품목 목록에서 선택"
+                  >
+                    <Search size={15} className="text-slate-500" />
+                  </Button>
+                  {/* 직접 조회 버튼 */}
+                  <Button
+                    type="button"
+                    onClick={lookupByText}
+                    disabled={isLookingUp || !searchText.trim()}
+                    className="h-9 shrink-0 gap-1.5 bg-blue-600 px-4 text-xs font-medium hover:bg-blue-700 rounded-lg shadow-none disabled:opacity-50 flex-1 md:flex-none"
+                  >
+                    {isLookingUp ? '조회중...' : '조회'}
+                  </Button>
+                </div>
               </div>
               {lookupError && <p className="mt-1.5 text-xs text-red-500">{lookupError}</p>}
             </div>
@@ -488,6 +509,7 @@ export default function TestRegPage() {
             </div>
 
             {/* 날짜 필드들 */}
+            <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4">
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-slate-600">포장일(예정)</label>
               <div className="relative">
@@ -524,6 +546,7 @@ export default function TestRegPage() {
                 </span>
               </div>
             </div>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -548,18 +571,24 @@ export default function TestRegPage() {
             <div className="flex flex-col gap-2">
               {testItems.map((item, idx) => (
                 <div key={idx}
-                  className={`flex items-center gap-3 rounded-lg border px-3.5 py-2.5 transition-colors ${
+                  className={`flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 rounded-lg border px-3.5 py-2.5 transition-colors ${
                     item.checked ? 'border-blue-100 bg-blue-50/40' : 'border-slate-100 bg-slate-50/40'
                   }`}>
-                  <input type="checkbox" checked={item.checked} onChange={() => toggleItem(idx)} className="cb-custom shrink-0" />
-                  <span className={`flex-1 text-sm font-medium ${item.checked ? 'text-slate-800' : 'text-slate-400'}`}>
-                    {item.name}
-                  </span>
-                  <div className="relative w-36 shrink-0">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <input type="checkbox" checked={item.checked} onChange={() => toggleItem(idx)} className="cb-custom shrink-0" />
+                    <span className={`flex-1 text-sm font-medium ${item.checked ? 'text-slate-800' : 'text-slate-400'}`}>
+                      {item.name}
+                    </span>
+                  </div>
+                  <div className="relative w-full sm:w-36 sm:shrink-0 pl-7 sm:pl-0">
                     <select value={item.assignee} onChange={e => setItemAssignee(idx, e.target.value)} disabled={!item.checked}
                       className="w-full appearance-none rounded-md border border-slate-200 bg-white px-2.5 py-1.5 pr-7 text-xs text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
                       <option value="">시험자 미배정</option>
-                      {DEMO_TESTERS.map(name => <option key={name} value={name}>{name}</option>)}
+                      {testerOptions.map(t => (
+                        <option key={t.id} value={t.name}>
+                          {t.name} ({t.employeeNo})
+                        </option>
+                      ))}
                     </select>
                     <ChevronDown size={12} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />
                   </div>
@@ -571,13 +600,13 @@ export default function TestRegPage() {
       )}
 
       {/* 버튼 */}
-      <div className="flex items-center justify-end gap-2 pb-2">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-2 pb-2">
         <Button type="button" variant="outline" onClick={() => router.back()}
-          className="h-9 px-5 text-sm text-slate-600 border-slate-200 hover:bg-slate-50 rounded-lg shadow-none">
+          className="h-9 px-5 text-sm text-slate-600 border-slate-200 hover:bg-slate-50 rounded-lg shadow-none w-full sm:w-auto">
           취소
         </Button>
         <Button type="button" onClick={handleSave} disabled={!isFormValid || isSaving}
-          className="h-9 bg-blue-600 px-6 text-sm font-medium hover:bg-blue-700 rounded-lg shadow-none disabled:opacity-50">
+          className="h-9 bg-blue-600 px-6 text-sm font-medium hover:bg-blue-700 rounded-lg shadow-none disabled:opacity-50 w-full sm:w-auto">
           {isSaving ? '저장중...' : '저장'}
         </Button>
       </div>

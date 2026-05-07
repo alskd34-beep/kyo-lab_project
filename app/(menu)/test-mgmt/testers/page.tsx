@@ -227,8 +227,8 @@ export default function TestersPage() {
   return (
     <div className="flex flex-col h-full bg-slate-50">
       {/* Header */}
-      <div className="bg-white border-b border-slate-200 px-6 py-4">
-        <div className="flex items-center justify-between">
+      <div className="bg-white border-b border-slate-200 px-4 md:px-6 py-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 shadow">
               <Users size={18} className="text-white" />
@@ -239,14 +239,14 @@ export default function TestersPage() {
             </div>
           </div>
           {activeTab === 'testers' && (
-            <Button onClick={openAdd} size="sm" className="h-8 gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs">
+            <Button onClick={openAdd} size="sm" className="h-8 gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs w-full md:w-auto">
               <Plus size={13} /> 시험자 추가
             </Button>
           )}
         </div>
 
         {/* Summary cards */}
-        <div className="mt-4 grid grid-cols-3 gap-3">
+        <div className="mt-4 grid grid-cols-3 gap-2 md:gap-3">
           {[
             { label: '전체 시험자', value: totalActive, sub: `총 ${testers.length}명`, color: 'bg-indigo-50 border-indigo-200 text-indigo-700' },
             { label: '단독 가능', value: soloCount, sub: `활성 기준`, color: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
@@ -282,10 +282,69 @@ export default function TestersPage() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-auto p-4 md:p-6">
         {/* ── Tab 1: 시험자 관리 ── */}
         {activeTab === 'testers' && (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <>
+          {/* Mobile card view */}
+          <div className="md:hidden flex flex-col gap-2">
+            {loading ? (
+              <div className="flex items-center justify-center py-20 text-slate-400 text-sm">불러오는 중...</div>
+            ) : sortedTesters.length === 0 ? (
+              <div className="py-12 text-center text-sm text-slate-400 bg-white rounded-xl border border-slate-200">등록된 시험자가 없습니다</div>
+            ) : (
+              sortedTesters.map((t, i) => (
+                <div key={t.id} className="bg-white rounded-xl border border-slate-200 shadow-sm p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-slate-400">#{i + 1}</span>
+                        <span className="font-mono text-xs text-slate-500">{t.employeeNo}</span>
+                      </div>
+                      <p className="mt-0.5 text-sm font-semibold text-slate-800 truncate">{t.name}</p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => openEdit(t)}
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                        title="수정"
+                      >
+                        <Pencil size={13} />
+                      </button>
+                      <button
+                        onClick={() => openDelete(t)}
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+                        title="삭제"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                    {t.canSolo
+                      ? <span className="inline-block rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">단독 가능</span>
+                      : <span className="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-400">단독 불가</span>}
+                    {t.canDuo
+                      ? <span className="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">2인 가능</span>
+                      : <span className="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-400">2인 불가</span>}
+                    <button
+                      onClick={() => void toggleActive(t)}
+                      className={`ml-auto inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold transition-colors ${
+                        t.isActive
+                          ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                          : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                      }`}
+                    >
+                      {t.isActive ? '활성' : '비활성'}
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Desktop table view */}
+          <div className="hidden md:block bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             {loading ? (
               <div className="flex items-center justify-center py-20 text-slate-400 text-sm">불러오는 중...</div>
             ) : (
@@ -368,13 +427,14 @@ export default function TestersPage() {
               </table>
             )}
           </div>
+          </>
         )}
 
         {/* ── Tab 2: 시험자 역량 ── */}
         {activeTab === 'capability' && (
           <div>
             {/* Legend */}
-            <div className="mb-3 flex items-center gap-3 text-xs text-slate-500">
+            <div className="mb-3 flex items-center gap-2 md:gap-3 text-xs text-slate-500 flex-wrap">
               <span className="font-medium text-slate-600">범례:</span>
               {(['O', 'Y', 'N', 'X'] as ProficiencyLevel[]).map(l => (
                 <span key={l} className="flex items-center gap-1">
@@ -388,7 +448,47 @@ export default function TestersPage() {
             {capLoading ? (
               <div className="flex items-center justify-center py-20 text-slate-400 text-sm">불러오는 중...</div>
             ) : (
-              <div className="overflow-auto rounded-xl border border-slate-200 shadow-sm bg-white">
+              <>
+              {/* Mobile card view */}
+              <div className="md:hidden flex flex-col gap-3">
+                {sortedTesters.filter(t => t.isActive).length === 0 ? (
+                  <div className="py-12 text-center text-slate-400 bg-white rounded-xl border border-slate-200">활성 시험자가 없습니다</div>
+                ) : (
+                  sortedTesters.filter(t => t.isActive).map(tester => (
+                    <div key={tester.id} className="bg-white rounded-xl border border-slate-200 shadow-sm p-3">
+                      <div className="flex items-center justify-between mb-2 pb-2 border-b border-slate-100">
+                        <p className="text-sm font-semibold text-slate-800">{tester.name}</p>
+                        <p className="font-mono text-[11px] text-slate-500">{tester.employeeNo}</p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {capabilities.map(cap => {
+                          const level = getLevel(tester.id, cap.id)
+                          const key = `${tester.id}_${cap.id}`
+                          const isSaving = savingCell === key
+                          return (
+                            <button
+                              key={cap.id}
+                              onClick={() => void cycleLevel(tester, cap)}
+                              disabled={isSaving}
+                              className={`flex items-center justify-between gap-2 rounded-lg border border-slate-100 px-2 py-1.5 transition-all ${
+                                isSaving ? 'opacity-50 cursor-wait' : 'hover:border-indigo-200 active:scale-95'
+                              }`}
+                            >
+                              <span className="text-[11px] text-slate-700 truncate text-left flex-1">{cap.name}</span>
+                              <span className={`inline-flex h-5 w-7 shrink-0 items-center justify-center rounded text-[10px] font-semibold ${LEVEL_STYLE[level]}`}>
+                                {level}
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Desktop matrix view */}
+              <div className="hidden md:block overflow-auto rounded-xl border border-slate-200 shadow-sm bg-white">
                 <table className="text-xs border-collapse" style={{ minWidth: '100%' }}>
                   <thead>
                     <tr className="bg-slate-800 text-white sticky top-0 z-10">
@@ -445,6 +545,7 @@ export default function TestersPage() {
                   </tbody>
                 </table>
               </div>
+              </>
             )}
           </div>
         )}

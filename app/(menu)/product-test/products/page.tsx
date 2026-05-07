@@ -224,22 +224,24 @@ export default function ProductsPage() {
   }, [rows])
 
   return (
-    <div className="flex flex-1 flex-col p-5 gap-4">
+    <div className="flex flex-1 flex-col p-3 md:p-5 gap-4">
       {/* Toolbar */}
-      <div className="flex items-center gap-3">
-        <h1 className="text-lg font-semibold text-slate-800 shrink-0">품목 마스터 관리</h1>
-        <Badge variant="secondary" className="text-xs">{filtered.length}건</Badge>
-        <div className="flex-1" />
-        <div className="relative">
+      <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3">
+        <div className="flex items-center gap-2 md:gap-3">
+          <h1 className="text-lg font-semibold text-slate-800 shrink-0">품목 마스터 관리</h1>
+          <Badge variant="secondary" className="text-xs">{filtered.length}건</Badge>
+        </div>
+        <div className="hidden md:block flex-1" />
+        <div className="relative w-full md:w-auto">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <Input
             placeholder="품목명 / 코드 / 약호 검색..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="pl-9 h-9 w-64 text-sm"
+            className="pl-9 h-9 w-full md:w-64 text-sm"
           />
         </div>
-        <Button onClick={openAdd} size="sm" className="bg-blue-600 hover:bg-blue-700 text-white h-9">
+        <Button onClick={openAdd} size="sm" className="bg-blue-600 hover:bg-blue-700 text-white h-9 w-full md:w-auto">
           <Plus size={15} className="mr-1" />품목 추가
         </Button>
       </div>
@@ -250,7 +252,7 @@ export default function ProductsPage() {
 
       {/* ── Summary ─────────────────────────────────────────────────────────────── */}
       {!loading && rows.length > 0 && (
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {/* 전체 건수 */}
           <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
             <p className="text-[11px] font-medium text-slate-400 mb-1.5">전체 품목</p>
@@ -330,8 +332,8 @@ export default function ProductsPage() {
         </div>
       )}
 
-      {/* Table */}
-      <div className="flex-1 overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+      {/* Table (desktop/tablet) */}
+      <div className="hidden md:block flex-1 overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-slate-900 text-slate-100 text-xs">
@@ -399,6 +401,58 @@ export default function ProductsPage() {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile cards */}
+      <div className="md:hidden flex flex-col gap-2">
+        {loading ? (
+          <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-400">불러오는 중...</div>
+        ) : filtered.length === 0 ? (
+          <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-400">데이터가 없습니다.</div>
+        ) : (
+          filtered.map(row => (
+            <div key={row.id} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="font-mono text-[11px] text-slate-500">{row.productCode}</span>
+                    {row.isActive ? (
+                      <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100 text-[10px]">활성</Badge>
+                    ) : (
+                      <Badge className="bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-100 text-[10px]">비활성</Badge>
+                    )}
+                    {row.difficulty && (
+                      <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${diffColor[row.difficulty] ?? ''}`}>
+                        {row.difficulty}
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-1 text-sm font-medium text-slate-800 break-words">
+                    {row.name}
+                    {row.nameAlt && <span className="ml-1.5 text-xs text-slate-400">{row.nameAlt}</span>}
+                  </div>
+                  {row.abbreviation && (
+                    <div className="text-[11px] font-mono text-slate-500">약호: {row.abbreviation}</div>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button onClick={() => openEdit(row)} className="rounded p-1.5 text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-colors" title="수정">
+                    <Pencil size={14} />
+                  </button>
+                  <button onClick={() => handleDelete(row)} className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors" title="삭제">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] text-slate-500 border-t border-slate-100 pt-2">
+                <div><span className="text-slate-400">품목구분:</span> {row.categoryName ?? '—'}</div>
+                <div><span className="text-slate-400">전문분류:</span> {row.classificationName ?? '—'}</div>
+                <div><span className="text-slate-400">단위:</span> {row.unit ?? '—'}</div>
+                <div className="truncate"><span className="text-slate-400">포장:</span> {row.packageSpec ?? '—'}</div>
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
       {/* Add/Edit Dialog */}

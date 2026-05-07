@@ -259,7 +259,7 @@ export default function TestStatusPage() {
             </div>
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-7 gap-2.5 px-5 py-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2.5 px-4 md:px-5 py-3">
               {KPI_DATA.map(kpi => (
                 <Card
                   key={kpi.label}
@@ -279,11 +279,11 @@ export default function TestStatusPage() {
           </div>
 
           {/* ── Table section ────────────────────────────────────────────── */}
-          <div className="flex-1 p-5">
+          <div className="flex-1 p-4 md:p-5">
             <Card className="border border-slate-200 shadow-none rounded-xl bg-white py-0 overflow-hidden">
 
               {/* Toolbar */}
-              <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-2.5">
+              <div className="flex flex-col md:flex-row md:items-center gap-2 border-b border-slate-100 px-4 py-2.5">
                 {/* Date range */}
                 <Popover>
                   <PopoverTrigger asChild>
@@ -314,7 +314,7 @@ export default function TestStatusPage() {
                 </Popover>
 
                 {/* Search */}
-                <div className="flex max-w-[240px] flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+                <div className="flex w-full md:max-w-[240px] md:flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
                   <Search size={13} className="text-slate-400 shrink-0" />
                   <input
                     type="text"
@@ -341,7 +341,64 @@ export default function TestStatusPage() {
                 </div>
               </div>
 
-              {/* Table */}
+              {/* Mobile card view */}
+              <div className="md:hidden flex flex-col gap-2 p-3">
+                {filtered.length === 0 ? (
+                  <p className="py-12 text-center text-sm text-slate-400">데이터가 없습니다</p>
+                ) : (
+                  filtered.map(row => {
+                    const status = STATUS_CONFIG[row.status]
+                    const isSelected = selectedRows.has(row.id)
+                    return (
+                      <div
+                        key={row.id}
+                        onClick={() => toggleRow(row.id)}
+                        className={`rounded-lg border p-3 transition-colors cursor-pointer ${
+                          isSelected ? 'bg-blue-50/60 border-blue-200' : 'bg-white border-slate-200 hover:bg-slate-50/70'
+                        }`}
+                      >
+                        <div className="flex items-start gap-2">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleRow(row.id)}
+                            onClick={e => e.stopPropagation()}
+                            className="cb-custom mt-0.5"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-medium ${
+                                row.category === '완제품' ? 'bg-slate-100 text-slate-600' : 'bg-sky-50 text-sky-700'
+                              }`}>{row.category}</span>
+                              <span className="text-[10px] text-slate-500">{row.type}</span>
+                              <span className={`ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${status.cls}`}>
+                                {status.label}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-sm font-medium text-slate-800 truncate">{row.product}</p>
+                            <p className="text-[11px] font-mono text-slate-500">{row.testNo}</p>
+                            <p className="mt-1 text-[11px] text-slate-600 truncate">{row.items}</p>
+                            <div className="mt-1.5 flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <Avatar className="h-5 w-5 shrink-0">
+                                  <AvatarFallback className={`text-[9px] font-bold text-white ${AVATAR_COLORS[row.managerInit] ?? 'bg-slate-400'}`}>
+                                    {row.managerInit}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <span className="text-[11px] text-slate-700">{row.manager}</span>
+                              </div>
+                              <span className="text-[10px] font-mono text-slate-400">~{row.dueDate}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+
+              {/* Table (desktop) */}
+              <div className="hidden md:block overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50/80 hover:bg-slate-50/80 border-slate-100">
@@ -420,6 +477,7 @@ export default function TestStatusPage() {
                   })}
                 </TableBody>
               </Table>
+              </div>
 
               {/* Footer */}
               <div className="flex items-center justify-between border-t border-slate-100 px-4 py-2.5 bg-slate-50/50">
