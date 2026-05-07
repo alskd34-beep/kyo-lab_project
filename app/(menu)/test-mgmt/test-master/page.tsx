@@ -12,13 +12,6 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@frontend/components/ui/dialog'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@frontend/components/ui/select'
 
 const CATEGORIES = ['성상·포장', '이화학', '함량시험', '확인시험', '기기분석', '안전성', '기타'] as const
 type Category = typeof CATEGORIES[number]
@@ -411,19 +404,15 @@ export default function TestMasterPage() {
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-slate-700">대분류</label>
-              <Select
+              <select
                 value={form.category}
-                onValueChange={v => setForm(f => ({ ...f, category: v as Category }))}
+                onChange={e => setForm(f => ({ ...f, category: e.target.value as Category }))}
+                className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-blue-300"
               >
-                <SelectTrigger className="h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CATEGORIES.map(cat => (
-                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                {CATEGORIES.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-slate-700">예상시간 (h)</label>
