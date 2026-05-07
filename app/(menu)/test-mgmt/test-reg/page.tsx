@@ -147,21 +147,32 @@ function Autocomplete({
 }) {
   const [suggestions, setSuggestions] = useState<ProductRow[]>([])
   const [open, setOpen]               = useState(false)
-  const wrapRef = useRef<HTMLDivElement>(null)
+  const [activeIdx, setActiveIdx]     = useState(-1)
+  const wrapRef   = useRef<HTMLDivElement>(null)
+  const listRef   = useRef<HTMLDivElement>(null)
+  const inputRef  = useRef<HTMLInputElement>(null)
 
-  // 3글자 이상 입력 시 자동완성
+  // 1글자 이상 입력 시 자동완성
   useEffect(() => {
     const trimmed = value.trim()
-    if (trimmed.length < 3) { setSuggestions([]); setOpen(false); return }
+    if (trimmed.length < 1) { setSuggestions([]); setOpen(false); setActiveIdx(-1); return }
     const tid = setTimeout(async () => {
       const res  = await fetch(`/api/products?search=${encodeURIComponent(trimmed)}&limit=10`)
       const data = await res.json() as { rows: ProductRow[] }
       const rows = data.rows ?? []
       setSuggestions(rows)
       setOpen(rows.length > 0)
-    }, 250)
+      setActiveIdx(-1)
+    }, 200)
     return () => clearTimeout(tid)
   }, [value])
+
+  // 활성 항목 스크롤
+  useEffect(() => {
+    if (activeIdx < 0 || !listRef.current) return
+    const el = listRef.current.children[activeIdx] as HTMLElement | undefined
+    el?.scrollIntoView({ block: 'nearest' })
+  }, [activeIdx])
 
   // 외부 클릭 시 드롭다운 닫기
   useEffect(() => {
@@ -172,21 +183,49 @@ function Autocomplete({
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!open || suggestions.length === 0) {
+      if (e.key === 'Enter') { setOpen(false); onSearch() }
+      return
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setActiveIdx(i => Math.min(i + 1, suggestions.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setActiveIdx(i => Math.max(i - 1, 0))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      if (activeIdx >= 0) {
+        onSelect(suggestions[activeIdx])
+        setOpen(false)
+        setActiveIdx(-1)
+      } else {
+        setOpen(false)
+        onSearch()
+      }
+    } else if (e.key === 'Escape') {
+      setOpen(false)
+      setActiveIdx(-1)
+    }
+  }
+
   return (
     <div ref={wrapRef} className="relative flex-1">
       <div className="flex items-center rounded-lg border border-slate-200 bg-white focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all overflow-hidden">
         <input
+          ref={inputRef}
           type="text"
           value={value}
           onChange={e => onChange(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') { setOpen(false); onSearch() } }}
-          placeholder="품목코드 또는 품목명 3자 이상 입력"
+          onKeyDown={handleKeyDown}
+          placeholder="품목코드 또는 품목명 입력"
           className="flex-1 bg-transparent px-3 py-2 text-sm text-slate-800 outline-none placeholder:text-slate-400"
         />
         {value && (
           <button
             type="button"
-            onClick={() => { onChange(''); setSuggestions([]); setOpen(false) }}
+            onClick={() => { onChange(''); setSuggestions([]); setOpen(false); setActiveIdx(-1) }}
             className="px-2 text-slate-400 hover:text-slate-600"
           >
             <X size={13} />
@@ -196,17 +235,25 @@ function Autocomplete({
 
       {/* 자동완성 드롭다운 */}
       {open && suggestions.length > 0 && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden">
-          {suggestions.map(p => (
+        <div
+          ref={listRef}
+          className="absolute left-0 right-0 top-full z-50 mt-1 max-h-64 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg"
+        >
+          {suggestions.map((p, idx) => (
             <button
               key={p.id}
               type="button"
               onMouseDown={e => e.preventDefault()}
-              onClick={() => { onSelect(p); setOpen(false) }}
-              className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-blue-50 transition-colors border-b border-slate-50 last:border-0"
+              onMouseEnter={() => setActiveIdx(idx)}
+              onClick={() => { onSelect(p); setOpen(false); setActiveIdx(-1) }}
+              className={`flex w-full items-center gap-3 px-3 py-2 text-left transition-colors border-b border-slate-50 last:border-0 ${
+                idx === activeIdx ? 'bg-blue-50' : 'hover:bg-slate-50'
+              }`}
             >
               <span className="w-14 shrink-0 font-mono text-[11px] text-slate-400">{p.productCode}</span>
-              <span className="flex-1 text-sm text-slate-800 truncate">{p.name}</span>
+              <span className={`flex-1 text-sm truncate ${idx === activeIdx ? 'text-blue-700 font-medium' : 'text-slate-800'}`}>
+                {p.name}
+              </span>
             </button>
           ))}
         </div>
@@ -333,7 +380,7 @@ export default function TestRegPage() {
     }
   }
 
-  const isFormValid = productFound && productCode.trim() && batchNo.trim()
+  const isFormValid = productFound && productCode.trim() && batchNo.trim() && testItems.length > 0
 
   return (
     <div className="flex flex-col gap-5 p-5 max-w-3xl">
@@ -355,7 +402,7 @@ export default function TestRegPage() {
             <div className="col-span-2">
               <label className="mb-1.5 block text-xs font-semibold text-slate-600">
                 품목 <span className="text-red-500">*</span>
-                <span className="ml-1.5 font-normal text-slate-400">— 코드·한글명 3자 이상 입력 또는 🔍로 목록 검색</span>
+                <span className="ml-1.5 font-normal text-slate-400">— 코드·한글명 입력 또는 🔍로 목록 검색</span>
               </label>
               <div className="flex gap-2">
                 <Autocomplete
@@ -443,16 +490,26 @@ export default function TestRegPage() {
             {/* 날짜 필드들 */}
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-slate-600">포장일(예정)</label>
-              <input type="date" value={packagingDate} onChange={e => setPackagingDate(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all" />
+              <div className="relative">
+                <input type="date" value={packagingDate} onChange={e => setPackagingDate(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all [&::-webkit-datetime-edit]:text-transparent" />
+                <span className={`pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm ${packagingDate ? 'text-slate-800' : 'text-slate-400'}`}>
+                  {packagingDate || '년-월-일'}
+                </span>
+              </div>
             </div>
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-slate-600">
                 기록서검토기한
                 <span className="ml-1 text-[10px] font-normal text-slate-400">(포장일+14일)</span>
               </label>
-              <input type="date" value={reviewDeadline} onChange={e => setReviewDeadline(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all" />
+              <div className="relative">
+                <input type="date" value={reviewDeadline} onChange={e => setReviewDeadline(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all [&::-webkit-datetime-edit]:text-transparent" />
+                <span className={`pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm ${reviewDeadline ? 'text-slate-800' : 'text-slate-400'}`}>
+                  {reviewDeadline || '년-월-일'}
+                </span>
+              </div>
             </div>
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-slate-600">
@@ -461,14 +518,10 @@ export default function TestRegPage() {
               </label>
               <div className="relative">
                 <input type="date" value={qcPlannedDate} onChange={e => setQcPlannedDate(e.target.value)}
-                  className={`w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all ${
-                    qcPlannedDate ? '' : '[&::-webkit-datetime-edit]:text-transparent'
-                  }`} />
-                {!qcPlannedDate && (
-                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">
-                    년-월-일
-                  </span>
-                )}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all [&::-webkit-datetime-edit]:text-transparent" />
+                <span className={`pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm ${qcPlannedDate ? 'text-slate-800' : 'text-slate-400'}`}>
+                  {qcPlannedDate || '년-월-일'}
+                </span>
               </div>
             </div>
           </div>
