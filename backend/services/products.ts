@@ -16,6 +16,7 @@ export interface ProductRow {
   packageSpec: string | null
   isActive: boolean
   sortOrder: number
+  testItemCount: number  // 등록된 시험항목 수
 }
 
 export interface ProductOptionRow {
@@ -24,7 +25,7 @@ export interface ProductOptionRow {
   name: string
 }
 
-function mapRow(r: Record<string, unknown>): ProductRow {
+function mapRow(r: Record<string, unknown>, testItemCount = 0): ProductRow {
   const cat = r.product_categories as Record<string, unknown> | null
   const cls = r.product_classifications as Record<string, unknown> | null
   return {
@@ -43,6 +44,7 @@ function mapRow(r: Record<string, unknown>): ProductRow {
     packageSpec:        (r.package_spec as string) ?? null,
     isActive:           r.is_active as boolean,
     sortOrder:          r.sort_order as number,
+    testItemCount,
   }
 }
 
@@ -62,7 +64,33 @@ export async function listProducts(q: { search?: string; limit?: number } = {}):
   if (q.limit) query = query.limit(q.limit)
   const { data, error } = await query
   if (error) throw error
-  return (data ?? []).map(r => mapRow(r as Record<string, unknown>))
+
+  const rows = (data ?? []) as Record<string, unknown>[]
+  if (rows.length === 0) return []
+
+  // 시험항목 카운트 일괄 조회
+  const ids = rows.map(r => r.id as string)
+  const { data: ptiRows } = await supabase
+    .from('product_test_items')
+    .select('product_id')
+    .in('product_id', ids)
+  const countByProduct = new Map<string, number>()
+  for (const row of (ptiRows ?? []) as { product_id: string }[]) {
+    countByProduct.set(row.product_id, (countByProduct.get(row.product_id) ?? 0) + 1)
+  }
+
+  return rows
+    .map(r => mapRow(r, countByProduct.get(r.id as string) ?? 0))
+    .sort((a, b) => {
+      // 1차: 시험항목 보유 우선 (count > 0)
+      const aHas = a.testItemCount > 0 ? 1 : 0
+      const bHas = b.testItemCount > 0 ? 1 : 0
+      if (aHas !== bHas) return bHas - aHas
+      // 2차: 시험항목 수 내림차순
+      if (a.testItemCount !== b.testItemCount) return b.testItemCount - a.testItemCount
+      // 3차: 기존 sort_order
+      return a.sortOrder - b.sortOrder
+    })
 }
 
 export async function listProductCategories(): Promise<ProductOptionRow[]> {

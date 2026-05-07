@@ -114,18 +114,31 @@ function ProductPickerDialog({
           ) : products.length === 0 ? (
             <div className="py-8 text-center text-sm text-slate-400">검색 결과가 없습니다.</div>
           ) : (
-            products.map(p => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => { onSelect(p); onClose() }}
-                className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-blue-50 transition-colors border-b border-slate-50 last:border-0"
-              >
-                <span className="w-16 shrink-0 font-mono text-[11px] text-slate-400">{p.productCode}</span>
-                <span className="flex-1 text-sm text-slate-800">{p.name}</span>
-                {p.unit && <span className="shrink-0 text-[11px] text-slate-400">{p.unit}</span>}
-              </button>
-            ))
+            products.map(p => {
+              const hasItems = (p.testItemCount ?? 0) > 0
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => { onSelect(p); onClose() }}
+                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-blue-50 transition-colors border-b border-slate-50 last:border-0"
+                >
+                  <span className="w-16 shrink-0 font-mono text-[11px] text-slate-400">{p.productCode}</span>
+                  <span className="flex-1 text-sm text-slate-800">{p.name}</span>
+                  <span
+                    className={`shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                      hasItems
+                        ? 'bg-blue-50 text-blue-600 border border-blue-100'
+                        : 'bg-slate-50 text-slate-400 border border-slate-200'
+                    }`}
+                    title="등록된 시험항목 수"
+                  >
+                    시험 {p.testItemCount ?? 0}건
+                  </span>
+                  {p.unit && <span className="shrink-0 text-[11px] text-slate-400 w-8 text-right">{p.unit}</span>}
+                </button>
+              )
+            })
           )}
         </div>
 
