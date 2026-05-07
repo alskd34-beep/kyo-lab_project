@@ -255,12 +255,12 @@ export default function TestMasterPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-slate-900 text-slate-100 text-xs">
-              <th className="px-4 py-3 text-left font-semibold">시험항목명</th>
-              <th className="px-4 py-3 text-left font-semibold w-28">대분류</th>
-              <th className="px-4 py-3 text-center font-semibold w-32">예상시간(h)</th>
-              <th className="px-4 py-3 text-center font-semibold w-24">2인시험</th>
-              <th className="px-4 py-3 text-center font-semibold w-20">활성</th>
-              <th className="px-4 py-3 text-center font-semibold w-24">액션</th>
+              <th className="sticky top-0 z-10 bg-slate-900 px-4 py-3 text-left font-semibold">시험항목명</th>
+              <th className="sticky top-0 z-10 bg-slate-900 px-4 py-3 text-left font-semibold w-28">대분류</th>
+              <th className="sticky top-0 z-10 bg-slate-900 px-4 py-3 text-center font-semibold w-32">예상시간(h)</th>
+              <th className="sticky top-0 z-10 bg-slate-900 px-4 py-3 text-center font-semibold w-24">2인시험</th>
+              <th className="sticky top-0 z-10 bg-slate-900 px-4 py-3 text-center font-semibold w-20">활성</th>
+              <th className="sticky top-0 z-10 bg-slate-900 px-4 py-3 text-center font-semibold w-24">액션</th>
             </tr>
           </thead>
           <tbody>
