@@ -22,6 +22,7 @@ import {
 interface SubItem {
   id: string
   label: string
+  live?: boolean
 }
 
 interface NavItem {
@@ -29,22 +30,23 @@ interface NavItem {
   icon: React.ReactNode
   label: string
   badge?: number
+  live?: boolean
   subItems?: SubItem[]
 }
 
 // ─── Nav Data ─────────────────────────────────────────────────────────────────
 const NAV_ITEMS: NavItem[] = [
-  { id: 'home', icon: <Home size={17} />, label: '홈' },
+  { id: 'home', icon: <Home size={17} />, label: '홈', live: true },
   {
     id: 'test-mgmt',
     icon: <FlaskConical size={17} />,
     label: '시험관리',
     subItems: [
-      { id: 'test-status', label: '시험현황' },
-      { id: 'test-reg',    label: '시험등록' },
+      { id: 'test-status', label: '시험현황',   live: true },
+      { id: 'test-reg',    label: '시험등록',   live: true },
       { id: 'test-result', label: '결과입력' },
       { id: 'test-cert',   label: '성적서관리' },
-      { id: 'test-items',  label: '시험항목관리' },
+      { id: 'test-items',  label: '시험항목관리', live: true },
     ],
   },
   {
@@ -52,7 +54,7 @@ const NAV_ITEMS: NavItem[] = [
     icon: <Box size={17} />,
     label: '제품시험',
     subItems: [
-      { id: 'prod-status', label: '제품시험현황' },
+      { id: 'prod-status', label: '제품시험현황', live: true },
       { id: 'prod-reg',    label: '완제품등록' },
       { id: 'prod-std',    label: '기준서관리' },
     ],
@@ -118,7 +120,7 @@ const BOTTOM_NAV: NavItem[] = [
     icon: <Settings size={17} />,
     label: '설정',
     subItems: [
-      { id: 'users',        label: '사용자관리' },
+      { id: 'users',        label: '사용자관리', live: true },
       { id: 'roles',        label: '권한관리' },
       { id: 'sys-settings', label: '시스템설정' },
     ],
@@ -335,6 +337,7 @@ export default function Sidebar({ activeItem = 'test-mgmt', onNavigate }: Sideba
             {NAV_ITEMS.map(item => {
               const isOpen        = openMenu    === item.id
               const isHighlighted = visibleMenuId === item.id
+              const hasLive       = item.live || item.subItems?.some(s => s.live)
 
               return (
                 <button
@@ -359,6 +362,9 @@ export default function Sidebar({ activeItem = 'test-mgmt', onNavigate }: Sideba
                         {item.badge}
                       </span>
                     )}
+                    {hasLive && item.badge == null && (
+                      <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-emerald-400 ring-1 ring-[#1a1f2e]" />
+                    )}
                   </div>
                   <span className="text-[9.5px] font-medium leading-none tracking-tight text-center w-full truncate">
                     {item.label}
@@ -370,23 +376,31 @@ export default function Sidebar({ activeItem = 'test-mgmt', onNavigate }: Sideba
 
           {/* Bottom nav */}
           <div className="flex flex-col items-center gap-0.5 px-2 py-2 border-t border-white/8 shrink-0">
-            {BOTTOM_NAV.map(item => (
-              <button
-                key={item.id}
-                onClick={() => handleNavClick(item)}
-                onMouseEnter={() => handleItemMouseEnter(item.id, !!item.subItems)}
-                className={`
-                  relative flex w-full flex-col items-center gap-1 rounded-xl px-1 py-2
-                  transition-colors cursor-pointer select-none
-                  ${visibleMenuId === item.id
-                    ? 'bg-white/14 text-white'
-                    : 'text-slate-500 hover:bg-white/7 hover:text-slate-300'}
-                `}
-              >
-                {item.icon}
-                <span className="text-[9.5px] font-medium leading-none">{item.label}</span>
-              </button>
-            ))}
+            {BOTTOM_NAV.map(item => {
+              const hasLive = item.live || item.subItems?.some(s => s.live)
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => handleNavClick(item)}
+                  onMouseEnter={() => handleItemMouseEnter(item.id, !!item.subItems)}
+                  className={`
+                    relative flex w-full flex-col items-center gap-1 rounded-xl px-1 py-2
+                    transition-colors cursor-pointer select-none
+                    ${visibleMenuId === item.id
+                      ? 'bg-white/14 text-white'
+                      : 'text-slate-500 hover:bg-white/7 hover:text-slate-300'}
+                  `}
+                >
+                  <div className="relative">
+                    {item.icon}
+                    {hasLive && (
+                      <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-emerald-400 ring-1 ring-[#1a1f2e]" />
+                    )}
+                  </div>
+                  <span className="text-[9.5px] font-medium leading-none">{item.label}</span>
+                </button>
+              )
+            })}
 
           </div>
         </aside>
@@ -483,8 +497,11 @@ function SubItemRow({ sub, isFav, onFavToggle, onSelect }: SubItemRowProps) {
     <div className="group relative flex w-full items-center rounded-lg transition-colors hover:bg-slate-50 active:bg-slate-100">
       <button
         onClick={onSelect}
-        className="flex-1 min-w-0 rounded-lg px-2.5 py-2 text-left"
+        className="flex-1 min-w-0 rounded-lg px-2.5 py-2 text-left flex items-center gap-2"
       >
+        {sub.live && (
+          <span className="shrink-0 h-2 w-2 rounded-full bg-emerald-400" />
+        )}
         <span className="text-sm text-slate-600 group-hover:text-slate-900 transition-colors">
           {sub.label}
         </span>
