@@ -1,31 +1,64 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Sidebar from '@frontend/components/dashboard/sidebar'
 import Chatbot from '@frontend/components/dashboard/chatbot'
 import { Avatar, AvatarFallback } from '@frontend/components/ui/avatar'
-import { Bell, ChevronDown, LogOut } from 'lucide-react'
+import { Bell, ChevronDown, LogOut, Menu } from 'lucide-react'
 import { useAuth } from '@frontend/lib/auth-context'
 
 export default function MenuLayout({ children }: { children: React.ReactNode }) {
   const [activeNav, setActiveNav] = useState<string>('')
   const { user, logout } = useAuth()
-  const [menuOpen, setMenuOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState<boolean>(false)
+  const [drawerOpen, setDrawerOpen] = useState<boolean>(false)
   const initial = (user?.displayName ?? user?.username ?? '?').charAt(0)
+
+  const closeDrawer = useCallback(() => setDrawerOpen(false), [])
+
+  // ESC closes the mobile drawer
+  useEffect(() => {
+    if (!drawerOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeDrawer()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [drawerOpen, closeDrawer])
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-100 font-sans">
       <Sidebar
         activeItem={activeNav}
         onNavigate={(navId) => setActiveNav(navId)}
+        isOpen={drawerOpen}
+        onClose={closeDrawer}
       />
+
+      {/* Mobile/tablet backdrop — only when drawer open and below lg */}
+      {drawerOpen && (
+        <button
+          type="button"
+          aria-label="메뉴 닫기"
+          onClick={closeDrawer}
+          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[1px] lg:hidden"
+        />
+      )}
 
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* ── Global top bar ──────────────────────────────────────────────── */}
-        <header className="flex h-12 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-5 shadow-sm z-20">
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 leading-none">광동제약</p>
-            <h1 className="text-[14px] font-semibold text-slate-800 leading-tight mt-0.5">QC 시험 관리 시스템</h1>
+        <header className="flex h-12 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-3 sm:px-5 shadow-sm z-20">
+          <div className="flex items-center gap-2">
+            {/* Hamburger — only on mobile/tablet */}
+            <button
+              type="button"
+              onClick={() => setDrawerOpen(true)}
+              aria-label="메뉴 열기"
+              aria-expanded={drawerOpen}
+              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors lg:hidden"
+            >
+              <Menu size={18} />
+            </button>
           </div>
 
           <div className="flex items-center gap-2.5">
@@ -37,16 +70,16 @@ export default function MenuLayout({ children }: { children: React.ReactNode }) 
             <div className="relative">
               <button
                 onClick={() => setMenuOpen(o => !o)}
-                className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 hover:bg-slate-100 transition-colors"
+                className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2 sm:px-3 py-1.5 hover:bg-slate-100 transition-colors"
               >
                 <Avatar className="h-6 w-6">
                   <AvatarFallback className="bg-blue-600 text-white text-[10px] font-bold">{initial}</AvatarFallback>
                 </Avatar>
-                <span className="text-xs font-medium text-slate-700">
+                <span className="hidden sm:inline text-xs font-medium text-slate-700">
                   {user?.displayName ?? user?.username ?? '게스트'}
                 </span>
                 {user?.role === 'admin' && (
-                  <span className="rounded-full bg-violet-100 px-1.5 py-0.5 text-[9px] font-semibold text-violet-700">ADMIN</span>
+                  <span className="hidden sm:inline rounded-full bg-violet-100 px-1.5 py-0.5 text-[9px] font-semibold text-violet-700">ADMIN</span>
                 )}
                 <ChevronDown size={12} className="text-slate-400" />
               </button>
