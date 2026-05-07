@@ -459,8 +459,17 @@ export default function TestRegPage() {
                 QC완료예정일
                 <span className="ml-1 text-[10px] font-normal text-slate-400">(편집 가능)</span>
               </label>
-              <input type="date" value={qcPlannedDate} onChange={e => setQcPlannedDate(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all" />
+              <div className="relative">
+                <input type="date" value={qcPlannedDate} onChange={e => setQcPlannedDate(e.target.value)}
+                  className={`w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all ${
+                    qcPlannedDate ? '' : '[&::-webkit-datetime-edit]:text-transparent'
+                  }`} />
+                {!qcPlannedDate && (
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">
+                    년-월-일
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </CardContent>
