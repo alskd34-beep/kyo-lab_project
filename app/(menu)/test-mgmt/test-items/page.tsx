@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo } from 'react'
 import { Trash2, Plus, Search } from 'lucide-react'
 import { Badge } from '@frontend/components/ui/badge'
 import { Button } from '@frontend/components/ui/button'
-import { Input } from '@frontend/components/ui/input'
 import {
   Dialog,
   DialogContent,
@@ -12,6 +11,19 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@frontend/components/ui/dialog'
+
+const CATEGORIES = ['성상·포장', '이화학', '함량시험', '확인시험', '기기분석', '안전성', '기타'] as const
+type Category = typeof CATEGORIES[number]
+
+const CATEGORY_COLORS: Record<string, string> = {
+  '성상·포장': 'bg-purple-100 text-purple-700',
+  '이화학':    'bg-blue-100 text-blue-700',
+  '함량시험':  'bg-green-100 text-green-700',
+  '확인시험':  'bg-teal-100 text-teal-700',
+  '기기분석':  'bg-orange-100 text-orange-700',
+  '안전성':    'bg-red-100 text-red-700',
+  '기타':      'bg-slate-100 text-slate-600',
+}
 
 interface ProductRow {
   id: string
@@ -28,6 +40,7 @@ interface ProductRow {
 interface TestItemRow {
   id: string
   name: string
+  category: string
   estimatedHours: number | null
   requiresDuo: boolean
   isActive: boolean
@@ -48,11 +61,13 @@ export default function TestItemsPage() {
   const [linkedItems, setLinkedItems]         = useState<ProductTestItemRow[]>([])
   const [productSearch, setProductSearch]     = useState('')
   const [addDialogOpen, setAddDialogOpen]     = useState(false)
+  const [dialogSearch, setDialogSearch]       = useState('')
+  const [dialogTab, setDialogTab]             = useState<'전체' | Category>('전체')
   const [selectedToAdd, setSelectedToAdd]     = useState<Set<string>>(new Set())
   const [addLoading, setAddLoading]           = useState(false)
+  const [itemsLoading, setItemsLoading]       = useState(false)
   const [error, setError]                     = useState<string | null>(null)
 
-  // ── Load products & test items ───────────────────────────────────────────────
   useEffect(() => {
     loadProducts()
     loadAllTestItems()
@@ -70,6 +85,7 @@ export default function TestItemsPage() {
   }
 
   async function loadAllTestItems() {
+    setItemsLoading(true)
     try {
       const res = await fetch('/api/test-items')
       if (!res.ok) throw new Error(await res.text())
@@ -77,10 +93,11 @@ export default function TestItemsPage() {
       setAllTestItems(data.rows)
     } catch (e) {
       setError(String(e))
+    } finally {
+      setItemsLoading(false)
     }
   }
 
-  // ── Load linked items for selected product ───────────────────────────────────
   useEffect(() => {
     if (!selectedProduct) { setLinkedItems([]); return }
     loadLinkedItems(selectedProduct.id)
@@ -97,7 +114,6 @@ export default function TestItemsPage() {
     }
   }
 
-  // ── Filtered product list ────────────────────────────────────────────────────
   const filteredProducts = useMemo(() => {
     const q = productSearch.trim().toLowerCase()
     if (!q) return products
@@ -108,17 +124,57 @@ export default function TestItemsPage() {
     )
   }, [products, productSearch])
 
-  // ── Test items not yet linked ────────────────────────────────────────────────
   const linkedIds = useMemo(
     () => new Set(linkedItems.map(li => li.testItemId)),
     [linkedItems],
   )
+
   const availableToAdd = useMemo(
     () => allTestItems.filter(ti => !linkedIds.has(ti.id) && ti.isActive),
     [allTestItems, linkedIds],
   )
 
-  // ── Delete linked item ───────────────────────────────────────────────────────
+  const dialogFiltered = useMemo(() => {
+    const q = dialogSearch.trim().toLowerCase()
+    return availableToAdd.filter(ti => {
+      if (dialogTab !== '전체' && ti.category !== dialogTab) return false
+      if (q && !ti.name.toLowerCase().includes(q)) return false
+      return true
+    })
+  }, [availableToAdd, dialogSearch, dialogTab])
+
+  const dialogTabCounts = useMemo(() => {
+    const counts: Record<string, number> = { '전체': availableToAdd.length }
+    for (const cat of CATEGORIES) {
+      counts[cat] = availableToAdd.filter(ti => ti.category === cat).length
+    }
+    return counts
+  }, [availableToAdd])
+
+  function openAddDialog() {
+    setSelectedToAdd(new Set())
+    setDialogSearch('')
+    setDialogTab('전체')
+    if (allTestItems.length === 0) loadAllTestItems()
+    setAddDialogOpen(true)
+  }
+
+  function toggleSelectAdd(id: string) {
+    setSelectedToAdd(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  function selectAll() {
+    setSelectedToAdd(new Set(dialogFiltered.map(ti => ti.id)))
+  }
+
+  function deselectAll() {
+    setSelectedToAdd(new Set())
+  }
+
   async function handleDeleteLinked(testItemId: string) {
     if (!selectedProduct) return
     setLinkedItems(prev => prev.filter(li => li.testItemId !== testItemId))
@@ -134,7 +190,6 @@ export default function TestItemsPage() {
     }
   }
 
-  // ── Add linked items ─────────────────────────────────────────────────────────
   async function handleAddItems() {
     if (!selectedProduct || selectedToAdd.size === 0) return
     setAddLoading(true)
@@ -162,20 +217,12 @@ export default function TestItemsPage() {
     }
   }
 
-  function toggleSelectAdd(id: string) {
-    setSelectedToAdd(prev => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
-  }
+  const ALL_DIALOG_TABS = ['전체', ...CATEGORIES] as const
 
-  // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-1 min-h-0 h-full">
       {/* ── Left panel: product selector ──────────────────────────────────────── */}
       <div className="flex w-72 shrink-0 flex-col border-r border-slate-200 bg-white">
-        {/* Header */}
         <div className="border-b border-slate-100 px-4 py-3 shrink-0">
           <p className="text-sm font-semibold text-slate-700 mb-2.5">품목 선택</p>
           <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
@@ -190,7 +237,6 @@ export default function TestItemsPage() {
           </div>
         </div>
 
-        {/* Product list */}
         <div className="flex-1 overflow-y-auto">
           {filteredProducts.length === 0 ? (
             <div className="flex items-center justify-center py-10">
@@ -225,7 +271,6 @@ export default function TestItemsPage() {
           )}
         </div>
 
-        {/* Footer */}
         <div className="border-t border-slate-100 px-4 py-2 bg-slate-50/50 shrink-0">
           <p className="text-[11px] text-slate-400">
             총 <span className="font-semibold text-slate-600">{filteredProducts.length}</span>개 품목
@@ -243,7 +288,6 @@ export default function TestItemsPage() {
           </div>
         ) : (
           <>
-            {/* Panel header */}
             <div className="flex items-center gap-3">
               <div className="flex-1 min-w-0">
                 <p className="text-[10px] text-slate-500 font-mono mb-0.5">{selectedProduct.productCode}</p>
@@ -253,7 +297,7 @@ export default function TestItemsPage() {
                 {linkedItems.length}건
               </Badge>
               <Button
-                onClick={() => { setSelectedToAdd(new Set()); setAddDialogOpen(true) }}
+                onClick={openAddDialog}
                 size="sm"
                 className="bg-blue-600 hover:bg-blue-700 text-white h-9 shrink-0"
               >
@@ -268,15 +312,14 @@ export default function TestItemsPage() {
               </div>
             )}
 
-            {/* Linked items table */}
             <div className="overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-slate-900 text-slate-100 text-xs">
-                    <th className="px-4 py-3 text-center font-semibold w-16">순서</th>
-                    <th className="px-4 py-3 text-left font-semibold">시험항목명</th>
-                    <th className="px-4 py-3 text-center font-semibold w-24">필수여부</th>
-                    <th className="px-4 py-3 text-center font-semibold w-20">삭제</th>
+                    <th className="sticky top-0 z-10 bg-slate-900 px-4 py-3 text-center font-semibold w-16">순서</th>
+                    <th className="sticky top-0 z-10 bg-slate-900 px-4 py-3 text-left font-semibold">시험항목명</th>
+                    <th className="sticky top-0 z-10 bg-slate-900 px-4 py-3 text-center font-semibold w-24">필수여부</th>
+                    <th className="sticky top-0 z-10 bg-slate-900 px-4 py-3 text-center font-semibold w-20">삭제</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -300,13 +343,9 @@ export default function TestItemsPage() {
                           <td className="px-4 py-2.5 font-medium text-slate-800">{li.testItemName}</td>
                           <td className="px-4 py-2.5 text-center">
                             {li.isMandatory ? (
-                              <Badge className="bg-red-50 text-red-600 border-red-200 hover:bg-red-50 text-[11px]">
-                                필수
-                              </Badge>
+                              <Badge className="bg-red-50 text-red-600 border-red-200 hover:bg-red-50 text-[11px]">필수</Badge>
                             ) : (
-                              <Badge className="bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-100 text-[11px]">
-                                선택
-                              </Badge>
+                              <Badge className="bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-100 text-[11px]">선택</Badge>
                             )}
                           </td>
                           <td className="px-4 py-2.5 text-center">
@@ -330,17 +369,72 @@ export default function TestItemsPage() {
 
       {/* ── Add test items dialog ──────────────────────────────────────────────── */}
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>시험항목 추가</DialogTitle>
           </DialogHeader>
 
-          <div className="max-h-80 overflow-y-auto rounded-lg border border-slate-200">
-            {availableToAdd.length === 0 ? (
-              <p className="py-8 text-center text-sm text-slate-400">추가할 수 있는 시험항목이 없습니다.</p>
+          {/* Search */}
+          <div className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+            <Search size={13} className="text-slate-400 shrink-0" />
+            <input
+              type="text"
+              placeholder="시험항목명 검색..."
+              value={dialogSearch}
+              onChange={e => setDialogSearch(e.target.value)}
+              className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
+              autoFocus
+            />
+          </div>
+
+          {/* Category tabs */}
+          <div className="flex gap-1 flex-wrap">
+            {ALL_DIALOG_TABS.map(tab => (
+              <button
+                key={tab}
+                onClick={() => setDialogTab(tab as typeof dialogTab)}
+                className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors ${
+                  dialogTab === tab
+                    ? 'bg-slate-800 text-white'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {tab}
+                <span className={`ml-1 text-[10px] ${dialogTab === tab ? 'text-slate-300' : 'text-slate-400'}`}>
+                  {dialogTabCounts[tab] ?? 0}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {/* Select all / deselect all */}
+          {dialogFiltered.length > 0 && (
+            <div className="flex items-center justify-between text-xs text-slate-500">
+              <span>
+                {dialogFiltered.length}개 항목
+                {selectedToAdd.size > 0 && (
+                  <span className="ml-1 font-semibold text-blue-600">({selectedToAdd.size}개 선택)</span>
+                )}
+              </span>
+              <div className="flex gap-2">
+                <button onClick={selectAll} className="text-blue-600 hover:underline">전체선택</button>
+                <span className="text-slate-300">|</span>
+                <button onClick={deselectAll} className="text-slate-400 hover:underline">전체해제</button>
+              </div>
+            </div>
+          )}
+
+          {/* Item list */}
+          <div className="max-h-72 overflow-y-auto rounded-lg border border-slate-200">
+            {itemsLoading ? (
+              <p className="py-8 text-center text-sm text-slate-400">불러오는 중...</p>
+            ) : dialogFiltered.length === 0 ? (
+              <p className="py-8 text-center text-sm text-slate-400">
+                {availableToAdd.length === 0 ? '추가할 수 있는 시험항목이 없습니다.' : '검색 결과가 없습니다.'}
+              </p>
             ) : (
               <ul className="divide-y divide-slate-100">
-                {availableToAdd.map(ti => (
+                {dialogFiltered.map(ti => (
                   <li key={ti.id}>
                     <label className="flex cursor-pointer items-center gap-3 px-4 py-2.5 hover:bg-slate-50">
                       <input
@@ -350,23 +444,22 @@ export default function TestItemsPage() {
                         className="h-4 w-4 rounded border-slate-300 text-blue-600"
                       />
                       <span className="flex-1 text-sm text-slate-700">{ti.name}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                        CATEGORY_COLORS[ti.category] ?? CATEGORY_COLORS['기타']
+                      }`}>
+                        {ti.category || '기타'}
+                      </span>
                       {ti.estimatedHours != null && (
                         <span className="text-xs text-slate-400">{ti.estimatedHours}h</span>
                       )}
                       {ti.requiresDuo && (
-                        <Badge className="bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-50 text-[10px]">
-                          2인
-                        </Badge>
+                        <Badge className="bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-50 text-[10px]">2인</Badge>
                       )}
                     </label>
                   </li>
                 ))}
               </ul>
             )}
-          </div>
-
-          <div className="text-xs text-slate-500 mt-1">
-            {selectedToAdd.size > 0 ? `${selectedToAdd.size}개 선택됨` : '시험항목을 선택하세요'}
           </div>
 
           <DialogFooter>
