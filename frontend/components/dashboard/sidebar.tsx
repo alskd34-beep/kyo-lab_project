@@ -57,6 +57,7 @@ const NAV_ITEMS: NavItem[] = [
       { id: 'prod-status', label: '제품시험현황', live: true },
       { id: 'prod-reg',    label: '완제품등록' },
       { id: 'prod-std',    label: '기준서관리' },
+      { id: 'manhours',    label: '평균공수관리', live: true },
     ],
   },
   {
@@ -143,6 +144,7 @@ const PATH_MAP: Record<string, string> = {
   'prod-status': '/product-test/prod-status',
   'prod-reg':    '/product-test/prod-reg',
   'prod-std':    '/product-test/prod-std',
+  'manhours':    '/product-test/manhours',
   // 안정성시험
   'stab-status': '/stability/stab-status',
   'stab-plan':   '/stability/stab-plan',
