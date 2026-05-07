@@ -64,6 +64,7 @@ export default function TestMasterPage() {
   const [editNameVal, setEditNameVal] = useState('')
   const [editHoursId, setEditHoursId] = useState<string | null>(null)
   const [editHoursVal, setEditHoursVal] = useState('')
+  const [editCatId, setEditCatId]     = useState<string | null>(null)
 
   const nameInputRef  = useRef<HTMLInputElement>(null)
   const hoursInputRef = useRef<HTMLInputElement>(null)
@@ -136,6 +137,13 @@ export default function TestMasterPage() {
     setEditNameId(null)
     if (!val || val === row.name) return
     try { await patchItem(row.id, { name: val }) }
+    catch { await loadItems() }
+  }
+
+  async function commitCatEdit(row: TestItemRow, val: string) {
+    setEditCatId(null)
+    if (val === row.category) return
+    try { await patchItem(row.id, { category: val }) }
     catch { await loadItems() }
   }
 
@@ -303,13 +311,31 @@ export default function TestMasterPage() {
                     )}
                   </td>
 
-                  {/* 대분류 badge */}
+                  {/* 대분류 — inline edit */}
                   <td className="px-4 py-2.5">
-                    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                      CATEGORY_COLORS[row.category] ?? CATEGORY_COLORS['기타']
-                    }`}>
-                      {row.category || '기타'}
-                    </span>
+                    {editCatId === row.id ? (
+                      <select
+                        autoFocus
+                        value={row.category || '기타'}
+                        onChange={e => commitCatEdit(row, e.target.value)}
+                        onBlur={() => setEditCatId(null)}
+                        className="rounded border border-blue-400 px-2 py-0.5 text-xs outline-none focus:ring-1 focus:ring-blue-300"
+                      >
+                        {CATEGORIES.map(cat => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <button
+                        onClick={() => setEditCatId(row.id)}
+                        title="클릭하여 수정"
+                        className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium hover:opacity-75 transition-opacity ${
+                          CATEGORY_COLORS[row.category] ?? CATEGORY_COLORS['기타']
+                        }`}
+                      >
+                        {row.category || '기타'}
+                      </button>
+                    )}
                   </td>
 
                   {/* 예상시간 — inline edit */}
