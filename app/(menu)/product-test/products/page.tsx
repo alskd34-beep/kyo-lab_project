@@ -197,6 +197,32 @@ export default function ProductsPage() {
     High:   'bg-red-100 text-red-700',
   }
 
+  // ── Summary stats ─────────────────────────────────────────────────────────────
+  const summary = useMemo(() => {
+    const total = rows.length
+    const active = rows.filter(r => r.isActive).length
+
+    const byCat: Record<string, number> = {}
+    rows.forEach(r => {
+      const key = r.categoryName ?? '미분류'
+      byCat[key] = (byCat[key] ?? 0) + 1
+    })
+
+    const byCls: Record<string, number> = {}
+    rows.forEach(r => {
+      const key = r.classificationName ?? '미분류'
+      byCls[key] = (byCls[key] ?? 0) + 1
+    })
+
+    const byDiff: Record<string, number> = { Low: 0, Medium: 0, High: 0, '미설정': 0 }
+    rows.forEach(r => {
+      const key = r.difficulty ?? '미설정'
+      byDiff[key] = (byDiff[key] ?? 0) + 1
+    })
+
+    return { total, active, byCat, byCls, byDiff }
+  }, [rows])
+
   return (
     <div className="flex flex-1 flex-col p-5 gap-4">
       {/* Toolbar */}
@@ -220,6 +246,88 @@ export default function ProductsPage() {
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div>
+      )}
+
+      {/* ── Summary ─────────────────────────────────────────────────────────────── */}
+      {!loading && rows.length > 0 && (
+        <div className="grid grid-cols-4 gap-3">
+          {/* 전체 건수 */}
+          <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+            <p className="text-[11px] font-medium text-slate-400 mb-1.5">전체 품목</p>
+            <p className="text-2xl font-bold text-slate-800">{summary.total}</p>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              활성 <span className="font-semibold text-emerald-600">{summary.active}</span>
+              {' / '}
+              비활성 <span className="font-semibold text-slate-500">{summary.total - summary.active}</span>
+            </p>
+          </div>
+
+          {/* 품목구분 */}
+          <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+            <p className="text-[11px] font-medium text-slate-400 mb-2">품목구분</p>
+            <div className="flex flex-col gap-1">
+              {Object.entries(summary.byCat)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5)
+                .map(([name, cnt]) => (
+                  <div key={name} className="flex items-center gap-1.5">
+                    <div
+                      className="h-1.5 rounded-full bg-blue-400"
+                      style={{ width: `${Math.round((cnt / summary.total) * 100)}%`, minWidth: 4, maxWidth: '60%' }}
+                    />
+                    <span className="text-[11px] text-slate-600 truncate flex-1">{name}</span>
+                    <span className="text-[11px] font-semibold text-slate-700 shrink-0">{cnt}</span>
+                  </div>
+                ))}
+            </div>
+          </div>
+
+          {/* 전문분류 */}
+          <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+            <p className="text-[11px] font-medium text-slate-400 mb-2">전문분류</p>
+            <div className="flex flex-col gap-1">
+              {Object.entries(summary.byCls)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5)
+                .map(([name, cnt]) => (
+                  <div key={name} className="flex items-center gap-1.5">
+                    <div
+                      className="h-1.5 rounded-full bg-purple-400"
+                      style={{ width: `${Math.round((cnt / summary.total) * 100)}%`, minWidth: 4, maxWidth: '60%' }}
+                    />
+                    <span className="text-[11px] text-slate-600 truncate flex-1">{name}</span>
+                    <span className="text-[11px] font-semibold text-slate-700 shrink-0">{cnt}</span>
+                  </div>
+                ))}
+            </div>
+          </div>
+
+          {/* 난이도 */}
+          <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+            <p className="text-[11px] font-medium text-slate-400 mb-2">난이도</p>
+            <div className="flex flex-col gap-1.5">
+              {[
+                { key: 'High',   label: 'High',   color: 'bg-red-400' },
+                { key: 'Medium', label: 'Medium', color: 'bg-yellow-400' },
+                { key: 'Low',    label: 'Low',    color: 'bg-green-400' },
+                { key: '미설정', label: '미설정', color: 'bg-slate-200' },
+              ].map(({ key, label, color }) => {
+                const cnt = summary.byDiff[key] ?? 0
+                if (!cnt) return null
+                return (
+                  <div key={key} className="flex items-center gap-1.5">
+                    <div
+                      className={`h-1.5 rounded-full ${color}`}
+                      style={{ width: `${Math.round((cnt / summary.total) * 100)}%`, minWidth: 4, maxWidth: '60%' }}
+                    />
+                    <span className="text-[11px] text-slate-600 flex-1">{label}</span>
+                    <span className="text-[11px] font-semibold text-slate-700 shrink-0">{cnt}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Table */}
