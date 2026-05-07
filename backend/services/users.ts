@@ -32,20 +32,30 @@ let adminEnsured = false
 /** 최초 가동 시 기본 admin 계정을 생성합니다. */
 export async function ensureAdminSeed(): Promise<void> {
   if (adminEnsured) return
-  const { data } = await supabase
+
+  const sel = await supabase
     .from('users')
     .select('id')
     .eq('username', ADMIN_USERNAME)
     .maybeSingle()
 
-  if (!data) {
+  if (sel.error) {
+    throw new Error(
+      `users 테이블 조회 실패 (마이그레이션 0003 미적용 가능성): ${sel.error.message}`,
+    )
+  }
+
+  if (!sel.data) {
     const hash = await hashPassword(ADMIN_PASSWORD)
-    await supabase.from('users').insert({
+    const ins = await supabase.from('users').insert({
       username:      ADMIN_USERNAME,
       password_hash: hash,
       display_name:  '관리자',
       role:          'admin',
     })
+    if (ins.error) {
+      throw new Error(`admin 시드 실패: ${ins.error.message}`)
+    }
   }
   adminEnsured = true
 }

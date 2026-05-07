@@ -2,6 +2,16 @@
 -- 인증 / 사용자 관리
 -- ─────────────────────────────────────────────────────────────────────────────
 
+create extension if not exists "pgcrypto";
+
+-- updated_at 자동 갱신 함수 (0001과 중복 안전)
+create or replace function set_updated_at()
+returns trigger as $$
+begin
+  new.updated_at = now();
+  return new;
+end $$ language plpgsql;
+
 do $$ begin
   create type user_role as enum ('admin', 'user');
 exception when duplicate_object then null; end $$;
