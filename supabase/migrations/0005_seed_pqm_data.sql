@@ -1921,7 +1921,6 @@ INSERT INTO product_manhours (product_id, package_unit, avg_hours) SELECT p.id, 
 INSERT INTO product_manhours (product_id, package_unit, avg_hours) SELECT p.id, '100mL', 4 FROM products p WHERE p.product_code = '10037' ON CONFLICT (product_id, package_unit) DO NOTHING;
 INSERT INTO product_manhours (product_id, package_unit, avg_hours) SELECT p.id, '100mL', 4 FROM products p WHERE p.product_code = '10053' ON CONFLICT (product_id, package_unit) DO NOTHING;
 INSERT INTO product_manhours (product_id, package_unit, avg_hours) SELECT p.id, '100mL', 5 FROM products p WHERE p.product_code = '28215' ON CONFLICT (product_id, package_unit) DO NOTHING;
-INSERT INTO product_manhours (product_id, package_unit, avg_hours) SELECT p.id, NULL, 4 FROM products p WHERE p.product_code = '28246' ON CONFLICT (product_id, package_unit) DO NOTHING;
 INSERT INTO product_manhours (product_id, package_unit, avg_hours) SELECT p.id, '1환(丸)', 7 FROM products p WHERE p.product_code = '21080' ON CONFLICT (product_id, package_unit) DO NOTHING;
 INSERT INTO product_manhours (product_id, package_unit, avg_hours) SELECT p.id, '1환(丸)', 7 FROM products p WHERE p.product_code = '21065' ON CONFLICT (product_id, package_unit) DO NOTHING;
 INSERT INTO product_manhours (product_id, package_unit, avg_hours) SELECT p.id, '50환(丸)', 7 FROM products p WHERE p.product_code = '21067' ON CONFLICT (product_id, package_unit) DO NOTHING;
@@ -1986,7 +1985,6 @@ INSERT INTO product_manhours (product_id, package_unit, avg_hours) SELECT p.id, 
 INSERT INTO product_manhours (product_id, package_unit, avg_hours) SELECT p.id, '50mL', 6 FROM products p WHERE p.product_code = '20108' ON CONFLICT (product_id, package_unit) DO NOTHING;
 INSERT INTO product_manhours (product_id, package_unit, avg_hours) SELECT p.id, '75mL', 3 FROM products p WHERE p.product_code = '77500' ON CONFLICT (product_id, package_unit) DO NOTHING;
 INSERT INTO product_manhours (product_id, package_unit, avg_hours) SELECT p.id, '75mL', 3 FROM products p WHERE p.product_code = '71121' ON CONFLICT (product_id, package_unit) DO NOTHING;
-INSERT INTO product_manhours (product_id, package_unit, avg_hours) SELECT p.id, NULL, 3 FROM products p WHERE p.product_code = '29594' ON CONFLICT (product_id, package_unit) DO NOTHING;
 INSERT INTO product_manhours (product_id, package_unit, avg_hours) SELECT p.id, '100T', 3 FROM products p WHERE p.product_code = '23381' ON CONFLICT (product_id, package_unit) DO NOTHING;
 INSERT INTO product_manhours (product_id, package_unit, avg_hours) SELECT p.id, '30T', 3 FROM products p WHERE p.product_code = '23382' ON CONFLICT (product_id, package_unit) DO NOTHING;
 INSERT INTO product_manhours (product_id, package_unit, avg_hours) SELECT p.id, '100T', 3 FROM products p WHERE p.product_code = '23383' ON CONFLICT (product_id, package_unit) DO NOTHING;
@@ -2023,7 +2021,6 @@ INSERT INTO product_manhours (product_id, package_unit, avg_hours) SELECT p.id, 
 INSERT INTO product_manhours (product_id, package_unit, avg_hours) SELECT p.id, '60C', 6 FROM products p WHERE p.product_code = '21147' ON CONFLICT (product_id, package_unit) DO NOTHING;
 INSERT INTO product_manhours (product_id, package_unit, avg_hours) SELECT p.id, '75mL', 4 FROM products p WHERE p.product_code = '23045' ON CONFLICT (product_id, package_unit) DO NOTHING;
 INSERT INTO product_manhours (product_id, package_unit, avg_hours) SELECT p.id, '0', 2 FROM products p WHERE p.product_code = '19719' ON CONFLICT (product_id, package_unit) DO NOTHING;
-INSERT INTO product_manhours (product_id, package_unit, avg_hours) SELECT p.id, NULL, 3 FROM products p WHERE p.product_code = '24087' ON CONFLICT (product_id, package_unit) DO NOTHING;
 INSERT INTO product_manhours (product_id, package_unit, avg_hours) SELECT p.id, '28T', 3 FROM products p WHERE p.product_code = '23064' ON CONFLICT (product_id, package_unit) DO NOTHING;
 INSERT INTO product_manhours (product_id, package_unit, avg_hours) SELECT p.id, '30T', 4 FROM products p WHERE p.product_code = '21494' ON CONFLICT (product_id, package_unit) DO NOTHING;
 INSERT INTO product_manhours (product_id, package_unit, avg_hours) SELECT p.id, '30T', 4 FROM products p WHERE p.product_code = '21495' ON CONFLICT (product_id, package_unit) DO NOTHING;
@@ -2031,7 +2028,4 @@ INSERT INTO product_manhours (product_id, package_unit, avg_hours) SELECT p.id, 
 INSERT INTO product_manhours (product_id, package_unit, avg_hours) SELECT p.id, '30T', 4 FROM products p WHERE p.product_code = '21497' ON CONFLICT (product_id, package_unit) DO NOTHING;
 INSERT INTO product_manhours (product_id, package_unit, avg_hours) SELECT p.id, '30T', 3 FROM products p WHERE p.product_code = '25255' ON CONFLICT (product_id, package_unit) DO NOTHING;
 INSERT INTO product_manhours (product_id, package_unit, avg_hours) SELECT p.id, '12T', 4 FROM products p WHERE p.product_code = '29580' ON CONFLICT (product_id, package_unit) DO NOTHING;
-INSERT INTO product_manhours (product_id, package_unit, avg_hours) SELECT p.id, NULL, 4 FROM products p WHERE p.product_code = '29579' ON CONFLICT (product_id, package_unit) DO NOTHING;
 INSERT INTO product_manhours (product_id, package_unit, avg_hours) SELECT p.id, '75mL', 4 FROM products p WHERE p.product_code = '23050' ON CONFLICT (product_id, package_unit) DO NOTHING;
-INSERT INTO product_manhours (product_id, package_unit, avg_hours) SELECT p.id, NULL, 5 FROM products p WHERE p.product_code = '29449' ON CONFLICT (product_id, package_unit) DO NOTHING;
-INSERT INTO product_manhours (product_id, package_unit, avg_hours) SELECT p.id, NULL, 3 FROM products p WHERE p.product_code = '21350' ON CONFLICT (product_id, package_unit) DO NOTHING;
