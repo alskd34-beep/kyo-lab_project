@@ -12,10 +12,31 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@frontend/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@frontend/components/ui/select'
+
+const CATEGORIES = ['성상·포장', '이화학', '함량시험', '확인시험', '기기분석', '안전성', '기타'] as const
+type Category = typeof CATEGORIES[number]
+
+const CATEGORY_COLORS: Record<string, string> = {
+  '성상·포장': 'bg-purple-100 text-purple-700',
+  '이화학':    'bg-blue-100 text-blue-700',
+  '함량시험':  'bg-green-100 text-green-700',
+  '확인시험':  'bg-teal-100 text-teal-700',
+  '기기분석':  'bg-orange-100 text-orange-700',
+  '안전성':    'bg-red-100 text-red-700',
+  '기타':      'bg-slate-100 text-slate-600',
+}
 
 interface TestItemRow {
   id: string
   name: string
+  category: string
   estimatedHours: number | null
   requiresDuo: boolean
   isActive: boolean
@@ -24,12 +45,14 @@ interface TestItemRow {
 
 interface FormState {
   name: string
+  category: Category
   estimatedHours: string
   requiresDuo: boolean
 }
 
 const EMPTY_FORM: FormState = {
   name: '',
+  category: '기타',
   estimatedHours: '',
   requiresDuo: false,
 }
@@ -38,12 +61,12 @@ export default function TestMasterPage() {
   const [rows, setRows]             = useState<TestItemRow[]>([])
   const [loading, setLoading]       = useState(true)
   const [search, setSearch]         = useState('')
+  const [activeTab, setActiveTab]   = useState<'전체' | Category>('전체')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [form, setForm]             = useState<FormState>(EMPTY_FORM)
   const [saving, setSaving]         = useState(false)
   const [error, setError]           = useState<string | null>(null)
 
-  // Inline edit state
   const [editNameId, setEditNameId]   = useState<string | null>(null)
   const [editNameVal, setEditNameVal] = useState('')
   const [editHoursId, setEditHoursId] = useState<string | null>(null)
@@ -52,7 +75,6 @@ export default function TestMasterPage() {
   const nameInputRef  = useRef<HTMLInputElement>(null)
   const hoursInputRef = useRef<HTMLInputElement>(null)
 
-  // ── Load ────────────────────────────────────────────────────────────────────
   useEffect(() => { loadItems() }, [])
 
   async function loadItems() {
@@ -69,14 +91,23 @@ export default function TestMasterPage() {
     }
   }
 
-  // ── Filter ───────────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return rows
-    return rows.filter(r => r.name.toLowerCase().includes(q))
-  }, [rows, search])
+    return rows.filter(r => {
+      if (activeTab !== '전체' && r.category !== activeTab) return false
+      if (q && !r.name.toLowerCase().includes(q)) return false
+      return true
+    })
+  }, [rows, search, activeTab])
 
-  // ── PATCH helper ─────────────────────────────────────────────────────────────
+  const tabCounts = useMemo(() => {
+    const counts: Record<string, number> = { '전체': rows.length }
+    for (const cat of CATEGORIES) {
+      counts[cat] = rows.filter(r => r.category === cat).length
+    }
+    return counts
+  }, [rows])
+
   async function patchItem(id: string, payload: Partial<TestItemRow>) {
     const res = await fetch('/api/test-items', {
       method: 'PATCH',
@@ -87,7 +118,6 @@ export default function TestMasterPage() {
     setRows(prev => prev.map(r => (r.id === id ? { ...r, ...payload } : r)))
   }
 
-  // ── Toggle duo ───────────────────────────────────────────────────────────────
   async function toggleDuo(row: TestItemRow) {
     const next = !row.requiresDuo
     setRows(prev => prev.map(r => (r.id === row.id ? { ...r, requiresDuo: next } : r)))
@@ -95,7 +125,6 @@ export default function TestMasterPage() {
     catch { await loadItems() }
   }
 
-  // ── Toggle active ────────────────────────────────────────────────────────────
   async function toggleActive(row: TestItemRow) {
     const next = !row.isActive
     setRows(prev => prev.map(r => (r.id === row.id ? { ...r, isActive: next } : r)))
@@ -103,7 +132,6 @@ export default function TestMasterPage() {
     catch { await loadItems() }
   }
 
-  // ── Inline name edit ─────────────────────────────────────────────────────────
   function startNameEdit(row: TestItemRow) {
     setEditNameId(row.id)
     setEditNameVal(row.name)
@@ -118,7 +146,6 @@ export default function TestMasterPage() {
     catch { await loadItems() }
   }
 
-  // ── Inline hours edit ────────────────────────────────────────────────────────
   function startHoursEdit(row: TestItemRow) {
     setEditHoursId(row.id)
     setEditHoursVal(row.estimatedHours != null ? String(row.estimatedHours) : '')
@@ -135,7 +162,6 @@ export default function TestMasterPage() {
     catch { await loadItems() }
   }
 
-  // ── Delete ───────────────────────────────────────────────────────────────────
   async function handleDelete(row: TestItemRow) {
     setRows(prev => prev.filter(r => r.id !== row.id))
     try {
@@ -148,7 +174,6 @@ export default function TestMasterPage() {
     } catch { await loadItems() }
   }
 
-  // ── Add ──────────────────────────────────────────────────────────────────────
   async function handleAdd() {
     if (!form.name.trim()) return
     setSaving(true)
@@ -158,6 +183,7 @@ export default function TestMasterPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: form.name,
+          category: form.category,
           estimatedHours: form.estimatedHours ? Number(form.estimatedHours) : null,
           requiresDuo: form.requiresDuo,
         }),
@@ -173,7 +199,8 @@ export default function TestMasterPage() {
     }
   }
 
-  // ── Render ───────────────────────────────────────────────────────────────────
+  const ALL_TABS = ['전체', ...CATEGORIES] as const
+
   return (
     <div className="flex flex-1 flex-col p-5 gap-4">
       {/* Toolbar */}
@@ -208,12 +235,35 @@ export default function TestMasterPage() {
         </div>
       )}
 
+      {/* Category tabs */}
+      <div className="flex gap-1 flex-wrap">
+        {ALL_TABS.map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab as typeof activeTab)}
+            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+              activeTab === tab
+                ? 'bg-slate-800 text-white'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            {tab}
+            <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] ${
+              activeTab === tab ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-500'
+            }`}>
+              {tabCounts[tab] ?? 0}
+            </span>
+          </button>
+        ))}
+      </div>
+
       {/* Table */}
       <div className="flex-1 overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-slate-900 text-slate-100 text-xs">
               <th className="px-4 py-3 text-left font-semibold">시험항목명</th>
+              <th className="px-4 py-3 text-left font-semibold w-28">대분류</th>
               <th className="px-4 py-3 text-center font-semibold w-32">예상시간(h)</th>
               <th className="px-4 py-3 text-center font-semibold w-24">2인시험</th>
               <th className="px-4 py-3 text-center font-semibold w-20">활성</th>
@@ -223,13 +273,13 @@ export default function TestMasterPage() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={5} className="py-16 text-center text-slate-400">
+                <td colSpan={6} className="py-16 text-center text-slate-400">
                   불러오는 중...
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={5} className="py-16 text-center text-slate-400">
+                <td colSpan={6} className="py-16 text-center text-slate-400">
                   데이터가 없습니다.
                 </td>
               </tr>
@@ -258,6 +308,15 @@ export default function TestMasterPage() {
                     ) : (
                       <span className="font-medium text-slate-800">{row.name}</span>
                     )}
+                  </td>
+
+                  {/* 대분류 badge */}
+                  <td className="px-4 py-2.5">
+                    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+                      CATEGORY_COLORS[row.category] ?? CATEGORY_COLORS['기타']
+                    }`}>
+                      {row.category || '기타'}
+                    </span>
                   </td>
 
                   {/* 예상시간 — inline edit */}
@@ -349,6 +408,22 @@ export default function TestMasterPage() {
                 onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                 placeholder="시험항목명을 입력하세요"
               />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-slate-700">대분류</label>
+              <Select
+                value={form.category}
+                onValueChange={v => setForm(f => ({ ...f, category: v as Category }))}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CATEGORIES.map(cat => (
+                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-slate-700">예상시간 (h)</label>

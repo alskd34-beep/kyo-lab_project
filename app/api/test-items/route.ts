@@ -18,6 +18,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const row = await createTestItem({
       name: body.name,
+      category: body.category,
       estimatedHours: body.estimatedHours,
       requiresDuo: body.requiresDuo,
     })
