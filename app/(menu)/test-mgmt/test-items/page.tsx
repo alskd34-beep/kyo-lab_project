@@ -1,208 +1,388 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { Card, CardContent } from '@frontend/components/ui/card'
-import { Search } from 'lucide-react'
+import { Trash2, Plus, Search } from 'lucide-react'
+import { Badge } from '@frontend/components/ui/badge'
+import { Button } from '@frontend/components/ui/button'
+import { Input } from '@frontend/components/ui/input'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@frontend/components/ui/dialog'
 
 interface ProductRow {
-  product_name: string
+  id: string
+  productCode: string
+  name: string
+  nameAlt: string | null
+  unit: string | null
+  productType: string | null
+  packageSpec: string | null
+  isActive: boolean
+  sortOrder: number
 }
 
-const DEMO_PRODUCTS: ProductRow[] = [
-  { product_name: '(미얀마 수출용)타목시펜정20mg' },
-  { product_name: '(베트남수출용)광동우황청심원(영묘향)' },
-  { product_name: '(사향)광동우황청심원(신)' },
-  { product_name: '(사향)광동우황청심원현탁액(신)' },
-  { product_name: '슬라임캡슐' },
-  { product_name: '베니톨정' },
-  { product_name: '알도셉트정5mg' },
-  { product_name: '개풍경옥고' },
-]
-
-const DEMO_TEST_ITEMS: Record<string, string[]> = {
-  '(미얀마 수출용)타목시펜정20mg':       ['성상,포장확인', '용출', '확인(정성)', '에탄올', '함량', '확인,함량균일성'],
-  '(베트남수출용)광동우황청심원(영묘향)': ['성상,포장확인', 'GCMS함량', 'GCMS확인', '이화학'],
-  '(사향)광동우황청심원(신)':            ['성상,포장확인', 'GCMS함량', 'GCMS확인', '확인(정성)', '함량', 'pH', '이화학'],
-  '(사향)광동우황청심원현탁액(신)':      ['성상,포장확인', 'GCMS함량', 'GCMS확인', '이화학'],
-  '슬라임캡슐':                          ['성상,포장확인', '용출', '붕해', '함량', '이화학'],
-  '베니톨정':                            ['성상,포장확인', 'HPLC함량', 'HPLC확인', '용출', '이화학'],
-  '알도셉트정5mg':                       ['성상,포장확인', 'HPLC함량', '용출', '붕해', '이화학'],
-  '개풍경옥고':                          ['성상,포장확인', '함량', 'pH', '이화학', '미생물'],
+interface TestItemRow {
+  id: string
+  name: string
+  estimatedHours: number | null
+  requiresDuo: boolean
+  isActive: boolean
+  createdAt: string
 }
 
-const ITEM_BADGE_COLORS = [
-  'bg-blue-50 text-blue-700 border-blue-200',
-  'bg-violet-50 text-violet-700 border-violet-200',
-  'bg-emerald-50 text-emerald-700 border-emerald-200',
-  'bg-amber-50 text-amber-700 border-amber-200',
-  'bg-sky-50 text-sky-700 border-sky-200',
-  'bg-rose-50 text-rose-700 border-rose-200',
-]
-
-function getItemColor(index: number): string {
-  return ITEM_BADGE_COLORS[index % ITEM_BADGE_COLORS.length]
+interface ProductTestItemRow {
+  testItemId: string
+  testItemName: string
+  isMandatory: boolean
+  sequenceOrder: number
 }
 
 export default function TestItemsPage() {
-  const [products, setProducts]               = useState<ProductRow[]>(DEMO_PRODUCTS)
-  const [testItems, setTestItems]             = useState<Record<string, string[]>>(DEMO_TEST_ITEMS)
-  const [selectedProduct, setSelectedProduct] = useState<string>(DEMO_PRODUCTS[0].product_name)
-  const [searchValue, setSearchValue]         = useState('')
-  const [usingDemo, setUsingDemo]             = useState(true)
+  const [products, setProducts]               = useState<ProductRow[]>([])
+  const [allTestItems, setAllTestItems]       = useState<TestItemRow[]>([])
+  const [selectedProduct, setSelectedProduct] = useState<ProductRow | null>(null)
+  const [linkedItems, setLinkedItems]         = useState<ProductTestItemRow[]>([])
+  const [productSearch, setProductSearch]     = useState('')
+  const [addDialogOpen, setAddDialogOpen]     = useState(false)
+  const [selectedToAdd, setSelectedToAdd]     = useState<Set<string>>(new Set())
+  const [addLoading, setAddLoading]           = useState(false)
+  const [error, setError]                     = useState<string | null>(null)
 
+  // ── Load products & test items ───────────────────────────────────────────────
   useEffect(() => {
-    fetch('/api/products?limit=200')
-      .then(async r => {
-        if (!r.ok) throw new Error(await r.text())
-        return r.json() as Promise<{ rows: ProductRow[] }>
-      })
-      .then(({ rows }) => {
-        if (rows.length > 0) {
-          setProducts(rows)
-          setSelectedProduct(rows[0].product_name)
-          setUsingDemo(false)
-        } else {
-          setUsingDemo(true)
-        }
-      })
-      .catch(() => {
-        setUsingDemo(true)
-      })
+    loadProducts()
+    loadAllTestItems()
   }, [])
 
+  async function loadProducts() {
+    try {
+      const res = await fetch('/api/products')
+      if (!res.ok) throw new Error(await res.text())
+      const data = await res.json() as { rows: ProductRow[] }
+      setProducts(data.rows)
+    } catch (e) {
+      setError(String(e))
+    }
+  }
+
+  async function loadAllTestItems() {
+    try {
+      const res = await fetch('/api/test-items')
+      if (!res.ok) throw new Error(await res.text())
+      const data = await res.json() as { rows: TestItemRow[] }
+      setAllTestItems(data.rows)
+    } catch (e) {
+      setError(String(e))
+    }
+  }
+
+  // ── Load linked items for selected product ───────────────────────────────────
   useEffect(() => {
-    if (usingDemo) return
-    if (!selectedProduct) return
-    fetch(`/api/products?productName=${encodeURIComponent(selectedProduct)}`)
-      .then(async r => {
-        if (!r.ok) throw new Error(await r.text())
-        return r.json() as Promise<{ items: string[] }>
-      })
-      .then(({ items }) => {
-        setTestItems(prev => ({ ...prev, [selectedProduct]: items }))
-      })
-      .catch(() => {})
-  }, [selectedProduct, usingDemo])
+    if (!selectedProduct) { setLinkedItems([]); return }
+    loadLinkedItems(selectedProduct.id)
+  }, [selectedProduct])
 
+  async function loadLinkedItems(productId: string) {
+    try {
+      const res = await fetch(`/api/product-test-items?productId=${productId}`)
+      if (!res.ok) throw new Error(await res.text())
+      const data = await res.json() as { rows: ProductTestItemRow[] }
+      setLinkedItems(data.rows)
+    } catch (e) {
+      setError(String(e))
+    }
+  }
+
+  // ── Filtered product list ────────────────────────────────────────────────────
   const filteredProducts = useMemo(() => {
-    if (!searchValue.trim()) return products
-    return products.filter(p => p.product_name.includes(searchValue.trim()))
-  }, [products, searchValue])
+    const q = productSearch.trim().toLowerCase()
+    if (!q) return products
+    return products.filter(
+      p =>
+        p.name.toLowerCase().includes(q) ||
+        p.productCode.toLowerCase().includes(q),
+    )
+  }, [products, productSearch])
 
-  const currentItems = testItems[selectedProduct] ?? []
+  // ── Test items not yet linked ────────────────────────────────────────────────
+  const linkedIds = useMemo(
+    () => new Set(linkedItems.map(li => li.testItemId)),
+    [linkedItems],
+  )
+  const availableToAdd = useMemo(
+    () => allTestItems.filter(ti => !linkedIds.has(ti.id) && ti.isActive),
+    [allTestItems, linkedIds],
+  )
 
+  // ── Delete linked item ───────────────────────────────────────────────────────
+  async function handleDeleteLinked(testItemId: string) {
+    if (!selectedProduct) return
+    setLinkedItems(prev => prev.filter(li => li.testItemId !== testItemId))
+    try {
+      const res = await fetch('/api/product-test-items', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId: selectedProduct.id, testItemId }),
+      })
+      if (!res.ok) throw new Error(await res.text())
+    } catch {
+      await loadLinkedItems(selectedProduct.id)
+    }
+  }
+
+  // ── Add linked items ─────────────────────────────────────────────────────────
+  async function handleAddItems() {
+    if (!selectedProduct || selectedToAdd.size === 0) return
+    setAddLoading(true)
+    try {
+      const nextOrder = linkedItems.length
+      const promises = Array.from(selectedToAdd).map((testItemId, idx) =>
+        fetch('/api/product-test-items', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            productId: selectedProduct.id,
+            testItemId,
+            sequenceOrder: nextOrder + idx,
+          }),
+        }),
+      )
+      await Promise.all(promises)
+      await loadLinkedItems(selectedProduct.id)
+      setSelectedToAdd(new Set())
+      setAddDialogOpen(false)
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setAddLoading(false)
+    }
+  }
+
+  function toggleSelectAdd(id: string) {
+    setSelectedToAdd(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-1 flex-col p-5">
-      <div className="flex flex-1 gap-4 min-h-0">
+    <div className="flex flex-1 min-h-0 h-full">
+      {/* ── Left panel: product selector ──────────────────────────────────────── */}
+      <div className="flex w-72 shrink-0 flex-col border-r border-slate-200 bg-white">
+        {/* Header */}
+        <div className="border-b border-slate-100 px-4 py-3 shrink-0">
+          <p className="text-sm font-semibold text-slate-700 mb-2.5">품목 선택</p>
+          <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+            <Search size={13} className="text-slate-400 shrink-0" />
+            <input
+              type="text"
+              placeholder="품목명 / 코드 검색..."
+              value={productSearch}
+              onChange={e => setProductSearch(e.target.value)}
+              className="w-full bg-transparent text-xs text-slate-700 outline-none placeholder:text-slate-400"
+            />
+          </div>
+        </div>
 
-        {/* Left panel — product list */}
-        <Card className="flex w-[280px] shrink-0 flex-col border border-slate-200 shadow-none rounded-xl bg-white py-0 overflow-hidden">
-          {/* Panel header */}
-          <div className="border-b border-slate-100 px-4 py-3">
-            <div className="flex items-center justify-between mb-2.5">
-              <span className="text-xs font-semibold text-slate-700">품목 목록</span>
-              {usingDemo && (
-                <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700 border border-amber-200">
-                  데모 모드
-                </span>
-              )}
+        {/* Product list */}
+        <div className="flex-1 overflow-y-auto">
+          {filteredProducts.length === 0 ? (
+            <div className="flex items-center justify-center py-10">
+              <p className="text-xs text-slate-400">검색 결과 없음</p>
             </div>
-            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
-              <Search size={13} className="text-slate-400 shrink-0" />
-              <input
-                type="text"
-                placeholder="품목명 검색..."
-                value={searchValue}
-                onChange={e => setSearchValue(e.target.value)}
-                className="w-full bg-transparent text-xs text-slate-700 outline-none placeholder:text-slate-400"
-              />
+          ) : (
+            <ul>
+              {filteredProducts.map(product => {
+                const isSelected = selectedProduct?.id === product.id
+                return (
+                  <li key={product.id}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedProduct(product)}
+                      className={`w-full px-4 py-2.5 text-left transition-colors border-l-2 ${
+                        isSelected
+                          ? 'bg-blue-50 border-blue-600'
+                          : 'border-transparent hover:bg-slate-50/70'
+                      }`}
+                    >
+                      <p className={`text-[10px] font-mono mb-0.5 ${isSelected ? 'text-blue-500' : 'text-slate-400'}`}>
+                        {product.productCode}
+                      </p>
+                      <p className={`text-xs font-medium leading-snug ${isSelected ? 'text-blue-700' : 'text-slate-700'}`}>
+                        {product.name}
+                      </p>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-slate-100 px-4 py-2 bg-slate-50/50 shrink-0">
+          <p className="text-[11px] text-slate-400">
+            총 <span className="font-semibold text-slate-600">{filteredProducts.length}</span>개 품목
+          </p>
+        </div>
+      </div>
+
+      {/* ── Right panel: linked test items ────────────────────────────────────── */}
+      <div className="flex flex-1 flex-col bg-slate-50 p-5 gap-4 overflow-auto">
+        {!selectedProduct ? (
+          <div className="flex flex-1 items-center justify-center">
+            <div className="text-center text-slate-400">
+              <p className="text-sm">좌측에서 품목을 선택하세요</p>
             </div>
           </div>
-
-          {/* Product list */}
-          <div className="flex-1 overflow-y-auto">
-            {filteredProducts.length === 0 ? (
-              <div className="flex items-center justify-center py-8">
-                <p className="text-xs text-slate-400">검색 결과 없음</p>
+        ) : (
+          <>
+            {/* Panel header */}
+            <div className="flex items-center gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] text-slate-500 font-mono mb-0.5">{selectedProduct.productCode}</p>
+                <h2 className="text-base font-semibold text-slate-800 truncate">{selectedProduct.name}</h2>
               </div>
+              <Badge variant="secondary" className="text-xs shrink-0">
+                {linkedItems.length}건
+              </Badge>
+              <Button
+                onClick={() => { setSelectedToAdd(new Set()); setAddDialogOpen(true) }}
+                size="sm"
+                className="bg-blue-600 hover:bg-blue-700 text-white h-9 shrink-0"
+              >
+                <Plus size={15} className="mr-1" />
+                시험항목 추가
+              </Button>
+            </div>
+
+            {error && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+                {error}
+              </div>
+            )}
+
+            {/* Linked items table */}
+            <div className="overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-900 text-slate-100 text-xs">
+                    <th className="px-4 py-3 text-center font-semibold w-16">순서</th>
+                    <th className="px-4 py-3 text-left font-semibold">시험항목명</th>
+                    <th className="px-4 py-3 text-center font-semibold w-24">필수여부</th>
+                    <th className="px-4 py-3 text-center font-semibold w-20">삭제</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {linkedItems.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="py-12 text-center text-slate-400 text-sm">
+                        연결된 시험항목이 없습니다. 우측 상단에서 추가하세요.
+                      </td>
+                    </tr>
+                  ) : (
+                    linkedItems
+                      .sort((a, b) => a.sequenceOrder - b.sequenceOrder)
+                      .map((li, idx) => (
+                        <tr
+                          key={li.testItemId}
+                          className={`border-t border-slate-100 transition-colors hover:bg-slate-100/60 ${
+                            idx % 2 === 1 ? 'bg-slate-50' : 'bg-white'
+                          }`}
+                        >
+                          <td className="px-4 py-2.5 text-center text-slate-500">{li.sequenceOrder + 1}</td>
+                          <td className="px-4 py-2.5 font-medium text-slate-800">{li.testItemName}</td>
+                          <td className="px-4 py-2.5 text-center">
+                            {li.isMandatory ? (
+                              <Badge className="bg-red-50 text-red-600 border-red-200 hover:bg-red-50 text-[11px]">
+                                필수
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-100 text-[11px]">
+                                선택
+                              </Badge>
+                            )}
+                          </td>
+                          <td className="px-4 py-2.5 text-center">
+                            <button
+                              onClick={() => handleDeleteLinked(li.testItemId)}
+                              className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                              title="연결 해제"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* ── Add test items dialog ──────────────────────────────────────────────── */}
+      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>시험항목 추가</DialogTitle>
+          </DialogHeader>
+
+          <div className="max-h-80 overflow-y-auto rounded-lg border border-slate-200">
+            {availableToAdd.length === 0 ? (
+              <p className="py-8 text-center text-sm text-slate-400">추가할 수 있는 시험항목이 없습니다.</p>
             ) : (
-              <ul>
-                {filteredProducts.map(product => {
-                  const isSelected = selectedProduct === product.product_name
-                  return (
-                    <li key={product.product_name}>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedProduct(product.product_name)}
-                        className={`w-full px-4 py-2.5 text-left text-xs transition-colors ${
-                          isSelected
-                            ? 'bg-blue-50 border-l-2 border-blue-600 text-blue-700 font-medium'
-                            : 'border-l-2 border-transparent text-slate-700 hover:bg-slate-50/70'
-                        }`}
-                      >
-                        {product.product_name}
-                      </button>
-                    </li>
-                  )
-                })}
+              <ul className="divide-y divide-slate-100">
+                {availableToAdd.map(ti => (
+                  <li key={ti.id}>
+                    <label className="flex cursor-pointer items-center gap-3 px-4 py-2.5 hover:bg-slate-50">
+                      <input
+                        type="checkbox"
+                        checked={selectedToAdd.has(ti.id)}
+                        onChange={() => toggleSelectAdd(ti.id)}
+                        className="h-4 w-4 rounded border-slate-300 text-blue-600"
+                      />
+                      <span className="flex-1 text-sm text-slate-700">{ti.name}</span>
+                      {ti.estimatedHours != null && (
+                        <span className="text-xs text-slate-400">{ti.estimatedHours}h</span>
+                      )}
+                      {ti.requiresDuo && (
+                        <Badge className="bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-50 text-[10px]">
+                          2인
+                        </Badge>
+                      )}
+                    </label>
+                  </li>
+                ))}
               </ul>
             )}
           </div>
 
-          {/* Footer */}
-          <div className="border-t border-slate-100 px-4 py-2 bg-slate-50/50">
-            <p className="text-[11px] text-slate-400">
-              총 <span className="font-semibold text-slate-600">{filteredProducts.length}</span>개 품목
-            </p>
-          </div>
-        </Card>
-
-        {/* Right panel — test items */}
-        <Card className="flex flex-1 flex-col border border-slate-200 shadow-none rounded-xl bg-white py-0 overflow-hidden">
-          {/* Panel header */}
-          <div className="border-b border-slate-100 px-5 py-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[11px] uppercase tracking-wide text-slate-500 mb-0.5">선택된 품목</p>
-                <h2 className="text-sm font-semibold text-slate-800">{selectedProduct}</h2>
-              </div>
-              <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-[11px] font-semibold text-blue-700 border border-blue-200">
-                {currentItems.length}개 항목
-              </span>
-            </div>
+          <div className="text-xs text-slate-500 mt-1">
+            {selectedToAdd.size > 0 ? `${selectedToAdd.size}개 선택됨` : '시험항목을 선택하세요'}
           </div>
 
-          {/* Test item chips */}
-          <CardContent className="flex-1 overflow-y-auto p-5">
-            {currentItems.length === 0 ? (
-              <div className="flex items-center justify-center h-full">
-                <p className="text-sm text-slate-400">시험항목이 없습니다.</p>
-              </div>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {currentItems.map((item, idx) => (
-                  <div
-                    key={`${item}-${idx}`}
-                    className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 transition-all hover:shadow-sm ${getItemColor(idx)}`}
-                  >
-                    <span className="text-sm font-medium">{item}</span>
-                    <span className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-bold border bg-white/60 border-current text-current">
-                      {idx % 2 === 0 ? 'Solo' : 'Duo'}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-
-          {/* Footer */}
-          <div className="border-t border-slate-100 px-5 py-2.5 bg-slate-50/50">
-            <p className="text-[11px] text-slate-400">
-              <span className="font-semibold text-slate-600">{selectedProduct}</span>의 시험항목 목록
-            </p>
-          </div>
-        </Card>
-      </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddDialogOpen(false)} disabled={addLoading}>
+              취소
+            </Button>
+            <Button
+              onClick={handleAddItems}
+              disabled={addLoading || selectedToAdd.size === 0}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              {addLoading ? '추가 중...' : `추가 (${selectedToAdd.size})`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

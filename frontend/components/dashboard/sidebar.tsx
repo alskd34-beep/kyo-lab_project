@@ -47,6 +47,7 @@ const NAV_ITEMS: NavItem[] = [
       { id: 'test-result', label: '결과입력' },
       { id: 'test-cert',   label: '성적서관리' },
       { id: 'test-items',  label: '시험항목관리', live: true },
+      { id: 'test-master', label: '시험항목마스터', live: true },
     ],
   },
   {
@@ -57,7 +58,8 @@ const NAV_ITEMS: NavItem[] = [
       { id: 'prod-status', label: '제품시험현황', live: true },
       { id: 'prod-reg',    label: '완제품등록' },
       { id: 'prod-std',    label: '기준서관리' },
-      { id: 'manhours',    label: '평균공수관리', live: true },
+      { id: 'manhours',       label: '평균공수관리', live: true },
+      { id: 'products-master', label: '품목마스터관리', live: true },
     ],
   },
   {
@@ -140,11 +142,13 @@ const PATH_MAP: Record<string, string> = {
   'test-result': '/test-mgmt/test-result',
   'test-cert':   '/test-mgmt/test-cert',
   'test-items':  '/test-mgmt/test-items',
+  'test-master': '/test-mgmt/test-master',
   // 제품시험
   'prod-status': '/product-test/prod-status',
   'prod-reg':    '/product-test/prod-reg',
   'prod-std':    '/product-test/prod-std',
-  'manhours':    '/product-test/manhours',
+  'manhours':        '/product-test/manhours',
+  'products-master': '/product-test/products',
   // 안정성시험
   'stab-status': '/stability/stab-status',
   'stab-plan':   '/stability/stab-plan',

@@ -1,15 +1,11 @@
 import { NextRequest } from 'next/server'
-import { listProducts, createProduct, updateProduct, deleteProduct } from '@backend/services/products'
+import { listTestItems, createTestItem, updateTestItem, deleteTestItem } from '@backend/services/testItems'
 
 export const runtime = 'nodejs'
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
-    const sp = req.nextUrl.searchParams
-    const rows = await listProducts({
-      search: sp.get('search') ?? undefined,
-      limit: sp.get('limit') ? Number(sp.get('limit')) : undefined,
-    })
+    const rows = await listTestItems()
     return Response.json({ rows })
   } catch (err) {
     const msg = err instanceof Error ? err.message : '서버 오류'
@@ -20,13 +16,10 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const row = await createProduct({
-      productCode: body.productCode,
+    const row = await createTestItem({
       name: body.name,
-      nameAlt: body.nameAlt,
-      unit: body.unit,
-      productType: body.productType,
-      packageSpec: body.packageSpec,
+      estimatedHours: body.estimatedHours,
+      requiresDuo: body.requiresDuo,
     })
     return Response.json({ row }, { status: 201 })
   } catch (err) {
@@ -40,7 +33,7 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json()
     const { id, ...fields } = body
     if (!id) return Response.json({ error: 'id 필수' }, { status: 400 })
-    await updateProduct(id, fields)
+    await updateTestItem(id, fields)
     return Response.json({ ok: true })
   } catch (err) {
     const msg = err instanceof Error ? err.message : '서버 오류'
@@ -53,7 +46,7 @@ export async function DELETE(req: NextRequest) {
     const body = await req.json()
     const { id } = body
     if (!id) return Response.json({ error: 'id 필수' }, { status: 400 })
-    await deleteProduct(id)
+    await deleteTestItem(id)
     return Response.json({ ok: true })
   } catch (err) {
     const msg = err instanceof Error ? err.message : '서버 오류'
