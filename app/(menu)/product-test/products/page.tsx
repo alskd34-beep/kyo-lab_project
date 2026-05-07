@@ -438,7 +438,7 @@ export default function ProductsPage() {
                 <select
                   value={form.categoryId}
                   onChange={f('categoryId')}
-                  className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-blue-300"
+                  className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-blue-400 focus-visible:ring-blue-400/40 focus-visible:ring-[3px]"
                 >
                   <option value="">—</option>
                   {categories.map(c => (
@@ -451,7 +451,7 @@ export default function ProductsPage() {
                 <select
                   value={form.classificationId}
                   onChange={f('classificationId')}
-                  className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-blue-300"
+                  className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-blue-400 focus-visible:ring-blue-400/40 focus-visible:ring-[3px]"
                 >
                   <option value="">—</option>
                   {classifications.map(c => (
@@ -468,7 +468,7 @@ export default function ProductsPage() {
                 <select
                   value={form.difficulty}
                   onChange={f('difficulty')}
-                  className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-blue-300"
+                  className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-blue-400 focus-visible:ring-blue-400/40 focus-visible:ring-[3px]"
                 >
                   {DIFFICULTY_OPTIONS.map(o => (
                     <option key={o.value} value={o.value}>{o.label}</option>

@@ -3,13 +3,24 @@ import { listTestItems, createTestItem, updateTestItem, deleteTestItem } from '@
 
 export const runtime = 'nodejs'
 
+function serializeError(err: unknown): string {
+  if (err instanceof Error) return err.message
+  if (err && typeof err === 'object') {
+    const o = err as Record<string, unknown>
+    const parts = [o.message, o.details, o.hint, o.code].filter(Boolean)
+    if (parts.length) return parts.join(' | ')
+    try { return JSON.stringify(err) } catch { return String(err) }
+  }
+  return String(err)
+}
+
 export async function GET() {
   try {
     const rows = await listTestItems()
     return Response.json({ rows })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : '서버 오류'
-    return Response.json({ error: msg }, { status: 500 })
+    console.error('[api/test-items GET]', err)
+    return Response.json({ error: serializeError(err) }, { status: 500 })
   }
 }
 
@@ -24,8 +35,8 @@ export async function POST(req: NextRequest) {
     })
     return Response.json({ row }, { status: 201 })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : '서버 오류'
-    return Response.json({ error: msg }, { status: 500 })
+    console.error('[api/test-items POST]', err)
+    return Response.json({ error: serializeError(err) }, { status: 500 })
   }
 }
 
@@ -37,8 +48,8 @@ export async function PATCH(req: NextRequest) {
     await updateTestItem(id, fields)
     return Response.json({ ok: true })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : '서버 오류'
-    return Response.json({ error: msg }, { status: 500 })
+    console.error('[api/test-items PATCH]', err)
+    return Response.json({ error: serializeError(err) }, { status: 500 })
   }
 }
 
@@ -50,7 +61,7 @@ export async function DELETE(req: NextRequest) {
     await deleteTestItem(id)
     return Response.json({ ok: true })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : '서버 오류'
-    return Response.json({ error: msg }, { status: 500 })
+    console.error('[api/test-items DELETE]', err)
+    return Response.json({ error: serializeError(err) }, { status: 500 })
   }
 }

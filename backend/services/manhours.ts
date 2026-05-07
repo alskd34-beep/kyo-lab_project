@@ -39,10 +39,56 @@ export async function listManhours(): Promise<ManhoursRow[]> {
   }))
 }
 
-export async function updateManhour(id: string, avgHours: number): Promise<void> {
+export async function createManhour(input: {
+  productId:    string
+  packageUnit:  string
+  avgHours:     number
+}): Promise<ManhoursRow> {
+  const { data, error } = await supabase
+    .from('product_manhours')
+    .insert({
+      product_id:   input.productId,
+      package_unit: input.packageUnit,
+      avg_hours:    input.avgHours,
+      updated_at:   new Date().toISOString(),
+    })
+    .select(`
+      id,
+      product_id,
+      package_unit,
+      avg_hours,
+      updated_at,
+      products (
+        product_code,
+        name
+      )
+    `)
+    .single()
+  if (error) throw error
+  const r = data as Record<string, unknown>
+  const prod = r.products as { product_code: string; name: string } | null
+  return {
+    id:          r.id as string,
+    productId:   r.product_id as string,
+    productCode: prod?.product_code ?? '',
+    productName: prod?.name ?? '',
+    packageUnit: r.package_unit as string,
+    avgHours:    r.avg_hours as number,
+    updatedAt:   r.updated_at as string | null,
+  }
+}
+
+export async function updateManhour(
+  id: string,
+  patch: { avgHours?: number; packageUnit?: string },
+): Promise<void> {
+  const update: Record<string, unknown> = { updated_at: new Date().toISOString() }
+  if (patch.avgHours !== undefined)    update.avg_hours    = patch.avgHours
+  if (patch.packageUnit !== undefined) update.package_unit = patch.packageUnit
+
   const { error } = await supabase
     .from('product_manhours')
-    .update({ avg_hours: avgHours, updated_at: new Date().toISOString() })
+    .update(update)
     .eq('id', id)
   if (error) throw error
 }

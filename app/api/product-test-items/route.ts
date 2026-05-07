@@ -10,7 +10,8 @@ export async function GET(req: NextRequest) {
     const rows = await listByProduct(productId)
     return Response.json({ rows })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : '서버 오류'
+    console.error('[api/product-test-items GET]', err)
+    const msg = err instanceof Error ? err.message : JSON.stringify(err)
     return Response.json({ error: msg }, { status: 500 })
   }
 }
@@ -23,7 +24,8 @@ export async function POST(req: NextRequest) {
     await addMapping(productId, testItemId, sequenceOrder)
     return Response.json({ ok: true }, { status: 201 })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : '서버 오류'
+    console.error('[api/product-test-items POST]', err)
+    const msg = err instanceof Error ? err.message : JSON.stringify(err)
     return Response.json({ error: msg }, { status: 500 })
   }
 }
@@ -36,7 +38,8 @@ export async function DELETE(req: NextRequest) {
     await removeMapping(productId, testItemId)
     return Response.json({ ok: true })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : '서버 오류'
+    console.error('[api/product-test-items DELETE]', err)
+    const msg = err instanceof Error ? err.message : JSON.stringify(err)
     return Response.json({ error: msg }, { status: 500 })
   }
 }

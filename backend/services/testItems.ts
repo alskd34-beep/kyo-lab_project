@@ -33,7 +33,20 @@ export async function listTestItems(): Promise<TestItemRow[]> {
     .select('id, name, category, estimated_hours, requires_duo, is_active, created_at')
     .order('category', { ascending: true })
     .order('name',     { ascending: true })
-  if (error) throw error
+  if (error) {
+    // category 컬럼 미적용 DB에 대한 fallback (마이그레이션 0007 미실행 환경)
+    const code = (error as { code?: string }).code
+    const msg = (error as { message?: string }).message ?? ''
+    if (code === '42703' || /category/i.test(msg)) {
+      const { data: data2, error: error2 } = await supabase
+        .from('test_items')
+        .select('id, name, estimated_hours, requires_duo, is_active, created_at')
+        .order('name', { ascending: true })
+      if (error2) throw error2
+      return (data2 ?? []).map(r => mapRow(r as Record<string, unknown>))
+    }
+    throw error
+  }
   return (data ?? []).map(r => mapRow(r as Record<string, unknown>))
 }
 
