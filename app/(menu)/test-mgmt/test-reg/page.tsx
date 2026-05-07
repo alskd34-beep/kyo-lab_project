@@ -6,16 +6,12 @@ import { addDays, format, parse, isValid } from 'date-fns'
 import { Button } from '@frontend/components/ui/button'
 import { Card, CardContent } from '@frontend/components/ui/card'
 import { Search, ChevronDown } from 'lucide-react'
+import type { Product } from '@shared/pqm'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type DosageForm = '현탁제' | '내용고형제' | '전제' | '환제' | '액제' | '주사제'
 type ValidationType = '일반' | 'PV' | 'CV'
-
-interface ProductLookup {
-  name: string
-  testItems: string[]
-}
 
 interface TestItemRow {
   name: string
@@ -25,11 +21,11 @@ interface TestItemRow {
 
 // ─── Demo Data ────────────────────────────────────────────────────────────────
 
-const DEMO_PRODUCT_LOOKUP: Record<string, ProductLookup> = {
-  '21081': { name: '(사향)광동우황청심원현탁액(신)', testItems: ['성상,포장확인', 'GCMS함량', 'GCMS확인', '확인(정성)', '함량', 'pH', '이화학'] },
-  '23263': { name: '베니톨정', testItems: ['성상,포장확인', 'HPLC함량', 'HPLC확인', '용출', '이화학'] },
-  '21391': { name: '알도셉트정5mg', testItems: ['성상,포장확인', 'HPLC함량', '용출', '붕해', '이화학'] },
-  '21350': { name: '슬라임캡슐', testItems: ['성상,포장확인', '용출', '붕해', '함량', '이화학'] },
+const DEMO_PRODUCT_LOOKUP: Record<string, { product_name: string; testItems: string[] }> = {
+  '21081': { product_name: '(사향)광동우황청심원현탁액(신)', testItems: ['성상,포장확인', 'GCMS함량', 'GCMS확인', '확인(정성)', '함량', 'pH', '이화학'] },
+  '23263': { product_name: '베니톨정',                       testItems: ['성상,포장확인', 'HPLC함량', 'HPLC확인', '용출', '이화학'] },
+  '21391': { product_name: '알도셉트정5mg',                  testItems: ['성상,포장확인', 'HPLC함량', '용출', '붕해', '이화학'] },
+  '21350': { product_name: '슬라임캡슐',                     testItems: ['성상,포장확인', '용출', '붕해', '함량', '이화학'] },
 }
 
 const DEMO_TESTERS = ['', '김태훈', '박성호', '권택균', '장재훈', '지건희']
@@ -52,23 +48,23 @@ export default function TestRegPage() {
   const router = useRouter()
 
   // Form state
-  const [productCode, setProductCode]           = useState('')
-  const [productName, setProductName]           = useState('')
-  const [spec, setSpec]                         = useState('')
-  const [batchNo, setBatchNo]                   = useState('')
-  const [dosageForm, setDosageForm]             = useState<DosageForm | ''>('')
-  const [packagingDate, setPackagingDate]       = useState('')
-  const [reviewDeadline, setReviewDeadline]     = useState('')
-  const [qcPlannedDate, setQcPlannedDate]       = useState('')
-  const [validationType, setValidationType]     = useState<ValidationType>('일반')
-  const [testItems, setTestItems]               = useState<TestItemRow[]>([])
+  const [productCode, setProductCode]       = useState('')
+  const [productName, setProductName]       = useState('')
+  const [spec, setSpec]                     = useState('')
+  const [batchNo, setBatchNo]               = useState('')
+  const [dosageForm, setDosageForm]         = useState<DosageForm | ''>('')
+  const [packagingDate, setPackagingDate]   = useState('')
+  const [reviewDeadline, setReviewDeadline] = useState('')
+  const [qcPlannedDate, setQcPlannedDate]   = useState('')
+  const [validationType, setValidationType] = useState<ValidationType>('일반')
+  const [testItems, setTestItems]           = useState<TestItemRow[]>([])
 
   // UI state
-  const [isLookingUp, setIsLookingUp]           = useState(false)
-  const [isSaving, setIsSaving]                 = useState(false)
-  const [lookupError, setLookupError]           = useState('')
-  const [usingDemo, setUsingDemo]               = useState(false)
-  const [productFound, setProductFound]         = useState(false)
+  const [isLookingUp, setIsLookingUp] = useState(false)
+  const [isSaving, setIsSaving]       = useState(false)
+  const [lookupError, setLookupError] = useState('')
+  const [usingDemo, setUsingDemo]     = useState(false)
+  const [productFound, setProductFound] = useState(false)
 
   // Auto-calculate dates when packagingDate changes
   useEffect(() => {
@@ -89,19 +85,19 @@ export default function TestRegPage() {
     try {
       const [productRes, itemsRes] = await Promise.all([
         fetch(`/api/products?search=${encodeURIComponent(code)}`),
-        fetch(`/api/products/${encodeURIComponent(code)}/test-items`),
+        fetch(`/api/products?productName=${encodeURIComponent(code)}`),
       ])
 
       if (!productRes.ok || !itemsRes.ok) throw new Error('API error')
 
-      const productData = await productRes.json() as { name?: string }
+      const productData = await productRes.json() as { rows?: Product[] }
       const itemsData = await itemsRes.json() as { items?: string[] }
 
-      const name = productData.name ?? ''
+      const foundProduct = productData.rows?.[0]
       const items = itemsData.items ?? []
 
-      if (name) {
-        setProductName(name)
+      if (foundProduct?.product_name) {
+        setProductName(foundProduct.product_name)
         setTestItems(items.map(item => ({ name: item, checked: true, assignee: '' })))
         setProductFound(true)
         setUsingDemo(false)
@@ -111,7 +107,7 @@ export default function TestRegPage() {
     } catch {
       const demo = DEMO_PRODUCT_LOOKUP[code]
       if (demo) {
-        setProductName(demo.name)
+        setProductName(demo.product_name)
         setTestItems(demo.testItems.map(item => ({ name: item, checked: true, assignee: '' })))
         setProductFound(true)
         setUsingDemo(true)
@@ -138,12 +134,13 @@ export default function TestRegPage() {
     try {
       const payload = {
         product_code: productCode.trim(),
+        product_name: productName,
         spec: spec.trim(),
         batch_no: batchNo.trim(),
-        dosage_form: dosageForm,
-        packaging_planned_date: packagingDate || null,
+        dosage_form: dosageForm || null,
+        packaging_date: packagingDate || null,
         record_review_deadline: reviewDeadline || null,
-        qc_planned_completion_date: qcPlannedDate || null,
+        qc_completion_deadline: qcPlannedDate || null,
         validation_type: validationType,
         test_items: testItems
           .filter(it => it.checked)
@@ -157,7 +154,6 @@ export default function TestRegPage() {
       if (!res.ok) throw new Error(await res.text())
       router.push('/product-test/prod-status')
     } catch {
-      // Demo mode: navigate anyway
       if (usingDemo) {
         router.push('/product-test/prod-status')
       }
@@ -298,7 +294,7 @@ export default function TestRegPage() {
               </div>
             </div>
 
-            {/* 포장일_예정일 */}
+            {/* 포장일(예정) */}
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-slate-600">포장일(예정)</label>
               <input

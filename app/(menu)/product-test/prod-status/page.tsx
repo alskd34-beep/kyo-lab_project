@@ -18,92 +18,76 @@ import {
   PopoverTrigger,
 } from '@frontend/components/ui/popover'
 import { ko } from 'date-fns/locale'
-import { format, differenceInCalendarDays, subMonths } from 'date-fns'
+import { format, subMonths } from 'date-fns'
 import type { DateRange } from 'react-day-picker'
 import { Calendar as CalendarIcon, Search, Download } from 'lucide-react'
+import type { BatchSummary, BatchStatus, DashboardStats } from '@shared/pqm'
 
-type BatchStatus = 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' | 'ON_HOLD' | 'CANCELLED'
-
-interface Batch {
-  id: number
-  productCode: string
-  productName: string
-  spec: string
-  batchNo: string
-  dosageForm: string
-  packagingDate: string
-  recordReviewDeadline: string
-  qcPlannedDate: string
-  status: BatchStatus
-}
-
-const DEMO_BATCHES: Batch[] = [
-  { id: 1, productCode: '21081', productName: '(사향)광동우황청심원현탁액(신)', spec: '50ML', batchNo: '26002', dosageForm: '현탁제', packagingDate: '2026.04.10', recordReviewDeadline: '2026.04.24', qcPlannedDate: '2026.04.24', status: 'COMPLETED' },
-  { id: 2, productCode: '21350', productName: '슬라임캡슐', spec: '120C', batchNo: '26001', dosageForm: '내용고형제', packagingDate: '2026.03.30', recordReviewDeadline: '2026.04.27', qcPlannedDate: '2026.04.27', status: 'COMPLETED' },
-  { id: 3, productCode: '23263', productName: '베니톨정', spec: '500T', batchNo: '26023', dosageForm: '내용고형제', packagingDate: '2026.04.16', recordReviewDeadline: '2026.04.30', qcPlannedDate: '2026.04.30', status: 'IN_PROGRESS' },
-  { id: 4, productCode: '23263', productName: '베니톨정', spec: '500T', batchNo: '26024', dosageForm: '내용고형제', packagingDate: '2026.04.16', recordReviewDeadline: '2026.04.30', qcPlannedDate: '2026.04.30', status: 'IN_PROGRESS' },
-  { id: 5, productCode: '23262', productName: '베니톨정', spec: '90T', batchNo: '26027', dosageForm: '내용고형제', packagingDate: '2026.04.21', recordReviewDeadline: '2026.04.30', qcPlannedDate: '2026.04.30', status: 'PLANNED' },
-  { id: 6, productCode: '21391', productName: '알도셉트정5mg', spec: '30T', batchNo: '26001', dosageForm: '내용고형제', packagingDate: '2026.04.06', recordReviewDeadline: '2026.04.30', qcPlannedDate: '2026.04.30', status: 'IN_PROGRESS' },
-  { id: 7, productCode: '24101', productName: '개풍경옥고', spec: '100G', batchNo: '26005', dosageForm: '전제', packagingDate: '2026.04.20', recordReviewDeadline: '2026.05.07', qcPlannedDate: '2026.05.07', status: 'PLANNED' },
-  { id: 8, productCode: '22301', productName: '광동우황청심원', spec: '1환', batchNo: '26010', dosageForm: '환제', packagingDate: '2026.04.25', recordReviewDeadline: '2026.05.10', qcPlannedDate: '2026.05.10', status: 'PLANNED' },
+const DEMO_BATCHES: BatchSummary[] = [
+  { id: 1, product_code: '21081', product_name: '(사향)광동우황청심원현탁액(신)', spec: '50ML', batch_no: '26002', dosage_form: '현탁제', packaging_date: '2026-04-10', record_review_deadline: '2026-04-24', qc_completion_deadline: '2026-04-24', is_urgent: false, status: 'completed', dDayRecord: -13, dDayQc: -13, note: null, created_at: '', process_order: null, validation_type: '일반' },
+  { id: 2, product_code: '21350', product_name: '슬라임캡슐', spec: '120C', batch_no: '26001', dosage_form: '내용고형제', packaging_date: '2026-03-30', record_review_deadline: '2026-04-27', qc_completion_deadline: '2026-04-27', is_urgent: false, status: 'completed', dDayRecord: -10, dDayQc: -10, note: null, created_at: '', process_order: null, validation_type: '일반' },
+  { id: 3, product_code: '23263', product_name: '베니톨정', spec: '500T', batch_no: '26023', dosage_form: '내용고형제', packaging_date: '2026-04-16', record_review_deadline: '2026-04-30', qc_completion_deadline: '2026-04-30', is_urgent: false, status: 'in_progress', dDayRecord: -7, dDayQc: -7, note: null, created_at: '', process_order: null, validation_type: '일반' },
+  { id: 4, product_code: '23263', product_name: '베니톨정', spec: '500T', batch_no: '26024', dosage_form: '내용고형제', packaging_date: '2026-04-16', record_review_deadline: '2026-04-30', qc_completion_deadline: '2026-04-30', is_urgent: false, status: 'pending', dDayRecord: -7, dDayQc: -7, note: null, created_at: '', process_order: null, validation_type: '일반' },
+  { id: 5, product_code: '21391', product_name: '알도셉트정5mg', spec: '30T', batch_no: '26001-A', dosage_form: '내용고형제', packaging_date: '2026-04-06', record_review_deadline: '2026-04-30', qc_completion_deadline: '2026-04-30', is_urgent: false, status: 'in_progress', dDayRecord: -7, dDayQc: -7, note: null, created_at: '', process_order: null, validation_type: '일반' },
+  { id: 6, product_code: '21080', product_name: '(사향)광동우황청심원(신)', spec: '1환', batch_no: '26010', dosage_form: '환제', packaging_date: '2026-04-25', record_review_deadline: '2026-05-07', qc_completion_deadline: '2026-05-07', is_urgent: false, status: 'pending', dDayRecord: 0, dDayQc: 0, note: null, created_at: '', process_order: null, validation_type: '일반' },
+  { id: 7, product_code: '27045', product_name: '(베트남수출용)광동우황청심원(영묘향)', spec: '1환', batch_no: '26011', dosage_form: '환제', packaging_date: '2026-04-28', record_review_deadline: '2026-05-10', qc_completion_deadline: '2026-05-10', is_urgent: false, status: 'pending', dDayRecord: 3, dDayQc: 3, note: null, created_at: '', process_order: null, validation_type: '일반' },
 ]
 
-const STATUS_CONFIG: Record<BatchStatus, { label: string; cls: string }> = {
-  PLANNED:     { label: '계획',  cls: 'bg-slate-100 text-slate-600 border border-slate-200' },
-  IN_PROGRESS: { label: '진행중', cls: 'bg-violet-50 text-violet-700 border border-violet-200' },
-  COMPLETED:   { label: '완료',  cls: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
-  ON_HOLD:     { label: '보류',  cls: 'bg-amber-50 text-amber-700 border border-amber-200' },
-  CANCELLED:   { label: '취소',  cls: 'bg-red-50 text-red-700 border border-red-200' },
+const DEMO_STATS: DashboardStats = {
+  totalBatches: 129, pending: 97, inProgress: 15, completed: 17,
+  dueSoon7: 23, dueSoon3: 8, overdueCount: 5,
 }
 
-const STATUS_FILTERS = ['전체', '계획', '진행중', '완료'] as const
+const STATUS_CONFIG: Record<BatchStatus, { label: string; cls: string }> = {
+  pending:     { label: '대기중', cls: 'bg-slate-100 text-slate-600 border border-slate-200' },
+  in_progress: { label: '진행중', cls: 'bg-violet-50 text-violet-700 border border-violet-200' },
+  completed:   { label: '완료',   cls: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
+  on_hold:     { label: '보류',   cls: 'bg-amber-50 text-amber-700 border border-amber-200' },
+  cancelled:   { label: '취소',   cls: 'bg-red-50 text-red-700 border border-red-200' },
+}
+
+const STATUS_FILTERS = ['전체', '대기중', '진행중', '완료'] as const
 type StatusFilter = typeof STATUS_FILTERS[number]
 
-function parseDateStr(dateStr: string): Date {
-  return new Date(dateStr.replace(/\./g, '-'))
+const STATUS_FILTER_MAP: Record<StatusFilter, BatchStatus | null> = {
+  '전체': null, '대기중': 'pending', '진행중': 'in_progress', '완료': 'completed',
 }
 
-function calcDDay(qcPlannedDate: string): number {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const target = parseDateStr(qcPlannedDate)
-  return differenceInCalendarDays(target, today)
-}
-
-function DDayCell({ dDay, status }: { dDay: number; status: BatchStatus }) {
-  if (status === 'COMPLETED' || status === 'CANCELLED') {
+function DDayCell({ dDayQc, status }: { dDayQc: number | null; status: BatchStatus }) {
+  if (status === 'completed' || status === 'cancelled' || dDayQc === null) {
     return <span className="text-xs text-slate-400">-</span>
   }
-  if (dDay <= 0) {
+  if (dDayQc <= 0) {
     return (
       <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold bg-red-50 text-red-700 border border-red-200">
-        D+{Math.abs(dDay)}
+        {dDayQc === 0 ? 'D-Day' : `D+${Math.abs(dDayQc)}`}
       </span>
     )
   }
-  if (dDay <= 3) {
+  if (dDayQc <= 3) {
     return (
       <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold bg-red-50 text-red-700 border border-red-200">
-        D-{dDay}
+        D-{dDayQc}
       </span>
     )
   }
-  if (dDay <= 7) {
+  if (dDayQc <= 7) {
     return (
       <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-        D-{dDay}
+        D-{dDayQc}
       </span>
     )
   }
   return (
     <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold bg-slate-100 text-slate-500 border border-slate-200">
-      D-{dDay}
+      D-{dDayQc}
     </span>
   )
 }
 
 export default function ProdStatusPage() {
-  const [batches, setBatches]           = useState<Batch[]>(DEMO_BATCHES)
+  const [batches, setBatches]           = useState<BatchSummary[]>(DEMO_BATCHES)
+  const [stats, setStats]               = useState<DashboardStats>(DEMO_STATS)
   const [isLoading, setIsLoading]       = useState(false)
   const [usingDemo, setUsingDemo]       = useState(true)
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set())
@@ -122,27 +106,37 @@ export default function ProdStatusPage() {
     if (dateRange?.from) params.set('from', format(dateRange.from, 'yyyy-MM-dd'))
     if (dateRange?.to)   params.set('to',   format(dateRange.to,   'yyyy-MM-dd'))
     if (searchValue)     params.set('search', searchValue)
-    if (statusFilter !== '전체') params.set('status', statusFilter)
+    if (statusFilter !== '전체') {
+      const mapped = STATUS_FILTER_MAP[statusFilter]
+      if (mapped) params.set('status', mapped)
+    }
 
     setIsLoading(true)
-    fetch(`/api/batches?${params.toString()}`)
-      .then(async r => {
+    Promise.all([
+      fetch(`/api/batches?${params.toString()}`).then(async r => {
         if (!r.ok) throw new Error(await r.text())
-        return r.json() as Promise<{ rows: Batch[] }>
-      })
-      .then(({ rows }) => {
+        return r.json() as Promise<{ rows: BatchSummary[] }>
+      }),
+      fetch('/api/dashboard').then(async r => {
+        if (!r.ok) throw new Error(await r.text())
+        return r.json() as Promise<DashboardStats>
+      }),
+    ])
+      .then(([batchData, statsData]) => {
         if (cancelled) return
-        if (rows.length > 0) {
-          setBatches(rows)
+        if (batchData.rows.length > 0) {
+          setBatches(batchData.rows)
           setUsingDemo(false)
         } else {
           setBatches(DEMO_BATCHES)
           setUsingDemo(true)
         }
+        setStats(statsData)
       })
       .catch(() => {
         if (cancelled) return
         setBatches(DEMO_BATCHES)
+        setStats(DEMO_STATS)
         setUsingDemo(true)
       })
       .finally(() => { if (!cancelled) setIsLoading(false) })
@@ -151,42 +145,19 @@ export default function ProdStatusPage() {
   }, [dateRange, searchValue, statusFilter])
 
   const filtered = useMemo(() => {
+    if (!usingDemo) return batches
     let rows = batches
-    if (usingDemo) {
-      if (searchValue) {
-        rows = rows.filter(r =>
-          r.productName.includes(searchValue) || r.batchNo.includes(searchValue)
-        )
-      }
-      if (statusFilter !== '전체') {
-        const statusMap: Record<StatusFilter, BatchStatus | null> = {
-          '전체': null, '계획': 'PLANNED', '진행중': 'IN_PROGRESS', '완료': 'COMPLETED',
-        }
-        const targetStatus = statusMap[statusFilter]
-        if (targetStatus) rows = rows.filter(r => r.status === targetStatus)
-      }
+    if (searchValue) {
+      rows = rows.filter(r =>
+        r.product_name.includes(searchValue) || r.batch_no.includes(searchValue)
+      )
+    }
+    if (statusFilter !== '전체') {
+      const mapped = STATUS_FILTER_MAP[statusFilter]
+      if (mapped) rows = rows.filter(r => r.status === mapped)
     }
     return rows
   }, [batches, usingDemo, searchValue, statusFilter])
-
-  const kpi = useMemo(() => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const active = batches.filter(b => b.status !== 'CANCELLED')
-    return {
-      total:      active.length,
-      inProgress: active.filter(b => b.status === 'IN_PROGRESS').length,
-      completed:  active.filter(b => b.status === 'COMPLETED').length,
-      within7:    active.filter(b => {
-        const d = calcDDay(b.qcPlannedDate)
-        return b.status !== 'COMPLETED' && d >= 1 && d <= 7
-      }).length,
-      within3:    active.filter(b => {
-        const d = calcDDay(b.qcPlannedDate)
-        return b.status !== 'COMPLETED' && d >= 1 && d <= 3
-      }).length,
-    }
-  }, [batches])
 
   const toggleRow = (id: number) => {
     setSelectedRows(prev => {
@@ -201,11 +172,12 @@ export default function ProdStatusPage() {
   }
 
   const KPI_CARDS = [
-    { label: '전체 배치',      value: kpi.total,      accent: 'text-slate-800',   bg: 'bg-white',         border: 'border-slate-200',  sub: '취소 제외 전체' },
-    { label: '진행중',         value: kpi.inProgress, accent: 'text-violet-600',  bg: 'bg-violet-50/60',  border: 'border-violet-100', sub: '시험 진행 중' },
-    { label: 'QC 완료',        value: kpi.completed,  accent: 'text-emerald-600', bg: 'bg-emerald-50/60', border: 'border-emerald-100',sub: '시험 완료' },
-    { label: 'D-7 이내',       value: kpi.within7,   accent: 'text-amber-600',   bg: 'bg-amber-50/60',   border: 'border-amber-100',  sub: '기한 임박' },
-    { label: 'D-3 이내',       value: kpi.within3,   accent: 'text-red-600',     bg: 'bg-red-50/60',     border: 'border-red-100',    sub: '위험' },
+    { label: '전체 배치',  value: stats.totalBatches, accent: 'text-slate-800',   bg: 'bg-white',         border: 'border-slate-200',  sub: '취소 제외 전체' },
+    { label: '대기중',     value: stats.pending,       accent: 'text-slate-600',   bg: 'bg-slate-50/60',   border: 'border-slate-200',  sub: '시험 대기' },
+    { label: '진행중',     value: stats.inProgress,    accent: 'text-violet-600',  bg: 'bg-violet-50/60',  border: 'border-violet-100', sub: '시험 진행 중' },
+    { label: 'QC 완료',   value: stats.completed,     accent: 'text-emerald-600', bg: 'bg-emerald-50/60', border: 'border-emerald-100', sub: '시험 완료' },
+    { label: 'D-7 이내',  value: stats.dueSoon7,      accent: 'text-amber-600',   bg: 'bg-amber-50/60',   border: 'border-amber-100',  sub: '기한 임박' },
+    { label: 'D-3 이내',  value: stats.dueSoon3,      accent: 'text-red-600',     bg: 'bg-red-50/60',     border: 'border-red-100',    sub: '위험' },
   ]
 
   return (
@@ -213,7 +185,7 @@ export default function ProdStatusPage() {
 
       {/* KPI */}
       <div className="sticky top-0 z-10 border-b border-slate-200 bg-white shadow-sm">
-        <div className="grid grid-cols-5 gap-2.5 px-5 py-3">
+        <div className="grid grid-cols-6 gap-2.5 px-5 py-3">
           {KPI_CARDS.map(kpiCard => (
             <Card
               key={kpiCard.label}
@@ -317,7 +289,7 @@ export default function ProdStatusPage() {
                     className="cb-custom"
                   />
                 </TableHead>
-                {['품목코드', '품목명', '규격', '제조번호', '제형', '포장일(예정)', '기록서검토기한', 'QC완료예정일', 'D-Day', '상태'].map(h => (
+                {['품목코드', '품목명', '규격', '제조번호', '제형', '포장일', '기록서검토기한', 'QC완료예정일', 'D-Day', '상태'].map(h => (
                   <TableHead key={h} className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide px-3">
                     {h}
                   </TableHead>
@@ -327,7 +299,6 @@ export default function ProdStatusPage() {
             <TableBody>
               {filtered.map(row => {
                 const isSelected = selectedRows.has(row.id)
-                const dDay = calcDDay(row.qcPlannedDate)
                 const statusCfg = STATUS_CONFIG[row.status]
                 return (
                   <TableRow
@@ -347,18 +318,18 @@ export default function ProdStatusPage() {
                         className="cb-custom"
                       />
                     </TableCell>
-                    <TableCell className="px-3 font-mono text-xs text-slate-500">{row.productCode}</TableCell>
+                    <TableCell className="px-3 font-mono text-xs text-slate-500">{row.product_code}</TableCell>
                     <TableCell className="px-3">
-                      <span className="text-sm font-medium text-slate-800">{row.productName}</span>
+                      <span className="text-sm font-medium text-slate-800">{row.product_name}</span>
                     </TableCell>
                     <TableCell className="px-3 text-xs text-slate-600">{row.spec}</TableCell>
-                    <TableCell className="px-3 font-mono text-xs text-slate-500">{row.batchNo}</TableCell>
-                    <TableCell className="px-3 text-xs text-slate-600">{row.dosageForm}</TableCell>
-                    <TableCell className="px-3 font-mono text-xs text-slate-500">{row.packagingDate}</TableCell>
-                    <TableCell className="px-3 font-mono text-xs text-slate-500">{row.recordReviewDeadline}</TableCell>
-                    <TableCell className="px-3 font-mono text-xs text-slate-500">{row.qcPlannedDate}</TableCell>
+                    <TableCell className="px-3 font-mono text-xs text-slate-500">{row.batch_no}</TableCell>
+                    <TableCell className="px-3 text-xs text-slate-600">{row.dosage_form}</TableCell>
+                    <TableCell className="px-3 font-mono text-xs text-slate-500">{row.packaging_date}</TableCell>
+                    <TableCell className="px-3 font-mono text-xs text-slate-500">{row.record_review_deadline}</TableCell>
+                    <TableCell className="px-3 font-mono text-xs text-slate-500">{row.qc_completion_deadline}</TableCell>
                     <TableCell className="px-3">
-                      <DDayCell dDay={dDay} status={row.status} />
+                      <DDayCell dDayQc={row.dDayQc} status={row.status} />
                     </TableCell>
                     <TableCell className="px-3">
                       <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${statusCfg.cls}`}>

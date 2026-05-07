@@ -4,20 +4,19 @@ import { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent } from '@frontend/components/ui/card'
 import { Search } from 'lucide-react'
 
-interface TestItemData {
-  productName: string
-  items: string[]
+interface ProductRow {
+  product_name: string
 }
 
-const DEMO_PRODUCTS = [
-  '(미얀마 수출용)타목시펜정20mg',
-  '(베트남수출용)광동우황청심원(영묘향)',
-  '(사향)광동우황청심원(신)',
-  '(사향)광동우황청심원현탁액(신)',
-  '슬라임캡슐',
-  '베니톨정',
-  '알도셉트정5mg',
-  '개풍경옥고',
+const DEMO_PRODUCTS: ProductRow[] = [
+  { product_name: '(미얀마 수출용)타목시펜정20mg' },
+  { product_name: '(베트남수출용)광동우황청심원(영묘향)' },
+  { product_name: '(사향)광동우황청심원(신)' },
+  { product_name: '(사향)광동우황청심원현탁액(신)' },
+  { product_name: '슬라임캡슐' },
+  { product_name: '베니톨정' },
+  { product_name: '알도셉트정5mg' },
+  { product_name: '개풍경옥고' },
 ]
 
 const DEMO_TEST_ITEMS: Record<string, string[]> = {
@@ -45,26 +44,22 @@ function getItemColor(index: number): string {
 }
 
 export default function TestItemsPage() {
-  const [products, setProducts]               = useState<string[]>(DEMO_PRODUCTS)
+  const [products, setProducts]               = useState<ProductRow[]>(DEMO_PRODUCTS)
   const [testItems, setTestItems]             = useState<Record<string, string[]>>(DEMO_TEST_ITEMS)
-  const [selectedProduct, setSelectedProduct] = useState<string>(DEMO_PRODUCTS[0])
+  const [selectedProduct, setSelectedProduct] = useState<string>(DEMO_PRODUCTS[0].product_name)
   const [searchValue, setSearchValue]         = useState('')
   const [usingDemo, setUsingDemo]             = useState(true)
 
   useEffect(() => {
-    fetch('/api/test-items')
+    fetch('/api/products?limit=200')
       .then(async r => {
         if (!r.ok) throw new Error(await r.text())
-        return r.json() as Promise<{ data: TestItemData[] }>
+        return r.json() as Promise<{ rows: ProductRow[] }>
       })
-      .then(({ data }) => {
-        if (data.length > 0) {
-          const productList = data.map(d => d.productName)
-          const itemMap: Record<string, string[]> = {}
-          data.forEach(d => { itemMap[d.productName] = d.items })
-          setProducts(productList)
-          setTestItems(itemMap)
-          setSelectedProduct(productList[0])
+      .then(({ rows }) => {
+        if (rows.length > 0) {
+          setProducts(rows)
+          setSelectedProduct(rows[0].product_name)
           setUsingDemo(false)
         } else {
           setUsingDemo(true)
@@ -75,9 +70,23 @@ export default function TestItemsPage() {
       })
   }, [])
 
+  useEffect(() => {
+    if (usingDemo) return
+    if (!selectedProduct) return
+    fetch(`/api/products?productName=${encodeURIComponent(selectedProduct)}`)
+      .then(async r => {
+        if (!r.ok) throw new Error(await r.text())
+        return r.json() as Promise<{ items: string[] }>
+      })
+      .then(({ items }) => {
+        setTestItems(prev => ({ ...prev, [selectedProduct]: items }))
+      })
+      .catch(() => {})
+  }, [selectedProduct, usingDemo])
+
   const filteredProducts = useMemo(() => {
     if (!searchValue.trim()) return products
-    return products.filter(p => p.includes(searchValue.trim()))
+    return products.filter(p => p.product_name.includes(searchValue.trim()))
   }, [products, searchValue])
 
   const currentItems = testItems[selectedProduct] ?? []
@@ -119,19 +128,19 @@ export default function TestItemsPage() {
             ) : (
               <ul>
                 {filteredProducts.map(product => {
-                  const isSelected = selectedProduct === product
+                  const isSelected = selectedProduct === product.product_name
                   return (
-                    <li key={product}>
+                    <li key={product.product_name}>
                       <button
                         type="button"
-                        onClick={() => setSelectedProduct(product)}
+                        onClick={() => setSelectedProduct(product.product_name)}
                         className={`w-full px-4 py-2.5 text-left text-xs transition-colors ${
                           isSelected
                             ? 'bg-blue-50 border-l-2 border-blue-600 text-blue-700 font-medium'
                             : 'border-l-2 border-transparent text-slate-700 hover:bg-slate-50/70'
                         }`}
                       >
-                        {product}
+                        {product.product_name}
                       </button>
                     </li>
                   )
@@ -177,11 +186,7 @@ export default function TestItemsPage() {
                     className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 transition-all hover:shadow-sm ${getItemColor(idx)}`}
                   >
                     <span className="text-sm font-medium">{item}</span>
-                    <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-bold border ${
-                      idx % 2 === 0
-                        ? 'bg-white/60 border-current text-current'
-                        : 'bg-white/60 border-current text-current'
-                    }`}>
+                    <span className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-bold border bg-white/60 border-current text-current">
                       {idx % 2 === 0 ? 'Solo' : 'Duo'}
                     </span>
                   </div>

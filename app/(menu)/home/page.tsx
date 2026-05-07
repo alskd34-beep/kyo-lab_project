@@ -3,36 +3,9 @@
 import { useState, useEffect } from 'react'
 import { Card, CardContent } from '@frontend/components/ui/card'
 import { Avatar, AvatarFallback } from '@frontend/components/ui/avatar'
-import type { BatchStatus } from '@shared/pqm'
+import type { BatchSummary, BatchStatus, DashboardStats } from '@shared/pqm'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-interface KpiItem {
-  label: string
-  value: string
-  unit: string
-  sub: string
-  accent: string
-  bg: string
-  border: string
-}
-
-interface UpcomingBatch {
-  id: number
-  productName: string
-  batchNo: string
-  qcDate: string
-  dDay: number
-  status: BatchStatus
-}
-
-interface DashboardStats {
-  total: number
-  planned: number
-  inProgress: number
-  completed: number
-  onHold: number
-}
 
 interface Tester {
   name: string
@@ -43,65 +16,58 @@ interface Tester {
 
 // ─── Demo Data ────────────────────────────────────────────────────────────────
 
-const DEMO_UPCOMING: UpcomingBatch[] = [
-  { id: 1, productName: '(사향)광동우황청심원현탁액(신)', batchNo: '26002', qcDate: '2026.04.24', dDay: -13, status: 'COMPLETED' },
-  { id: 2, productName: '슬라임캡슐', batchNo: '26001', qcDate: '2026.04.27', dDay: -10, status: 'COMPLETED' },
-  { id: 3, productName: '베니톨정', batchNo: '26023', qcDate: '2026.04.30', dDay: -7, status: 'IN_PROGRESS' },
-  { id: 4, productName: '베니톨정', batchNo: '26024', qcDate: '2026.04.30', dDay: -7, status: 'IN_PROGRESS' },
-  { id: 5, productName: '알도셉트정5mg', batchNo: '26001', qcDate: '2026.04.30', dDay: -7, status: 'IN_PROGRESS' },
-  { id: 6, productName: '개풍경옥고', batchNo: '26005', qcDate: '2026.05.07', dDay: 0, status: 'PLANNED' },
-  { id: 7, productName: '광동우황청심원', batchNo: '26010', qcDate: '2026.05.10', dDay: 3, status: 'PLANNED' },
+const DEMO_UPCOMING: BatchSummary[] = [
+  { id: 1, product_code: '21081', product_name: '(사향)광동우황청심원현탁액(신)', spec: '50ML', batch_no: '26002', dosage_form: '현탁제', packaging_date: '2026-04-10', record_review_deadline: '2026-04-24', qc_completion_deadline: '2026-04-24', is_urgent: false, status: 'completed', dDayRecord: -13, dDayQc: -13, note: null, created_at: '', process_order: null, validation_type: '일반' },
+  { id: 2, product_code: '21350', product_name: '슬라임캡슐', spec: '120C', batch_no: '26001', dosage_form: '내용고형제', packaging_date: '2026-03-30', record_review_deadline: '2026-04-27', qc_completion_deadline: '2026-04-27', is_urgent: false, status: 'completed', dDayRecord: -10, dDayQc: -10, note: null, created_at: '', process_order: null, validation_type: '일반' },
+  { id: 3, product_code: '23263', product_name: '베니톨정', spec: '500T', batch_no: '26023', dosage_form: '내용고형제', packaging_date: '2026-04-16', record_review_deadline: '2026-04-30', qc_completion_deadline: '2026-04-30', is_urgent: false, status: 'in_progress', dDayRecord: -7, dDayQc: -7, note: null, created_at: '', process_order: null, validation_type: '일반' },
+  { id: 4, product_code: '23263', product_name: '베니톨정', spec: '500T', batch_no: '26024', dosage_form: '내용고형제', packaging_date: '2026-04-16', record_review_deadline: '2026-04-30', qc_completion_deadline: '2026-04-30', is_urgent: false, status: 'in_progress', dDayRecord: -7, dDayQc: -7, note: null, created_at: '', process_order: null, validation_type: '일반' },
+  { id: 5, product_code: '21391', product_name: '알도셉트정5mg', spec: '30T', batch_no: '26001-A', dosage_form: '내용고형제', packaging_date: '2026-04-06', record_review_deadline: '2026-04-30', qc_completion_deadline: '2026-04-30', is_urgent: false, status: 'in_progress', dDayRecord: -7, dDayQc: -7, note: null, created_at: '', process_order: null, validation_type: '일반' },
+  { id: 6, product_code: '21080', product_name: '(사향)광동우황청심원(신)', spec: '1환', batch_no: '26010', dosage_form: '환제', packaging_date: '2026-04-25', record_review_deadline: '2026-05-07', qc_completion_deadline: '2026-05-07', is_urgent: false, status: 'pending', dDayRecord: 0, dDayQc: 0, note: null, created_at: '', process_order: null, validation_type: '일반' },
+  { id: 7, product_code: '27045', product_name: '(베트남수출용)광동우황청심원(영묘향)', spec: '1환', batch_no: '26011', dosage_form: '환제', packaging_date: '2026-04-28', record_review_deadline: '2026-05-10', qc_completion_deadline: '2026-05-10', is_urgent: false, status: 'pending', dDayRecord: 3, dDayQc: 3, note: null, created_at: '', process_order: null, validation_type: '일반' },
 ]
 
-const DEMO_STATS: DashboardStats = { total: 75, planned: 28, inProgress: 22, completed: 21, onHold: 4 }
-
-const DEMO_KPI: KpiItem[] = [
-  { label: '이번달 배치', value: '75', unit: '건', sub: '총 생산배치 수', accent: 'text-slate-800', bg: 'bg-white', border: 'border-slate-200' },
-  { label: '진행중', value: '22', unit: '건', sub: 'QC 시험 진행', accent: 'text-violet-600', bg: 'bg-violet-50/60', border: 'border-violet-100' },
-  { label: 'QC완료', value: '21', unit: '건', sub: '이번달 완료', accent: 'text-emerald-600', bg: 'bg-emerald-50/60', border: 'border-emerald-100' },
-  { label: 'D-7 임박', value: '12', unit: '건', sub: '기한 임박 배치', accent: 'text-amber-600', bg: 'bg-amber-50/60', border: 'border-amber-100' },
-  { label: '오늘 마감', value: '3', unit: '건', sub: 'QC완료예정일', accent: 'text-red-600', bg: 'bg-red-50/60', border: 'border-red-100' },
-  { label: 'OOS건수', value: '2', unit: '건', sub: '기준일탈', accent: 'text-red-600', bg: 'bg-red-50/60', border: 'border-red-100' },
-  { label: '평균처리일', value: '4.2', unit: '일', sub: '배치당 처리일', accent: 'text-blue-600', bg: 'bg-blue-50/60', border: 'border-blue-100' },
-]
+const DEMO_STATS: DashboardStats = {
+  totalBatches: 129, pending: 97, inProgress: 15, completed: 17,
+  dueSoon7: 23, dueSoon3: 8, overdueCount: 5,
+}
 
 const DEMO_TESTERS: Tester[] = [
-  { name: '김태훈', init: '김', color: 'bg-blue-500', assignedToday: 3 },
-  { name: '박성호', init: '박', color: 'bg-violet-500', assignedToday: 2 },
+  { name: '김태훈', init: '김', color: 'bg-blue-500',    assignedToday: 3 },
+  { name: '박성호', init: '박', color: 'bg-violet-500',  assignedToday: 2 },
   { name: '권택균', init: '권', color: 'bg-emerald-500', assignedToday: 1 },
-  { name: '장재훈', init: '장', color: 'bg-amber-500', assignedToday: 4 },
-  { name: '지건희', init: '지', color: 'bg-rose-500', assignedToday: 2 },
+  { name: '장재훈', init: '장', color: 'bg-amber-500',   assignedToday: 4 },
+  { name: '지건희', init: '지', color: 'bg-rose-500',    assignedToday: 2 },
 ]
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<BatchStatus, { label: string; cls: string }> = {
-  PLANNED:    { label: '예정', cls: 'bg-slate-100 text-slate-600' },
-  IN_PROGRESS: { label: '진행중', cls: 'bg-violet-50 text-violet-700' },
-  COMPLETED:  { label: '완료', cls: 'bg-emerald-50 text-emerald-700' },
-  ON_HOLD:    { label: '보류', cls: 'bg-amber-50 text-amber-700' },
-  CANCELLED:  { label: '취소', cls: 'bg-red-50 text-red-600' },
+  pending:     { label: '대기중', cls: 'bg-slate-100 text-slate-600' },
+  in_progress: { label: '진행중', cls: 'bg-violet-50 text-violet-700' },
+  completed:   { label: '완료',   cls: 'bg-emerald-50 text-emerald-700' },
+  on_hold:     { label: '보류',   cls: 'bg-amber-50 text-amber-700' },
+  cancelled:   { label: '취소',   cls: 'bg-red-50 text-red-600' },
 }
 
-function dDayColor(dDay: number): string {
-  if (dDay < 0) return 'text-slate-400'
-  if (dDay === 0) return 'text-red-600 font-bold'
-  if (dDay <= 3) return 'text-red-500 font-semibold'
-  if (dDay <= 7) return 'text-amber-600 font-semibold'
+function dDayColor(dDayQc: number | null): string {
+  if (dDayQc === null || dDayQc < 0) return 'text-slate-400'
+  if (dDayQc === 0) return 'text-red-600 font-bold'
+  if (dDayQc <= 3)  return 'text-red-500 font-semibold'
+  if (dDayQc <= 7)  return 'text-amber-600 font-semibold'
   return 'text-emerald-600'
 }
 
-function dDayLabel(dDay: number): string {
-  if (dDay < 0) return `D+${Math.abs(dDay)}`
-  if (dDay === 0) return 'D-Day'
-  return `D-${dDay}`
+function dDayLabel(dDayQc: number | null): string {
+  if (dDayQc === null) return '-'
+  if (dDayQc < 0)  return `D+${Math.abs(dDayQc)}`
+  if (dDayQc === 0) return 'D-Day'
+  return `D-${dDayQc}`
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function HomePage() {
-  const [kpis, setKpis]           = useState<KpiItem[]>(DEMO_KPI)
-  const [upcoming, setUpcoming]   = useState<UpcomingBatch[]>(DEMO_UPCOMING)
+  const [upcoming, setUpcoming]   = useState<BatchSummary[]>(DEMO_UPCOMING)
   const [stats, setStats]         = useState<DashboardStats>(DEMO_STATS)
   const [usingDemo, setUsingDemo] = useState(true)
   const [isLoading, setIsLoading] = useState(false)
@@ -109,16 +75,21 @@ export default function HomePage() {
   useEffect(() => {
     let cancelled = false
     setIsLoading(true)
-    fetch('/api/dashboard')
-      .then(async r => {
+
+    Promise.all([
+      fetch('/api/dashboard').then(async r => {
         if (!r.ok) throw new Error(await r.text())
-        return r.json() as Promise<{ upcomingBatches: UpcomingBatch[]; stats: DashboardStats; kpis: KpiItem[] }>
-      })
-      .then(data => {
+        return r.json() as Promise<DashboardStats>
+      }),
+      fetch('/api/batches?limit=10').then(async r => {
+        if (!r.ok) throw new Error(await r.text())
+        return r.json() as Promise<{ rows: BatchSummary[] }>
+      }),
+    ])
+      .then(([statsData, batchData]) => {
         if (cancelled) return
-        setUpcoming(data.upcomingBatches ?? DEMO_UPCOMING)
-        setStats(data.stats ?? DEMO_STATS)
-        setKpis(data.kpis ?? DEMO_KPI)
+        setStats(statsData)
+        setUpcoming(batchData.rows.length > 0 ? batchData.rows : DEMO_UPCOMING)
         setUsingDemo(false)
       })
       .catch(() => {
@@ -126,22 +97,31 @@ export default function HomePage() {
         setUsingDemo(true)
       })
       .finally(() => { if (!cancelled) setIsLoading(false) })
+
     return () => { cancelled = true }
   }, [])
 
+  const KPI_CARDS = [
+    { label: '전체 배치',  value: stats.totalBatches, unit: '건', sub: '총 생산배치 수',   accent: 'text-slate-800',   bg: 'bg-white',         border: 'border-slate-200' },
+    { label: '대기중',     value: stats.pending,       unit: '건', sub: '시험 대기',        accent: 'text-slate-600',   bg: 'bg-slate-50/60',   border: 'border-slate-200' },
+    { label: '진행중',     value: stats.inProgress,    unit: '건', sub: 'QC 시험 진행',     accent: 'text-violet-600',  bg: 'bg-violet-50/60',  border: 'border-violet-100' },
+    { label: 'QC완료',    value: stats.completed,     unit: '건', sub: '이번달 완료',       accent: 'text-emerald-600', bg: 'bg-emerald-50/60', border: 'border-emerald-100' },
+    { label: 'D-7 임박',  value: stats.dueSoon7,      unit: '건', sub: '기한 임박 배치',   accent: 'text-amber-600',   bg: 'bg-amber-50/60',   border: 'border-amber-100' },
+    { label: '기한초과',   value: stats.overdueCount,  unit: '건', sub: 'QC완료예정일 초과', accent: 'text-red-600',     bg: 'bg-red-50/60',     border: 'border-red-100' },
+  ]
+
   const statRows = [
-    { label: '예정', key: 'planned' as const, color: 'bg-slate-400' },
+    { label: '대기중', key: 'pending' as const,    color: 'bg-slate-400' },
     { label: '진행중', key: 'inProgress' as const, color: 'bg-violet-500' },
-    { label: '완료', key: 'completed' as const, color: 'bg-emerald-500' },
-    { label: '보류', key: 'onHold' as const, color: 'bg-amber-500' },
+    { label: '완료',   key: 'completed' as const,  color: 'bg-emerald-500' },
   ]
 
   return (
     <div className="flex flex-col gap-4 p-5 min-h-0">
 
       {/* ── KPI 카드 행 ──────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-7 gap-2.5">
-        {kpis.map(kpi => (
+      <div className="grid grid-cols-6 gap-2.5">
+        {KPI_CARDS.map(kpi => (
           <Card
             key={kpi.label}
             className={`cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md ${kpi.bg} border ${kpi.border} shadow-none rounded-xl py-0`}
@@ -197,17 +177,17 @@ export default function HomePage() {
                       className="border-b border-slate-50 hover:bg-slate-50/60 transition-colors cursor-pointer"
                     >
                       <td className="px-4 py-2.5">
-                        <span className="font-medium text-slate-800 text-xs">{row.productName}</span>
+                        <span className="font-medium text-slate-800 text-xs">{row.product_name}</span>
                       </td>
                       <td className="px-3 py-2.5">
-                        <span className="font-mono text-xs text-slate-500">{row.batchNo}</span>
+                        <span className="font-mono text-xs text-slate-500">{row.batch_no}</span>
                       </td>
                       <td className="px-3 py-2.5">
-                        <span className="font-mono text-xs text-slate-600">{row.qcDate}</span>
+                        <span className="font-mono text-xs text-slate-600">{row.qc_completion_deadline}</span>
                       </td>
                       <td className="px-3 py-2.5 text-center">
-                        <span className={`text-xs tabular-nums ${dDayColor(row.dDay)}`}>
-                          {dDayLabel(row.dDay)}
+                        <span className={`text-xs tabular-nums ${dDayColor(row.dDayQc)}`}>
+                          {dDayLabel(row.dDayQc)}
                         </span>
                       </td>
                       <td className="px-3 py-2.5">
@@ -230,13 +210,13 @@ export default function HomePage() {
           </div>
           <CardContent className="px-4 py-4">
             <div className="mb-4 flex items-center gap-2">
-              <span className="text-3xl font-bold text-slate-800 tabular-nums">{stats.total}</span>
-              <span className="text-sm text-slate-500">건 이번달 총 배치</span>
+              <span className="text-3xl font-bold text-slate-800 tabular-nums">{stats.totalBatches}</span>
+              <span className="text-sm text-slate-500">건 총 배치</span>
             </div>
             <div className="flex flex-col gap-3">
               {statRows.map(row => {
                 const count = stats[row.key]
-                const pct = stats.total > 0 ? Math.round((count / stats.total) * 100) : 0
+                const pct = stats.totalBatches > 0 ? Math.round((count / stats.totalBatches) * 100) : 0
                 return (
                   <div key={row.key}>
                     <div className="flex items-center justify-between mb-1">
