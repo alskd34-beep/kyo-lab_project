@@ -48,6 +48,7 @@ const NAV_ITEMS: NavItem[] = [
       { id: 'test-cert',   label: '성적서관리' },
       { id: 'test-items',  label: '시험항목관리', live: true },
       { id: 'test-master', label: '시험항목마스터', live: true },
+      { id: 'testers',     label: '시험자 관리',   live: true },
     ],
   },
   {
@@ -143,6 +144,7 @@ const PATH_MAP: Record<string, string> = {
   'test-cert':   '/test-mgmt/test-cert',
   'test-items':  '/test-mgmt/test-items',
   'test-master': '/test-mgmt/test-master',
+  'testers':     '/test-mgmt/testers',
   // 제품시험
   'prod-status': '/product-test/prod-status',
   'prod-reg':    '/product-test/prod-reg',
