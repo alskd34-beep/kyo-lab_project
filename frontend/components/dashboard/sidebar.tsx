@@ -16,6 +16,8 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  Calendar,
+  Factory,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -49,6 +51,18 @@ const NAV_ITEMS: NavItem[] = [
       { id: 'test-items',  label: '시험항목관리', live: true },
       { id: 'test-master', label: '시험항목마스터', live: true },
       { id: 'testers',     label: '시험자 관리',   live: true },
+    ],
+  },
+  {
+    id: 'schedule',
+    icon: <Calendar size={17} />,
+    label: '스케줄',
+    live: true,
+    subItems: [
+      { id: 'schedule-pct',         label: 'PCT (생산관리)', live: true },
+      { id: 'schedule-weekly-plan', label: '주간 계획 (자동)', live: true },
+      { id: 'schedule-weekly',      label: '주간 스케줄 (AI)', live: true },
+      { id: 'schedule-monthly',     label: '월간 스케줄',    live: true },
     ],
   },
   {
@@ -137,6 +151,11 @@ const ALL_NAV = [...NAV_ITEMS, ...BOTTOM_NAV]
 // Maps nav IDs (top-level + sub) to actual app router paths.
 const PATH_MAP: Record<string, string> = {
   home: '/home',
+  // 스케줄
+  'schedule-pct':         '/schedule/pct',
+  'schedule-weekly-plan': '/schedule/weekly-plan',
+  'schedule-weekly':      '/schedule/weekly',
+  'schedule-monthly':     '/schedule/monthly',
   // 시험관리
   'test-status': '/test-mgmt/test-status',
   'test-reg':    '/test-mgmt/test-reg',

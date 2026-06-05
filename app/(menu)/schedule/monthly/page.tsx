@@ -1,0 +1,411 @@
+'use client'
+
+import { useState, useEffect, useMemo } from 'react'
+import { Card, CardContent, CardHeader, CardTitle } from '@frontend/components/ui/card'
+import { Button } from '@frontend/components/ui/button'
+import {
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  AlertCircle,
+  Users,
+  AlertTriangle,
+} from 'lucide-react'
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface ScheduleRow {
+  id: number
+  tester_id: number
+  batch_id: number
+  product_name: string
+  test_items: string[]
+  scheduled_date: string
+  workdays: number
+  is_urgent: boolean
+  is_duo: boolean
+  duo_partner_id: number | null
+  status: string
+  note: string | null
+}
+
+interface Tester {
+  id: number
+  name: string
+  employee_no: string
+}
+
+interface MonthlyResponse {
+  month: string
+  monthStart: string
+  monthEnd: string
+  schedules: ScheduleRow[]
+  testers: Tester[]
+}
+
+// ─── 공통 톤 ──────────────────────────────────────────────────────────────────
+const TXT_PRIMARY   = 'text-slate-900 dark:text-slate-50'
+const TXT_SECONDARY = 'text-slate-700 dark:text-slate-200'
+const TXT_TERTIARY  = 'text-slate-600 dark:text-slate-300'
+const TXT_MUTED     = 'text-slate-500 dark:text-slate-400'
+const BORDER        = 'border-slate-200 dark:border-slate-700'
+const CARD_BG       = 'bg-white dark:bg-slate-900'
+
+// ─── Utils ────────────────────────────────────────────────────────────────────
+function thisMonth(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+function shiftMonth(monthYM: string, delta: number): string {
+  const [y, m] = monthYM.split('-').map(Number)
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1))
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+}
+
+function getDaysInMonth(monthYM: string): string[] {
+  const [y, m] = monthYM.split('-').map(Number)
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate()
+  return Array.from({ length: last }, (_, i) => `${monthYM}-${String(i + 1).padStart(2, '0')}`)
+}
+
+function dayOfWeek(dateStr: string): number {
+  return new Date(dateStr + 'T00:00:00Z').getUTCDay()
+}
+
+const DOW_KOR = ['일', '월', '화', '수', '목', '금', '토']
+
+// 셀 색상: 긴급 > 듀오 > 일반
+function cellStyle(row: ScheduleRow): { bg: string; border: string; label: string } {
+  if (row.is_urgent) return {
+    bg: 'bg-red-200 dark:bg-red-900/60 hover:bg-red-300',
+    border: 'border-red-300 dark:border-red-800',
+    label: '긴급',
+  }
+  if (row.is_duo) return {
+    bg: 'bg-blue-200 dark:bg-blue-900/60 hover:bg-blue-300',
+    border: 'border-blue-300 dark:border-blue-800',
+    label: '듀오',
+  }
+  return {
+    bg: 'bg-emerald-100 dark:bg-emerald-900/40 hover:bg-emerald-200',
+    border: 'border-emerald-300 dark:border-emerald-800',
+    label: '예정',
+  }
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+export default function MonthlySchedulePage() {
+  const [month, setMonth] = useState<string>(thisMonth())
+  const [data, setData]   = useState<MonthlyResponse | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let aborted = false
+    setLoading(true)
+    setError(null)
+    fetch(`/api/schedules/monthly?month=${month}`, { credentials: 'include' })
+      .then(async res => {
+        const json = await res.json()
+        if (!res.ok) throw new Error(json.error ?? '월간 스케줄 조회 실패')
+        if (!aborted) setData(json)
+      })
+      .catch(e => !aborted && setError(e instanceof Error ? e.message : '알 수 없는 오류'))
+      .finally(() => !aborted && setLoading(false))
+    return () => { aborted = true }
+  }, [month])
+
+  const days = useMemo(() => getDaysInMonth(month), [month])
+
+  // 시험자별 + 날짜별 셀에 들어갈 row들 인덱스
+  // key = `${tester_id}::${YYYY-MM-DD}`
+  const cellMap = useMemo(() => {
+    const m = new Map<string, ScheduleRow[]>()
+    if (!data) return m
+    for (const row of data.schedules) {
+      const start = new Date(row.scheduled_date + 'T00:00:00Z')
+      const wd = Math.max(1, row.workdays || 1)
+      for (let i = 0; i < wd; i++) {
+        const d = new Date(start)
+        d.setUTCDate(start.getUTCDate() + i)
+        const ds = d.toISOString().slice(0, 10)
+        if (!ds.startsWith(month)) continue
+        const k = `${row.tester_id}::${ds}`
+        if (!m.has(k)) m.set(k, [])
+        m.get(k)!.push(row)
+      }
+    }
+    return m
+  }, [data, month])
+
+  // 데이터가 있는 시험자만 표시 (선택적으로 전체 표시도 가능)
+  const visibleTesters = useMemo(() => {
+    if (!data) return []
+    const usedIds = new Set(data.schedules.map(s => s.tester_id))
+    return data.testers
+      .filter(t => usedIds.has(t.id))
+      .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
+  }, [data])
+
+  // 요약 통계
+  const stats = useMemo(() => {
+    if (!data) return { total: 0, urgent: 0, duo: 0, testers: 0 }
+    return {
+      total: data.schedules.length,
+      urgent: data.schedules.filter(s => s.is_urgent).length,
+      duo: data.schedules.filter(s => s.is_duo).length,
+      testers: visibleTesters.length,
+    }
+  }, [data, visibleTesters])
+
+  return (
+    <div className="p-6">
+      <div className="mx-auto max-w-[1800px] space-y-5">
+
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-600 shadow-md shadow-violet-600/30">
+            <Calendar size={20} className="text-white" />
+          </div>
+          <div>
+            <h1 className={`text-xl font-bold ${TXT_PRIMARY}`}>월간 QC 시험 스케줄</h1>
+            <p className={`text-xs ${TXT_MUTED}`}>
+              생성된 주간 스케줄이 자동 반영됩니다. 시험자×날짜 그리드로 부하를 시각화합니다.
+            </p>
+          </div>
+        </div>
+
+        {/* 월 네비게이션 */}
+        <Card className={`${BORDER} ${CARD_BG}`}>
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setMonth(shiftMonth(month, -1))}
+                className="gap-1.5"
+              >
+                <ChevronLeft size={14} />
+                이전 달
+              </Button>
+              <div className={`min-w-[120px] text-center text-lg font-bold ${TXT_PRIMARY}`}>
+                {month.replace('-', '년 ')}월
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setMonth(shiftMonth(month, 1))}
+                className="gap-1.5"
+              >
+                다음 달
+                <ChevronRight size={14} />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setMonth(thisMonth())}
+              >
+                이번 달
+              </Button>
+            </div>
+            <input
+              type="month"
+              value={month}
+              onChange={e => setMonth(e.target.value)}
+              className={`h-9 rounded-lg border ${BORDER} bg-white dark:bg-slate-800 px-3 text-sm tabular-nums outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 dark:focus:ring-violet-900/40 ${TXT_PRIMARY} [color-scheme:light] dark:[color-scheme:dark]`}
+            />
+          </CardContent>
+        </Card>
+
+        {/* 에러 */}
+        {error && (
+          <Card className="border-red-300 bg-red-50 dark:border-red-900 dark:bg-red-950/40">
+            <CardContent className="flex items-start gap-2 py-3">
+              <AlertCircle size={16} className="mt-0.5 shrink-0 text-red-600 dark:text-red-400" />
+              <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* 로딩 */}
+        {loading && (
+          <Card className={`${BORDER} ${CARD_BG}`}>
+            <CardContent className="flex flex-col items-center justify-center gap-2 py-12">
+              <Loader2 size={28} className="animate-spin text-violet-500" />
+              <p className={`text-sm font-medium ${TXT_SECONDARY}`}>월간 스케줄 불러오는 중...</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* 결과 */}
+        {!loading && data && (
+          <>
+            {/* 요약 */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Card className="border-violet-200 bg-violet-50 dark:border-violet-900 dark:bg-violet-950/40">
+                <CardContent className="flex items-center gap-3 py-4">
+                  <Calendar size={20} className="text-violet-600 dark:text-violet-400" />
+                  <div>
+                    <p className={`text-[11px] font-medium ${TXT_MUTED}`}>총 배정</p>
+                    <p className={`text-xl font-bold tabular-nums ${TXT_PRIMARY}`}>{stats.total}건</p>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/40">
+                <CardContent className="flex items-center gap-3 py-4">
+                  <Users size={20} className="text-blue-600 dark:text-blue-400" />
+                  <div>
+                    <p className={`text-[11px] font-medium ${TXT_MUTED}`}>활동 시험자</p>
+                    <p className={`text-xl font-bold tabular-nums ${TXT_PRIMARY}`}>{stats.testers}명</p>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/40">
+                <CardContent className="flex items-center gap-3 py-4">
+                  <AlertTriangle size={20} className="text-red-600 dark:text-red-400" />
+                  <div>
+                    <p className={`text-[11px] font-medium ${TXT_MUTED}`}>긴급</p>
+                    <p className="text-xl font-bold tabular-nums text-red-700 dark:text-red-300">{stats.urgent}건</p>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-sky-200 bg-sky-50 dark:border-sky-900 dark:bg-sky-950/40">
+                <CardContent className="flex items-center gap-3 py-4">
+                  <Users size={20} className="text-sky-600 dark:text-sky-400" />
+                  <div>
+                    <p className={`text-[11px] font-medium ${TXT_MUTED}`}>듀오</p>
+                    <p className="text-xl font-bold tabular-nums text-sky-700 dark:text-sky-300">{stats.duo}건</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* 간트 그리드 */}
+            <Card className={`${BORDER} ${CARD_BG} overflow-hidden`}>
+              <CardHeader>
+                <CardTitle className={`flex items-center gap-2 text-base ${TXT_PRIMARY}`}>
+                  <Calendar size={16} className="text-violet-600 dark:text-violet-400" />
+                  월간 그리드
+                  <span className={`text-xs font-normal ${TXT_MUTED}`}>(시험자 × 날짜)</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-0 pb-0">
+                {visibleTesters.length === 0 ? (
+                  <p className={`px-6 py-10 text-center text-sm ${TXT_MUTED}`}>
+                    이 달에 배정된 스케줄이 없습니다.
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-100 dark:bg-slate-800/60">
+                          <th
+                            className={`sticky left-0 z-10 border-b ${BORDER} bg-slate-100 dark:bg-slate-800/60 px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide ${TXT_TERTIARY}`}
+                            style={{ minWidth: 120 }}
+                          >
+                            시험자
+                          </th>
+                          {days.map(d => {
+                            const dow = dayOfWeek(d)
+                            const isWeekend = dow === 0 || dow === 6
+                            return (
+                              <th
+                                key={d}
+                                className={`border-b border-l ${BORDER} px-1 py-2 text-center text-[10px] font-semibold ${
+                                  isWeekend ? 'text-red-500 dark:text-red-400' : TXT_TERTIARY
+                                }`}
+                                style={{ minWidth: 38 }}
+                              >
+                                <div>{Number(d.slice(-2))}</div>
+                                <div className="text-[9px] font-normal opacity-70">{DOW_KOR[dow]}</div>
+                              </th>
+                            )
+                          })}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visibleTesters.map(t => (
+                          <tr key={t.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
+                            <td
+                              className={`sticky left-0 z-10 border-b ${BORDER} bg-white dark:bg-slate-900 px-3 py-2 text-sm font-semibold ${TXT_PRIMARY}`}
+                            >
+                              <div className="flex items-center gap-1.5">
+                                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white">
+                                  {t.name.slice(0, 1)}
+                                </div>
+                                {t.name}
+                              </div>
+                            </td>
+                            {days.map(d => {
+                              const k = `${t.id}::${d}`
+                              const rows = cellMap.get(k) ?? []
+                              const isWeekend = (() => {
+                                const dow = dayOfWeek(d)
+                                return dow === 0 || dow === 6
+                              })()
+                              return (
+                                <td
+                                  key={k}
+                                  className={`border-b border-l ${BORDER} p-0.5 align-top ${
+                                    isWeekend ? 'bg-slate-50/60 dark:bg-slate-800/30' : ''
+                                  }`}
+                                  style={{ minWidth: 38 }}
+                                >
+                                  <div className="flex flex-col gap-0.5">
+                                    {rows.map(r => {
+                                      const style = cellStyle(r)
+                                      return (
+                                        <div
+                                          key={`${r.id}-${d}`}
+                                          title={`${r.product_name} (배치 ${r.batch_id})\n시험항목: ${r.test_items?.join(', ') ?? '-'}\n공수: ${r.workdays}일\n${r.note ?? ''}`}
+                                          className={`truncate rounded-sm border px-1 py-0.5 text-[9px] font-medium cursor-help transition-colors ${style.bg} ${style.border} ${TXT_PRIMARY}`}
+                                        >
+                                          {r.product_name.slice(0, 6)}
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                </td>
+                              )
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* 범례 */}
+            <Card className={`${BORDER} bg-slate-100/70 dark:bg-slate-800/40`}>
+              <CardContent className="flex flex-wrap items-center gap-4 py-3 text-xs">
+                <span className={`font-semibold ${TXT_MUTED}`}>범례:</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-block h-3 w-3 rounded-sm border border-emerald-300 bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-900/40" />
+                  <span className={TXT_TERTIARY}>일반</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-block h-3 w-3 rounded-sm border border-red-300 bg-red-200 dark:border-red-800 dark:bg-red-900/60" />
+                  <span className={TXT_TERTIARY}>긴급</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-block h-3 w-3 rounded-sm border border-blue-300 bg-blue-200 dark:border-blue-800 dark:bg-blue-900/60" />
+                  <span className={TXT_TERTIARY}>듀오</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-block h-3 w-3 rounded-sm bg-slate-200 dark:bg-slate-700" />
+                  <span className={TXT_TERTIARY}>주말</span>
+                </div>
+                <span className={`ml-auto text-[10px] italic ${TXT_MUTED}`}>
+                  셀에 마우스를 올리면 상세 정보가 표시됩니다.
+                </span>
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
