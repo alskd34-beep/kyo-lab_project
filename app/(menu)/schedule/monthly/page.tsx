@@ -1,6 +1,11 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import {
+  loadPctMonthlySnapshot,
+  clearPctMonthlySnapshot,
+  type PctMonthlyAssignment,
+} from '@frontend/lib/pct-schedule-bridge'
 import { Card, CardContent, CardHeader, CardTitle } from '@frontend/components/ui/card'
 import { Button } from '@frontend/components/ui/button'
 import {
@@ -15,22 +20,24 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface ScheduleRow {
-  id: number
-  tester_id: number
-  batch_id: number
+  id: number | string  // PCT 출처일 때는 string key
+  tester_id: number | string
+  batch_id: number | string
+  product_code?: string  // PCT 출처 표시용
   product_name: string
   test_items: string[]
   scheduled_date: string
   workdays: number
   is_urgent: boolean
   is_duo: boolean
-  duo_partner_id: number | null
+  duo_partner_id: number | string | null
   status: string
   note: string | null
+  source?: 'db' | 'pct'  // 데이터 출처
 }
 
 interface Tester {
-  id: number
+  id: number | string
   name: string
   employee_no: string
 }
@@ -75,8 +82,20 @@ function dayOfWeek(dateStr: string): number {
 
 const DOW_KOR = ['일', '월', '화', '수', '목', '금', '토']
 
-// 셀 색상: 긴급 > 듀오 > 일반
+// 셀 색상: PCT 출처는 보라 톤, DB는 긴급/듀오/일반 톤
 function cellStyle(row: ScheduleRow): { bg: string; border: string; label: string } {
+  if (row.source === 'pct') {
+    if (row.is_urgent) return {
+      bg: 'bg-rose-200 dark:bg-rose-900/60 hover:bg-rose-300',
+      border: 'border-rose-400 dark:border-rose-700 border-dashed',
+      label: 'PCT·긴급',
+    }
+    return {
+      bg: 'bg-violet-200 dark:bg-violet-900/60 hover:bg-violet-300',
+      border: 'border-violet-400 dark:border-violet-700 border-dashed',
+      label: 'PCT',
+    }
+  }
   if (row.is_urgent) return {
     bg: 'bg-red-200 dark:bg-red-900/60 hover:bg-red-300',
     border: 'border-red-300 dark:border-red-800',
@@ -101,6 +120,16 @@ export default function MonthlySchedulePage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // PCT 스냅샷 (localStorage에서 로드)
+  const [pctSnapshot, setPctSnapshot] = useState<PctMonthlyAssignment[]>([])
+  const [pctGeneratedAt, setPctGeneratedAt] = useState<string | null>(null)
+
+  useEffect(() => {
+    const snap = loadPctMonthlySnapshot()
+    setPctSnapshot(snap?.assignments ?? [])
+    setPctGeneratedAt(snap?.generatedAt ?? null)
+  }, [month])
+
   useEffect(() => {
     let aborted = false
     setLoading(true)
@@ -116,14 +145,66 @@ export default function MonthlySchedulePage() {
     return () => { aborted = true }
   }, [month])
 
+  // PCT 항목을 ScheduleRow 형태로 변환 (해당 월만)
+  const pctSchedules: ScheduleRow[] = useMemo(() => {
+    return pctSnapshot
+      .filter(a => a.scheduledDate.startsWith(month))
+      .map(a => ({
+        id:             `pct-${a.key}`,
+        tester_id:      `pct-${a.testerName}`,
+        batch_id:       `pct-${a.productCode}-${a.batchNo}`,
+        product_code:   a.productCode,
+        product_name:   a.productName,
+        test_items:     a.testItems,
+        scheduled_date: a.scheduledDate,
+        workdays:       a.workdays,
+        is_urgent:      a.isUrgent,
+        is_duo:         false,
+        duo_partner_id: null,
+        status:         'pct',
+        note:           `[PCT] ${a.batchNo} · ${a.testItems.join(', ')}\n${a.note || ''}`.trim(),
+        source:         'pct',
+      }))
+  }, [pctSnapshot, month])
+
+  // PCT에서 등장한 시험자 이름을 DB testers와 매칭. DB에 같은 이름 있으면 그 id 사용,
+  // 없으면 가상 id ('pct-{name}')로 신규 행 추가.
+  const mergedTesters: Tester[] = useMemo(() => {
+    const dbTesters = data?.testers ?? []
+    const dbByName = new Map(dbTesters.map(t => [t.name, t]))
+    const out: Tester[] = [...dbTesters]
+    const pctNames = new Set(pctSnapshot.map(a => a.testerName))
+    for (const name of pctNames) {
+      if (!dbByName.has(name)) {
+        out.push({ id: `pct-${name}`, name, employee_no: '—' })
+      }
+    }
+    return out
+  }, [data, pctSnapshot])
+
+  // PCT 항목의 tester_id를 DB 매칭으로 보정 (이름이 같으면 DB의 numeric id 사용)
+  const pctSchedulesMerged: ScheduleRow[] = useMemo(() => {
+    const dbByName = new Map((data?.testers ?? []).map(t => [t.name, t.id]))
+    return pctSchedules.map(s => {
+      const name = String(s.tester_id).replace(/^pct-/, '')
+      const dbId = dbByName.get(name)
+      return dbId != null ? { ...s, tester_id: dbId } : s
+    })
+  }, [pctSchedules, data])
+
   const days = useMemo(() => getDaysInMonth(month), [month])
+
+  // DB + PCT 합친 전체 스케줄
+  const allSchedules: ScheduleRow[] = useMemo(() => {
+    const dbRows: ScheduleRow[] = (data?.schedules ?? []).map(r => ({ ...r, source: 'db' as const }))
+    return [...dbRows, ...pctSchedulesMerged]
+  }, [data, pctSchedulesMerged])
 
   // 시험자별 + 날짜별 셀에 들어갈 row들 인덱스
   // key = `${tester_id}::${YYYY-MM-DD}`
   const cellMap = useMemo(() => {
     const m = new Map<string, ScheduleRow[]>()
-    if (!data) return m
-    for (const row of data.schedules) {
+    for (const row of allSchedules) {
       const start = new Date(row.scheduled_date + 'T00:00:00Z')
       const wd = Math.max(1, row.workdays || 1)
       for (let i = 0; i < wd; i++) {
@@ -137,27 +218,33 @@ export default function MonthlySchedulePage() {
       }
     }
     return m
-  }, [data, month])
+  }, [allSchedules, month])
 
-  // 데이터가 있는 시험자만 표시 (선택적으로 전체 표시도 가능)
+  // 데이터가 있는 시험자만 표시 (DB + PCT 모두 포함)
   const visibleTesters = useMemo(() => {
-    if (!data) return []
-    const usedIds = new Set(data.schedules.map(s => s.tester_id))
-    return data.testers
+    const usedIds = new Set(allSchedules.map(s => s.tester_id))
+    return mergedTesters
       .filter(t => usedIds.has(t.id))
       .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
-  }, [data])
+  }, [allSchedules, mergedTesters])
 
-  // 요약 통계
+  // 요약 통계 (DB + PCT)
   const stats = useMemo(() => {
-    if (!data) return { total: 0, urgent: 0, duo: 0, testers: 0 }
+    const pctCount = pctSchedulesMerged.length
     return {
-      total: data.schedules.length,
-      urgent: data.schedules.filter(s => s.is_urgent).length,
-      duo: data.schedules.filter(s => s.is_duo).length,
+      total:   allSchedules.length,
+      urgent:  allSchedules.filter(s => s.is_urgent).length,
+      duo:     allSchedules.filter(s => s.is_duo).length,
       testers: visibleTesters.length,
+      pct:     pctCount,
     }
-  }, [data, visibleTesters])
+  }, [allSchedules, pctSchedulesMerged, visibleTesters])
+
+  function handleClearPct() {
+    clearPctMonthlySnapshot()
+    setPctSnapshot([])
+    setPctGeneratedAt(null)
+  }
 
   return (
     <div className="p-6">
@@ -171,10 +258,40 @@ export default function MonthlySchedulePage() {
           <div>
             <h1 className={`text-xl font-bold ${TXT_PRIMARY}`}>월간 QC 시험 스케줄</h1>
             <p className={`text-xs ${TXT_MUTED}`}>
-              생성된 주간 스케줄이 자동 반영됩니다. 시험자×날짜 그리드로 부하를 시각화합니다.
+              생성된 주간 스케줄과 PCT 생산관리에서 전송된 배정이 시험자×날짜 그리드로 통합 표시됩니다.
             </p>
           </div>
         </div>
+
+        {/* PCT 데이터 알림 */}
+        {pctSnapshot.length > 0 && (
+          <Card className="border-violet-200 dark:border-violet-800 bg-violet-50/70 dark:bg-violet-950/30">
+            <CardContent className="flex flex-wrap items-center justify-between gap-3 py-3 text-xs">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-600 text-white">
+                  <Calendar size={14} />
+                </div>
+                <span className={`font-semibold ${TXT_PRIMARY}`}>PCT 생산관리 배정 표시 중</span>
+                <span className={TXT_TERTIARY}>
+                  총 <b className={`text-base ${TXT_PRIMARY}`}>{pctSnapshot.length}</b>건 · 이번 달 <b className={`text-base ${TXT_PRIMARY}`}>{pctSchedulesMerged.length}</b>건
+                </span>
+                {pctGeneratedAt && (
+                  <span className={`text-[10px] ${TXT_MUTED}`}>
+                    생성: {new Date(pctGeneratedAt).toLocaleString('ko-KR')}
+                  </span>
+                )}
+              </div>
+              <Button
+                onClick={handleClearPct}
+                variant="outline"
+                size="sm"
+                className="gap-1.5 border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-900/40"
+              >
+                PCT 데이터 지우기
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         {/* 월 네비게이션 */}
         <Card className={`${BORDER} ${CARD_BG}`}>
@@ -393,6 +510,10 @@ export default function MonthlySchedulePage() {
                 <div className="flex items-center gap-1.5">
                   <span className="inline-block h-3 w-3 rounded-sm border border-blue-300 bg-blue-200 dark:border-blue-800 dark:bg-blue-900/60" />
                   <span className={TXT_TERTIARY}>듀오</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-block h-3 w-3 rounded-sm border border-dashed border-violet-400 bg-violet-200 dark:border-violet-700 dark:bg-violet-900/60" />
+                  <span className={TXT_TERTIARY}>PCT 생산관리 출처</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="inline-block h-3 w-3 rounded-sm bg-slate-200 dark:bg-slate-700" />

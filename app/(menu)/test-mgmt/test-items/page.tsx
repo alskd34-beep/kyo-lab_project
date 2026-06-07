@@ -103,14 +103,16 @@ export default function TestItemsPage() {
     loadLinkedItems(selectedProduct.id)
   }, [selectedProduct])
 
-  async function loadLinkedItems(productId: string) {
+  async function loadLinkedItems(productId: string): Promise<ProductTestItemRow[] | null> {
     try {
       const res = await fetch(`/api/product-test-items?productId=${productId}`)
       if (!res.ok) throw new Error(await res.text())
       const data = await res.json() as { rows: ProductTestItemRow[] }
       setLinkedItems(data.rows)
+      return data.rows
     } catch (e) {
       setError(String(e))
+      return null
     }
   }
 
@@ -175,9 +177,35 @@ export default function TestItemsPage() {
     setSelectedToAdd(new Set())
   }
 
+  /**
+   * 남은 항목들의 sequence_order를 0,1,2,…로 일괄 재할당.
+   * 호출 후 linkedItems도 정렬된 상태로 갱신.
+   */
+  async function reorderLinked(items: ProductTestItemRow[]) {
+    if (!selectedProduct) return
+    const ordered = [...items].sort((a, b) => a.sequenceOrder - b.sequenceOrder)
+    const orderedTestItemIds = ordered.map(li => li.testItemId)
+    try {
+      const res = await fetch('/api/product-test-items/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productId: selectedProduct.id,
+          orderedTestItemIds,
+        }),
+      })
+      if (!res.ok) throw new Error(await res.text())
+      // 로컬 state에도 깔끔한 sequenceOrder 적용
+      setLinkedItems(ordered.map((li, idx) => ({ ...li, sequenceOrder: idx })))
+    } catch {
+      await loadLinkedItems(selectedProduct.id)
+    }
+  }
+
   async function handleDeleteLinked(testItemId: string) {
     if (!selectedProduct) return
-    setLinkedItems(prev => prev.filter(li => li.testItemId !== testItemId))
+    const remaining = linkedItems.filter(li => li.testItemId !== testItemId)
+    setLinkedItems(remaining)
     try {
       const res = await fetch('/api/product-test-items', {
         method: 'DELETE',
@@ -185,6 +213,8 @@ export default function TestItemsPage() {
         body: JSON.stringify({ productId: selectedProduct.id, testItemId }),
       })
       if (!res.ok) throw new Error(await res.text())
+      // 삭제 후 남은 항목 재정렬
+      if (remaining.length > 0) await reorderLinked(remaining)
     } catch {
       await loadLinkedItems(selectedProduct.id)
     }
@@ -194,7 +224,8 @@ export default function TestItemsPage() {
     if (!selectedProduct || selectedToAdd.size === 0) return
     setAddLoading(true)
     try {
-      const nextOrder = linkedItems.length
+      // max(sequenceOrder)+1 부터 시작 (length가 아닌 최댓값 기준)
+      const maxOrder = linkedItems.reduce((m, li) => Math.max(m, li.sequenceOrder), -1)
       const promises = Array.from(selectedToAdd).map((testItemId, idx) =>
         fetch('/api/product-test-items', {
           method: 'POST',
@@ -202,12 +233,14 @@ export default function TestItemsPage() {
           body: JSON.stringify({
             productId: selectedProduct.id,
             testItemId,
-            sequenceOrder: nextOrder + idx,
+            sequenceOrder: maxOrder + 1 + idx,
           }),
         }),
       )
       await Promise.all(promises)
-      await loadLinkedItems(selectedProduct.id)
+      // 서버에서 다시 가져온 후, 깔끔한 0,1,2,… 로 재정렬
+      const refreshed = await loadLinkedItems(selectedProduct.id)
+      if (refreshed && refreshed.length > 0) await reorderLinked(refreshed)
       setSelectedToAdd(new Set())
       setAddDialogOpen(false)
     } catch (e) {
@@ -346,7 +379,7 @@ export default function TestItemsPage() {
                             idx % 2 === 1 ? 'bg-slate-50' : 'bg-white'
                           }`}
                         >
-                          <td className="px-4 py-2.5 text-center text-slate-500">{li.sequenceOrder + 1}</td>
+                          <td className="px-4 py-2.5 text-center text-slate-500">{idx + 1}</td>
                           <td className="px-4 py-2.5 font-medium text-slate-800">{li.testItemName}</td>
                           <td className="px-4 py-2.5 text-center">
                             {li.isMandatory ? (

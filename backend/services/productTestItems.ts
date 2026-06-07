@@ -55,3 +55,24 @@ export async function removeMapping(productId: string, testItemId: string): Prom
     .eq('test_item_id', testItemId)
   if (error) throw error
 }
+
+/**
+ * 품목의 시험항목 순서를 0,1,2,... 로 일괄 재정렬.
+ * `orderedTestItemIds`의 순서대로 sequence_order를 부여한다.
+ */
+export async function reorderByProduct(
+  productId: string,
+  orderedTestItemIds: string[],
+): Promise<void> {
+  // 동시에 N개 update — 항목이 많지 않으므로 병렬 처리
+  const updates = orderedTestItemIds.map((testItemId, idx) =>
+    supabase
+      .from('product_test_items')
+      .update({ sequence_order: idx })
+      .eq('product_id', productId)
+      .eq('test_item_id', testItemId)
+  )
+  const results = await Promise.all(updates)
+  const firstErr = results.find(r => r.error)
+  if (firstErr?.error) throw new Error(`재정렬 실패: ${firstErr.error.message}`)
+}

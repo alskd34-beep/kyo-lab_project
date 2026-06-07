@@ -217,7 +217,7 @@ export default function TestMasterPage() {
             placeholder="시험항목명 검색..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="pl-9 h-9 w-full md:w-56 text-sm"
+            className="pl-9 h-9 w-full md:w-56 text-sm text-slate-900"
           />
         </div>
         <Button
@@ -426,6 +426,7 @@ export default function TestMasterPage() {
                 value={form.name}
                 onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                 placeholder="시험항목명을 입력하세요"
+                className="text-slate-900"
               />
             </div>
             <div className="flex flex-col gap-1.5">
@@ -448,6 +449,7 @@ export default function TestMasterPage() {
                 value={form.estimatedHours}
                 onChange={e => setForm(f => ({ ...f, estimatedHours: e.target.value }))}
                 placeholder="예) 2"
+                className="text-slate-900"
               />
             </div>
             <div className="flex items-center gap-2">
