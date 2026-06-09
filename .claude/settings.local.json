@@ -81,7 +81,16 @@
       "Bash(echo \"exit=$?\")",
       "Bash(node --check /Users/kyo/.claude/hud/omc-hud.mjs)",
       "Bash(node --check /Users/kyo/.claude/hud/lib/config-dir.mjs)",
-      "Bash(env)"
+      "Bash(env)",
+      "Bash(lsof -i :3300 -sTCP:LISTEN)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} \\(%{time_total}s\\)\\\\n\" http://localhost:3300/)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} -> Location: %{redirect_url}\\\\n\" http://localhost:3300/)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} \\(%{time_total}s\\)\\\\n\" http://localhost:3300/login)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:3300/api/auth/me)",
+      "Bash(ps -p 2683 -o pid,etime,command)",
+      "Bash(npx eslint *)",
+      "Bash(node scripts/manhours_minus_one.mjs)",
+      "Bash(node scripts/manhours_minus_one.mjs --apply)"
     ],
     "additionalDirectories": [
       "/tmp"

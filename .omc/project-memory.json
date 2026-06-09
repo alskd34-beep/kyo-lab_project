@@ -42,7 +42,7 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "npm run build",
+    "buildCommand": "cd /Users/kyo/project_kyo\nnpx tsc --noEmit 2>&1 | grep -E \"sidebar|schedule/pct|schedule/monthly|pct-schedule-bridge\" || echo \"✅ 수정한 파일 타입 에러 없음\"\necho \"--- 전체 에러 수 (기존 8개 = 회귀 없음) ---\"\nnpx tsc --noEmit 2>&1 | grep -cE \"error TS\"",
     "testCommand": null,
     "lintCommand": "npm run lint",
     "devCommand": "npm run dev",
@@ -199,6 +199,24 @@
   },
   "hotPaths": [
     {
+      "path": "frontend/components/board/MondayBoard.tsx",
+      "accessCount": 4,
+      "lastAccessed": 1780921389827,
+      "type": "file"
+    },
+    {
+      "path": "frontend/components/dashboard/sidebar.tsx",
+      "accessCount": 4,
+      "lastAccessed": 1780932453276,
+      "type": "file"
+    },
+    {
+      "path": "frontend/lib/pct-schedule-bridge.ts",
+      "accessCount": 4,
+      "lastAccessed": 1780932503940,
+      "type": "file"
+    },
+    {
       "path": "backend/lib/guard.ts",
       "accessCount": 3,
       "lastAccessed": 1780850057268,
@@ -211,6 +229,12 @@
       "type": "file"
     },
     {
+      "path": "frontend/components/providers/theme-provider.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1780923694631,
+      "type": "file"
+    },
+    {
       "path": "types/pqm.ts",
       "accessCount": 2,
       "lastAccessed": 1780849985963,
@@ -220,6 +244,24 @@
       "path": "backend/lib/supabase.ts",
       "accessCount": 2,
       "lastAccessed": 1780850057915,
+      "type": "file"
+    },
+    {
+      "path": "frontend/components/board/SheetBoardSection.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1780921221956,
+      "type": "file"
+    },
+    {
+      "path": "frontend/components/ui/dialog.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1780921346137,
+      "type": "file"
+    },
+    {
+      "path": "backend/services/manhours.ts",
+      "accessCount": 2,
+      "lastAccessed": 1780931500392,
       "type": "file"
     },
     {
@@ -259,12 +301,6 @@
       "type": "file"
     },
     {
-      "path": "backend/services/manhours.ts",
-      "accessCount": 1,
-      "lastAccessed": 1780849945083,
-      "type": "file"
-    },
-    {
       "path": "frontend/lib/auth-context.tsx",
       "accessCount": 1,
       "lastAccessed": 1780849946539,
@@ -289,21 +325,9 @@
       "type": "file"
     },
     {
-      "path": "frontend/lib/pct-schedule-bridge.ts",
-      "accessCount": 1,
-      "lastAccessed": 1780849947184,
-      "type": "file"
-    },
-    {
       "path": "app/api/auth/login/route.ts",
       "accessCount": 1,
       "lastAccessed": 1780849949063,
-      "type": "file"
-    },
-    {
-      "path": "frontend/components/providers/theme-provider.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1780849949105,
       "type": "file"
     },
     {
@@ -358,12 +382,6 @@
       "path": "frontend/components/ui/card.tsx",
       "accessCount": 1,
       "lastAccessed": 1780849949589,
-      "type": "file"
-    },
-    {
-      "path": "frontend/components/board/MondayBoard.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1780849949603,
       "type": "file"
     },
     {
@@ -433,18 +451,6 @@
       "type": "file"
     },
     {
-      "path": "frontend/components/dashboard/sidebar.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1780849955300,
-      "type": "file"
-    },
-    {
-      "path": "frontend/components/board/SheetBoardSection.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1780849955994,
-      "type": "file"
-    },
-    {
       "path": "app/api/batches/[id]/route.ts",
       "accessCount": 1,
       "lastAccessed": 1780849957629,
@@ -466,12 +472,6 @@
       "path": "frontend/components/ui/badge.tsx",
       "accessCount": 1,
       "lastAccessed": 1780849958030,
-      "type": "file"
-    },
-    {
-      "path": "frontend/components/ui/dialog.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1780849958239,
       "type": "file"
     },
     {

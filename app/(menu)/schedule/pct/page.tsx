@@ -12,6 +12,14 @@ import { useState, useMemo, useCallback, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@frontend/components/ui/card'
 import { Button } from '@frontend/components/ui/button'
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@frontend/components/ui/dialog'
+import {
   Factory,
   FileSpreadsheet,
   Loader2,
@@ -19,13 +27,15 @@ import {
   RefreshCw,
   Database,
   Plus,
-  Save,
   RotateCcw,
   Sparkles,
   UserMinus,
   AlertTriangle,
   CalendarPlus,
   CheckCircle2,
+  ArrowRight,
+  Download,
+  Calendar,
 } from 'lucide-react'
 import MondayBoard, { type BoardGroup, type ColumnDef } from '@frontend/components/board/MondayBoard'
 import {
@@ -190,7 +200,14 @@ function autoAssign(
   rows: PctRow[],
   testers: Tester[],
   matrix: CapabilityMatrixRow[],
-): { rows: PctRow[]; stats: { assignedCount: number; urgentCount: number; testersUsed: number } } {
+  hoursByCode: Map<string, number>,
+  fallbackHours: number,
+): { rows: PctRow[]; stats: { assignedCount: number; urgentCount: number; testersUsed: number; matched: number; unmatched: number } } {
+  // 품목코드로 평균공수 매칭. 미매칭이면 fallback 사용.
+  const hoursFor = (r: PctRow): { hours: number; matched: boolean } => {
+    const h = hoursByCode.get((r.품목코드 ?? '').trim())
+    return h != null && h > 0 ? { hours: h, matched: true } : { hours: fallbackHours, matched: false }
+  }
   // 1. 자격 있는 시험자 집합 — 활성 + Solo + 역량 1개 이상 Y/O
   const proficientByTester = new Map<string, number>()
   for (const m of matrix) {
@@ -208,7 +225,7 @@ function autoAssign(
     : testers.filter(t => t.isActive && t.canSolo).map(t => ({ ...t, _load: 0 }))
 
   if (effectivePool.length === 0) {
-    return { rows, stats: { assignedCount: 0, urgentCount: 0, testersUsed: 0 } }
+    return { rows, stats: { assignedCount: 0, urgentCount: 0, testersUsed: 0, matched: 0, unmatched: 0 } }
   }
 
   // 2. 우선순위 점수 계산 (부정 표현 제외한 정확한 긴급 감지)
@@ -229,13 +246,16 @@ function autoAssign(
     return a.idx - b.idx
   })
 
-  // 4. 부하 최소 시험자에게 배정 (라운드 로빈 + 가중치)
+  // 4. 부하(평균공수 시간) 최소 시험자에게 배정 — 건수가 아닌 실제 공수로 분배
   const assignments = new Map<string, string>()  // rowId -> testerName
+  let matched = 0, unmatched = 0
   for (const { r } of sorted) {
+    const { hours, matched: isMatched } = hoursFor(r)
+    if (isMatched) matched++; else unmatched++
     effectivePool.sort((x, y) => x._load - y._load)
     const chosen = effectivePool[0]
     assignments.set(r.id, chosen.name)
-    chosen._load += 1
+    chosen._load += hours   // 건수(1)가 아니라 평균공수 시간만큼 부하 누적
   }
 
   // 5. 원래 rows 순서에 결과 적용
@@ -251,6 +271,8 @@ function autoAssign(
       assignedCount: assignments.size,
       urgentCount:   rows.filter(r => priority(r) < 2).length,
       testersUsed:   new Set(assignments.values()).size,
+      matched,
+      unmatched,
     },
   }
 }
@@ -266,27 +288,50 @@ export default function PctPage() {
   // 시험자 + 역량 데이터 (자동 배정용)
   const [testers, setTesters] = useState<Tester[]>([])
   const [matrix,  setMatrix]  = useState<CapabilityMatrixRow[]>([])
-  const [autoStats, setAutoStats] = useState<{ assignedCount: number; urgentCount: number; testersUsed: number } | null>(null)
+  // 평균공수(시간) — 품목코드 → 평균공수. 평균공수관리(product_manhours)에서 로드.
+  const [manhoursByCode, setManhoursByCode] = useState<Map<string, number>>(new Map())
+  const [autoStats, setAutoStats] = useState<{ assignedCount: number; urgentCount: number; testersUsed: number; matched: number; unmatched: number } | null>(null)
 
   // 페이지 마운트 시 시험자/역량 fetch (실패 시 fallback PERSON_OPTIONS 사용)
   useEffect(() => {
     let aborted = false
     ;(async () => {
       try {
-        const [tRes, cRes] = await Promise.all([
+        const [tRes, cRes, mRes] = await Promise.all([
           fetch('/api/testers',              { credentials: 'include' }),
           fetch('/api/tester-capabilities',  { credentials: 'include' }),
+          fetch('/api/manhours',             { credentials: 'include' }),
         ])
         if (!tRes.ok || !cRes.ok) {
           console.warn('[PCT] 시험자/역량 fetch 실패 — 기본 명단으로 fallback', tRes.status, cRes.status)
-          return
+        } else {
+          const [tJson, cJson] = await Promise.all([tRes.json(), cRes.json()])
+          if (aborted) return
+          setTesters((tJson?.rows   ?? []) as Tester[])
+          setMatrix ((cJson?.matrix ?? []) as CapabilityMatrixRow[])
         }
-        const [tJson, cJson] = await Promise.all([tRes.json(), cRes.json()])
-        if (aborted) return
-        setTesters((tJson?.rows   ?? []) as Tester[])
-        setMatrix ((cJson?.matrix ?? []) as CapabilityMatrixRow[])
+        // 평균공수: 품목코드별 평균 (같은 코드에 포장단위가 여러 개면 평균)
+        if (mRes.ok) {
+          const mJson = await mRes.json()
+          if (aborted) return
+          const rows = (mJson?.rows ?? []) as { productCode: string; avgHours: number }[]
+          const sum = new Map<string, { total: number; n: number }>()
+          for (const r of rows) {
+            const code = (r.productCode ?? '').trim()
+            if (!code) continue
+            const cur = sum.get(code) ?? { total: 0, n: 0 }
+            cur.total += Number(r.avgHours) || 0
+            cur.n += 1
+            sum.set(code, cur)
+          }
+          const map = new Map<string, number>()
+          for (const [code, { total, n }] of sum) map.set(code, n > 0 ? total / n : 0)
+          setManhoursByCode(map)
+        } else {
+          console.warn('[PCT] 평균공수 fetch 실패', mRes.status)
+        }
       } catch (e) {
-        if (!aborted) console.warn('[PCT] 시험자/역량 fetch 예외 — 기본 명단으로 fallback', e)
+        if (!aborted) console.warn('[PCT] 시험자/역량/공수 fetch 예외 — 기본값 fallback', e)
       }
     })()
     return () => { aborted = true }
@@ -336,13 +381,20 @@ export default function PctPage() {
     setAutoStats(null)
   }, [originalRows])
 
-  // 자동 배정 — 비고 '긴급' 우선, 부하 최소 시험자에게 분배
+  // 미매칭 품목에 적용할 fallback 공수 = 등록된 평균공수의 평균 (없으면 4h)
+  const fallbackHours = useMemo(() => {
+    const vals = [...manhoursByCode.values()].filter(v => v > 0)
+    if (vals.length === 0) return 4
+    return vals.reduce((a, b) => a + b, 0) / vals.length
+  }, [manhoursByCode])
+
+  // 자동 배정 — 비고 '긴급' 우선, 평균공수(시간) 부하 최소 시험자에게 분배
   const handleAutoAssign = useCallback(() => {
     if (rows.length === 0) return
-    const result = autoAssign(rows, testers, matrix)
+    const result = autoAssign(rows, testers, matrix, manhoursByCode, fallbackHours)
     setRows(result.rows)
     setAutoStats(result.stats)
-  }, [rows, testers, matrix])
+  }, [rows, testers, matrix, manhoursByCode, fallbackHours])
 
   // 담당자 일괄 초기화
   const clearAllAssignments = useCallback(() => {
@@ -350,35 +402,36 @@ export default function PctPage() {
     setAutoStats(null)
   }, [])
 
-  // 월간 스케줄로 보낼 결과 (담당자 있는 행만)
+  // 이번 세션에서 "스케줄 생성"을 눌러 만든 결과 (팝업/배너용). null이면 아직 생성 안 함.
   const [scheduleStats, setScheduleStats] = useState<{
     saved:    number
     skipped:  number
     generatedAt: string
   } | null>(null)
+  // 생성 완료 모달 표시 여부
+  const [generatedModalOpen, setGeneratedModalOpen] = useState(false)
+  // 페이지 진입 시점에 이미 저장돼 있던 이전 스냅샷 메타 (조용한 안내용 — "생성됨" 팝업은 띄우지 않음)
+  const [existingSnapshot, setExistingSnapshot] = useState<{ count: number; generatedAt: string } | null>(null)
 
-  // 페이지 로드 시 기존 스냅샷 메타정보 표시
+  // 페이지 로드 시 기존 스냅샷이 있으면 "이전 생성 이력"으로만 표시 (불러오기=자동생성 오해 방지)
   useEffect(() => {
     const snap = loadPctMonthlySnapshot()
     if (snap) {
-      setScheduleStats({
-        saved:       snap.assignments.length,
-        skipped:     0,
-        generatedAt: snap.generatedAt,
-      })
+      setExistingSnapshot({ count: snap.assignments.length, generatedAt: snap.generatedAt })
     }
   }, [])
 
   /**
    * 스케줄 생성 — 자동/수동 배정된 행을 월간 스케줄용 스냅샷으로 저장.
-   * 담당자 미지정/포장일 누락 행은 자동 제외.
+   * 담당자 미지정/포장일 누락 행은 자동 제외. 완료 시 모달 팝업.
    */
   const handleGenerateSchedule = useCallback(() => {
     if (rows.length === 0) return
     const assignments: PctMonthlyAssignment[] = []
     let skipped = 0
     for (const r of rows) {
-      const m = pctRowToMonthly(r)
+      const h = manhoursByCode.get((r.품목코드 ?? '').trim())
+      const m = pctRowToMonthly(r, h != null && h > 0 ? h : fallbackHours)
       if (m) assignments.push(m)
       else   skipped++
     }
@@ -388,7 +441,19 @@ export default function PctPage() {
       skipped,
       generatedAt: new Date().toISOString(),
     })
-  }, [rows])
+    setExistingSnapshot(null)       // 새로 생성했으므로 이전 이력 배너는 숨김
+    setGeneratedModalOpen(true)     // "월간 스케줄 생성됨" 모달
+  }, [rows, manhoursByCode, fallbackHours])
+
+  // ─── 워크플로우 단계 계산 ───────────────────────────────────────────────────
+  // 1 불러오기 → 2 AI 자동 배정 → 3 스케줄 생성 → 4 월간 보기
+  const assignedCount = useMemo(() => rows.filter(r => r.담당자 && r.담당자.trim()).length, [rows])
+  const workflowStep = useMemo(() => {
+    if (rows.length === 0)   return 1   // 불러오기 대기
+    if (assignedCount === 0) return 2   // 배정 대기
+    if (!scheduleStats)      return 3   // 생성 대기
+    return 4                            // 생성 완료
+  }, [rows.length, assignedCount, scheduleStats])
 
   const stats = useMemo(() => {
     const added    = rows.filter(r => r._origin === 'added').length
@@ -421,6 +486,7 @@ export default function PctPage() {
       chipColor: { '대기': 'slate', '진행중': 'blue', '검토중': 'violet', '완료': 'emerald', '지연': 'red' } },
     { key: '담당자',         label: '담당자',         kind: 'person', width: 110, editable: true,
       options: personOptions },
+    { key: '공수',           label: '공수(h)',        kind: 'number', width: 75 },
     { key: '비고',           label: '비고',           kind: 'text',   width: 140, editable: true },
   ]
 
@@ -447,12 +513,17 @@ export default function PctPage() {
       id:    k,
       label: buckets.get(k)!.label,
       color: k === 'no-date' ? 'bg-slate-500' : GROUP_COLORS[i % GROUP_COLORS.length],
-      rows:  buckets.get(k)!.rows.map(r => ({
-        id:   r.id,
-        data: r as unknown as Record<string, unknown>,
-      })),
+      rows:  buckets.get(k)!.rows.map(r => {
+        // 품목코드로 평균공수 매칭 → 공수 셀 표시 (미매칭이면 ~fallback 으로 추정 표기)
+        const h = manhoursByCode.get((r.품목코드 ?? '').trim())
+        const 공수 = h != null && h > 0 ? h.toFixed(1) : `~${fallbackHours.toFixed(1)}`
+        return {
+          id:   r.id,
+          data: { ...(r as unknown as Record<string, unknown>), 공수 },
+        }
+      }),
     }))
-  }, [rows])
+  }, [rows, manhoursByCode, fallbackHours])
 
   const TXT_PRIMARY   = 'text-slate-900 dark:text-slate-50'
   const TXT_MUTED     = 'text-slate-500 dark:text-slate-400'
@@ -476,6 +547,41 @@ export default function PctPage() {
             </p>
           </div>
         </div>
+
+        {/* 워크플로우 단계 안내 — 불러오기 → AI 자동배정 → 스케줄 생성 → 월간 보기 */}
+        <Card className={`${BORDER} ${CARD_BG}`}>
+          <CardContent className="py-3">
+            <ol className="flex flex-wrap items-center gap-x-1 gap-y-2 text-xs">
+              {[
+                { n: 1, label: '시트 불러오기',  icon: Download },
+                { n: 2, label: 'AI 자동 배정',   icon: Sparkles },
+                { n: 3, label: '스케줄 생성',     icon: CalendarPlus },
+                { n: 4, label: '월간 스케줄 보기', icon: Calendar },
+              ].map((s, i) => {
+                const done    = workflowStep > s.n
+                const current = workflowStep === s.n
+                const Icon    = s.icon
+                return (
+                  <li key={s.n} className="flex items-center gap-1">
+                    <span
+                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-semibold transition-colors ${
+                        done
+                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
+                          : current
+                            ? 'bg-blue-600 text-white shadow-sm'
+                            : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500'
+                      }`}
+                    >
+                      {done ? <CheckCircle2 size={13} /> : <Icon size={13} />}
+                      <span className="hidden sm:inline">{s.n}. </span>{s.label}
+                    </span>
+                    {i < 3 && <ArrowRight size={13} className="text-slate-300 dark:text-slate-600" />}
+                  </li>
+                )
+              })}
+            </ol>
+          </CardContent>
+        </Card>
 
         {/* 시트 ID + 컨트롤 */}
         <Card className={`${BORDER} ${CARD_BG}`}>
@@ -552,7 +658,7 @@ export default function PctPage() {
                     className="gap-1.5 bg-emerald-600 px-3 text-white hover:bg-emerald-700 disabled:opacity-60"
                   >
                     <Sparkles size={13} />
-                    자동 배정
+                    AI 자동 배정
                   </Button>
                   <Button
                     onClick={clearAllAssignments}
@@ -633,12 +739,36 @@ export default function PctPage() {
                     <span className={TXT_TERTIARY}>
                       참여 시험자: <b className={`text-base ${TXT_PRIMARY}`}>{autoStats.testersUsed}</b>명
                     </span>
+                    <span className="inline-flex items-center gap-1 rounded-md border border-blue-300 bg-blue-100 dark:border-blue-800 dark:bg-blue-900/50 px-2 py-0.5 font-semibold text-blue-700 dark:text-blue-300">
+                      평균공수 연동 {autoStats.matched}건
+                      {autoStats.unmatched > 0 && <span className="font-normal text-blue-500 dark:text-blue-400"> · 미등록 {autoStats.unmatched}건(추정)</span>}
+                    </span>
                   </div>
                 </CardContent>
               </Card>
             )}
 
-            {/* 스케줄 생성 결과 알림 */}
+            {/* 이전 생성 이력 (조용한 안내 — 이번 세션 생성 아님) */}
+            {!scheduleStats && existingSnapshot && (
+              <Card className={`${BORDER} bg-slate-50 dark:bg-slate-800/40`}>
+                <CardContent className="flex flex-wrap items-center justify-between gap-3 py-2.5 text-xs">
+                  <span className={TXT_TERTIARY}>
+                    이전에 생성된 월간 스케줄 <b className={TXT_PRIMARY}>{existingSnapshot.count}</b>건이 있습니다
+                    <span className={`ml-2 text-[10px] ${TXT_MUTED}`}>
+                      ({new Date(existingSnapshot.generatedAt).toLocaleString('ko-KR')})
+                    </span>
+                  </span>
+                  <a
+                    href="/schedule/monthly"
+                    className="inline-flex items-center gap-1 rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-[11px] font-semibold text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 transition-colors"
+                  >
+                    월간 스케줄 보기 →
+                  </a>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* 스케줄 생성 결과 배너 (이번 세션 생성) */}
             {scheduleStats && (
               <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/70 dark:bg-blue-950/30">
                 <CardContent className="flex flex-wrap items-center justify-between gap-4 py-3 text-xs">
@@ -679,6 +809,8 @@ export default function PctPage() {
                   columns={columns}
                   onCellChange={onCellChange}
                   emptyMessage="표시할 행이 없습니다."
+                  defaultCollapsed
+                  showToggleAll
                 />
               </CardContent>
             </Card>
@@ -709,6 +841,48 @@ export default function PctPage() {
           </Card>
         )}
       </div>
+
+      {/* 월간 스케줄 생성 완료 모달 */}
+      <Dialog open={generatedModalOpen} onOpenChange={setGeneratedModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white">
+                <CheckCircle2 size={18} />
+              </span>
+              월간 스케줄 생성됨
+            </DialogTitle>
+            <DialogDescription>
+              배정된 항목이 월간 스케줄로 전송되었습니다.
+            </DialogDescription>
+          </DialogHeader>
+
+          {scheduleStats && (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 px-4 py-3 text-sm">
+              <span className={TXT_TERTIARY}>
+                전송 <b className={`text-lg ${TXT_PRIMARY}`}>{scheduleStats.saved}</b>건
+              </span>
+              {scheduleStats.skipped > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-100 dark:border-amber-800 dark:bg-amber-900/50 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                  담당자 미지정 {scheduleStats.skipped}건 제외
+                </span>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setGeneratedModalOpen(false)}>
+              닫기
+            </Button>
+            <a
+              href="/schedule/monthly"
+              className="inline-flex items-center justify-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition-colors"
+            >
+              월간 스케줄 보기 <ArrowRight size={15} />
+            </a>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

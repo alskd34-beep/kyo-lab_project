@@ -16,7 +16,11 @@ import {
   AlertCircle,
   Users,
   AlertTriangle,
+  LayoutGrid,
+  CalendarRange,
+  UserSquare,
 } from 'lucide-react'
+import MondayBoard, { type BoardGroup, type ColumnDef } from '@frontend/components/board/MondayBoard'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface ScheduleRow {
@@ -28,6 +32,7 @@ interface ScheduleRow {
   test_items: string[]
   scheduled_date: string
   workdays: number
+  avg_hours?: number   // PCT 출처: 평균공수(시간)
   is_urgent: boolean
   is_duo: boolean
   duo_partner_id: number | string | null
@@ -57,6 +62,7 @@ const TXT_TERTIARY  = 'text-slate-600 dark:text-slate-300'
 const TXT_MUTED     = 'text-slate-500 dark:text-slate-400'
 const BORDER        = 'border-slate-200 dark:border-slate-700'
 const CARD_BG       = 'bg-white dark:bg-slate-900'
+const BOARD_COLORS  = ['bg-blue-500', 'bg-emerald-500', 'bg-violet-500', 'bg-amber-500', 'bg-rose-500', 'bg-teal-500', 'bg-fuchsia-500']
 
 // ─── Utils ────────────────────────────────────────────────────────────────────
 function thisMonth(): string {
@@ -119,6 +125,8 @@ export default function MonthlySchedulePage() {
   const [data, setData]   = useState<MonthlyResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // 뷰 전환: 월간 그리드 / 주간 보드 / 개인별 보드
+  const [view, setView] = useState<'monthly' | 'weekly' | 'personal'>('monthly')
 
   // PCT 스냅샷 (localStorage에서 로드)
   const [pctSnapshot, setPctSnapshot] = useState<PctMonthlyAssignment[]>([])
@@ -158,6 +166,7 @@ export default function MonthlySchedulePage() {
         test_items:     a.testItems,
         scheduled_date: a.scheduledDate,
         workdays:       a.workdays,
+        avg_hours:      a.avgHours,
         is_urgent:      a.isUrgent,
         is_duo:         false,
         duo_partner_id: null,
@@ -239,6 +248,83 @@ export default function MonthlySchedulePage() {
       pct:     pctCount,
     }
   }, [allSchedules, pctSchedulesMerged, visibleTesters])
+
+  // ─── Monday 스타일 보드 데이터 (주간 / 개인별 탭) ─────────────────────────────
+  const testerNameById = useMemo(() => {
+    const m = new Map<string | number, string>()
+    for (const t of mergedTesters) m.set(t.id, t.name)
+    return m
+  }, [mergedTesters])
+
+  const toBoardData = useMemo(() => (r: ScheduleRow): Record<string, unknown> => ({
+    날짜:     r.scheduled_date,
+    품목명:   r.product_name,
+    코드:     r.product_code ?? '',
+    제조번호: typeof r.batch_id === 'string' ? r.batch_id.replace(/^pct-/, '') : r.batch_id,
+    담당자:   testerNameById.get(r.tester_id) ?? String(r.tester_id),
+    공수:     r.avg_hours != null && r.avg_hours > 0 ? r.avg_hours.toFixed(1) : (r.workdays ? `${r.workdays}일` : '—'),
+    긴급:     r.is_urgent ? '긴급' : '일반',
+    출처:     r.source === 'pct' ? 'PCT' : 'QC',
+    시험항목: (r.test_items ?? []).join(', '),
+  }), [testerNameById])
+
+  // 주간(포장/예정일 기준 ISO 주) 그룹
+  const weeklyGroups: BoardGroup[] = useMemo(() => {
+    const buckets = new Map<string, { label: string; rows: ScheduleRow[] }>()
+    for (const r of allSchedules) {
+      const d = new Date(r.scheduled_date + 'T00:00:00Z')
+      if (isNaN(d.getTime())) continue
+      const dow = (d.getUTCDay() + 6) % 7
+      const monday = new Date(d); monday.setUTCDate(d.getUTCDate() - dow)
+      const sunday = new Date(monday); sunday.setUTCDate(monday.getUTCDate() + 6)
+      const key = monday.toISOString().slice(0, 10)
+      const fmt = (x: Date) => `${x.getUTCMonth() + 1}/${x.getUTCDate()}`
+      if (!buckets.has(key)) buckets.set(key, { label: `${fmt(monday)} ~ ${fmt(sunday)}`, rows: [] })
+      buckets.get(key)!.rows.push(r)
+    }
+    return Array.from(buckets.keys()).sort().map((k, i) => ({
+      id:    k,
+      label: buckets.get(k)!.label,
+      color: BOARD_COLORS[i % BOARD_COLORS.length],
+      rows:  buckets.get(k)!.rows
+        .sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date))
+        .map(r => ({ id: String(r.id), data: toBoardData(r) })),
+    }))
+  }, [allSchedules, toBoardData])
+
+  // 개인별(담당 시험자) 그룹
+  const personalGroups: BoardGroup[] = useMemo(() => {
+    const buckets = new Map<string, ScheduleRow[]>()
+    for (const r of allSchedules) {
+      const name = testerNameById.get(r.tester_id) ?? String(r.tester_id)
+      if (!buckets.has(name)) buckets.set(name, [])
+      buckets.get(name)!.push(r)
+    }
+    return Array.from(buckets.keys())
+      .sort((a, b) => a.localeCompare(b, 'ko'))
+      .map((name, i) => ({
+        id:    name,
+        label: name,
+        color: BOARD_COLORS[i % BOARD_COLORS.length],
+        rows:  buckets.get(name)!
+          .sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date))
+          .map(r => ({ id: String(r.id), data: toBoardData(r) })),
+      }))
+  }, [allSchedules, testerNameById, toBoardData])
+
+  const weeklyColumns: ColumnDef[] = [
+    { key: '날짜',     label: '날짜',     kind: 'date',   width: 110 },
+    { key: '품목명',   label: '품목명',   kind: 'text',   width: 200 },
+    { key: '코드',     label: '코드',     kind: 'mono',   width: 80  },
+    { key: '제조번호', label: '제조번호', kind: 'mono',   width: 90  },
+    { key: '담당자',   label: '담당자',   kind: 'person', width: 110 },
+    { key: '공수',     label: '공수(h)',  kind: 'number', width: 75  },
+    { key: '긴급',     label: '긴급',     kind: 'chip',   width: 70, chipColor: { '일반': 'slate', '긴급': 'red' } },
+    { key: '출처',     label: '출처',     kind: 'chip',   width: 70, chipColor: { 'QC': 'blue', 'PCT': 'violet' } },
+    { key: '시험항목', label: '시험항목', kind: 'text',   width: 160 },
+  ]
+  // 개인별 보드는 그룹 자체가 담당자이므로 담당자 컬럼 제외
+  const personalColumns: ColumnDef[] = weeklyColumns.filter(c => c.key !== '담당자')
 
   function handleClearPct() {
     clearPctMonthlySnapshot()
@@ -398,6 +484,37 @@ export default function MonthlySchedulePage() {
               </Card>
             </div>
 
+            {/* 뷰 전환 탭 */}
+            <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-1.5">
+              {([
+                { key: 'monthly',  label: '월간 그리드', icon: LayoutGrid,    hint: '시험자 × 날짜' },
+                { key: 'weekly',   label: '주간 보드',   icon: CalendarRange, hint: '주차별' },
+                { key: 'personal', label: '개인별 할당', icon: UserSquare,    hint: '시험자별' },
+              ] as const).map(t => {
+                const active = view === t.key
+                const Icon = t.icon
+                return (
+                  <button
+                    key={t.key}
+                    onClick={() => setView(t.key)}
+                    className={`inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold transition-colors ${
+                      active
+                        ? 'bg-violet-600 text-white shadow-sm'
+                        : `${TXT_TERTIARY} hover:bg-slate-100 dark:hover:bg-slate-800`
+                    }`}
+                  >
+                    <Icon size={15} />
+                    {t.label}
+                    <span className={`hidden text-[10px] font-normal sm:inline ${active ? 'text-violet-100' : TXT_MUTED}`}>
+                      {t.hint}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* ── 월간 그리드 뷰 ── */}
+            {view === 'monthly' && (<>
             {/* 간트 그리드 */}
             <Card className={`${BORDER} ${CARD_BG} overflow-hidden`}>
               <CardHeader>
@@ -475,7 +592,7 @@ export default function MonthlySchedulePage() {
                                       return (
                                         <div
                                           key={`${r.id}-${d}`}
-                                          title={`${r.product_name} (배치 ${r.batch_id})\n시험항목: ${r.test_items?.join(', ') ?? '-'}\n공수: ${r.workdays}일\n${r.note ?? ''}`}
+                                          title={`${r.product_name} (배치 ${r.batch_id})\n시험항목: ${r.test_items?.join(', ') ?? '-'}\n공수: ${r.avg_hours != null && r.avg_hours > 0 ? `${r.avg_hours.toFixed(1)}h (${r.workdays}일)` : `${r.workdays}일`}\n${r.note ?? ''}`}
                                           className={`truncate rounded-sm border px-1 py-0.5 text-[9px] font-medium cursor-help transition-colors ${style.bg} ${style.border} ${TXT_PRIMARY}`}
                                         >
                                           {r.product_name.slice(0, 6)}
@@ -524,6 +641,49 @@ export default function MonthlySchedulePage() {
                 </span>
               </CardContent>
             </Card>
+            </>)}
+
+            {/* ── 주간 보드 뷰 (Monday 스타일, 주차별 그룹) ── */}
+            {view === 'weekly' && (
+              <Card className={`${BORDER} ${CARD_BG}`}>
+                <CardHeader>
+                  <CardTitle className={`flex items-center gap-2 text-base ${TXT_PRIMARY}`}>
+                    <CalendarRange size={16} className="text-violet-600 dark:text-violet-400" />
+                    주간 보드
+                    <span className={`text-xs font-normal ${TXT_MUTED}`}>(포장/예정일 기준 주차)</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-3 sm:p-4">
+                  <MondayBoard
+                    groups={weeklyGroups}
+                    columns={weeklyColumns}
+                    showToggleAll
+                    emptyMessage="이 달에 배정된 스케줄이 없습니다."
+                  />
+                </CardContent>
+              </Card>
+            )}
+
+            {/* ── 개인별 할당 뷰 (Monday 스타일, 시험자별 그룹) ── */}
+            {view === 'personal' && (
+              <Card className={`${BORDER} ${CARD_BG}`}>
+                <CardHeader>
+                  <CardTitle className={`flex items-center gap-2 text-base ${TXT_PRIMARY}`}>
+                    <UserSquare size={16} className="text-violet-600 dark:text-violet-400" />
+                    개인별 할당
+                    <span className={`text-xs font-normal ${TXT_MUTED}`}>(시험자별 배정 목록)</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-3 sm:p-4">
+                  <MondayBoard
+                    groups={personalGroups}
+                    columns={personalColumns}
+                    showToggleAll
+                    emptyMessage="이 달에 배정된 스케줄이 없습니다."
+                  />
+                </CardContent>
+              </Card>
+            )}
           </>
         )}
       </div>

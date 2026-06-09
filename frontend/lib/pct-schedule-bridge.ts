@@ -25,7 +25,9 @@ export interface PctMonthlyAssignment {
   batchNo:       string
   /** 시험항목 표시 — '전항목' 또는 '개별항목' */
   testItems:     string[]
-  /** 공수(일) — 디폴트 1 */
+  /** 평균공수(시간) — 평균공수관리에서 품목코드로 매칭. 미매칭 시 0 */
+  avgHours:      number
+  /** 공수(일) — avgHours를 일 단위로 환산 (1일 = 8시간, 최소 1일) */
   workdays:      number
   /** 긴급 여부 */
   isUrgent:      boolean
@@ -42,9 +44,18 @@ export interface PctMonthlySnapshot {
   assignments: PctMonthlyAssignment[]
 }
 
+/** 1 작업일 = 8시간 기준으로 공수(시간) → 일수 환산 */
+const DAILY_HOURS = 8
+export function hoursToWorkdays(avgHours: number): number {
+  if (!avgHours || avgHours <= 0) return 1
+  return Math.max(1, Math.round(avgHours / DAILY_HOURS))
+}
+
 /**
  * PCT 페이지의 단일 행을 월간 항목으로 변환.
  * 담당자 미지정이거나 포장일 파싱 실패면 null 반환.
+ *
+ * @param avgHours 평균공수관리에서 품목코드로 매칭한 평균공수(시간). 미매칭이면 undefined.
  */
 export function pctRowToMonthly(row: {
   품목코드:   string
@@ -55,12 +66,15 @@ export function pctRowToMonthly(row: {
   진행방법:   string  // '전항목' | '개별항목'
   담당자:     string
   비고:       string
-}): PctMonthlyAssignment | null {
+}, avgHours?: number): PctMonthlyAssignment | null {
   if (!row.담당자 || !row.담당자.trim()) return null
   const date = normalizeDate(row.포장일)
   if (!date) return null
 
   const noteUrgent = /긴급/.test(row.비고 ?? '') && !/(비\s*긴급|긴급\s*(아님|아닙|안\s?됨|X|x|없음)|긴급(하지|이|은)\s*(아니|않))/.test(row.비고 ?? '')
+
+  const hours = avgHours && avgHours > 0 ? avgHours : 0
+  const hourNote = hours > 0 ? ` · 공수 ${hours.toFixed(1)}h` : ''
 
   return {
     key:           `${row.품목코드}-${row.제조번호}-${row.담당자}`,
@@ -70,9 +84,10 @@ export function pctRowToMonthly(row: {
     productCode:   row.품목코드,
     batchNo:       row.제조번호,
     testItems:     [row.진행방법 || '전항목'],
-    workdays:      1,
+    avgHours:      hours,
+    workdays:      hoursToWorkdays(hours),
     isUrgent:      row.긴급 === '긴급' || noteUrgent,
-    note:          row.비고 ?? '',
+    note:          `${row.비고 ?? ''}${hourNote}`.trim(),
     createdAt:     new Date().toISOString(),
   }
 }

@@ -34,11 +34,28 @@ interface NavItem {
   badge?: number
   live?: boolean
   subItems?: SubItem[]
+  /** subItems가 있어도 상단 클릭 시 이 경로로 바로 이동 (서브패널도 함께 열림) */
+  defaultPath?: string
 }
 
 // ─── Nav Data ─────────────────────────────────────────────────────────────────
 const NAV_ITEMS: NavItem[] = [
   { id: 'home', icon: <Home size={17} />, label: '홈', live: true },
+  {
+    // 스케줄 — 홈 바로 아래로 이동. 클릭 시 주간 계획(자동)으로 바로 이동.
+    id: 'schedule',
+    icon: <Calendar size={17} />,
+    label: '스케줄',
+    live: true,
+    defaultPath: '/schedule/weekly-plan',
+    subItems: [
+      { id: 'schedule-pct',         label: 'PCT (생산관리)', live: true },
+      { id: 'schedule-weekly-plan', label: '주간 계획 (자동)', live: true },
+      // 주간 스케줄(AI) — 미사용. 숨김 처리 (월간 스케줄의 "주간 보드" 탭으로 대체). 추후 불필요 시 삭제.
+      // { id: 'schedule-weekly',      label: '주간 스케줄 (AI)', live: true },
+      { id: 'schedule-monthly',     label: '월간 스케줄',    live: true },
+    ],
+  },
   {
     id: 'test-mgmt',
     icon: <FlaskConical size={17} />,
@@ -51,18 +68,6 @@ const NAV_ITEMS: NavItem[] = [
       { id: 'test-items',  label: '시험항목관리', live: true },
       { id: 'test-master', label: '시험항목마스터', live: true },
       { id: 'testers',     label: '시험자 관리',   live: true },
-    ],
-  },
-  {
-    id: 'schedule',
-    icon: <Calendar size={17} />,
-    label: '스케줄',
-    live: true,
-    subItems: [
-      { id: 'schedule-pct',         label: 'PCT (생산관리)', live: true },
-      { id: 'schedule-weekly-plan', label: '주간 계획 (자동)', live: true },
-      { id: 'schedule-weekly',      label: '주간 스케줄 (AI)', live: true },
-      { id: 'schedule-monthly',     label: '월간 스케줄',    live: true },
     ],
   },
   {
@@ -264,6 +269,12 @@ export default function Sidebar({ activeItem = 'test-mgmt', onNavigate, isOpen =
     setOpenMenu(prev => {
       const next = prev === item.id ? null : item.id
       setPanelOpen(next !== null)
+      // 메뉴를 "여는" 클릭이고 defaultPath가 있으면 해당 기본 페이지로 바로 이동
+      if (next !== null && item.defaultPath) {
+        onNavigate?.(item.id)
+        router.push(item.defaultPath)
+        onClose?.()
+      }
       return next
     })
     setHoverMenu(null)

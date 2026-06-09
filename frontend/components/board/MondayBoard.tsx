@@ -47,11 +47,30 @@ interface MondayBoardProps {
   emptyMessage?: string
   /** 셀 값 변경 콜백. editable=true 컬럼에서만 호출됨. */
   onCellChange?: (rowId: string | number, columnKey: string, newValue: string) => void
+  /** true면 그룹을 접힌 상태로 시작 (주간 날짜만 보이고 필요 시 펼침) */
+  defaultCollapsed?: boolean
+  /** 상단에 "전체 펼치기/접기" 컨트롤 표시 */
+  showToggleAll?: boolean
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
-export default function MondayBoard({ groups, columns, emptyMessage, onCellChange }: MondayBoardProps) {
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+export default function MondayBoard({ groups, columns, emptyMessage, onCellChange, defaultCollapsed = false, showToggleAll = false }: MondayBoardProps) {
+  const [collapsed, setCollapsed] = useState<Set<string>>(() =>
+    defaultCollapsed ? new Set(groups.map(g => g.id)) : new Set()
+  )
+  // defaultCollapsed일 때, 비동기로 도착하는 새 그룹을 최초 1회 접힌 상태로 등록.
+  // 사용자가 직접 펼친 그룹은 다시 접지 않도록 "이미 본 그룹" ref로 추적.
+  const seenRef = useRef<Set<string>>(new Set(defaultCollapsed ? groups.map(g => g.id) : []))
+  useEffect(() => {
+    if (!defaultCollapsed) return
+    const fresh = groups.filter(g => !seenRef.current.has(g.id))
+    if (fresh.length === 0) return
+    setCollapsed(prev => {
+      const next = new Set(prev)
+      for (const g of fresh) { next.add(g.id); seenRef.current.add(g.id) }
+      return next
+    })
+  }, [groups, defaultCollapsed])
 
   const toggleGroup = (id: string) =>
     setCollapsed(prev => {
@@ -59,6 +78,9 @@ export default function MondayBoard({ groups, columns, emptyMessage, onCellChang
       next.has(id) ? next.delete(id) : next.add(id)
       return next
     })
+
+  const expandAll   = () => setCollapsed(new Set())
+  const collapseAll = () => setCollapsed(new Set(groups.map(g => g.id)))
 
   const renderCellCell = (col: ColumnDef, row: BoardRow) => {
     const val = row.data[col.key]
@@ -83,9 +105,24 @@ export default function MondayBoard({ groups, columns, emptyMessage, onCellChang
     )
   }
 
+  const nonEmpty = groups.filter(g => g.rows.length > 0)
+  const allClosed = nonEmpty.length > 0 && nonEmpty.every(g => collapsed.has(g.id))
+
   return (
     <div className="overflow-x-auto">
       <div className="min-w-full">
+        {showToggleAll && nonEmpty.length > 1 && (
+          <div className="mb-2 flex items-center justify-end">
+            <button
+              onClick={allClosed ? expandAll : collapseAll}
+              className="inline-flex items-center gap-1 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-colors"
+            >
+              {allClosed
+                ? <><ChevronDown size={13} /> 전체 펼치기</>
+                : <><ChevronRight size={13} /> 전체 접기</>}
+            </button>
+          </div>
+        )}
         {groups.map(group => {
           const isClosed = collapsed.has(group.id)
           if (group.rows.length === 0) return null
