@@ -90,7 +90,18 @@
       "Bash(ps -p 2683 -o pid,etime,command)",
       "Bash(npx eslint *)",
       "Bash(node scripts/manhours_minus_one.mjs)",
-      "Bash(node scripts/manhours_minus_one.mjs --apply)"
+      "Bash(node scripts/manhours_minus_one.mjs --apply)",
+      "Bash(git pull *)",
+      "Bash(git stash *)",
+      "Bash(kill 2683)",
+      "Bash(lsof -ti :3300 -sTCP:LISTEN)",
+      "Bash(xargs -r kill -9)",
+      "Bash(echo \"started pid $!\")",
+      "mcp__plugin_oh-my-claudecode_t__state_list_active",
+      "Bash(node /tmp/probe_schema.mjs)",
+      "Bash(node scripts/_probe_tmp.mjs)",
+      "Bash(node scripts/_probe2.mjs)",
+      "Bash(curl -s -o /tmp/r.txt -w 'HTTP %{http_code}\\\\n' -X POST http://localhost:3300/api/schedules/pct-generate -H 'Content-Type: application/json' -d '{\"rows\":[]}')"
     ],
     "additionalDirectories": [
       "/tmp"

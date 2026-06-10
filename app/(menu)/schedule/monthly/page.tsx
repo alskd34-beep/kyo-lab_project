@@ -32,7 +32,8 @@ interface ScheduleRow {
   test_items: string[]
   scheduled_date: string
   workdays: number
-  avg_hours?: number   // PCT 출처: 평균공수(시간)
+  avg_hours?: number   // PCT 출처: 평균공수(시간) (레거시)
+  dates?: string[]     // PCT 출처: 명시적 배정 근무일(주말 제외). 있으면 이 날짜들에 배치
   is_urgent: boolean
   is_duo: boolean
   duo_partner_id: number | string | null
@@ -155,8 +156,10 @@ export default function MonthlySchedulePage() {
 
   // PCT 항목을 ScheduleRow 형태로 변환 (해당 월만)
   const pctSchedules: ScheduleRow[] = useMemo(() => {
+    const inMonth = (a: PctMonthlyAssignment) =>
+      a.dates && a.dates.length ? a.dates.some(d => d.startsWith(month)) : a.scheduledDate.startsWith(month)
     return pctSnapshot
-      .filter(a => a.scheduledDate.startsWith(month))
+      .filter(inMonth)
       .map(a => ({
         id:             `pct-${a.key}`,
         tester_id:      `pct-${a.testerName}`,
@@ -165,13 +168,20 @@ export default function MonthlySchedulePage() {
         product_name:   a.productName,
         test_items:     a.testItems,
         scheduled_date: a.scheduledDate,
+        dates:          a.dates,
         workdays:       a.workdays,
         avg_hours:      a.avgHours,
         is_urgent:      a.isUrgent,
-        is_duo:         false,
-        duo_partner_id: null,
+        is_duo:         !!a.isDuo,
+        duo_partner_id: a.duoPartner ?? null,
         status:         'pct',
-        note:           `[PCT] ${a.batchNo} · ${a.testItems.join(', ')}\n${a.note || ''}`.trim(),
+        note:           [
+          `[PCT] ${a.batchNo}`,
+          a.method ? `방법: ${a.method}` : '',
+          `시험항목: ${a.testItems.join(', ')}`,
+          a.isDuo && a.duoPartner ? `듀오: ${a.testerName}+${a.duoPartner}` : '',
+          a.note || '',
+        ].filter(Boolean).join('\n'),
         source:         'pct',
       }))
   }, [pctSnapshot, month])
@@ -214,12 +224,20 @@ export default function MonthlySchedulePage() {
   const cellMap = useMemo(() => {
     const m = new Map<string, ScheduleRow[]>()
     for (const row of allSchedules) {
-      const start = new Date(row.scheduled_date + 'T00:00:00Z')
-      const wd = Math.max(1, row.workdays || 1)
-      for (let i = 0; i < wd; i++) {
-        const d = new Date(start)
-        d.setUTCDate(start.getUTCDate() + i)
-        const ds = d.toISOString().slice(0, 10)
+      // PCT: 명시적 근무일(dates)이 있으면 그 날짜들에만 배치(주말 제외 반영)
+      // DB: scheduled_date부터 workdays만큼 달력 연속 배치(기존 동작)
+      let dayList: string[]
+      if (row.dates && row.dates.length) {
+        dayList = row.dates
+      } else {
+        const start = new Date(row.scheduled_date + 'T00:00:00Z')
+        const wd = Math.max(1, row.workdays || 1)
+        dayList = Array.from({ length: wd }, (_, i) => {
+          const d = new Date(start); d.setUTCDate(start.getUTCDate() + i)
+          return d.toISOString().slice(0, 10)
+        })
+      }
+      for (const ds of dayList) {
         if (!ds.startsWith(month)) continue
         const k = `${row.tester_id}::${ds}`
         if (!m.has(k)) m.set(k, [])

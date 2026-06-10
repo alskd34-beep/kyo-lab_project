@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"node /tmp/probe_schema.mjs 2>&1\",\"description\":\"Probe DB schema and data for matching\"}",
+  "error": "Exit code 1\nnode:internal/modules/package_json_reader:301\n  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);\n        ^\n\nError [ERR_MODULE_NOT_FOUND]: Cannot find package '@supabase/supabase-js' imported from /private/tmp/probe_schema.mjs\n    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)\n    at packageResolve (node:internal/modules/esm/resolve:768:81)\n    at moduleResolve (node:internal/modules/esm/resolve:859:18)\n    at defaultResolve (node:...",
+  "timestamp": "2026-06-10T12:28:43.275Z",
+  "retry_count": 1
+}

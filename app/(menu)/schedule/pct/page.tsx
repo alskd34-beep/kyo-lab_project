@@ -39,11 +39,10 @@ import {
 } from 'lucide-react'
 import MondayBoard, { type BoardGroup, type ColumnDef } from '@frontend/components/board/MondayBoard'
 import {
-  pctRowToMonthly,
-  savePctMonthlySnapshot,
+  savePctMonthlyFromEngine,
   loadPctMonthlySnapshot,
-  type PctMonthlyAssignment,
 } from '@frontend/lib/pct-schedule-bridge'
+import type { EngineResult } from '@backend/services/scheduleEngine'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface SheetResponse {
@@ -288,50 +287,26 @@ export default function PctPage() {
   // 시험자 + 역량 데이터 (자동 배정용)
   const [testers, setTesters] = useState<Tester[]>([])
   const [matrix,  setMatrix]  = useState<CapabilityMatrixRow[]>([])
-  // 평균공수(시간) — 품목코드 → 평균공수. 평균공수관리(product_manhours)에서 로드.
-  const [manhoursByCode, setManhoursByCode] = useState<Map<string, number>>(new Map())
-  const [autoStats, setAutoStats] = useState<{ assignedCount: number; urgentCount: number; testersUsed: number; matched: number; unmatched: number } | null>(null)
+  // 규칙 엔진(서버) 배정 결과 — AI 자동 배정 시 채워짐
+  const [engineResult, setEngineResult] = useState<EngineResult | null>(null)
+  const [assigning, setAssigning] = useState(false)
 
   // 페이지 마운트 시 시험자/역량 fetch (실패 시 fallback PERSON_OPTIONS 사용)
   useEffect(() => {
     let aborted = false
     ;(async () => {
       try {
-        const [tRes, cRes, mRes] = await Promise.all([
-          fetch('/api/testers',              { credentials: 'include' }),
-          fetch('/api/tester-capabilities',  { credentials: 'include' }),
-          fetch('/api/manhours',             { credentials: 'include' }),
-        ])
-        if (!tRes.ok || !cRes.ok) {
-          console.warn('[PCT] 시험자/역량 fetch 실패 — 기본 명단으로 fallback', tRes.status, cRes.status)
-        } else {
-          const [tJson, cJson] = await Promise.all([tRes.json(), cRes.json()])
-          if (aborted) return
-          setTesters((tJson?.rows   ?? []) as Tester[])
-          setMatrix ((cJson?.matrix ?? []) as CapabilityMatrixRow[])
+        // 담당자 수동 선택 드롭다운용 시험자 명단 (배정 자체는 서버 규칙엔진이 수행)
+        const tRes = await fetch('/api/testers', { credentials: 'include' })
+        if (!tRes.ok) {
+          console.warn('[PCT] 시험자 fetch 실패 — 기본 명단으로 fallback', tRes.status)
+          return
         }
-        // 평균공수: 품목코드별 평균 (같은 코드에 포장단위가 여러 개면 평균)
-        if (mRes.ok) {
-          const mJson = await mRes.json()
-          if (aborted) return
-          const rows = (mJson?.rows ?? []) as { productCode: string; avgHours: number }[]
-          const sum = new Map<string, { total: number; n: number }>()
-          for (const r of rows) {
-            const code = (r.productCode ?? '').trim()
-            if (!code) continue
-            const cur = sum.get(code) ?? { total: 0, n: 0 }
-            cur.total += Number(r.avgHours) || 0
-            cur.n += 1
-            sum.set(code, cur)
-          }
-          const map = new Map<string, number>()
-          for (const [code, { total, n }] of sum) map.set(code, n > 0 ? total / n : 0)
-          setManhoursByCode(map)
-        } else {
-          console.warn('[PCT] 평균공수 fetch 실패', mRes.status)
-        }
+        const tJson = await tRes.json()
+        if (aborted) return
+        setTesters((tJson?.rows ?? []) as Tester[])
       } catch (e) {
-        if (!aborted) console.warn('[PCT] 시험자/역량/공수 fetch 예외 — 기본값 fallback', e)
+        if (!aborted) console.warn('[PCT] 시험자 fetch 예외 — 기본 명단으로 fallback', e)
       }
     })()
     return () => { aborted = true }
@@ -378,28 +353,61 @@ export default function PctPage() {
 
   const resetChanges = useCallback(() => {
     setRows(originalRows.map(r => ({ ...r })))
-    setAutoStats(null)
+    setEngineResult(null)
   }, [originalRows])
 
-  // 미매칭 품목에 적용할 fallback 공수 = 등록된 평균공수의 평균 (없으면 4h)
-  const fallbackHours = useMemo(() => {
-    const vals = [...manhoursByCode.values()].filter(v => v > 0)
-    if (vals.length === 0) return 4
-    return vals.reduce((a, b) => a + b, 0) / vals.length
-  }, [manhoursByCode])
-
-  // 자동 배정 — 비고 '긴급' 우선, 평균공수(시간) 부하 최소 시험자에게 분배
-  const handleAutoAssign = useCallback(() => {
+  // AI 자동 배정 — 서버 규칙엔진 호출 (포장일+1 근무일 시작, product_workload 공수,
+  // product_test_items→test_item_equipment→역량 Y/O 매칭, 전항목/개별항목, solo/duo)
+  const handleAutoAssign = useCallback(async () => {
     if (rows.length === 0) return
-    const result = autoAssign(rows, testers, matrix, manhoursByCode, fallbackHours)
-    setRows(result.rows)
-    setAutoStats(result.stats)
-  }, [rows, testers, matrix, manhoursByCode, fallbackHours])
+    setAssigning(true)
+    setError(null)
+    try {
+      const payload = {
+        rows: rows.map(r => ({
+          품목코드: r.품목코드, 품목명: r.품목명, 제조번호: r.제조번호,
+          포장일: r.포장일, 긴급: r.긴급, 진행방법: r.진행방법, 담당자: r.담당자,
+        })),
+      }
+      const res = await fetch('/api/schedules/pct-generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? '자동 배정 실패')
+      const result = json as EngineResult
+      setEngineResult(result)
+
+      // 행별 담당자 표시 갱신 (전항목: 시험자명 / 개별항목: '개별 N명')
+      const byRow = new Map<string, EngineResult['assignments']>()
+      for (const a of result.assignments) {
+        const k = `${a.productCode}|${a.batchNo}`
+        const arr = byRow.get(k) ?? []
+        arr.push(a); byRow.set(k, arr)
+      }
+      setRows(prev => prev.map(r => {
+        const as = byRow.get(`${(r.품목코드 ?? '').trim()}|${r.제조번호}`) ?? []
+        let disp = ''
+        if (as.length === 1 && as[0].method === '전항목') {
+          disp = as[0].isDuo ? `${as[0].testerName}+${as[0].duoPartner}` : as[0].testerName
+        } else if (as.length > 0) {
+          disp = `개별 ${as.length}명`
+        }
+        return disp === r.담당자 ? r : { ...r, 담당자: disp, _dirty: true }
+      }))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '자동 배정 오류')
+    } finally {
+      setAssigning(false)
+    }
+  }, [rows])
 
   // 담당자 일괄 초기화
   const clearAllAssignments = useCallback(() => {
     setRows(prev => prev.map(r => r.담당자 ? { ...r, 담당자: '', _dirty: true } : r))
-    setAutoStats(null)
+    setEngineResult(null)
   }, [])
 
   // 이번 세션에서 "스케줄 생성"을 눌러 만든 결과 (팝업/배너용). null이면 아직 생성 안 함.
@@ -422,38 +430,29 @@ export default function PctPage() {
   }, [])
 
   /**
-   * 스케줄 생성 — 자동/수동 배정된 행을 월간 스케줄용 스냅샷으로 저장.
-   * 담당자 미지정/포장일 누락 행은 자동 제외. 완료 시 모달 팝업.
+   * 스케줄 생성 — AI 자동 배정 결과(규칙엔진)를 월간 스케줄 스냅샷으로 저장.
+   * 완료 시 모달 팝업. 자동 배정을 먼저 수행해야 활성화됨.
    */
   const handleGenerateSchedule = useCallback(() => {
-    if (rows.length === 0) return
-    const assignments: PctMonthlyAssignment[] = []
-    let skipped = 0
-    for (const r of rows) {
-      const h = manhoursByCode.get((r.품목코드 ?? '').trim())
-      const m = pctRowToMonthly(r, h != null && h > 0 ? h : fallbackHours)
-      if (m) assignments.push(m)
-      else   skipped++
-    }
-    savePctMonthlySnapshot(assignments)
+    if (!engineResult || engineResult.assignments.length === 0) return
+    savePctMonthlyFromEngine(engineResult.assignments)
     setScheduleStats({
-      saved:       assignments.length,
-      skipped,
+      saved:       engineResult.assignments.length,
+      skipped:     engineResult.unassigned.length,
       generatedAt: new Date().toISOString(),
     })
     setExistingSnapshot(null)       // 새로 생성했으므로 이전 이력 배너는 숨김
     setGeneratedModalOpen(true)     // "월간 스케줄 생성됨" 모달
-  }, [rows, manhoursByCode, fallbackHours])
+  }, [engineResult])
 
   // ─── 워크플로우 단계 계산 ───────────────────────────────────────────────────
   // 1 불러오기 → 2 AI 자동 배정 → 3 스케줄 생성 → 4 월간 보기
-  const assignedCount = useMemo(() => rows.filter(r => r.담당자 && r.담당자.trim()).length, [rows])
   const workflowStep = useMemo(() => {
-    if (rows.length === 0)   return 1   // 불러오기 대기
-    if (assignedCount === 0) return 2   // 배정 대기
-    if (!scheduleStats)      return 3   // 생성 대기
-    return 4                            // 생성 완료
-  }, [rows.length, assignedCount, scheduleStats])
+    if (rows.length === 0) return 1   // 불러오기 대기
+    if (!engineResult)     return 2   // 배정 대기
+    if (!scheduleStats)    return 3   // 생성 대기
+    return 4                          // 생성 완료
+  }, [rows.length, engineResult, scheduleStats])
 
   const stats = useMemo(() => {
     const added    = rows.filter(r => r._origin === 'added').length
@@ -484,11 +483,18 @@ export default function PctPage() {
     { key: '상태',           label: '상태',           kind: 'chip',   width: 85,  editable: true,
       options: [...STATUS_OPTIONS],
       chipColor: { '대기': 'slate', '진행중': 'blue', '검토중': 'violet', '완료': 'emerald', '지연': 'red' } },
-    { key: '담당자',         label: '담당자',         kind: 'person', width: 110, editable: true,
+    { key: '담당자',         label: '담당자',         kind: 'person', width: 130, editable: true,
       options: personOptions },
-    { key: '공수',           label: '공수(h)',        kind: 'number', width: 75 },
+    { key: '공수',           label: '공수(일)',       kind: 'number', width: 70 },
     { key: '비고',           label: '비고',           kind: 'text',   width: 140, editable: true },
   ]
+
+  // 품목코드 → 공수(일). 자동 배정 결과(서버 product_workload)에서 추출.
+  const workdaysByCode = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const a of engineResult?.assignments ?? []) m.set(a.productCode, a.workdays)
+    return m
+  }, [engineResult])
 
   // 주차별 그룹화
   const groups: BoardGroup[] = useMemo(() => {
@@ -514,16 +520,16 @@ export default function PctPage() {
       label: buckets.get(k)!.label,
       color: k === 'no-date' ? 'bg-slate-500' : GROUP_COLORS[i % GROUP_COLORS.length],
       rows:  buckets.get(k)!.rows.map(r => {
-        // 품목코드로 평균공수 매칭 → 공수 셀 표시 (미매칭이면 ~fallback 으로 추정 표기)
-        const h = manhoursByCode.get((r.품목코드 ?? '').trim())
-        const 공수 = h != null && h > 0 ? h.toFixed(1) : `~${fallbackHours.toFixed(1)}`
+        // 자동 배정 후 품목코드로 공수(일) 표시
+        const wd = workdaysByCode.get((r.품목코드 ?? '').trim())
+        const 공수 = wd != null ? `${wd}일` : ''
         return {
           id:   r.id,
           data: { ...(r as unknown as Record<string, unknown>), 공수 },
         }
       }),
     }))
-  }, [rows, manhoursByCode, fallbackHours])
+  }, [rows, workdaysByCode])
 
   const TXT_PRIMARY   = 'text-slate-900 dark:text-slate-50'
   const TXT_MUTED     = 'text-slate-500 dark:text-slate-400'
@@ -647,18 +653,16 @@ export default function PctPage() {
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  {/* 자동 배정 — 비고 '긴급' 우선 + 부하 분산 */}
+                  {/* AI 자동 배정 — 서버 규칙엔진(역량·장비·공수 기반) */}
                   <Button
                     onClick={handleAutoAssign}
-                    disabled={rows.length === 0}
+                    disabled={rows.length === 0 || assigning}
                     size="sm"
-                    title={testers.length === 0
-                      ? '시험자 정보 없음 — 기본 명단 사용'
-                      : `${testers.filter(t => t.isActive).length}명 시험자 풀에서 부하 최소로 자동 분배`}
+                    title="시험자 역량·장비(test_item_equipment)·공수(product_workload) 기반 규칙 자동 배정"
                     className="gap-1.5 bg-emerald-600 px-3 text-white hover:bg-emerald-700 disabled:opacity-60"
                   >
-                    <Sparkles size={13} />
-                    AI 자동 배정
+                    {assigning ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                    {assigning ? '배정 중...' : 'AI 자동 배정'}
                   </Button>
                   <Button
                     onClick={clearAllAssignments}
@@ -693,9 +697,9 @@ export default function PctPage() {
                   {/* 스케줄 생성 — 자동 배정 후 월간 스케줄로 전달 */}
                   <Button
                     onClick={handleGenerateSchedule}
-                    disabled={rows.every(r => !r.담당자)}
+                    disabled={!engineResult || engineResult.assignments.length === 0}
                     size="sm"
-                    title="담당자 배정된 행을 월간 스케줄로 전송"
+                    title="AI 자동 배정 결과를 월간 스케줄로 전송 (먼저 자동 배정 필요)"
                     className="gap-1.5 bg-blue-600 px-4 text-white hover:bg-blue-700 disabled:opacity-60"
                   >
                     <CalendarPlus size={13} />
@@ -717,33 +721,45 @@ export default function PctPage() {
               </CardContent>
             </Card>
 
-            {/* 자동 배정 결과 알림 */}
-            {autoStats && (
+            {/* AI 자동 배정 결과 알림 */}
+            {engineResult && (
               <Card className="border-emerald-200 dark:border-emerald-800 bg-emerald-50/70 dark:bg-emerald-950/30">
-                <CardContent className="flex flex-wrap items-center gap-4 py-3 text-xs">
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-600 text-white">
-                      <Sparkles size={14} />
-                    </div>
-                    <span className={`font-semibold ${TXT_PRIMARY}`}>자동 배정 완료</span>
-                  </div>
+                <CardContent className="flex flex-col gap-2 py-3 text-xs">
                   <div className="flex flex-wrap items-center gap-3">
-                    <span className={TXT_TERTIARY}>
-                      배정: <b className={`text-base ${TXT_PRIMARY}`}>{autoStats.assignedCount}</b>건
-                    </span>
-                    {autoStats.urgentCount > 0 && (
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-600 text-white">
+                        <Sparkles size={14} />
+                      </div>
+                      <span className={`font-semibold ${TXT_PRIMARY}`}>AI 자동 배정 완료</span>
+                    </div>
+                    <span className={TXT_TERTIARY}>배정 <b className={`text-base ${TXT_PRIMARY}`}>{engineResult.stats.assigned}</b>건</span>
+                    {engineResult.stats.urgent > 0 && (
                       <span className="inline-flex items-center gap-1 rounded-md border border-red-300 bg-red-100 dark:border-red-800 dark:bg-red-900/50 px-2 py-0.5 font-semibold text-red-700 dark:text-red-300">
-                        <AlertTriangle size={10} /> 긴급 우선 처리 {autoStats.urgentCount}건
+                        <AlertTriangle size={10} /> 긴급 {engineResult.stats.urgent}건
                       </span>
                     )}
-                    <span className={TXT_TERTIARY}>
-                      참여 시험자: <b className={`text-base ${TXT_PRIMARY}`}>{autoStats.testersUsed}</b>명
-                    </span>
+                    {engineResult.stats.duo > 0 && (
+                      <span className="inline-flex items-center gap-1 rounded-md border border-sky-300 bg-sky-100 dark:border-sky-800 dark:bg-sky-900/50 px-2 py-0.5 font-semibold text-sky-700 dark:text-sky-300">
+                        듀오 {engineResult.stats.duo}건
+                      </span>
+                    )}
+                    <span className={TXT_TERTIARY}>참여 시험자 <b className={`text-base ${TXT_PRIMARY}`}>{engineResult.stats.testersUsed}</b>명</span>
                     <span className="inline-flex items-center gap-1 rounded-md border border-blue-300 bg-blue-100 dark:border-blue-800 dark:bg-blue-900/50 px-2 py-0.5 font-semibold text-blue-700 dark:text-blue-300">
-                      평균공수 연동 {autoStats.matched}건
-                      {autoStats.unmatched > 0 && <span className="font-normal text-blue-500 dark:text-blue-400"> · 미등록 {autoStats.unmatched}건(추정)</span>}
+                      공수 매칭 {engineResult.stats.workloadMatched}건
+                      {engineResult.stats.workloadMissing > 0 && <span className="font-normal text-blue-500 dark:text-blue-400"> · 미등록 {engineResult.stats.workloadMissing}건(기본 3일)</span>}
                     </span>
                   </div>
+                  {engineResult.unassigned.length > 0 && (
+                    <div className="rounded-md border border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40 px-3 py-2">
+                      <p className="font-semibold text-amber-700 dark:text-amber-300">미배정 {engineResult.unassigned.length}건</p>
+                      <ul className="mt-1 list-inside list-disc text-amber-700 dark:text-amber-300/90">
+                        {engineResult.unassigned.slice(0, 6).map((u, i) => (
+                          <li key={i}>{u.productCode} {u.productName} ({u.batchNo}) — {u.reason}</li>
+                        ))}
+                        {engineResult.unassigned.length > 6 && <li>… 외 {engineResult.unassigned.length - 6}건</li>}
+                      </ul>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}

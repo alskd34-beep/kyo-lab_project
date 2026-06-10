@@ -23,18 +23,66 @@ export interface PctMonthlyAssignment {
   productCode:   string
   /** 제조번호 */
   batchNo:       string
-  /** 시험항목 표시 — '전항목' 또는 '개별항목' */
+  /** 배정된 시험항목 목록 */
   testItems:     string[]
-  /** 평균공수(시간) — 평균공수관리에서 품목코드로 매칭. 미매칭 시 0 */
-  avgHours:      number
-  /** 공수(일) — avgHours를 일 단위로 환산 (1일 = 8시간, 최소 1일) */
+  /** 평균공수(시간) — (레거시) 시간 기반 환산용. 규칙엔진 경로에서는 0 */
+  avgHours?:     number
+  /** 공수(일) — product_workload.avg_workdays */
   workdays:      number
+  /** 배정된 근무일 목록(주말 제외). 있으면 월간 그리드는 이 날짜들에 배치 */
+  dates?:        string[]
+  /** 진행방법 */
+  method?:       '전항목' | '개별항목'
+  /** 듀오(2인) 여부 */
+  isDuo?:        boolean
+  /** 듀오 짝 시험자 이름 */
+  duoPartner?:   string | null
   /** 긴급 여부 */
   isUrgent:      boolean
   /** 비고 */
   note:          string
   /** 생성 시각 (ISO) */
   createdAt:     string
+}
+
+/** 규칙 엔진(scheduleEngine) 출력 1건 — 구조적 타입 (백엔드 EngineAssignment 호환) */
+export interface EngineAssignmentLike {
+  key:         string
+  productCode: string
+  productName: string
+  batchNo:     string
+  testerName:  string
+  testItems:   string[]
+  method:      '전항목' | '개별항목'
+  isDuo:       boolean
+  duoPartner:  string | null
+  isUrgent:    boolean
+  startDate:   string
+  dates:       string[]
+  workdays:    number
+  note:        string
+}
+
+/** 규칙 엔진 배정 결과를 월간 스냅샷으로 저장 */
+export function savePctMonthlyFromEngine(items: EngineAssignmentLike[]): void {
+  const assignments: PctMonthlyAssignment[] = items.map(a => ({
+    key:           a.key,
+    scheduledDate: a.startDate,
+    dates:         a.dates,
+    testerName:    a.testerName,
+    productName:   a.productName,
+    productCode:   a.productCode,
+    batchNo:       a.batchNo,
+    testItems:     a.testItems,
+    workdays:      a.workdays,
+    method:        a.method,
+    isDuo:         a.isDuo,
+    duoPartner:    a.duoPartner,
+    isUrgent:      a.isUrgent,
+    note:          a.note,
+    createdAt:     new Date().toISOString(),
+  }))
+  savePctMonthlySnapshot(assignments)
 }
 
 /** localStorage에 저장된 전체 스냅샷 */

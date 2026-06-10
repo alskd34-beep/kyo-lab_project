@@ -42,7 +42,7 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "cd /Users/kyo/project_kyo\nnpx tsc --noEmit 2>&1 | grep -E \"sidebar|schedule/pct|schedule/monthly|pct-schedule-bridge\" || echo \"✅ 수정한 파일 타입 에러 없음\"\necho \"--- 전체 에러 수 (기존 8개 = 회귀 없음) ---\"\nnpx tsc --noEmit 2>&1 | grep -cE \"error TS\"",
+    "buildCommand": "cd /Users/kyo/project_kyo\nnpx tsc --noEmit 2>&1 | grep -E \"scheduleEngine|pct-generate|pct-schedule-bridge|schedule/pct|schedule/monthly\" || echo \"✅ 이번 작업 파일 타입 에러 없음\"\necho \"--- 전체 에러 수 (기존 8개 = 회귀 없음 기대) ---\"\nnpx tsc --noEmit 2>&1 | grep -cE \"error TS\"",
     "testCommand": null,
     "lintCommand": "npm run lint",
     "devCommand": "npm run dev",
@@ -199,6 +199,12 @@
   },
   "hotPaths": [
     {
+      "path": "frontend/lib/pct-schedule-bridge.ts",
+      "accessCount": 5,
+      "lastAccessed": 1781095548249,
+      "type": "file"
+    },
+    {
       "path": "frontend/components/board/MondayBoard.tsx",
       "accessCount": 4,
       "lastAccessed": 1780921389827,
@@ -208,12 +214,6 @@
       "path": "frontend/components/dashboard/sidebar.tsx",
       "accessCount": 4,
       "lastAccessed": 1780932453276,
-      "type": "file"
-    },
-    {
-      "path": "frontend/lib/pct-schedule-bridge.ts",
-      "accessCount": 4,
-      "lastAccessed": 1780932503940,
       "type": "file"
     },
     {
@@ -265,6 +265,18 @@
       "type": "file"
     },
     {
+      "path": "backend/services/productTestItems.ts",
+      "accessCount": 2,
+      "lastAccessed": 1781094244627,
+      "type": "file"
+    },
+    {
+      "path": "frontend/lib/weekly-planner.ts",
+      "accessCount": 2,
+      "lastAccessed": 1781094282141,
+      "type": "file"
+    },
+    {
       "path": "backend/lib/auth-cookies.ts",
       "accessCount": 1,
       "lastAccessed": 1780849941124,
@@ -274,12 +286,6 @@
       "path": "backend/services/batches.ts",
       "accessCount": 1,
       "lastAccessed": 1780849942170,
-      "type": "file"
-    },
-    {
-      "path": "backend/services/productTestItems.ts",
-      "accessCount": 1,
-      "lastAccessed": 1780849942222,
       "type": "file"
     },
     {
@@ -310,12 +316,6 @@
       "path": "frontend/lib/utils.ts",
       "accessCount": 1,
       "lastAccessed": 1780849946727,
-      "type": "file"
-    },
-    {
-      "path": "frontend/lib/weekly-planner.ts",
-      "accessCount": 1,
-      "lastAccessed": 1780849946953,
       "type": "file"
     },
     {
