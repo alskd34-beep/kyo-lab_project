@@ -1,14 +1,30 @@
-'use client'
+"use client"
 
-import { useState, useEffect, useCallback } from 'react'
-import { Plus, Pencil, Trash2, Users, ChevronDown, ChevronUp } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from "react"
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from '@frontend/components/ui/dialog'
-import { Button } from '@frontend/components/ui/button'
-import { Input } from '@frontend/components/ui/input'
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
+  Grid2x2,
+  Pencil,
+  Plus,
+  Save,
+  Trash2,
+  Users,
+} from "lucide-react"
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+import { Badge } from "@frontend/components/ui/badge"
+import { Button } from "@frontend/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@frontend/components/ui/dialog"
+import { Input } from "@frontend/components/ui/input"
+
 interface TesterRow {
   id: string
   employeeNo: string
@@ -25,7 +41,7 @@ interface CapabilityRow {
   sortOrder: number
 }
 
-type ProficiencyLevel = 'Y' | 'N' | 'X' | 'O'
+type ProficiencyLevel = "Y" | "N" | "X" | "O"
 
 interface MatrixRow {
   testerId: string
@@ -33,74 +49,79 @@ interface MatrixRow {
   proficiencyLevel: ProficiencyLevel
 }
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-const LEVEL_CYCLE: ProficiencyLevel[] = ['X', 'Y', 'O', 'N']
+const LEVEL_CYCLE: ProficiencyLevel[] = ["X", "Y", "O", "N"]
 
 const LEVEL_STYLE: Record<ProficiencyLevel, string> = {
-  O: 'bg-blue-100 text-blue-700 font-bold',
-  Y: 'bg-emerald-100 text-emerald-700 font-semibold',
-  N: 'bg-red-100 text-red-600',
-  X: 'bg-slate-100 text-slate-400',
+  O: "border-blue-300 bg-blue-700 text-white",
+  Y: "border-emerald-300 bg-emerald-700 text-white",
+  N: "border-rose-300 bg-rose-700 text-white",
+  X: "border-slate-300 bg-slate-100 text-slate-500",
 }
 
 const LEVEL_LABEL: Record<ProficiencyLevel, string> = {
-  O: '우수',
-  Y: '가능',
-  N: '불가',
-  X: '-',
+  O: "우수",
+  Y: "가능",
+  N: "불가",
+  X: "-",
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+type TabId = "testers" | "capability"
+
+const dialogInputClass =
+  "h-10 border-slate-300 bg-white text-slate-950 placeholder:text-slate-500 focus-visible:border-blue-600 focus-visible:ring-blue-200"
+
 export default function TestersPage() {
-  const [activeTab, setActiveTab] = useState<'testers' | 'capability'>('testers')
-
-  // ── Tester data ──────────────────────────────────────────────────────────
-  const [testers, setTesters]       = useState<TesterRow[]>([])
-  const [loading, setLoading]       = useState(true)
-
-  // ── Capability data ──────────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<TabId>("testers")
+  const [testers, setTesters] = useState<TesterRow[]>([])
+  const [loading, setLoading] = useState(true)
   const [capabilities, setCapabilities] = useState<CapabilityRow[]>([])
-  const [matrix, setMatrix]             = useState<MatrixRow[]>([])
-  const [capLoading, setCapLoading]     = useState(false)
-  const [capLoaded, setCapLoaded]       = useState(false)
-  const [savingCell, setSavingCell]     = useState<string | null>(null)
+  const [matrix, setMatrix] = useState<MatrixRow[]>([])
+  const [capLoading, setCapLoading] = useState(false)
+  const [capLoaded, setCapLoaded] = useState(false)
+  const [savingCell, setSavingCell] = useState<string | null>(null)
 
-  // ── Tester dialog ────────────────────────────────────────────────────────
-  const [addOpen,    setAddOpen]    = useState(false)
-  const [editOpen,   setEditOpen]   = useState(false)
+  const [addOpen, setAddOpen] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
-  const [selected,   setSelected]   = useState<TesterRow | null>(null)
-
-  const [form, setForm] = useState({ employeeNo: '', name: '', canSolo: true, canDuo: false })
+  const [selected, setSelected] = useState<TesterRow | null>(null)
+  const [form, setForm] = useState({
+    employeeNo: "",
+    name: "",
+    canSolo: true,
+    canDuo: false,
+  })
   const [saving, setSaving] = useState(false)
-  const [error, setError]   = useState('')
+  const [error, setError] = useState("")
 
-  // ── Sort state ────────────────────────────────────────────────────────────
-  const [sortField, setSortField] = useState<'employeeNo' | 'name'>('employeeNo')
-  const [sortDir, setSortDir]     = useState<'asc' | 'desc'>('asc')
+  const [sortField, setSortField] = useState<"employeeNo" | "name">(
+    "employeeNo"
+  )
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
 
-  // ── Summary ───────────────────────────────────────────────────────────────
-  const totalActive   = testers.filter(t => t.isActive).length
-  const soloCount     = testers.filter(t => t.canSolo && t.isActive).length
-  const duoCount      = testers.filter(t => t.canDuo && t.isActive).length
+  useEffect(() => {
+    void fetchTesters()
+  }, [])
 
-  const fetchTesters = useCallback(async () => {
+  async function fetchTesters() {
     setLoading(true)
     try {
-      const res  = await fetch('/api/testers')
-      const json = await res.json()
+      const res = await fetch("/api/testers")
+      const json = (await res.json()) as { rows?: TesterRow[] }
       setTesters(json.rows ?? [])
     } finally {
       setLoading(false)
     }
-  }, [])
+  }
 
   const fetchCapabilities = useCallback(async () => {
     if (capLoaded) return
     setCapLoading(true)
     try {
-      const res  = await fetch('/api/tester-capabilities')
-      const json = await res.json()
+      const res = await fetch("/api/tester-capabilities")
+      const json = (await res.json()) as {
+        capabilities?: CapabilityRow[]
+        matrix?: MatrixRow[]
+      }
       setCapabilities(json.capabilities ?? [])
       setMatrix(json.matrix ?? [])
       setCapLoaded(true)
@@ -109,233 +130,390 @@ export default function TestersPage() {
     }
   }, [capLoaded])
 
-  useEffect(() => { void fetchTesters() }, [fetchTesters])
-
   useEffect(() => {
-    if (activeTab === 'capability') void fetchCapabilities()
+    if (activeTab === "capability") void fetchCapabilities()
   }, [activeTab, fetchCapabilities])
 
-  // ── Tester CRUD ───────────────────────────────────────────────────────────
   function openAdd() {
-    setForm({ employeeNo: '', name: '', canSolo: true, canDuo: false })
-    setError('')
+    setForm({ employeeNo: "", name: "", canSolo: true, canDuo: false })
+    setError("")
     setAddOpen(true)
   }
 
   function openEdit(row: TesterRow) {
     setSelected(row)
-    setForm({ employeeNo: row.employeeNo, name: row.name, canSolo: row.canSolo, canDuo: row.canDuo })
-    setError('')
+    setForm({
+      employeeNo: row.employeeNo,
+      name: row.name,
+      canSolo: row.canSolo,
+      canDuo: row.canDuo,
+    })
+    setError("")
     setEditOpen(true)
   }
 
   function openDelete(row: TesterRow) {
     setSelected(row)
+    setError("")
     setDeleteOpen(true)
   }
 
   async function handleAdd() {
-    if (!form.employeeNo.trim() || !form.name.trim()) { setError('사번과 이름을 입력하세요'); return }
-    setSaving(true); setError('')
+    if (!form.employeeNo.trim() || !form.name.trim()) {
+      setError("사번과 이름을 입력하세요.")
+      return
+    }
+    setSaving(true)
+    setError("")
     try {
-      const res  = await fetch('/api/testers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
-      const json = await res.json()
-      if (!res.ok) { setError(json.error ?? '저장 실패'); return }
-      setTesters(prev => [...prev, json.row])
+      const res = await fetch("/api/testers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      })
+      const json = (await res.json()) as { error?: string; row?: TesterRow }
+      if (!res.ok) {
+        setError(json.error ?? "저장 실패")
+        return
+      }
+      setTesters((prev) => [...prev, json.row as TesterRow])
       setAddOpen(false)
-    } finally { setSaving(false) }
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function handleEdit() {
     if (!selected) return
-    if (!form.employeeNo.trim() || !form.name.trim()) { setError('사번과 이름을 입력하세요'); return }
-    setSaving(true); setError('')
+    if (!form.employeeNo.trim() || !form.name.trim()) {
+      setError("사번과 이름을 입력하세요.")
+      return
+    }
+    setSaving(true)
+    setError("")
     try {
-      const res  = await fetch('/api/testers', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: selected.id, ...form }) })
-      const json = await res.json()
-      if (!res.ok) { setError(json.error ?? '저장 실패'); return }
-      setTesters(prev => prev.map(t => t.id === selected.id ? { ...t, ...form } : t))
+      const res = await fetch("/api/testers", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: selected.id, ...form }),
+      })
+      const json = (await res.json()) as { error?: string }
+      if (!res.ok) {
+        setError(json.error ?? "저장 실패")
+        return
+      }
+      setTesters((prev) =>
+        prev.map((tester) =>
+          tester.id === selected.id ? { ...tester, ...form } : tester
+        )
+      )
       setEditOpen(false)
-    } finally { setSaving(false) }
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function handleDelete() {
     if (!selected) return
     setSaving(true)
     try {
-      const res = await fetch('/api/testers', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: selected.id }) })
+      const res = await fetch("/api/testers", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: selected.id }),
+      })
       if (res.ok) {
-        setTesters(prev => prev.filter(t => t.id !== selected.id))
-        setMatrix(prev => prev.filter(m => m.testerId !== selected.id))
+        setTesters((prev) => prev.filter((tester) => tester.id !== selected.id))
+        setMatrix((prev) => prev.filter((row) => row.testerId !== selected.id))
         setDeleteOpen(false)
       }
-    } finally { setSaving(false) }
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function toggleActive(row: TesterRow) {
     const next = !row.isActive
-    setTesters(prev => prev.map(t => t.id === row.id ? { ...t, isActive: next } : t))
-    await fetch('/api/testers', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: row.id, isActive: next }) })
+    setTesters((prev) =>
+      prev.map((tester) =>
+        tester.id === row.id ? { ...tester, isActive: next } : tester
+      )
+    )
+    await fetch("/api/testers", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: row.id, isActive: next }),
+    })
   }
 
-  // ── Capability matrix ─────────────────────────────────────────────────────
-  function getLevel(testerId: string, capId: string): ProficiencyLevel {
-    return matrix.find(m => m.testerId === testerId && m.capabilityId === capId)?.proficiencyLevel ?? 'X'
+  function getLevel(testerId: string, capabilityId: string): ProficiencyLevel {
+    return (
+      matrix.find(
+        (row) => row.testerId === testerId && row.capabilityId === capabilityId
+      )?.proficiencyLevel ?? "X"
+    )
   }
 
-  async function cycleLevel(tester: TesterRow, cap: CapabilityRow) {
-    const cur   = getLevel(tester.id, cap.id)
-    const next  = LEVEL_CYCLE[(LEVEL_CYCLE.indexOf(cur) + 1) % LEVEL_CYCLE.length]
-    const key   = `${tester.id}_${cap.id}`
+  async function cycleLevel(tester: TesterRow, capability: CapabilityRow) {
+    const current = getLevel(tester.id, capability.id)
+    const next =
+      LEVEL_CYCLE[(LEVEL_CYCLE.indexOf(current) + 1) % LEVEL_CYCLE.length]
+    const key = `${tester.id}_${capability.id}`
     setSavingCell(key)
 
-    setMatrix(prev => {
-      const exists = prev.find(m => m.testerId === tester.id && m.capabilityId === cap.id)
-      if (exists) return prev.map(m => m.testerId === tester.id && m.capabilityId === cap.id ? { ...m, proficiencyLevel: next } : m)
-      return [...prev, { testerId: tester.id, capabilityId: cap.id, proficiencyLevel: next }]
+    setMatrix((prev) => {
+      const exists = prev.find(
+        (row) =>
+          row.testerId === tester.id && row.capabilityId === capability.id
+      )
+      if (exists) {
+        return prev.map((row) =>
+          row.testerId === tester.id && row.capabilityId === capability.id
+            ? { ...row, proficiencyLevel: next }
+            : row
+        )
+      }
+      return [
+        ...prev,
+        {
+          testerId: tester.id,
+          capabilityId: capability.id,
+          proficiencyLevel: next,
+        },
+      ]
     })
 
     try {
-      await fetch('/api/tester-capabilities', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ testerId: tester.id, capabilityId: cap.id, proficiencyLevel: next }),
+      await fetch("/api/tester-capabilities", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          testerId: tester.id,
+          capabilityId: capability.id,
+          proficiencyLevel: next,
+        }),
       })
-    } finally { setSavingCell(null) }
+    } finally {
+      setSavingCell(null)
+    }
   }
 
-  // ── Sort ──────────────────────────────────────────────────────────────────
-  const sortedTesters = [...testers].sort((a, b) => {
-    const va = sortField === 'employeeNo' ? a.employeeNo : a.name
-    const vb = sortField === 'employeeNo' ? b.employeeNo : b.name
-    return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va)
-  })
+  const sortedTesters = useMemo(() => {
+    return [...testers].sort((a, b) => {
+      const va = sortField === "employeeNo" ? a.employeeNo : a.name
+      const vb = sortField === "employeeNo" ? b.employeeNo : b.name
+      return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va)
+    })
+  }, [testers, sortDir, sortField])
 
-  function toggleSort(field: 'employeeNo' | 'name') {
-    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortField(field); setSortDir('asc') }
+  const activeTesters = useMemo(
+    () => sortedTesters.filter((tester) => tester.isActive),
+    [sortedTesters]
+  )
+
+  const summary = useMemo(() => {
+    const active = testers.filter((tester) => tester.isActive).length
+    const solo = testers.filter(
+      (tester) => tester.isActive && tester.canSolo
+    ).length
+    const duo = testers.filter(
+      (tester) => tester.isActive && tester.canDuo
+    ).length
+    return { active, solo, duo }
+  }, [testers])
+
+  function toggleSort(field: "employeeNo" | "name") {
+    if (sortField === field) {
+      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"))
+      return
+    }
+    setSortField(field)
+    setSortDir("asc")
   }
 
-  function SortIcon({ field }: { field: 'employeeNo' | 'name' }) {
-    if (sortField !== field) return <span className="ml-1 opacity-30"><ChevronDown size={11} /></span>
-    return sortDir === 'asc'
-      ? <ChevronUp size={11} className="ml-1 text-blue-500" />
-      : <ChevronDown size={11} className="ml-1 text-blue-500" />
+  function SortIcon({ field }: { field: "employeeNo" | "name" }) {
+    if (sortField !== field) {
+      return (
+        <span className="ml-1 opacity-40">
+          <ChevronDown size={11} />
+        </span>
+      )
+    }
+    return sortDir === "asc" ? (
+      <ChevronUp size={11} className="ml-1 text-blue-700" />
+    ) : (
+      <ChevronDown size={11} className="ml-1 text-blue-700" />
+    )
   }
 
-  // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-full bg-slate-50">
-      {/* Header */}
-      <div className="bg-white border-b border-slate-200 px-4 md:px-6 py-4">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 shadow">
-              <Users size={18} className="text-white" />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-slate-800">시험자 관리</h2>
-              <p className="text-xs text-slate-500">시험자 정보 및 역량 관리</p>
-            </div>
+    <div className="flex min-w-0 flex-1 flex-col gap-4 bg-slate-200/70 p-3 md:p-5">
+      <div className="flex flex-col gap-2 rounded-lg border border-slate-300 bg-white px-3 py-3 shadow-sm md:flex-row md:items-center md:gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-700 text-white shadow-sm">
+            {activeTab === "testers" ? (
+              <Users size={18} />
+            ) : (
+              <Grid2x2 size={18} />
+            )}
           </div>
-          {activeTab === 'testers' && (
-            <Button onClick={openAdd} size="sm" className="h-8 gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs w-full md:w-auto">
-              <Plus size={13} /> 시험자 추가
-            </Button>
-          )}
+          <div className="min-w-0">
+            <h1 className="min-w-0 text-base font-bold text-slate-950 sm:text-lg">
+              {activeTab === "testers" ? "시험자 관리" : "시험자 역량"}
+            </h1>
+            <p className="text-xs font-medium text-slate-600">
+              {activeTab === "testers"
+                ? "시험자 정보와 활성 상태를 관리합니다."
+                : "활성 시험자의 역량 매트릭스를 관리합니다."}
+            </p>
+          </div>
         </div>
 
-        {/* Summary cards */}
-        <div className="mt-4 grid grid-cols-3 gap-2 md:gap-3">
+        <div className="flex flex-wrap items-center gap-1 md:ml-auto">
           {[
-            { label: '전체 시험자', value: totalActive, sub: `총 ${testers.length}명`, color: 'bg-indigo-50 border-indigo-200 text-indigo-700' },
-            { label: '단독 가능', value: soloCount, sub: `활성 기준`, color: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
-            { label: '2인 가능', value: duoCount, sub: `활성 기준`, color: 'bg-amber-50 border-amber-200 text-amber-700' },
-          ].map(c => (
-            <div key={c.label} className={`rounded-xl border px-4 py-3 ${c.color}`}>
-              <p className="text-xs font-medium opacity-70">{c.label}</p>
-              <p className="text-2xl font-bold mt-0.5">{c.value}<span className="text-xs font-normal ml-1">명</span></p>
-              <p className="text-[11px] opacity-60 mt-0.5">{c.sub}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Tabs */}
-        <div className="mt-4 flex gap-1 border-b border-slate-200">
-          {[
-            { id: 'testers',    label: '시험자 관리' },
-            { id: 'capability', label: '시험자 역량' },
-          ].map(tab => (
+            { id: "testers", label: "시험자 관리" },
+            { id: "capability", label: "시험자 역량" },
+          ].map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as typeof activeTab)}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
+              onClick={() => setActiveTab(tab.id as TabId)}
+              className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${
                 activeTab === tab.id
-                  ? 'border-indigo-600 text-indigo-700'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
+                  ? "bg-blue-700 text-white"
+                  : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
               }`}
             >
               {tab.label}
             </button>
           ))}
         </div>
+
+        {activeTab === "testers" && (
+          <Button
+            onClick={openAdd}
+            size="sm"
+            className="h-9 w-full bg-blue-700 text-white shadow-sm hover:bg-blue-800 md:w-auto"
+          >
+            <Plus size={15} className="mr-1" />
+            시험자 추가
+          </Button>
+        )}
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-auto p-4 md:p-6">
-        {/* ── Tab 1: 시험자 관리 ── */}
-        {activeTab === 'testers' && (
-          <>
-          {/* Mobile card view */}
-          <div className="md:hidden flex flex-col gap-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="rounded-lg border border-l-4 border-slate-300 border-l-blue-700 bg-white px-4 py-3 shadow-sm">
+          <p className="mb-1.5 text-[11px] font-bold tracking-wide text-slate-600 uppercase">
+            활성 시험자
+          </p>
+          <p className="text-3xl font-black text-slate-950">{summary.active}</p>
+          <p className="mt-0.5 text-[11px] font-medium text-slate-600">
+            전체{" "}
+            <span className="font-bold text-blue-700">{testers.length}</span>명
+            중
+          </p>
+        </div>
+        <div className="rounded-lg border border-l-4 border-slate-300 border-l-emerald-700 bg-white px-4 py-3 shadow-sm">
+          <p className="mb-1.5 text-[11px] font-bold tracking-wide text-slate-600 uppercase">
+            단독 가능
+          </p>
+          <p className="text-3xl font-black text-emerald-700">{summary.solo}</p>
+          <p className="mt-0.5 text-[11px] font-medium text-slate-600">
+            활성 기준
+          </p>
+        </div>
+        <div className="rounded-lg border border-l-4 border-slate-300 border-l-amber-600 bg-white px-4 py-3 shadow-sm">
+          <p className="mb-1.5 text-[11px] font-bold tracking-wide text-slate-600 uppercase">
+            2인 가능
+          </p>
+          <p className="text-3xl font-black text-amber-700">{summary.duo}</p>
+          <p className="mt-0.5 text-[11px] font-medium text-slate-600">
+            활성 기준
+          </p>
+        </div>
+      </div>
+
+      {activeTab === "testers" && (
+        <>
+          <div className="flex flex-col gap-2 md:hidden">
             {loading ? (
-              <div className="flex items-center justify-center py-20 text-slate-400 text-sm">불러오는 중...</div>
+              <div className="rounded-lg border border-slate-300 bg-white p-6 text-center text-sm font-medium text-slate-600">
+                불러오는 중...
+              </div>
             ) : sortedTesters.length === 0 ? (
-              <div className="py-12 text-center text-sm text-slate-400 bg-white rounded-xl border border-slate-200">등록된 시험자가 없습니다</div>
+              <div className="rounded-lg border border-slate-300 bg-white p-6 text-center text-sm font-medium text-slate-600">
+                등록된 시험자가 없습니다.
+              </div>
             ) : (
-              sortedTesters.map((t, i) => (
-                <div key={t.id} className="bg-white rounded-xl border border-slate-200 shadow-sm p-3">
+              sortedTesters.map((tester, idx) => (
+                <div
+                  key={tester.id}
+                  className="rounded-lg border border-slate-300 bg-white p-3 shadow-sm"
+                >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-slate-400">#{i + 1}</span>
-                        <span className="font-mono text-xs text-slate-500">{t.employeeNo}</span>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[11px] font-bold text-slate-500">
+                          #{idx + 1}
+                        </span>
+                        <span className="font-mono text-[11px] font-bold text-blue-800">
+                          {tester.employeeNo}
+                        </span>
+                        <Badge
+                          className={
+                            tester.isActive
+                              ? "border-emerald-700 bg-emerald-700 text-[10px] font-bold text-white hover:bg-emerald-700"
+                              : "border-slate-600 bg-slate-600 text-[10px] font-bold text-white hover:bg-slate-600"
+                          }
+                        >
+                          {tester.isActive ? "활성" : "비활성"}
+                        </Badge>
                       </div>
-                      <p className="mt-0.5 text-sm font-semibold text-slate-800 truncate">{t.name}</p>
+                      <div className="mt-1 text-sm font-bold text-slate-950">
+                        {tester.name}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex shrink-0 items-center gap-1">
                       <button
-                        onClick={() => openEdit(t)}
-                        className="rounded-lg p-1.5 text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                        onClick={() => openEdit(tester)}
+                        className="rounded-md bg-blue-100 p-1.5 text-blue-700 transition-colors hover:bg-blue-700 hover:text-white"
                         title="수정"
                       >
-                        <Pencil size={13} />
+                        <Pencil size={14} />
                       </button>
                       <button
-                        onClick={() => openDelete(t)}
-                        className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+                        onClick={() => openDelete(tester)}
+                        className="rounded-md bg-rose-100 p-1.5 text-rose-700 transition-colors hover:bg-rose-700 hover:text-white"
                         title="삭제"
                       >
-                        <Trash2 size={13} />
+                        <Trash2 size={14} />
                       </button>
                     </div>
                   </div>
-                  <div className="mt-2 flex items-center gap-1.5 flex-wrap">
-                    {t.canSolo
-                      ? <span className="inline-block rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">단독 가능</span>
-                      : <span className="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-400">단독 불가</span>}
-                    {t.canDuo
-                      ? <span className="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">2인 가능</span>
-                      : <span className="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-400">2인 불가</span>}
-                    <button
-                      onClick={() => void toggleActive(t)}
-                      className={`ml-auto inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold transition-colors ${
-                        t.isActive
-                          ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                          : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
-                      }`}
+
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-slate-200 pt-2">
+                    <span
+                      className={
+                        tester.canSolo
+                          ? "inline-block rounded-full border border-emerald-300 bg-emerald-700 px-2 py-0.5 text-[10px] font-bold text-white"
+                          : "inline-block rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500"
+                      }
                     >
-                      {t.isActive ? '활성' : '비활성'}
+                      {tester.canSolo ? "단독 가능" : "단독 불가"}
+                    </span>
+                    <span
+                      className={
+                        tester.canDuo
+                          ? "inline-block rounded-full border border-amber-300 bg-amber-600 px-2 py-0.5 text-[10px] font-bold text-white"
+                          : "inline-block rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500"
+                      }
+                    >
+                      {tester.canDuo ? "2인 가능" : "2인 불가"}
+                    </span>
+                    <button
+                      onClick={() => void toggleActive(tester)}
+                      className="ml-auto rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-700 transition-colors hover:bg-slate-200"
+                    >
+                      상태 전환
                     </button>
                   </div>
                 </div>
@@ -343,76 +521,114 @@ export default function TestersPage() {
             )}
           </div>
 
-          {/* Desktop table view */}
-          <div className="hidden md:block bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="hidden overflow-auto rounded-lg border border-slate-300 bg-white shadow-md md:block">
             {loading ? (
-              <div className="flex items-center justify-center py-20 text-slate-400 text-sm">불러오는 중...</div>
+              <div className="p-16 text-center text-sm font-medium text-slate-600">
+                불러오는 중...
+              </div>
             ) : (
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 w-12">순번</th>
-                    <th
-                      className="px-4 py-3 text-left text-xs font-semibold text-slate-500 w-28 cursor-pointer select-none"
-                      onClick={() => toggleSort('employeeNo')}
-                    >
-                      <span className="flex items-center">사번 <SortIcon field="employeeNo" /></span>
+                  <tr className="bg-slate-950 text-xs text-white">
+                    <th className="sticky top-0 z-10 w-14 bg-slate-950 px-4 py-3 text-left font-bold">
+                      순번
                     </th>
                     <th
-                      className="px-4 py-3 text-left text-xs font-semibold text-slate-500 cursor-pointer select-none"
-                      onClick={() => toggleSort('name')}
+                      className="sticky top-0 z-10 w-28 cursor-pointer bg-slate-950 px-4 py-3 text-left font-bold"
+                      onClick={() => toggleSort("employeeNo")}
                     >
-                      <span className="flex items-center">이름 <SortIcon field="name" /></span>
+                      <span className="flex items-center">
+                        사번 <SortIcon field="employeeNo" />
+                      </span>
                     </th>
-                    <th className="px-4 py-3 text-center text-xs font-semibold text-slate-500 w-24">단독시험</th>
-                    <th className="px-4 py-3 text-center text-xs font-semibold text-slate-500 w-24">2인시험</th>
-                    <th className="px-4 py-3 text-center text-xs font-semibold text-slate-500 w-20">상태</th>
-                    <th className="px-4 py-3 text-center text-xs font-semibold text-slate-500 w-24">관리</th>
+                    <th
+                      className="sticky top-0 z-10 cursor-pointer bg-slate-950 px-4 py-3 text-left font-bold"
+                      onClick={() => toggleSort("name")}
+                    >
+                      <span className="flex items-center">
+                        이름 <SortIcon field="name" />
+                      </span>
+                    </th>
+                    <th className="sticky top-0 z-10 w-24 bg-slate-950 px-4 py-3 text-center font-bold">
+                      단독시험
+                    </th>
+                    <th className="sticky top-0 z-10 w-24 bg-slate-950 px-4 py-3 text-center font-bold">
+                      2인시험
+                    </th>
+                    <th className="sticky top-0 z-10 w-20 bg-slate-950 px-4 py-3 text-center font-bold">
+                      상태
+                    </th>
+                    <th className="sticky top-0 z-10 w-24 bg-slate-950 px-4 py-3 text-center font-bold">
+                      관리
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedTesters.map((t, i) => (
-                    <tr key={t.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                      <td className="px-4 py-3 text-xs text-slate-400">{i + 1}</td>
-                      <td className="px-4 py-3 text-xs font-mono text-slate-600">{t.employeeNo}</td>
-                      <td className="px-4 py-3 font-medium text-slate-800">{t.name}</td>
-                      <td className="px-4 py-3 text-center">
-                        {t.canSolo
-                          ? <span className="inline-block rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">가능</span>
-                          : <span className="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-400">불가</span>}
+                  {sortedTesters.map((tester, idx) => (
+                    <tr
+                      key={tester.id}
+                      className={`border-t border-slate-200 transition-colors hover:bg-blue-50 ${
+                        idx % 2 === 1 ? "bg-slate-100/80" : "bg-white"
+                      }`}
+                    >
+                      <td className="px-4 py-2.5 text-xs font-semibold text-slate-500">
+                        {idx + 1}
                       </td>
-                      <td className="px-4 py-3 text-center">
-                        {t.canDuo
-                          ? <span className="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">가능</span>
-                          : <span className="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-400">불가</span>}
+                      <td className="px-4 py-2.5 font-mono text-xs font-bold text-blue-800">
+                        {tester.employeeNo}
                       </td>
-                      <td className="px-4 py-3 text-center">
-                        <button
-                          onClick={() => void toggleActive(t)}
-                          className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold transition-colors ${
-                            t.isActive
-                              ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                              : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
-                          }`}
+                      <td className="px-4 py-2.5 font-semibold text-slate-950">
+                        {tester.name}
+                      </td>
+                      <td className="px-4 py-2.5 text-center">
+                        <span
+                          className={
+                            tester.canSolo
+                              ? "inline-block rounded-full border border-emerald-300 bg-emerald-700 px-2 py-0.5 text-[11px] font-bold text-white"
+                              : "inline-block rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500"
+                          }
                         >
-                          {t.isActive ? '활성' : '비활성'}
+                          {tester.canSolo ? "가능" : "불가"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-center">
+                        <span
+                          className={
+                            tester.canDuo
+                              ? "inline-block rounded-full border border-amber-300 bg-amber-600 px-2 py-0.5 text-[11px] font-bold text-white"
+                              : "inline-block rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500"
+                          }
+                        >
+                          {tester.canDuo ? "가능" : "불가"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-center">
+                        <button
+                          onClick={() => void toggleActive(tester)}
+                          className={
+                            tester.isActive
+                              ? "inline-block rounded-full border border-emerald-300 bg-emerald-700 px-2 py-0.5 text-[11px] font-bold text-white transition-colors hover:bg-emerald-800"
+                              : "inline-block rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-700 transition-colors hover:bg-slate-200"
+                          }
+                        >
+                          {tester.isActive ? "활성" : "비활성"}
                         </button>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-2.5 text-center">
                         <div className="flex items-center justify-center gap-1">
                           <button
-                            onClick={() => openEdit(t)}
-                            className="rounded-lg p-1.5 text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                            onClick={() => openEdit(tester)}
+                            className="rounded-md bg-blue-100 p-1.5 text-blue-700 transition-colors hover:bg-blue-700 hover:text-white"
                             title="수정"
                           >
-                            <Pencil size={13} />
+                            <Pencil size={14} />
                           </button>
                           <button
-                            onClick={() => openDelete(t)}
-                            className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+                            onClick={() => openDelete(tester)}
+                            className="rounded-md bg-rose-100 p-1.5 text-rose-700 transition-colors hover:bg-rose-700 hover:text-white"
                             title="삭제"
                           >
-                            <Trash2 size={13} />
+                            <Trash2 size={14} />
                           </button>
                         </div>
                       </td>
@@ -420,62 +636,87 @@ export default function TestersPage() {
                   ))}
                   {testers.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="py-12 text-center text-sm text-slate-400">등록된 시험자가 없습니다</td>
+                      <td
+                        colSpan={7}
+                        className="py-16 text-center text-sm font-medium text-slate-600"
+                      >
+                        등록된 시험자가 없습니다.
+                      </td>
                     </tr>
                   )}
                 </tbody>
               </table>
             )}
           </div>
-          </>
-        )}
+        </>
+      )}
 
-        {/* ── Tab 2: 시험자 역량 ── */}
-        {activeTab === 'capability' && (
-          <div>
-            {/* Legend */}
-            <div className="mb-3 flex items-center gap-2 md:gap-3 text-xs text-slate-500 flex-wrap">
-              <span className="font-medium text-slate-600">범례:</span>
-              {(['O', 'Y', 'N', 'X'] as ProficiencyLevel[]).map(l => (
-                <span key={l} className="flex items-center gap-1">
-                  <span className={`inline-flex h-5 w-8 items-center justify-center rounded text-[11px] ${LEVEL_STYLE[l]}`}>{l}</span>
-                  <span>{LEVEL_LABEL[l]}</span>
+      {activeTab === "capability" && (
+        <>
+          <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-600">
+            <span className="font-bold text-slate-700">범례</span>
+            {(["O", "Y", "N", "X"] as ProficiencyLevel[]).map((level) => (
+              <span key={level} className="flex items-center gap-1">
+                <span
+                  className={`inline-flex h-5 w-8 items-center justify-center rounded border text-[11px] font-bold ${LEVEL_STYLE[level]}`}
+                >
+                  {level}
                 </span>
-              ))}
-              <span className="ml-2 text-slate-400">※ 셀 클릭으로 변경</span>
-            </div>
+                <span>{LEVEL_LABEL[level]}</span>
+              </span>
+            ))}
+            <span className="text-slate-500">셀 클릭으로 순환 변경</span>
+          </div>
 
-            {capLoading ? (
-              <div className="flex items-center justify-center py-20 text-slate-400 text-sm">불러오는 중...</div>
-            ) : (
-              <>
-              {/* Mobile card view */}
-              <div className="md:hidden flex flex-col gap-3">
-                {sortedTesters.filter(t => t.isActive).length === 0 ? (
-                  <div className="py-12 text-center text-slate-400 bg-white rounded-xl border border-slate-200">활성 시험자가 없습니다</div>
+          {capLoading ? (
+            <div className="rounded-lg border border-slate-300 bg-white p-6 text-center text-sm font-medium text-slate-600">
+              불러오는 중...
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-col gap-3 md:hidden">
+                {activeTesters.length === 0 ? (
+                  <div className="rounded-lg border border-slate-300 bg-white p-6 text-center text-sm font-medium text-slate-600">
+                    활성 시험자가 없습니다.
+                  </div>
                 ) : (
-                  sortedTesters.filter(t => t.isActive).map(tester => (
-                    <div key={tester.id} className="bg-white rounded-xl border border-slate-200 shadow-sm p-3">
-                      <div className="flex items-center justify-between mb-2 pb-2 border-b border-slate-100">
-                        <p className="text-sm font-semibold text-slate-800">{tester.name}</p>
-                        <p className="font-mono text-[11px] text-slate-500">{tester.employeeNo}</p>
+                  activeTesters.map((tester) => (
+                    <div
+                      key={tester.id}
+                      className="rounded-lg border border-slate-300 bg-white p-3 shadow-sm"
+                    >
+                      <div className="mb-2 border-b border-slate-200 pb-2">
+                        <p className="text-sm font-bold text-slate-950">
+                          {tester.name}
+                        </p>
+                        <p className="font-mono text-[11px] font-semibold text-blue-800">
+                          {tester.employeeNo}
+                        </p>
                       </div>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {capabilities.map(cap => {
-                          const level = getLevel(tester.id, cap.id)
-                          const key = `${tester.id}_${cap.id}`
+                      <div className="grid grid-cols-1 gap-1.5 min-[420px]:grid-cols-2">
+                        {capabilities.map((capability) => {
+                          const level = getLevel(tester.id, capability.id)
+                          const key = `${tester.id}_${capability.id}`
                           const isSaving = savingCell === key
                           return (
                             <button
-                              key={cap.id}
-                              onClick={() => void cycleLevel(tester, cap)}
+                              key={capability.id}
+                              onClick={() =>
+                                void cycleLevel(tester, capability)
+                              }
                               disabled={isSaving}
-                              className={`flex items-center justify-between gap-2 rounded-lg border border-slate-100 px-2 py-1.5 transition-all ${
-                                isSaving ? 'opacity-50 cursor-wait' : 'hover:border-indigo-200 active:scale-95'
+                              className={`flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-2.5 py-2 text-left transition-colors ${
+                                isSaving
+                                  ? "cursor-wait opacity-50"
+                                  : "hover:border-blue-300 hover:bg-blue-50"
                               }`}
                             >
-                              <span className="text-[11px] text-slate-700 truncate text-left flex-1">{cap.name}</span>
-                              <span className={`inline-flex h-5 w-7 shrink-0 items-center justify-center rounded text-[10px] font-semibold ${LEVEL_STYLE[level]}`}>
+                              <span className="flex-1 truncate text-[11px] font-medium text-slate-800">
+                                {capability.name}
+                              </span>
+                              <span
+                                className={`inline-flex h-6 w-8 shrink-0 items-center justify-center rounded border text-[10px] font-bold ${LEVEL_STYLE[level]}`}
+                              >
                                 {level}
                               </span>
                             </button>
@@ -487,46 +728,68 @@ export default function TestersPage() {
                 )}
               </div>
 
-              {/* Desktop matrix view */}
-              <div className="hidden md:block overflow-auto rounded-xl border border-slate-200 shadow-sm bg-white">
-                <table className="text-xs border-collapse" style={{ minWidth: '100%' }}>
+              <div className="hidden overflow-auto rounded-lg border border-slate-300 bg-white shadow-md md:block">
+                <table className="min-w-full border-collapse text-xs">
                   <thead>
-                    <tr className="bg-slate-800 text-white sticky top-0 z-10">
-                      <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap border-r border-slate-600 min-w-[90px] sticky left-0 bg-slate-800 z-20">
+                    <tr className="bg-slate-950 text-white">
+                      <th className="sticky top-0 left-0 z-20 min-w-[100px] border-r border-slate-700 bg-slate-950 px-3 py-3 text-left font-bold">
                         이름
                       </th>
-                      <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap border-r border-slate-600 w-20 sticky left-[90px] bg-slate-800 z-20">
+                      <th className="sticky top-0 left-[100px] z-20 w-24 border-r border-slate-700 bg-slate-950 px-3 py-3 text-center font-bold">
                         사번
                       </th>
-                      {capabilities.map(cap => (
-                        <th key={cap.id} className="px-1 py-2.5 text-center font-semibold whitespace-nowrap border-r border-slate-600 min-w-[60px]">
-                          {cap.name}
+                      {capabilities.map((capability) => (
+                        <th
+                          key={capability.id}
+                          className="sticky top-0 z-10 min-w-[68px] border-r border-slate-700 bg-slate-950 px-2 py-3 text-center font-bold"
+                        >
+                          {capability.name}
                         </th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {sortedTesters.filter(t => t.isActive).map((tester, ri) => (
-                      <tr key={tester.id} className={ri % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}>
-                        <td className={`px-3 py-2 font-medium text-slate-800 border-r border-slate-100 whitespace-nowrap sticky left-0 z-10 ${ri % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
+                    {activeTesters.map((tester, rowIndex) => (
+                      <tr
+                        key={tester.id}
+                        className={
+                          rowIndex % 2 === 0 ? "bg-white" : "bg-slate-100/80"
+                        }
+                      >
+                        <td
+                          className={`sticky left-0 z-10 border-r border-slate-200 px-3 py-2.5 font-semibold text-slate-950 ${
+                            rowIndex % 2 === 0 ? "bg-white" : "bg-slate-100"
+                          }`}
+                        >
                           {tester.name}
                         </td>
-                        <td className={`px-2 py-2 text-center font-mono text-slate-500 border-r border-slate-100 whitespace-nowrap sticky left-[90px] z-10 ${ri % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
+                        <td
+                          className={`sticky left-[100px] z-10 border-r border-slate-200 px-3 py-2.5 text-center font-mono text-slate-700 ${
+                            rowIndex % 2 === 0 ? "bg-white" : "bg-slate-100"
+                          }`}
+                        >
                           {tester.employeeNo}
                         </td>
-                        {capabilities.map(cap => {
-                          const level = getLevel(tester.id, cap.id)
-                          const key   = `${tester.id}_${cap.id}`
+                        {capabilities.map((capability) => {
+                          const level = getLevel(tester.id, capability.id)
+                          const key = `${tester.id}_${capability.id}`
                           const isSaving = savingCell === key
                           return (
-                            <td key={cap.id} className="p-1 text-center border-r border-slate-100">
+                            <td
+                              key={capability.id}
+                              className="border-r border-slate-200 p-1.5 text-center"
+                            >
                               <button
-                                onClick={() => void cycleLevel(tester, cap)}
+                                onClick={() =>
+                                  void cycleLevel(tester, capability)
+                                }
                                 disabled={isSaving}
-                                className={`inline-flex h-6 w-11 items-center justify-center rounded text-[11px] font-semibold transition-all ${
-                                  isSaving ? 'opacity-50 cursor-wait' : 'cursor-pointer hover:scale-110 hover:shadow-sm'
+                                className={`inline-flex h-7 w-11 items-center justify-center rounded border text-[11px] font-bold transition-transform ${
+                                  isSaving
+                                    ? "cursor-wait opacity-50"
+                                    : "hover:scale-105"
                                 } ${LEVEL_STYLE[level]}`}
-                                title={`${tester.name} / ${cap.name}: ${LEVEL_LABEL[level]} → 클릭으로 변경`}
+                                title={`${tester.name} / ${capability.name}: ${LEVEL_LABEL[level]}`}
                               >
                                 {level}
                               </button>
@@ -535,165 +798,311 @@ export default function TestersPage() {
                         })}
                       </tr>
                     ))}
-                    {testers.filter(t => t.isActive).length === 0 && (
+                    {activeTesters.length === 0 && (
                       <tr>
-                        <td colSpan={capabilities.length + 2} className="py-12 text-center text-slate-400">
-                          활성 시험자가 없습니다
+                        <td
+                          colSpan={capabilities.length + 2}
+                          className="py-16 text-center text-sm font-medium text-slate-600"
+                        >
+                          활성 시험자가 없습니다.
                         </td>
                       </tr>
                     )}
                   </tbody>
                 </table>
               </div>
-              </>
-            )}
-          </div>
-        )}
-      </div>
+            </>
+          )}
+        </>
+      )}
 
-      {/* ── Add Dialog ── */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>시험자 추가</DialogTitle>
+        <DialogContent className="max-h-[calc(100dvh-1rem)] gap-0 overflow-hidden border-slate-300 bg-slate-50 p-0 shadow-2xl sm:max-w-xl">
+          <DialogHeader className="border-b border-slate-200 bg-white px-4 py-4 pr-12 text-left sm:px-5">
+            <DialogTitle className="text-lg font-black text-slate-950">
+              시험자 추가
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-xs font-medium text-slate-600">
+              시험자 기본 정보와 시험 가능 범위를 등록합니다.
+            </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-3">
-              <label className="text-right text-sm text-slate-600">사번 *</label>
-              <Input
-                className="col-span-3 h-8 text-sm"
-                placeholder="예: 16242"
-                value={form.employeeNo}
-                onChange={e => setForm(f => ({ ...f, employeeNo: e.target.value }))}
-              />
+
+          <div className="max-h-[65dvh] overflow-y-auto px-4 py-4 sm:px-5">
+            <div className="grid gap-4">
+              <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+                <div className="mb-3 border-b border-slate-100 pb-3">
+                  <h3 className="text-sm font-black text-slate-950">
+                    기본 정보
+                  </h3>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-bold tracking-wide text-slate-700">
+                      사번 <span className="text-rose-600">*</span>
+                    </label>
+                    <Input
+                      className={dialogInputClass}
+                      placeholder="예: 16242"
+                      value={form.employeeNo}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          employeeNo: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-bold tracking-wide text-slate-700">
+                      이름 <span className="text-rose-600">*</span>
+                    </label>
+                    <Input
+                      className={dialogInputClass}
+                      placeholder="홍길동"
+                      value={form.name}
+                      onChange={(e) =>
+                        setForm((prev) => ({ ...prev, name: e.target.value }))
+                      }
+                    />
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+                <div className="mb-3 border-b border-slate-100 pb-3">
+                  <h3 className="text-sm font-black text-slate-950">
+                    시험 가능 범위
+                  </h3>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-medium text-slate-800">
+                    <input
+                      type="checkbox"
+                      checked={form.canSolo}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          canSolo: e.target.checked,
+                        }))
+                      }
+                      className="cb-custom"
+                    />
+                    단독 시험 가능
+                  </label>
+                  <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-medium text-slate-800">
+                    <input
+                      type="checkbox"
+                      checked={form.canDuo}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          canDuo: e.target.checked,
+                        }))
+                      }
+                      className="cb-custom"
+                    />
+                    2인 시험 가능
+                  </label>
+                </div>
+              </section>
+
+              {error && (
+                <div className="rounded-lg border border-red-300 bg-red-100 px-4 py-2 text-sm font-medium text-red-800">
+                  {error}
+                </div>
+              )}
             </div>
-            <div className="grid grid-cols-4 items-center gap-3">
-              <label className="text-right text-sm text-slate-600">이름 *</label>
-              <Input
-                className="col-span-3 h-8 text-sm"
-                placeholder="홍길동"
-                value={form.name}
-                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-3">
-              <label className="text-right text-sm text-slate-600">단독시험</label>
-              <div className="col-span-3 flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="add-solo"
-                  checked={form.canSolo}
-                  onChange={e => setForm(f => ({ ...f, canSolo: e.target.checked }))}
-                  className="cb-custom"
-                />
-                <label htmlFor="add-solo" className="text-sm text-slate-600">단독 시험 가능</label>
-              </div>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-3">
-              <label className="text-right text-sm text-slate-600">2인시험</label>
-              <div className="col-span-3 flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="add-duo"
-                  checked={form.canDuo}
-                  onChange={e => setForm(f => ({ ...f, canDuo: e.target.checked }))}
-                  className="cb-custom"
-                />
-                <label htmlFor="add-duo" className="text-sm text-slate-600">2인 시험 가능</label>
-              </div>
-            </div>
-            {error && <p className="col-span-4 text-xs text-red-500 text-right">{error}</p>}
           </div>
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setAddOpen(false)}>취소</Button>
-            <Button size="sm" onClick={() => void handleAdd()} disabled={saving} className="bg-indigo-600 hover:bg-indigo-700 text-white">
-              {saving ? '저장 중...' : '추가'}
+
+          <DialogFooter className="border-t border-slate-200 bg-white px-4 py-4 sm:px-5">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setAddOpen(false)}
+              className="h-10 border-slate-300 text-slate-800 hover:bg-slate-100"
+            >
+              취소
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => void handleAdd()}
+              disabled={saving}
+              className="h-10 bg-blue-700 px-5 font-bold text-white shadow-sm hover:bg-blue-800"
+            >
+              <Save size={15} className="mr-1.5" />
+              {saving ? "저장 중..." : "추가"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* ── Edit Dialog ── */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>시험자 수정</DialogTitle>
+        <DialogContent className="max-h-[calc(100dvh-1rem)] gap-0 overflow-hidden border-slate-300 bg-slate-50 p-0 shadow-2xl sm:max-w-xl">
+          <DialogHeader className="border-b border-slate-200 bg-white px-4 py-4 pr-12 text-left sm:px-5">
+            <DialogTitle className="text-lg font-black text-slate-950">
+              시험자 수정
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-xs font-medium text-slate-600">
+              시험자 정보와 시험 가능 범위를 수정합니다.
+            </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-3">
-              <label className="text-right text-sm text-slate-600">사번 *</label>
-              <Input
-                className="col-span-3 h-8 text-sm"
-                value={form.employeeNo}
-                onChange={e => setForm(f => ({ ...f, employeeNo: e.target.value }))}
-              />
+
+          <div className="max-h-[65dvh] overflow-y-auto px-4 py-4 sm:px-5">
+            <div className="grid gap-4">
+              <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+                <div className="mb-3 border-b border-slate-100 pb-3">
+                  <h3 className="text-sm font-black text-slate-950">
+                    기본 정보
+                  </h3>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-bold tracking-wide text-slate-700">
+                      사번 <span className="text-rose-600">*</span>
+                    </label>
+                    <Input
+                      className={dialogInputClass}
+                      value={form.employeeNo}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          employeeNo: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-bold tracking-wide text-slate-700">
+                      이름 <span className="text-rose-600">*</span>
+                    </label>
+                    <Input
+                      className={dialogInputClass}
+                      value={form.name}
+                      onChange={(e) =>
+                        setForm((prev) => ({ ...prev, name: e.target.value }))
+                      }
+                    />
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+                <div className="mb-3 border-b border-slate-100 pb-3">
+                  <h3 className="text-sm font-black text-slate-950">
+                    시험 가능 범위
+                  </h3>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-medium text-slate-800">
+                    <input
+                      type="checkbox"
+                      checked={form.canSolo}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          canSolo: e.target.checked,
+                        }))
+                      }
+                      className="cb-custom"
+                    />
+                    단독 시험 가능
+                  </label>
+                  <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-medium text-slate-800">
+                    <input
+                      type="checkbox"
+                      checked={form.canDuo}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          canDuo: e.target.checked,
+                        }))
+                      }
+                      className="cb-custom"
+                    />
+                    2인 시험 가능
+                  </label>
+                </div>
+              </section>
+
+              {error && (
+                <div className="rounded-lg border border-red-300 bg-red-100 px-4 py-2 text-sm font-medium text-red-800">
+                  {error}
+                </div>
+              )}
             </div>
-            <div className="grid grid-cols-4 items-center gap-3">
-              <label className="text-right text-sm text-slate-600">이름 *</label>
-              <Input
-                className="col-span-3 h-8 text-sm"
-                value={form.name}
-                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-3">
-              <label className="text-right text-sm text-slate-600">단독시험</label>
-              <div className="col-span-3 flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="edit-solo"
-                  checked={form.canSolo}
-                  onChange={e => setForm(f => ({ ...f, canSolo: e.target.checked }))}
-                  className="cb-custom"
-                />
-                <label htmlFor="edit-solo" className="text-sm text-slate-600">단독 시험 가능</label>
-              </div>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-3">
-              <label className="text-right text-sm text-slate-600">2인시험</label>
-              <div className="col-span-3 flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="edit-duo"
-                  checked={form.canDuo}
-                  onChange={e => setForm(f => ({ ...f, canDuo: e.target.checked }))}
-                  className="cb-custom"
-                />
-                <label htmlFor="edit-duo" className="text-sm text-slate-600">2인 시험 가능</label>
-              </div>
-            </div>
-            {error && <p className="col-span-4 text-xs text-red-500 text-right">{error}</p>}
           </div>
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setEditOpen(false)}>취소</Button>
-            <Button size="sm" onClick={() => void handleEdit()} disabled={saving} className="bg-indigo-600 hover:bg-indigo-700 text-white">
-              {saving ? '저장 중...' : '저장'}
+
+          <DialogFooter className="border-t border-slate-200 bg-white px-4 py-4 sm:px-5">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setEditOpen(false)}
+              className="h-10 border-slate-300 text-slate-800 hover:bg-slate-100"
+            >
+              취소
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => void handleEdit()}
+              disabled={saving}
+              className="h-10 bg-blue-700 px-5 font-bold text-white shadow-sm hover:bg-blue-800"
+            >
+              <Save size={15} className="mr-1.5" />
+              {saving ? "저장 중..." : "저장"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* ── Delete Dialog ── */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="text-red-600">시험자 삭제</DialogTitle>
+        <DialogContent className="max-h-[calc(100dvh-1rem)] gap-0 overflow-hidden border-slate-300 bg-white p-0 shadow-2xl sm:max-w-md">
+          <DialogHeader className="border-b border-slate-200 bg-rose-50 px-4 py-4 pr-12 text-left sm:px-5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rose-700 text-white shadow-sm">
+                <AlertTriangle size={20} />
+              </div>
+              <div className="min-w-0">
+                <DialogTitle className="text-lg font-black text-slate-950">
+                  시험자 삭제
+                </DialogTitle>
+                <DialogDescription className="mt-1 text-xs font-medium text-rose-800">
+                  역량 데이터도 함께 삭제됩니다.
+                </DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
-          <div className="py-4">
-            <p className="text-sm text-slate-600">
-              <span className="font-semibold text-slate-800">{selected?.name}</span> ({selected?.employeeNo}) 시험자를 삭제하시겠습니까?
-            </p>
-            <p className="mt-2 text-xs text-red-500">역량 데이터도 함께 삭제됩니다. 이 작업은 되돌릴 수 없습니다.</p>
+
+          <div className="px-4 py-4 sm:px-5">
+            <div className="rounded-lg border border-rose-200 bg-rose-50/70 p-4">
+              <p className="text-sm font-bold text-slate-950">
+                {selected?.name}
+              </p>
+              <p className="mt-1 font-mono text-xs font-semibold text-rose-800">
+                {selected?.employeeNo}
+              </p>
+              <p className="mt-3 text-sm font-medium text-slate-700">
+                이 시험자를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.
+              </p>
+            </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setDeleteOpen(false)}>취소</Button>
+
+          <DialogFooter className="border-t border-slate-200 bg-white px-4 py-4 sm:px-5">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDeleteOpen(false)}
+              className="h-10 border-slate-300 text-slate-800 hover:bg-slate-100"
+            >
+              취소
+            </Button>
             <Button
               size="sm"
               onClick={() => void handleDelete()}
               disabled={saving}
-              className="bg-red-600 hover:bg-red-700 text-white"
+              className="h-10 bg-rose-700 px-5 font-bold text-white shadow-sm hover:bg-rose-800"
             >
-              {saving ? '삭제 중...' : '삭제'}
+              <Trash2 size={15} className="mr-1.5" />
+              {saving ? "삭제 중..." : "삭제"}
             </Button>
           </DialogFooter>
         </DialogContent>
