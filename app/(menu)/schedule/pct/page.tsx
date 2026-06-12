@@ -594,22 +594,22 @@ export default function PctPage() {
       {
         label: "전체 행",
         value: stats.total,
-        accent: "text-white",
-        bg: "bg-white/10",
+        accent: "text-slate-900",
+        bg: "bg-slate-50",
         note: rows.length > 0 ? "현재 시트 반영됨" : "시트를 불러오세요",
       },
       {
         label: "변경",
         value: stats.changes,
-        accent: "text-amber-200",
-        bg: "bg-amber-500/10",
+        accent: "text-amber-700",
+        bg: "bg-amber-50",
         note: `${stats.added} 추가 · ${stats.modified} 수정`,
       },
       {
         label: "자동 배정",
         value: engineResult?.stats.assigned ?? 0,
-        accent: "text-emerald-200",
-        bg: "bg-emerald-500/10",
+        accent: "text-emerald-700",
+        bg: "bg-emerald-50",
         note: engineResult
           ? `${engineResult.stats.testersUsed}명 참여`
           : "배정 대기",
@@ -617,8 +617,8 @@ export default function PctPage() {
       {
         label: "스케줄",
         value: scheduleStats?.saved ?? existingSnapshot?.count ?? 0,
-        accent: "text-sky-200",
-        bg: "bg-sky-500/10",
+        accent: "text-sky-700",
+        bg: "bg-sky-50",
         note: scheduleStats
           ? "이번 세션 생성"
           : existingSnapshot
@@ -656,15 +656,15 @@ export default function PctPage() {
 
   return (
     <div className="relative overflow-x-hidden px-3 py-3 sm:px-4 lg:px-6">
-      <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[320px] bg-[radial-gradient(circle_at_10%_10%,rgba(16,185,129,0.16),transparent_28%),radial-gradient(circle_at_90%_0%,rgba(59,130,246,0.18),transparent_30%),linear-gradient(to_bottom,rgba(15,23,42,0.06),transparent_65%)]" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[320px] bg-[radial-gradient(circle_at_10%_10%,rgba(16,185,129,0.12),transparent_28%),radial-gradient(circle_at_90%_0%,rgba(59,130,246,0.12),transparent_30%),linear-gradient(to_bottom,rgba(241,245,249,0.96),transparent_65%)]" />
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4">
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-slate-950 text-white shadow-[0_24px_80px_rgba(15,23,42,0.22)]">
+        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white text-slate-900 shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
           <div className="grid gap-0 xl:grid-cols-[minmax(0,1.18fr)_minmax(340px,0.82fr)]">
-            <div className="relative border-b border-white/8 p-4 sm:p-5 xl:border-r xl:border-b-0">
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.14),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(59,130,246,0.14),transparent_35%)]" />
+            <div className="relative border-b border-slate-100 bg-[linear-gradient(180deg,rgba(248,250,252,0.98),rgba(255,255,255,1))] p-4 sm:p-5 xl:border-r xl:border-b-0">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.08),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(59,130,246,0.08),transparent_35%)]" />
               <div className="relative space-y-4">
-                <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold tracking-[0.28em] text-slate-400 uppercase">
-                  <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2.5 py-1">
+                <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold tracking-[0.28em] text-slate-500 uppercase">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-slate-600 shadow-sm">
                     <Factory size={12} />
                     PCT 시트 허브
                   </span>
@@ -672,8 +672,8 @@ export default function PctPage() {
                     className={cn(
                       "inline-flex items-center rounded-full px-2.5 py-1 tracking-normal",
                       rows.length > 0
-                        ? "bg-emerald-500/15 text-emerald-200"
-                        : "bg-amber-500/15 text-amber-200"
+                        ? "border border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "border border-amber-200 bg-amber-50 text-amber-700"
                     )}
                   >
                     {rows.length > 0 ? "시트 연결됨" : "시트 대기"}
@@ -681,10 +681,10 @@ export default function PctPage() {
                 </div>
 
                 <div className="max-w-3xl space-y-2">
-                  <h1 className="text-[clamp(1.75rem,3vw,2.8rem)] font-semibold tracking-tight">
+                  <h1 className="text-[clamp(1.75rem,3vw,2.8rem)] font-semibold tracking-tight text-slate-900">
                     PCT (생산관리)
                   </h1>
-                  <p className="max-w-2xl text-sm leading-6 text-slate-300">
+                  <p className="max-w-2xl text-sm leading-6 text-slate-600">
                     구글 스프레드시트에서 생산 배치를 불러와 바로 편집하는 작업
                     허브입니다. 모바일에서는 손가락 기준으로 눌리기 쉽게,
                     데스크톱에서는 한 눈에 흐름이 보이도록 정리했습니다.
@@ -696,13 +696,13 @@ export default function PctPage() {
                     <div
                       key={item.label}
                       className={cn(
-                        "rounded-lg border border-white/10 px-3 py-3 backdrop-blur",
+                        "rounded-lg border border-slate-200 px-3 py-3 shadow-sm",
                         item.bg
                       )}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="text-[10px] font-semibold tracking-[0.22em] text-slate-400 uppercase">
+                          <p className="text-[10px] font-semibold tracking-[0.22em] text-slate-500 uppercase">
                             {item.label}
                           </p>
                           <p
@@ -715,7 +715,7 @@ export default function PctPage() {
                           </p>
                         </div>
                       </div>
-                      <p className="mt-1.5 text-[11px] leading-relaxed text-slate-300">
+                      <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500">
                         {item.note}
                       </p>
                     </div>
@@ -729,18 +729,20 @@ export default function PctPage() {
                       <div
                         key={s.n}
                         className={cn(
-                          "flex items-center gap-2 rounded-lg border px-3 py-2.5 text-xs",
+                          "flex items-center gap-2 rounded-lg border px-3 py-2.5 text-xs shadow-sm",
                           s.active
-                            ? "border-emerald-400/30 bg-emerald-500/10 text-white"
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                             : i === 0
-                              ? "border-blue-400/25 bg-blue-500/10 text-slate-100"
-                              : "border-white/10 bg-white/5 text-slate-200"
+                              ? "border-blue-200 bg-blue-50 text-blue-700"
+                              : "border-slate-200 bg-white text-slate-700"
                         )}
                       >
                         <span
                           className={cn(
                             "flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
-                            s.active ? "bg-white text-slate-900" : "bg-white/10"
+                            s.active
+                              ? "bg-emerald-600 text-white"
+                              : "bg-slate-100 text-slate-700"
                           )}
                         >
                           {s.active ? (
@@ -764,22 +766,22 @@ export default function PctPage() {
               </div>
             </div>
 
-            <div className="relative p-4 sm:p-5">
-              <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,0.94),rgba(15,23,42,0.84))]" />
+            <div className="relative border-t border-slate-100 bg-slate-50/80 p-4 sm:p-5 xl:border-t-0 xl:border-l">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.08),transparent_30%),radial-gradient(circle_at_bottom_left,rgba(59,130,246,0.08),transparent_28%)]" />
               <div className="relative space-y-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-[10px] font-semibold tracking-[0.28em] text-slate-400 uppercase">
+                    <p className="text-[10px] font-semibold tracking-[0.28em] text-slate-500 uppercase">
                       시트 연결
                     </p>
-                    <h2 className="mt-1 text-lg font-semibold text-white">
+                    <h2 className="mt-1 text-lg font-semibold text-slate-900">
                       구글 시트 ID
                     </h2>
                   </div>
                   <Button
                     onClick={loadSheet}
                     disabled={loading || !fileId.trim()}
-                    className="h-9 gap-1.5 rounded-lg bg-emerald-500 px-3 text-sm font-medium text-white hover:bg-emerald-400 disabled:opacity-60"
+                    className="h-9 gap-1.5 rounded-lg bg-emerald-600 px-3 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
                   >
                     {loading ? (
                       <Loader2 size={14} className="animate-spin" />
@@ -795,7 +797,7 @@ export default function PctPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs font-medium text-slate-300">
+                  <label className="text-xs font-medium text-slate-600">
                     파일 ID
                   </label>
                   <input
@@ -803,7 +805,7 @@ export default function PctPage() {
                     value={fileId}
                     onChange={(e) => setFileId(e.target.value)}
                     disabled={loading}
-                    className="h-11 w-full rounded-lg border border-white/10 bg-white/5 px-3 font-mono text-xs text-white outline-none placeholder:text-slate-500 focus:border-emerald-400/60 focus:ring-2 focus:ring-emerald-400/15 disabled:opacity-60"
+                    className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 font-mono text-xs text-slate-800 outline-none placeholder:text-slate-400 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 disabled:opacity-60"
                     placeholder="시트 URL의 /d/ 다음 ID"
                   />
                 </div>
@@ -814,7 +816,7 @@ export default function PctPage() {
                     disabled={rows.length === 0 || assigning}
                     size="sm"
                     title="시험자 역량·장비(test_item_equipment)·공수(product_workload) 기반 규칙 자동 배정"
-                    className="h-10 gap-1.5 rounded-lg bg-blue-500 px-3 text-sm font-medium text-white hover:bg-blue-400 disabled:opacity-60"
+                    className="h-10 gap-1.5 rounded-lg bg-blue-600 px-3 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
                   >
                     {assigning ? (
                       <Loader2 size={13} className="animate-spin" />
@@ -828,7 +830,7 @@ export default function PctPage() {
                     variant="outline"
                     size="sm"
                     disabled={rows.every((r) => !r.담당자)}
-                    className="h-10 gap-1.5 rounded-lg border-white/10 bg-white/5 px-3 text-sm text-white hover:bg-white/10"
+                    className="h-10 gap-1.5 rounded-lg border-slate-200 bg-white px-3 text-sm text-slate-700 hover:bg-slate-50"
                   >
                     <UserMinus size={13} />
                     담당자 초기화
@@ -840,7 +842,7 @@ export default function PctPage() {
                     onClick={addRow}
                     variant="outline"
                     size="sm"
-                    className="h-10 gap-1.5 rounded-lg border-white/10 bg-white/5 px-3 text-sm text-white hover:bg-white/10"
+                    className="h-10 gap-1.5 rounded-lg border-slate-200 bg-white px-3 text-sm text-slate-700 hover:bg-slate-50"
                   >
                     <Plus size={13} />행 추가
                   </Button>
@@ -849,7 +851,7 @@ export default function PctPage() {
                     variant="outline"
                     size="sm"
                     disabled={stats.changes === 0}
-                    className="h-10 gap-1.5 rounded-lg border-white/10 bg-white/5 px-3 text-sm text-white hover:bg-white/10"
+                    className="h-10 gap-1.5 rounded-lg border-slate-200 bg-white px-3 text-sm text-slate-700 hover:bg-slate-50"
                   >
                     <RotateCcw size={13} />
                     원본 복원
@@ -864,7 +866,7 @@ export default function PctPage() {
                     }
                     size="sm"
                     title="AI 자동 배정 결과를 월간 스케줄로 전송 (먼저 자동 배정 필요)"
-                    className="h-10 gap-1.5 rounded-lg bg-emerald-500 px-3 text-sm font-medium text-white hover:bg-emerald-400 disabled:opacity-60"
+                    className="h-10 gap-1.5 rounded-lg bg-emerald-600 px-3 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
                   >
                     <CalendarPlus size={13} />
                     스케줄 생성
@@ -880,24 +882,24 @@ export default function PctPage() {
                     disabled={stats.changes === 0}
                     size="sm"
                     variant="outline"
-                    className="h-10 gap-1.5 rounded-lg border-white/10 bg-white/5 px-3 text-sm text-white hover:bg-white/10"
+                    className="h-10 gap-1.5 rounded-lg border-slate-200 bg-white px-3 text-sm text-slate-700 hover:bg-slate-50"
                     title="Supabase 동기화 — 다음 단계에서 활성화"
                   >
                     <Database size={13} />
                     DB 동기화
-                    <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[9px] font-bold text-slate-200">
+                    <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-600">
                       준비중
                     </span>
                   </Button>
                 </div>
 
                 {error && (
-                  <div className="flex items-start gap-2 rounded-lg border border-red-400/20 bg-red-500/10 p-3">
+                  <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3">
                     <AlertCircle
                       size={14}
-                      className="mt-0.5 shrink-0 text-red-300"
+                      className="mt-0.5 shrink-0 text-red-500"
                     />
-                    <p className="text-xs leading-relaxed text-red-100">
+                    <p className="text-xs leading-relaxed text-red-700">
                       {error}
                     </p>
                   </div>
