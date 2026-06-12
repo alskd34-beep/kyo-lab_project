@@ -14,6 +14,7 @@ export interface UserDTO {
   id:           string
   username:     string
   displayName:  string | null
+  avatarUrl:    string | null
   role:         UserRole
   isActive:     boolean
   lastLoginAt:  string | null
@@ -65,6 +66,7 @@ interface DbUser {
   username:       string
   password_hash:  string
   display_name:   string | null
+  avatar_url:     string | null
   role:           UserRole
   is_active:      boolean
   last_login_at:  string | null
@@ -76,6 +78,7 @@ function toDTO(r: DbUser): UserDTO {
     id:          r.id,
     username:    r.username,
     displayName: r.display_name,
+    avatarUrl:   r.avatar_url ?? null,
     role:        r.role,
     isActive:    r.is_active,
     lastLoginAt: r.last_login_at,
@@ -118,17 +121,21 @@ export async function createUser(input: {
   username:    string
   password:    string
   displayName?: string
+  avatarUrl?:   string | null
   role?:        UserRole
 }): Promise<UserDTO> {
   const hash = await hashPassword(input.password)
+  const row: Record<string, unknown> = {
+    username:      input.username,
+    password_hash: hash,
+    display_name:  input.displayName ?? null,
+    role:          input.role ?? 'user',
+  }
+  if (input.avatarUrl !== undefined) row.avatar_url = input.avatarUrl
+
   const { data, error } = await supabase
     .from('users')
-    .insert({
-      username:      input.username,
-      password_hash: hash,
-      display_name:  input.displayName ?? null,
-      role:          input.role ?? 'user',
-    })
+    .insert(row)
     .select('*')
     .single()
   if (error) throw error
@@ -137,10 +144,11 @@ export async function createUser(input: {
 
 export async function updateUser(
   id: string,
-  patch: { displayName?: string; role?: UserRole; isActive?: boolean; password?: string },
+  patch: { displayName?: string; avatarUrl?: string | null; role?: UserRole; isActive?: boolean; password?: string },
 ): Promise<UserDTO> {
   const update: Record<string, unknown> = {}
   if (patch.displayName !== undefined) update.display_name = patch.displayName
+  if (patch.avatarUrl   !== undefined) update.avatar_url   = patch.avatarUrl
   if (patch.role        !== undefined) update.role         = patch.role
   if (patch.isActive    !== undefined) update.is_active    = patch.isActive
   if (patch.password)                  update.password_hash = await hashPassword(patch.password)

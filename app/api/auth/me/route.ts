@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
       id:          user.id,
       username:    user.username,
       displayName: user.displayName,
+      avatarUrl:   user.avatarUrl,
       role:        user.role,
     },
   })

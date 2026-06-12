@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Sidebar from '@frontend/components/dashboard/sidebar'
 import Chatbot from '@frontend/components/dashboard/chatbot'
-import { Avatar, AvatarFallback } from '@frontend/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@frontend/components/ui/avatar'
 import { Bell, ChevronDown, LogOut, Menu } from 'lucide-react'
 import { useAuth } from '@frontend/lib/auth-context'
 
@@ -73,6 +73,7 @@ export default function MenuLayout({ children }: { children: React.ReactNode }) 
                 className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2 sm:px-3 py-1.5 hover:bg-slate-100 transition-colors"
               >
                 <Avatar className="h-6 w-6">
+                  {user?.avatarUrl && <AvatarImage src={user.avatarUrl} alt="" />}
                   <AvatarFallback className="bg-blue-600 text-white text-[10px] font-bold">{initial}</AvatarFallback>
                 </Avatar>
                 <span className="hidden sm:inline text-xs font-medium text-slate-700">

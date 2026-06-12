@@ -20,11 +20,11 @@ export async function POST(req: NextRequest) {
   const g = await requireAdmin(req)
   if (!g.ok) return g.response
   try {
-    const { username, password, displayName, role } = await req.json()
+    const { username, password, displayName, avatarUrl, role } = await req.json()
     if (!username || !password) {
       return Response.json({ error: 'username, password 필수' }, { status: 400 })
     }
-    const user = await createUser({ username, password, displayName, role })
+    const user = await createUser({ username, password, displayName, avatarUrl, role })
     return Response.json({ user }, { status: 201 })
   } catch (err) {
     const msg = err instanceof Error ? err.message : '서버 오류'

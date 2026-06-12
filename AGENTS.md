@@ -82,3 +82,6 @@ Supabase (Postgres)   ← schema in supabase/migrations
 - OpenAI HTTP API (`gpt-4o-mini`) for the chatbot. **Note:** `@anthropic-ai/sdk` is listed in deps but is legacy/unused — the chat service was migrated to OpenAI.
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->
+
+## UX Preferences
+- 별도 요청이 없으면 데이터 수정 작업은 인라인 편집보다 모달/Dialog를 기본 UX로 사용한다.

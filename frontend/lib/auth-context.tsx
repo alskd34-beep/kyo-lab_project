@@ -8,6 +8,7 @@ export interface AuthUser {
   id:          string
   username:    string
   displayName: string | null
+  avatarUrl:   string | null
   role:        UserRole
 }
 

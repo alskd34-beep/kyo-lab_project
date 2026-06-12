@@ -13,8 +13,8 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx) {
   if (!g.ok) return g.response
   try {
     const { id } = await ctx.params
-    const { displayName, role, isActive, password } = await req.json()
-    const user = await updateUser(id, { displayName, role, isActive, password })
+    const { displayName, avatarUrl, role, isActive, password } = await req.json()
+    const user = await updateUser(id, { displayName, avatarUrl, role, isActive, password })
     if (password || isActive === false) {
       await revokeAllUserTokens(id)
     }
