@@ -14,10 +14,8 @@ import {
   Settings,
   Star,
   X,
-  ChevronLeft,
   ChevronRight,
   Calendar,
-  Factory,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -225,11 +223,10 @@ export default function Sidebar({ activeItem = 'test-mgmt', onNavigate, isOpen =
   const leaveTimer   = useRef<ReturnType<typeof setTimeout> | null>(null)
   const wrapperRef   = useRef<HTMLDivElement>(null)
 
-  // 사이드바 외부 클릭 시 서브메뉴 패널 자동 닫힘
+  // 사이드바 외부 클릭 시 hover 미리보기만 닫고 선택된 메뉴는 유지한다.
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
-        setOpenMenu(null)
         setHoverMenu(null)
       }
     }
@@ -237,19 +234,31 @@ export default function Sidebar({ activeItem = 'test-mgmt', onNavigate, isOpen =
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Load favorites from localStorage
+  // 저장된 즐겨찾기는 렌더 이후에 복원해 하이드레이션 표시 차이를 피한다.
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('kd-qc-favorites')
-      if (stored) setFavorites(new Set(JSON.parse(stored) as string[]))
-    } catch {}
+    let mounted = true
+
+    queueMicrotask(() => {
+      try {
+        const stored = localStorage.getItem('kd-qc-favorites')
+        if (mounted && stored) setFavorites(new Set(JSON.parse(stored) as string[]))
+      } catch {}
+    })
+
+    return () => {
+      mounted = false
+    }
   }, [])
 
   const toggleFavorite = (subItemId: string, e: React.MouseEvent) => {
     e.stopPropagation()
     setFavorites(prev => {
       const next = new Set(prev)
-      next.has(subItemId) ? next.delete(subItemId) : next.add(subItemId)
+      if (next.has(subItemId)) {
+        next.delete(subItemId)
+      } else {
+        next.add(subItemId)
+      }
       localStorage.setItem('kd-qc-favorites', JSON.stringify([...next]))
       return next
     })
@@ -266,17 +275,16 @@ export default function Sidebar({ activeItem = 'test-mgmt', onNavigate, isOpen =
       return
     }
     // Toggle: clicking active item closes it
-    setOpenMenu(prev => {
-      const next = prev === item.id ? null : item.id
-      setPanelOpen(next !== null)
-      // 메뉴를 "여는" 클릭이고 defaultPath가 있으면 해당 기본 페이지로 바로 이동
-      if (next !== null && item.defaultPath) {
-        onNavigate?.(item.id)
-        router.push(item.defaultPath)
-        onClose?.()
-      }
-      return next
-    })
+    const nextOpenMenu = openMenu === item.id ? null : item.id
+    setOpenMenu(nextOpenMenu)
+    setPanelOpen(nextOpenMenu !== null)
+
+    // 메뉴를 "여는" 클릭이고 defaultPath가 있으면 해당 기본 페이지로 바로 이동
+    if (nextOpenMenu !== null && item.defaultPath) {
+      onNavigate?.(item.id)
+      router.push(item.defaultPath)
+      onClose?.()
+    }
     setHoverMenu(null)
   }
 
