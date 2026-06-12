@@ -9,13 +9,9 @@
  */
 
 import { useState, useMemo, useCallback, useEffect, useRef } from "react"
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@frontend/components/ui/card"
+import { Card, CardContent } from "@frontend/components/ui/card"
 import { Button } from "@frontend/components/ui/button"
+import { cn } from "@frontend/lib/utils"
 import {
   Dialog,
   DialogContent,
@@ -593,161 +589,232 @@ export default function PctPage() {
   const BORDER = "border-slate-200 dark:border-slate-700"
   const CARD_BG = "bg-white dark:bg-slate-900"
 
+  const heroStats = useMemo(
+    () => [
+      {
+        label: "전체 행",
+        value: stats.total,
+        accent: "text-white",
+        bg: "bg-white/10",
+        note: rows.length > 0 ? "현재 시트 반영됨" : "시트를 불러오세요",
+      },
+      {
+        label: "변경",
+        value: stats.changes,
+        accent: "text-amber-200",
+        bg: "bg-amber-500/10",
+        note: `${stats.added} 추가 · ${stats.modified} 수정`,
+      },
+      {
+        label: "자동 배정",
+        value: engineResult?.stats.assigned ?? 0,
+        accent: "text-emerald-200",
+        bg: "bg-emerald-500/10",
+        note: engineResult
+          ? `${engineResult.stats.testersUsed}명 참여`
+          : "배정 대기",
+      },
+      {
+        label: "스케줄",
+        value: scheduleStats?.saved ?? existingSnapshot?.count ?? 0,
+        accent: "text-sky-200",
+        bg: "bg-sky-500/10",
+        note: scheduleStats
+          ? "이번 세션 생성"
+          : existingSnapshot
+            ? "이전 생성 이력"
+            : "아직 없음",
+      },
+    ],
+    [engineResult, existingSnapshot, rows.length, scheduleStats, stats]
+  )
+
+  const workflowItems = useMemo(
+    () => [
+      { n: 1, label: "시트 불러오기", icon: Download, active: rows.length > 0 },
+      {
+        n: 2,
+        label: "AI 자동 배정",
+        icon: Sparkles,
+        active: !!engineResult,
+      },
+      {
+        n: 3,
+        label: "스케줄 생성",
+        icon: CalendarPlus,
+        active: !!scheduleStats,
+      },
+      {
+        n: 4,
+        label: "월간 보기",
+        icon: Calendar,
+        active: !!scheduleStats || !!existingSnapshot,
+      },
+    ],
+    [engineResult, existingSnapshot, rows.length, scheduleStats]
+  )
+
   return (
-    <div className="p-6">
-      <div className="mx-auto max-w-[1600px] space-y-5">
-        {/* Header */}
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 shadow-md shadow-emerald-600/30">
-            <Factory size={20} className="text-white" />
-          </div>
-          <div>
-            <h1 className={`text-xl font-bold ${TXT_PRIMARY}`}>
-              PCT (생산관리)
-            </h1>
-            <p className={`text-xs ${TXT_MUTED}`}>
-              구글 스프레드시트에서 생산 배치를 가져와 편집합니다. 변경사항은
-              다음 단계에서 Supabase에 동기화됩니다.
-            </p>
-          </div>
-        </div>
-
-        {/* 워크플로우 단계 안내 — 불러오기 → AI 자동배정 → 스케줄 생성 → 월간 보기 */}
-        <Card className={`${BORDER} ${CARD_BG}`}>
-          <CardContent className="py-3">
-            <ol className="flex flex-wrap items-center gap-x-1 gap-y-2 text-xs">
-              {[
-                { n: 1, label: "시트 불러오기", icon: Download },
-                { n: 2, label: "AI 자동 배정", icon: Sparkles },
-                { n: 3, label: "스케줄 생성", icon: CalendarPlus },
-                { n: 4, label: "월간 스케줄 보기", icon: Calendar },
-              ].map((s, i) => {
-                const done = workflowStep > s.n
-                const current = workflowStep === s.n
-                const Icon = s.icon
-                return (
-                  <li key={s.n} className="flex items-center gap-1">
-                    <span
-                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-semibold transition-colors ${
-                        done
-                          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
-                          : current
-                            ? "bg-blue-600 text-white shadow-sm"
-                            : "bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500"
-                      }`}
-                    >
-                      {done ? <CheckCircle2 size={13} /> : <Icon size={13} />}
-                      <span className="hidden sm:inline">{s.n}. </span>
-                      {s.label}
-                    </span>
-                    {i < 3 && (
-                      <ArrowRight
-                        size={13}
-                        className="text-slate-300 dark:text-slate-600"
-                      />
-                    )}
-                  </li>
-                )
-              })}
-            </ol>
-          </CardContent>
-        </Card>
-
-        {/* 시트 ID + 컨트롤 */}
-        <Card className={`${BORDER} ${CARD_BG}`}>
-          <CardHeader>
-            <CardTitle
-              className={`flex items-center gap-2 text-base ${TXT_PRIMARY}`}
-            >
-              <FileSpreadsheet
-                size={16}
-                className="text-emerald-600 dark:text-emerald-400"
-              />
-              구글 시트 연동
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex flex-wrap items-end gap-3">
-              <div className="flex min-w-[280px] flex-1 flex-col gap-1.5">
-                <label className={`text-xs font-medium ${TXT_TERTIARY}`}>
-                  구글 시트 ID
-                </label>
-                <input
-                  type="text"
-                  value={fileId}
-                  onChange={(e) => setFileId(e.target.value)}
-                  disabled={loading}
-                  className={`h-9 rounded-lg border ${BORDER} bg-white px-3 font-mono text-xs outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 dark:bg-slate-800 dark:focus:ring-emerald-900/40 ${TXT_PRIMARY} disabled:opacity-60`}
-                  placeholder="시트 URL의 /d/ 다음 ID"
-                />
-              </div>
-              <Button
-                onClick={loadSheet}
-                disabled={loading || !fileId.trim()}
-                className="h-9 gap-1.5 bg-emerald-600 px-4 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
-              >
-                {loading ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <RefreshCw size={14} />
-                )}
-                {loading
-                  ? "불러오는 중..."
-                  : rows.length
-                    ? "시트에서 다시 불러오기"
-                    : "시트 불러오기"}
-              </Button>
-            </div>
-            {error && (
-              <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950/40">
-                <AlertCircle
-                  size={14}
-                  className="mt-0.5 shrink-0 text-red-600 dark:text-red-400"
-                />
-                <p className="text-xs text-red-700 dark:text-red-300">
-                  {error}
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* 데이터 로드 후 영역 */}
-        {rows.length > 0 && (
-          <>
-            {/* 요약 + 액션 바 */}
-            <Card className={`${BORDER} ${CARD_BG}`}>
-              <CardContent className="flex flex-wrap items-center justify-between gap-3 py-3">
-                <div className="flex flex-wrap items-center gap-3 text-xs">
-                  <span className={`font-medium ${TXT_TERTIARY}`}>
-                    총{" "}
-                    <span className={`text-base font-bold ${TXT_PRIMARY}`}>
-                      {stats.total}
-                    </span>
-                    건
+    <div className="relative overflow-x-hidden px-3 py-3 sm:px-4 lg:px-6">
+      <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[320px] bg-[radial-gradient(circle_at_10%_10%,rgba(16,185,129,0.16),transparent_28%),radial-gradient(circle_at_90%_0%,rgba(59,130,246,0.18),transparent_30%),linear-gradient(to_bottom,rgba(15,23,42,0.06),transparent_65%)]" />
+      <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4">
+        <section className="overflow-hidden rounded-lg border border-slate-200 bg-slate-950 text-white shadow-[0_24px_80px_rgba(15,23,42,0.22)]">
+          <div className="grid gap-0 xl:grid-cols-[minmax(0,1.18fr)_minmax(340px,0.82fr)]">
+            <div className="relative border-b border-white/8 p-4 sm:p-5 xl:border-r xl:border-b-0">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.14),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(59,130,246,0.14),transparent_35%)]" />
+              <div className="relative space-y-4">
+                <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold tracking-[0.28em] text-slate-400 uppercase">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2.5 py-1">
+                    <Factory size={12} />
+                    PCT 시트 허브
                   </span>
-                  {stats.added > 0 && (
-                    <span className="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
-                      <Plus size={10} /> 추가 {stats.added}
-                    </span>
-                  )}
-                  {stats.modified > 0 && (
-                    <span className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 font-semibold text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
-                      ✎ 수정 {stats.modified}
-                    </span>
-                  )}
-                  {stats.changes === 0 && (
-                    <span className={TXT_MUTED}>변경사항 없음</span>
-                  )}
+                  <span
+                    className={cn(
+                      "inline-flex items-center rounded-full px-2.5 py-1 tracking-normal",
+                      rows.length > 0
+                        ? "bg-emerald-500/15 text-emerald-200"
+                        : "bg-amber-500/15 text-amber-200"
+                    )}
+                  >
+                    {rows.length > 0 ? "시트 연결됨" : "시트 대기"}
+                  </span>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {/* AI 자동 배정 — 서버 규칙엔진(역량·장비·공수 기반) */}
+
+                <div className="max-w-3xl space-y-2">
+                  <h1 className="text-[clamp(1.75rem,3vw,2.8rem)] font-semibold tracking-tight">
+                    PCT (생산관리)
+                  </h1>
+                  <p className="max-w-2xl text-sm leading-6 text-slate-300">
+                    구글 스프레드시트에서 생산 배치를 불러와 바로 편집하는 작업
+                    허브입니다. 모바일에서는 손가락 기준으로 눌리기 쉽게,
+                    데스크톱에서는 한 눈에 흐름이 보이도록 정리했습니다.
+                  </p>
+                </div>
+
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                  {heroStats.map((item) => (
+                    <div
+                      key={item.label}
+                      className={cn(
+                        "rounded-lg border border-white/10 px-3 py-3 backdrop-blur",
+                        item.bg
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-semibold tracking-[0.22em] text-slate-400 uppercase">
+                            {item.label}
+                          </p>
+                          <p
+                            className={cn(
+                              "mt-1 text-xl font-bold",
+                              item.accent
+                            )}
+                          >
+                            {item.value}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="mt-1.5 text-[11px] leading-relaxed text-slate-300">
+                        {item.note}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                  {workflowItems.map((s, i) => {
+                    const Icon = s.icon
+                    return (
+                      <div
+                        key={s.n}
+                        className={cn(
+                          "flex items-center gap-2 rounded-lg border px-3 py-2.5 text-xs",
+                          s.active
+                            ? "border-emerald-400/30 bg-emerald-500/10 text-white"
+                            : i === 0
+                              ? "border-blue-400/25 bg-blue-500/10 text-slate-100"
+                              : "border-white/10 bg-white/5 text-slate-200"
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
+                            s.active ? "bg-white text-slate-900" : "bg-white/10"
+                          )}
+                        >
+                          {s.active ? (
+                            <CheckCircle2 size={13} />
+                          ) : (
+                            <Icon size={13} />
+                          )}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-[10px] font-semibold tracking-[0.22em] text-slate-400 uppercase">
+                            Step {s.n}
+                          </span>
+                          <span className="block truncate font-medium">
+                            {s.label}
+                          </span>
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="relative p-4 sm:p-5">
+              <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,0.94),rgba(15,23,42,0.84))]" />
+              <div className="relative space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-semibold tracking-[0.28em] text-slate-400 uppercase">
+                      시트 연결
+                    </p>
+                    <h2 className="mt-1 text-lg font-semibold text-white">
+                      구글 시트 ID
+                    </h2>
+                  </div>
+                  <Button
+                    onClick={loadSheet}
+                    disabled={loading || !fileId.trim()}
+                    className="h-9 gap-1.5 rounded-lg bg-emerald-500 px-3 text-sm font-medium text-white hover:bg-emerald-400 disabled:opacity-60"
+                  >
+                    {loading ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <RefreshCw size={14} />
+                    )}
+                    {loading
+                      ? "불러오는 중..."
+                      : rows.length
+                        ? "다시 불러오기"
+                        : "시트 불러오기"}
+                  </Button>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-slate-300">
+                    파일 ID
+                  </label>
+                  <input
+                    type="text"
+                    value={fileId}
+                    onChange={(e) => setFileId(e.target.value)}
+                    disabled={loading}
+                    className="h-11 w-full rounded-lg border border-white/10 bg-white/5 px-3 font-mono text-xs text-white outline-none placeholder:text-slate-500 focus:border-emerald-400/60 focus:ring-2 focus:ring-emerald-400/15 disabled:opacity-60"
+                    placeholder="시트 URL의 /d/ 다음 ID"
+                  />
+                </div>
+
+                <div className="grid gap-2 sm:grid-cols-2">
                   <Button
                     onClick={handleAutoAssign}
                     disabled={rows.length === 0 || assigning}
                     size="sm"
                     title="시험자 역량·장비(test_item_equipment)·공수(product_workload) 기반 규칙 자동 배정"
-                    className="gap-1.5 bg-emerald-600 px-3 text-white hover:bg-emerald-700 disabled:opacity-60"
+                    className="h-10 gap-1.5 rounded-lg bg-blue-500 px-3 text-sm font-medium text-white hover:bg-blue-400 disabled:opacity-60"
                   >
                     {assigning ? (
                       <Loader2 size={13} className="animate-spin" />
@@ -761,17 +828,19 @@ export default function PctPage() {
                     variant="outline"
                     size="sm"
                     disabled={rows.every((r) => !r.담당자)}
-                    className="gap-1.5"
+                    className="h-10 gap-1.5 rounded-lg border-white/10 bg-white/5 px-3 text-sm text-white hover:bg-white/10"
                   >
                     <UserMinus size={13} />
-                    담당자 일괄 초기화
+                    담당자 초기화
                   </Button>
-                  <span className="mx-1 hidden h-5 w-px bg-slate-200 sm:block dark:bg-slate-700" />
+                </div>
+
+                <div className="grid gap-2 sm:grid-cols-2">
                   <Button
                     onClick={addRow}
                     variant="outline"
                     size="sm"
-                    className="gap-1.5"
+                    className="h-10 gap-1.5 rounded-lg border-white/10 bg-white/5 px-3 text-sm text-white hover:bg-white/10"
                   >
                     <Plus size={13} />행 추가
                   </Button>
@@ -780,12 +849,14 @@ export default function PctPage() {
                     variant="outline"
                     size="sm"
                     disabled={stats.changes === 0}
-                    className="gap-1.5"
+                    className="h-10 gap-1.5 rounded-lg border-white/10 bg-white/5 px-3 text-sm text-white hover:bg-white/10"
                   >
                     <RotateCcw size={13} />
-                    원본으로 되돌리기
+                    원본 복원
                   </Button>
-                  {/* 스케줄 생성 — 자동 배정 후 월간 스케줄로 전달 */}
+                </div>
+
+                <div className="grid gap-2 sm:grid-cols-2">
                   <Button
                     onClick={handleGenerateSchedule}
                     disabled={
@@ -793,7 +864,7 @@ export default function PctPage() {
                     }
                     size="sm"
                     title="AI 자동 배정 결과를 월간 스케줄로 전송 (먼저 자동 배정 필요)"
-                    className="gap-1.5 bg-blue-600 px-4 text-white hover:bg-blue-700 disabled:opacity-60"
+                    className="h-10 gap-1.5 rounded-lg bg-emerald-500 px-3 text-sm font-medium text-white hover:bg-emerald-400 disabled:opacity-60"
                   >
                     <CalendarPlus size={13} />
                     스케줄 생성
@@ -809,14 +880,84 @@ export default function PctPage() {
                     disabled={stats.changes === 0}
                     size="sm"
                     variant="outline"
-                    className="gap-1.5"
+                    className="h-10 gap-1.5 rounded-lg border-white/10 bg-white/5 px-3 text-sm text-white hover:bg-white/10"
                     title="Supabase 동기화 — 다음 단계에서 활성화"
                   >
                     <Database size={13} />
                     DB 동기화
-                    <span className="ml-1 rounded-full bg-slate-300 px-1.5 py-0.5 text-[9px] font-bold text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+                    <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[9px] font-bold text-slate-200">
                       준비중
                     </span>
+                  </Button>
+                </div>
+
+                {error && (
+                  <div className="flex items-start gap-2 rounded-lg border border-red-400/20 bg-red-500/10 p-3">
+                    <AlertCircle
+                      size={14}
+                      className="mt-0.5 shrink-0 text-red-300"
+                    />
+                    <p className="text-xs leading-relaxed text-red-100">
+                      {error}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 데이터 로드 후 영역 */}
+        {rows.length > 0 && (
+          <>
+            {/* 요약 스트립 */}
+            <Card
+              className={`${BORDER} ${CARD_BG} shadow-[0_14px_50px_rgba(15,23,42,0.06)]`}
+            >
+              <CardContent className="flex flex-col gap-3 py-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-semibold text-slate-700">
+                    현재 단계{" "}
+                    <span className="text-slate-900">{workflowStep}/4</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 font-medium text-slate-600">
+                    총 <b className="text-slate-900">{stats.total}</b>건
+                  </span>
+                  {stats.added > 0 && (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-700">
+                      <Plus size={10} /> 추가 {stats.added}
+                    </span>
+                  )}
+                  {stats.modified > 0 && (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 font-semibold text-amber-700">
+                      ✎ 수정 {stats.modified}
+                    </span>
+                  )}
+                  {stats.changes === 0 && (
+                    <span
+                      className={`rounded-full border border-dashed border-slate-200 px-2.5 py-1 ${TXT_MUTED}`}
+                    >
+                      변경사항 없음
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <a
+                    href="/schedule/monthly"
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                  >
+                    월간 스케줄 보기
+                    <ArrowRight size={14} />
+                  </a>
+                  <Button
+                    onClick={resetChanges}
+                    variant="outline"
+                    size="sm"
+                    disabled={stats.changes === 0}
+                    className="h-9 gap-1.5 rounded-lg border-slate-200 bg-white px-3 text-sm text-slate-700 hover:bg-slate-50"
+                  >
+                    <RotateCcw size={13} />
+                    원본으로 되돌리기
                   </Button>
                 </div>
               </CardContent>
