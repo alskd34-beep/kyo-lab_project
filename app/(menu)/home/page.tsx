@@ -14,6 +14,29 @@ interface Tester {
   assignedToday: number
 }
 
+interface TableauSummary {
+  configured: boolean
+  generatedAt: string
+  serverUrl: string | null
+  siteContentUrl: string | null
+  workbooks: Array<{
+    id: string
+    name: string
+    projectName: string | null
+    updatedAt: string | null
+    webUrl: string | null
+  }>
+  views: Array<{
+    id: string
+    name: string
+    workbookName: string | null
+    projectName: string | null
+    updatedAt: string | null
+    webUrl: string | null
+  }>
+  missingEnv?: string[]
+}
+
 // ─── Demo Data ────────────────────────────────────────────────────────────────
 
 const DEMO_UPCOMING: BatchSummary[] = [
@@ -64,17 +87,31 @@ function dDayLabel(dDayQc: number | null): string {
   return `D-${dDayQc}`
 }
 
+function formatDateTime(value: string | null): string {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString('ko-KR', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function HomePage() {
   const [upcoming, setUpcoming]   = useState<BatchSummary[]>(DEMO_UPCOMING)
   const [stats, setStats]         = useState<DashboardStats>(DEMO_STATS)
   const [usingDemo, setUsingDemo] = useState(true)
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [tableau, setTableau] = useState<TableauSummary | null>(null)
+  const [tableauError, setTableauError] = useState<string | null>(null)
+  const [isTableauLoading, setIsTableauLoading] = useState(true)
 
   useEffect(() => {
     let cancelled = false
-    setIsLoading(true)
 
     Promise.all([
       fetch('/api/dashboard').then(async r => {
@@ -97,6 +134,24 @@ export default function HomePage() {
         setUsingDemo(true)
       })
       .finally(() => { if (!cancelled) setIsLoading(false) })
+
+    fetch('/api/tableau/summary?limit=5')
+      .then(async r => {
+        const json = await r.json()
+        if (!r.ok) throw new Error(json.error ?? 'Tableau 정보를 불러오지 못했습니다')
+        return json as { row: TableauSummary }
+      })
+      .then(data => {
+        if (cancelled) return
+        setTableau(data.row)
+        setTableauError(null)
+      })
+      .catch(err => {
+        if (cancelled) return
+        setTableau(null)
+        setTableauError(err instanceof Error ? err.message : 'Tableau 연동 오류')
+      })
+      .finally(() => { if (!cancelled) setIsTableauLoading(false) })
 
     return () => { cancelled = true }
   }, [])
@@ -137,6 +192,70 @@ export default function HomePage() {
           </Card>
         ))}
       </div>
+
+      {/* ── Tableau 요약 ─────────────────────────────────────────────────── */}
+      <Card className="border border-slate-200 shadow-none rounded-xl bg-white py-0">
+        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-slate-800">Tableau 인사이트</span>
+            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+              tableau?.configured
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                : 'border-amber-200 bg-amber-50 text-amber-700'
+            }`}>
+              {tableau?.configured ? '연동됨' : '설정 필요'}
+            </span>
+          </div>
+          {isTableauLoading && <span className="text-[10px] text-slate-400">Tableau 로딩 중...</span>}
+        </div>
+        <CardContent className="px-4 py-3">
+          {tableauError ? (
+            <p className="text-xs text-red-600">{tableauError}</p>
+          ) : tableau && !tableau.configured ? (
+            <div className="flex flex-col gap-1">
+              <p className="text-xs font-medium text-slate-700">Tableau 환경변수를 확인해 주세요.</p>
+              <p className="text-[11px] text-slate-500">
+                누락: {(tableau.missingEnv ?? []).join(', ')}
+              </p>
+            </div>
+          ) : tableau ? (
+            <div className="grid gap-3 lg:grid-cols-[220px_1fr]">
+              <div className="grid grid-cols-2 gap-2 lg:grid-cols-1">
+                <div className="rounded-lg border border-slate-100 bg-slate-50/70 px-3 py-2">
+                  <p className="text-[10px] font-medium text-slate-500">워크북</p>
+                  <p className="mt-1 text-xl font-bold tabular-nums text-slate-800">{tableau.workbooks.length}</p>
+                </div>
+                <div className="rounded-lg border border-slate-100 bg-slate-50/70 px-3 py-2">
+                  <p className="text-[10px] font-medium text-slate-500">뷰</p>
+                  <p className="mt-1 text-xl font-bold tabular-nums text-violet-600">{tableau.views.length}</p>
+                </div>
+              </div>
+              <div className="min-w-0">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-xs font-semibold text-slate-700">최근 Tableau 뷰</p>
+                  <p className="text-[10px] text-slate-400">갱신 {formatDateTime(tableau.generatedAt)}</p>
+                </div>
+                <div className="grid gap-2 md:grid-cols-2">
+                  {tableau.views.slice(0, 4).map(view => (
+                    <div key={view.id} className="rounded-lg border border-slate-100 px-3 py-2">
+                      <p className="truncate text-xs font-semibold text-slate-800">{view.name}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-slate-500">
+                        {view.workbookName ?? '워크북 미확인'} · {view.projectName ?? '프로젝트 미확인'}
+                      </p>
+                      <p className="mt-1 text-[10px] text-slate-400">수정 {formatDateTime(view.updatedAt)}</p>
+                    </div>
+                  ))}
+                  {tableau.views.length === 0 && (
+                    <p className="text-xs text-slate-500">표시할 Tableau 뷰가 없습니다.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-slate-500">Tableau 정보를 준비 중입니다.</p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* ── 중단: 기한임박 배치 + 상태 요약 ──────────────────────────── */}
       <div className="flex flex-col lg:flex-row gap-4 min-h-0">

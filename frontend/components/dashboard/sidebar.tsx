@@ -40,15 +40,16 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { id: 'home', icon: <Home size={17} />, label: '홈', live: true },
   {
-    // 스케줄 — 홈 바로 아래로 이동. 클릭 시 주간 계획(자동)으로 바로 이동.
+    // 스케줄 — 홈 바로 아래로 이동. 클릭 시 PCT로 바로 이동.
     id: 'schedule',
     icon: <Calendar size={17} />,
     label: '스케줄',
     live: true,
-    defaultPath: '/schedule/weekly-plan',
+    defaultPath: '/schedule/pct',
     subItems: [
-      { id: 'schedule-pct',         label: 'PCT (생산관리)', live: true },
-      { id: 'schedule-weekly-plan', label: '주간 계획 (자동)', live: true },
+      { id: 'schedule-pct',         label: 'AI 스케줄', live: true },
+      // 주간 계획(자동) — 블라인드 처리. 추후 미사용 확정 시 page/유틸/route map까지 삭제.
+      // { id: 'schedule-weekly-plan', label: '주간 계획 (자동)', live: true },
       // 주간 스케줄(AI) — 미사용. 숨김 처리 (월간 스케줄의 "주간 보드" 탭으로 대체). 추후 불필요 시 삭제.
       // { id: 'schedule-weekly',      label: '주간 스케줄 (AI)', live: true },
       { id: 'schedule-monthly',     label: '월간 스케줄',    live: true },
