@@ -103,7 +103,7 @@ export function hoursToWorkdays(avgHours: number): number {
  * PCT 페이지의 단일 행을 월간 항목으로 변환.
  * 담당자 미지정이거나 포장일 파싱 실패면 null 반환.
  *
- * @param avgHours 평균공수관리에서 품목코드로 매칭한 평균공수(시간). 미매칭이면 undefined.
+ * @param avgHours 평균공수에서 품목코드로 매칭한 평균공수(시간). 미매칭이면 undefined.
  */
 export function pctRowToMonthly(row: {
   품목코드:   string

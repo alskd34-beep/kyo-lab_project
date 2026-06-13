@@ -15,7 +15,7 @@ Route group containing every authenticated screen of the QC system, wrapped in a
 | Directory | Purpose |
 |-----------|---------|
 | `home/` | Landing dashboard after login |
-| `product-test/` | Product testing: `products`, `prod-reg`, `prod-status`, `prod-std`, `manhours` (시험 품목/공수 관리) |
+| `product-test/` | Product testing: `products` (품목 마스터 + 평균공수 통합), `prod-reg`, `prod-status`, `prod-std` |
 | `test-mgmt/` | Test management: `test-master`, `test-items`, `test-reg`, `test-result`, `test-status`, `test-cert`, `testers` |
 | `schedule/` | Scheduling: `monthly`, `weekly`, `weekly-plan`, `pct` (Monday-style boards + planners) |
 | `stability/` | Stability studies: `stab-plan`, `stab-report`, `stab-status` |
@@ -23,7 +23,7 @@ Route group containing every authenticated screen of the QC system, wrapped in a
 | `documents/` | Controlled docs: `doc-sop`, `doc-std`, `doc-cert`, `doc-checklist` |
 | `equipment/` | Equipment: `equip-operation`, `equip-usage`, `equip-backup`, `equip-ai-maint` |
 | `insights/` | Analytics: `dash`, `stats`, `ins-report` |
-| `settings/` | Admin: `users`, `roles`, `sys-settings` |
+| `settings/` | Setup/admin: `품목 마스터`, `시험항목 마스터`, `품목별 시험항목 관리`, `users`, `roles`, `sys-settings` |
 
 ## For AI Agents
 

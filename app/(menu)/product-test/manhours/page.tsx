@@ -1,5 +1,5 @@
-import { ProductTestWorkspace } from "@frontend/components/product-test/product-test-workspace"
+import { redirect } from "next/navigation"
 
 export default function ManhoursPage() {
-  return <ProductTestWorkspace defaultTab="manhours" />
+  redirect("/product-test/products")
 }

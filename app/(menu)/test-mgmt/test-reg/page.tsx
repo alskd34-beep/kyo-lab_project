@@ -203,7 +203,7 @@ function ProductPickerDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-lg gap-0 overflow-hidden p-0">
+      <DialogContent className="w-[calc(100%-2rem)] max-w-lg gap-0 overflow-hidden p-0 max-h-[90vh] overflow-y-auto">
         <DialogHeader className="border-b border-slate-100 px-4 py-3">
           <DialogTitle className="text-sm font-semibold text-slate-800">
             품목 검색
@@ -527,7 +527,7 @@ export default function TestRegPage() {
         setProductFound(true)
       } else {
         setLookupError(
-          "등록된 시험항목이 없습니다. 시험항목관리에서 먼저 등록해주세요."
+          "등록된 시험항목이 없습니다. 시험항목 마스터에서 먼저 등록해주세요."
         )
         setProductFound(true)
       }
@@ -780,7 +780,7 @@ export default function TestRegPage() {
             </div>
 
             {/* 날짜 필드들 */}
-            <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:col-span-2 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 md:col-span-2 md:grid-cols-3">
               <DateField
                 label="포장일(예정)"
                 helper="기록서검토기한과 QC완료예정일 계산 기준"

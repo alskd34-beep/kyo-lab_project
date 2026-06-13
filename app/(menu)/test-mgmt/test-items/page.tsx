@@ -306,7 +306,7 @@ export default function TestItemsPage() {
   const hasSelection = !!selectedProduct
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 bg-slate-200/70 p-3 md:p-5">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-x-hidden bg-slate-200/70 p-3 md:p-5">
       <div className="flex flex-col gap-2 rounded-lg border border-slate-300 bg-white px-3 py-3 shadow-sm md:flex-row md:items-center md:gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-700 text-white shadow-sm">
@@ -314,10 +314,10 @@ export default function TestItemsPage() {
           </div>
           <div className="min-w-0">
             <h1 className="min-w-0 text-base font-bold text-slate-950 sm:text-lg">
-              시험항목 연결
+              품목별 시험항목 관리
             </h1>
             <p className="text-xs font-medium text-slate-600">
-              품목별 시험항목 연결과 순서를 관리합니다.
+              품목 마스터와 시험항목 마스터를 연결하고 순서를 관리합니다.
             </p>
           </div>
         </div>
@@ -341,7 +341,7 @@ export default function TestItemsPage() {
       )}
 
       <div className="grid min-h-0 grid-cols-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-        <aside className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-slate-300 bg-white shadow-md">
+        <aside className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-slate-300 bg-white shadow-md max-h-[40vh] lg:max-h-none">
           <div className="border-b border-slate-200 px-4 py-3">
             <p className="mb-2 text-sm font-bold text-slate-950">품목 선택</p>
             <div className="relative">
@@ -526,8 +526,8 @@ export default function TestItemsPage() {
                   )}
                 </div>
 
-                <div className="hidden overflow-auto rounded-lg border border-slate-300 bg-white shadow-sm md:block">
-                  <table className="w-full text-sm">
+                <div className="hidden overflow-x-auto rounded-lg border border-slate-300 bg-white shadow-sm md:block">
+                  <table className="w-full min-w-[560px] text-sm">
                     <thead>
                       <tr className="bg-slate-950 text-xs text-white">
                         <th className="sticky top-0 z-10 w-16 bg-slate-950 px-4 py-3 text-center font-bold">
@@ -605,7 +605,7 @@ export default function TestItemsPage() {
       </div>
 
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-        <DialogContent className="max-h-[calc(100dvh-1rem)] gap-0 overflow-hidden border-slate-300 bg-slate-50 p-0 shadow-2xl sm:max-w-2xl">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden border-slate-300 bg-slate-50 p-0 shadow-2xl sm:max-w-2xl">
           <DialogHeader className="border-b border-slate-200 bg-white px-4 py-4 pr-12 text-left sm:px-5">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-700 text-white shadow-sm">
@@ -771,7 +771,7 @@ export default function TestItemsPage() {
           if (!open && !unlinkLoading) setUnlinkTarget(null)
         }}
       >
-        <DialogContent className="max-h-[calc(100dvh-1rem)] gap-0 overflow-hidden border-slate-300 bg-white p-0 shadow-2xl sm:max-w-md">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden border-slate-300 bg-white p-0 shadow-2xl sm:max-w-md">
           <DialogHeader className="border-b border-slate-200 bg-rose-50 px-4 py-4 pr-12 text-left sm:px-5">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rose-700 text-white shadow-sm">

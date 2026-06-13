@@ -1,7 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, type ChangeEvent } from "react"
-import { useRouter } from "next/navigation"
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react"
 import {
   AlertTriangle,
   Box,
@@ -26,9 +25,6 @@ import {
   DialogTitle,
 } from "@frontend/components/ui/dialog"
 import { Input } from "@frontend/components/ui/input"
-import { cn } from "@frontend/lib/utils"
-
-type TabKey = "products" | "manhours"
 
 interface LookupOptionRow {
   id: string
@@ -102,75 +98,90 @@ const DIFFICULTY_OPTIONS = [
   { value: "Medium", label: "Medium" },
   { value: "High", label: "High" },
 ]
+export function ProductTestWorkspace() {
+  const manhoursSectionRef = useRef<HTMLDivElement>(null)
+  const [manhoursQuickOpen, setManhoursQuickOpen] = useState<ProductRow | null>(null)
 
-const TAB_ROUTES: Record<TabKey, string> = {
-  products: "/product-test/products",
-  manhours: "/product-test/manhours",
-}
+  const handleJumpToManhours = useCallback((product: ProductRow) => {
+    setManhoursQuickOpen(product)
+    manhoursSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+  }, [])
 
-export function ProductTestWorkspace({ defaultTab }: { defaultTab: TabKey }) {
-  const router = useRouter()
-  const [activeTab, setActiveTab] = useState<TabKey>(defaultTab)
-
-  useEffect(() => {
-    setActiveTab(defaultTab)
-  }, [defaultTab])
+  const handleManhoursQuickOpenHandled = useCallback(() => {
+    setManhoursQuickOpen(null)
+  }, [])
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-4 bg-slate-200/70 p-3 md:p-5">
-      <div className="rounded-lg border border-slate-300 bg-white px-3 py-3 shadow-sm md:px-4 md:py-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div className="min-w-0">
+    <div className="flex min-w-0 flex-1 flex-col gap-4 bg-white p-3 md:p-5">
+      <div className="rounded-3xl border border-slate-200 bg-gradient-to-br from-white via-blue-50/40 to-emerald-50/50 px-4 py-4 shadow-sm md:px-5 md:py-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0 max-w-3xl">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-base font-black text-slate-950 sm:text-lg">
-                제품시험 통합 관리
-              </h1>
-              <Badge className="border-blue-700 bg-blue-700 text-[11px] font-bold text-white shadow-sm hover:bg-blue-700">
-                통합 화면
-              </Badge>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700">
+                <Box size={13} />
+                품목 마스터
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
+                <Gauge size={13} />
+                평균공수 통합
+              </span>
             </div>
-            <p className="mt-1 text-xs font-medium text-slate-600">
-              품목마스터와 평균공수를 한 화면에서 전환하며 관리합니다.
+            <h1 className="mt-3 text-[clamp(1.4rem,2vw,2.2rem)] font-black tracking-tight text-slate-950">
+              품목마스터와 평균공수를 하나의 흐름으로 관리합니다.
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+              품목을 먼저 정리하고, 아래 공수 섹션에서 바로 연결하세요.
+              별도 메뉴를 없애고 한 화면에서 조회, 등록, 수정이 이어지도록 구성했습니다.
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-            {[
-              { key: "products" as const, label: "품목마스터", icon: Box },
-              { key: "manhours" as const, label: "평균공수", icon: Gauge },
-            ].map(({ key, label, icon: Icon }) => {
-              const active = activeTab === key
-              return (
-                <Button
-                  key={key}
-                  type="button"
-                  variant={active ? "default" : "outline"}
-                  onClick={() => {
-                    setActiveTab(key)
-                    router.push(TAB_ROUTES[key])
-                  }}
-                  className={cn(
-                    "h-9 justify-start px-3 text-sm font-bold sm:justify-center",
-                    active
-                      ? "bg-blue-700 text-white hover:bg-blue-800"
-                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
-                  )}
-                >
-                  <Icon size={15} className="mr-1.5" />
-                  {label}
-                </Button>
-              )
-            })}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:max-w-2xl">
+            <div className="rounded-2xl border border-blue-100 bg-white px-4 py-3 shadow-sm">
+              <p className="text-[10px] font-bold tracking-wide text-slate-500 uppercase">
+                핵심
+              </p>
+              <p className="mt-2 text-lg font-black text-blue-700">통합</p>
+              <p className="text-[11px] text-slate-500">별도 화면 제거</p>
+            </div>
+            <div className="rounded-2xl border border-emerald-100 bg-white px-4 py-3 shadow-sm">
+              <p className="text-[10px] font-bold tracking-wide text-slate-500 uppercase">
+                흐름
+              </p>
+              <p className="mt-2 text-lg font-black text-emerald-700">품목 → 공수</p>
+              <p className="text-[11px] text-slate-500">연결 중심</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+              <p className="text-[10px] font-bold tracking-wide text-slate-500 uppercase">
+                스타일
+              </p>
+              <p className="mt-2 text-lg font-black text-slate-900">화이트</p>
+              <p className="text-[11px] text-slate-500">깔끔한 배경</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+              <p className="text-[10px] font-bold tracking-wide text-slate-500 uppercase">
+                액션
+              </p>
+              <p className="mt-2 text-lg font-black text-slate-900">빠른 등록</p>
+              <p className="text-[11px] text-slate-500">아래 섹션 바로 이동</p>
+            </div>
           </div>
         </div>
       </div>
 
-      {activeTab === "products" ? <ProductsPanel /> : <ManhoursPanel />}
+      <ProductsPanel onJumpToManhours={handleJumpToManhours} />
+
+      <div ref={manhoursSectionRef}>
+        <ManhoursPanel quickOpenProduct={manhoursQuickOpen} onQuickOpenHandled={handleManhoursQuickOpenHandled} />
+      </div>
     </div>
   )
 }
 
-function ProductsPanel() {
+function ProductsPanel({
+  onJumpToManhours,
+}: {
+  onJumpToManhours: (product: ProductRow) => void
+}) {
   const [rows, setRows] = useState<ProductRow[]>([])
   const [categories, setCategories] = useState<LookupOptionRow[]>([])
   const [classifications, setClassifications] = useState<LookupOptionRow[]>([])
@@ -184,13 +195,7 @@ function ProductsPanel() {
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    queueMicrotask(() => {
-      void loadProducts()
-    })
-  }, [])
-
-  async function loadProducts() {
+  const loadProducts = useCallback(async () => {
     setLoading(true)
     try {
       const res = await fetch("/api/products")
@@ -208,7 +213,13 @@ function ProductsPanel() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      void loadProducts()
+    })
+  }, [loadProducts])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -357,11 +368,11 @@ function ProductsPanel() {
 
   return (
     <>
-      <div className="flex min-w-0 flex-1 flex-col gap-4 bg-slate-200/70 p-3 md:p-5">
-        <div className="flex flex-col gap-2 rounded-lg border border-slate-300 bg-white px-3 py-3 shadow-sm md:flex-row md:items-center md:gap-3">
+      <div className="flex min-w-0 flex-1 flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-3 shadow-sm md:p-5">
+        <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm md:flex-row md:items-center md:gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-2 md:gap-3">
             <h2 className="min-w-0 text-base font-bold text-slate-950 sm:text-lg">
-              품목 마스터 관리
+              품목 마스터
             </h2>
             <Badge className="border-blue-700 bg-blue-700 text-xs text-white shadow-sm">
               {filtered.length}건
@@ -514,7 +525,7 @@ function ProductsPanel() {
         )}
 
         <div className="hidden flex-1 overflow-auto rounded-lg border border-slate-300 bg-white shadow-md md:block">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[720px] text-sm">
             <thead>
               <tr className="bg-slate-950 text-xs text-white">
                 <th className="sticky top-0 z-10 bg-slate-950 px-4 py-3 text-left font-bold">
@@ -544,7 +555,7 @@ function ProductsPanel() {
                 <th className="sticky top-0 z-10 w-16 bg-slate-950 px-4 py-3 text-center font-bold">
                   상태
                 </th>
-                <th className="sticky top-0 z-10 w-20 bg-slate-950 px-4 py-3 text-center font-bold">
+                <th className="sticky top-0 z-10 w-28 bg-slate-950 px-4 py-3 text-center font-bold">
                   액션
                 </th>
               </tr>
@@ -627,6 +638,13 @@ function ProductsPanel() {
                     <td className="px-4 py-2.5 text-center">
                       <div className="flex items-center justify-center gap-1">
                         <button
+                          onClick={() => onJumpToManhours(row)}
+                          className="rounded-md bg-emerald-100 p-1.5 text-emerald-700 transition-colors hover:bg-emerald-700 hover:text-white"
+                          title="평균공수로 이동"
+                        >
+                          <Gauge size={14} />
+                        </button>
+                        <button
                           onClick={() => openEdit(row)}
                           className="rounded-md bg-blue-100 p-1.5 text-blue-700 transition-colors hover:bg-blue-700 hover:text-white"
                           title="수정"
@@ -703,6 +721,13 @@ function ProductsPanel() {
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
                     <button
+                      onClick={() => onJumpToManhours(row)}
+                      className="rounded-md bg-emerald-100 p-1.5 text-emerald-700 transition-colors hover:bg-emerald-700 hover:text-white"
+                      title="평균공수로 이동"
+                    >
+                      <Gauge size={14} />
+                    </button>
+                    <button
                       onClick={() => openEdit(row)}
                       className="rounded-md bg-blue-100 p-1.5 text-blue-700 transition-colors hover:bg-blue-700 hover:text-white"
                       title="수정"
@@ -742,7 +767,7 @@ function ProductsPanel() {
         </div>
 
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogContent className="max-h-[calc(100dvh-1rem)] gap-0 overflow-hidden border-slate-300 bg-slate-50 p-0 shadow-2xl sm:max-w-2xl">
+          <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden border-slate-300 bg-slate-50 p-0 shadow-2xl sm:max-w-2xl">
             <DialogHeader className="border-b border-slate-200 bg-white px-4 py-4 pr-12 text-left sm:px-5">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-700 text-white shadow-sm">
@@ -953,7 +978,7 @@ function ProductsPanel() {
             if (!open && !deleting) setDeleteTarget(null)
           }}
         >
-          <DialogContent className="max-h-[calc(100dvh-1rem)] gap-0 overflow-hidden border-slate-300 bg-white p-0 shadow-2xl sm:max-w-md">
+          <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden border-slate-300 bg-white p-0 shadow-2xl sm:max-w-md">
             <DialogHeader className="border-b border-slate-200 bg-rose-50 px-4 py-4 pr-12 text-left sm:px-5">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rose-700 text-white shadow-sm">
@@ -1010,7 +1035,13 @@ function ProductsPanel() {
   )
 }
 
-function ManhoursPanel() {
+function ManhoursPanel({
+  quickOpenProduct,
+  onQuickOpenHandled,
+}: {
+  quickOpenProduct: ProductRow | null
+  onQuickOpenHandled: () => void
+}) {
   const [rows, setRows] = useState<ManhoursRow[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchValue, setSearchValue] = useState("")
@@ -1032,13 +1063,7 @@ function ManhoursPanel() {
   const [deleteTarget, setDeleteTarget] = useState<ManhoursRow | null>(null)
   const [deleting, setDeleting] = useState(false)
 
-  useEffect(() => {
-    queueMicrotask(() => {
-      void loadManhours()
-    })
-  }, [])
-
-  async function loadManhours() {
+  const loadManhours = useCallback(async () => {
     setIsLoading(true)
     try {
       const res = await fetch("/api/manhours")
@@ -1050,9 +1075,9 @@ function ManhoursPanel() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [])
 
-  async function loadProducts() {
+  const loadProducts = useCallback(async () => {
     if (products.length > 0) return
     try {
       const res = await fetch("/api/products?limit=2000")
@@ -1062,7 +1087,28 @@ function ManhoursPanel() {
     } catch (err) {
       console.error("[manhours] 품목 로드 실패", err)
     }
-  }
+  }, [products.length])
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      void loadManhours()
+    })
+  }, [loadManhours])
+
+  useEffect(() => {
+    if (!quickOpenProduct) return
+    queueMicrotask(() => {
+      void (async () => {
+        await loadProducts()
+        setProductSearch(quickOpenProduct.name)
+        setSelectedProductId(quickOpenProduct.id)
+        setNewPackageUnit("")
+        setNewAvgHours("")
+        setCreateOpen(true)
+        onQuickOpenHandled()
+      })()
+    })
+  }, [loadProducts, onQuickOpenHandled, quickOpenProduct])
 
   const filtered = useMemo(() => {
     const q = searchValue.trim().toLowerCase()
@@ -1260,11 +1306,15 @@ function ManhoursPanel() {
     "h-10 border-slate-300 bg-white text-slate-950 placeholder:text-slate-500 focus-visible:border-blue-600 focus-visible:ring-blue-200"
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-4 bg-slate-200/70 p-3 md:p-5">
-      <div className="flex flex-col gap-2 rounded-lg border border-slate-300 bg-white px-3 py-3 shadow-sm md:flex-row md:items-center md:gap-3">
+    <div className="flex min-w-0 flex-1 flex-col gap-4 rounded-3xl border border-slate-200 bg-gradient-to-br from-white via-emerald-50/25 to-blue-50/30 p-3 shadow-sm md:p-5">
+      <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm md:flex-row md:items-center md:gap-3">
+        <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
+          <Gauge size={13} />
+          평균공수 관리
+        </div>
         <div className="flex min-w-0 flex-wrap items-center gap-2 md:gap-3">
           <h2 className="min-w-0 text-base font-bold text-slate-950 sm:text-lg">
-            평균공수 관리
+            품목별 평균공수
           </h2>
           <Badge className="border-blue-700 bg-blue-700 text-xs font-bold text-white shadow-sm">
             {filtered.length}건
@@ -1280,13 +1330,13 @@ function ManhoursPanel() {
             placeholder="품목명 / 코드 / 포장단위 검색..."
             value={searchValue}
             onChange={(e) => setSearchValue(e.target.value)}
-            className="h-9 w-full bg-slate-50 pl-9 text-sm md:w-72"
+            className="h-9 w-full border-slate-200 bg-white pl-9 text-sm md:w-72"
           />
         </div>
         <Button
           onClick={openCreate}
           size="sm"
-          className="h-9 w-full bg-blue-700 text-white shadow-sm hover:bg-blue-800 md:w-auto"
+          className="h-9 w-full bg-emerald-600 text-white shadow-sm hover:bg-emerald-700 md:w-auto"
         >
           <Plus size={15} className="mr-1" />
           신규 등록
@@ -1332,7 +1382,7 @@ function ManhoursPanel() {
             </p>
           </div>
 
-          <div className="rounded-lg border border-l-4 border-slate-300 border-l-violet-700 bg-white px-4 py-3 shadow-sm">
+          <div className="rounded-lg border border-l-4 border-slate-300 border-l-emerald-700 bg-white px-4 py-3 shadow-sm">
             <p className="mb-1.5 text-[11px] font-bold tracking-wide text-slate-600 uppercase">
               최대 공수 품목
             </p>
@@ -1342,11 +1392,11 @@ function ManhoursPanel() {
             <p className="mt-0.5 text-[11px] font-medium text-slate-600">
               {summary.maxRow ? (
                 <>
-                  <span className="font-mono font-bold text-violet-700">
+                  <span className="font-mono font-bold text-emerald-700">
                     {summary.maxRow.productCode}
                   </span>
                   {" / "}
-                  <span className="font-bold text-slate-800">
+                    <span className="font-bold text-slate-800">
                     {summary.maxRow.avgHours.toFixed(2)}h
                   </span>
                 </>
@@ -1356,7 +1406,7 @@ function ManhoursPanel() {
             </p>
           </div>
 
-          <div className="rounded-lg border border-l-4 border-slate-300 border-l-rose-700 bg-white px-4 py-3 shadow-sm">
+          <div className="rounded-lg border border-l-4 border-slate-300 border-l-blue-700 bg-white px-4 py-3 shadow-sm">
             <p className="mb-1.5 text-[11px] font-bold tracking-wide text-slate-600 uppercase">
               검색 결과
             </p>
@@ -1365,7 +1415,7 @@ function ManhoursPanel() {
             </p>
             <p className="mt-0.5 text-[11px] font-medium text-slate-600">
               전체{" "}
-              <span className="font-bold text-rose-700">{rows.length}</span>건
+              <span className="font-bold text-blue-700">{rows.length}</span>건
               중
             </p>
           </div>
@@ -1373,7 +1423,7 @@ function ManhoursPanel() {
       )}
 
       <div className="hidden flex-1 overflow-auto rounded-lg border border-slate-300 bg-white shadow-md md:block">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[540px] text-sm">
           <thead>
             <tr className="bg-slate-950 text-xs text-white">
               <th className="sticky top-0 z-10 bg-slate-950 px-4 py-3 text-left font-bold">
@@ -1537,7 +1587,7 @@ function ManhoursPanel() {
       </div>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-h-[calc(100dvh-1rem)] gap-0 overflow-hidden border-slate-300 bg-slate-50 p-0 shadow-2xl sm:max-w-2xl">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden border-slate-300 bg-slate-50 p-0 shadow-2xl sm:max-w-2xl">
           <DialogHeader className="border-b border-slate-200 bg-white px-4 py-4 pr-12 text-left sm:px-5">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-700 text-white shadow-sm">
@@ -1716,7 +1766,7 @@ function ManhoursPanel() {
           if (!open) setEditTarget(null)
         }}
       >
-        <DialogContent className="max-h-[calc(100dvh-1rem)] gap-0 overflow-hidden border-slate-300 bg-slate-50 p-0 shadow-2xl sm:max-w-xl">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden border-slate-300 bg-slate-50 p-0 shadow-2xl sm:max-w-xl">
           <DialogHeader className="border-b border-slate-200 bg-white px-4 py-4 pr-12 text-left sm:px-5">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-700 text-white shadow-sm">
@@ -1829,7 +1879,7 @@ function ManhoursPanel() {
           if (!open && !deleting) setDeleteTarget(null)
         }}
       >
-        <DialogContent className="max-h-[calc(100dvh-1rem)] gap-0 overflow-hidden border-slate-300 bg-white p-0 shadow-2xl sm:max-w-md">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden border-slate-300 bg-white p-0 shadow-2xl sm:max-w-md">
           <DialogHeader className="border-b border-slate-200 bg-rose-50 px-4 py-4 pr-12 text-left sm:px-5">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rose-700 text-white shadow-sm">
