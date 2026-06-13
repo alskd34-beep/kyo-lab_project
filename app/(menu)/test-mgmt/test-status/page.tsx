@@ -174,7 +174,7 @@ export default function TestStatusPage() {
   return (
     <>
       {/* ── Scrollable body ──────────────────────────────────────────────── */}
-      <div className="flex flex-1 flex-col">
+      <div className="flex flex-1 flex-col overflow-x-hidden">
 
           {/* ── KPI + Tab header (optionally sticky) ─────────────────────── */}
           <div className={`bg-white border-b border-slate-200 shadow-sm z-10 ${stickyHeader ? 'sticky top-0' : ''}`}>
@@ -283,13 +283,13 @@ export default function TestStatusPage() {
             <Card className="border border-slate-200 shadow-none rounded-xl bg-white py-0 overflow-hidden">
 
               {/* Toolbar */}
-              <div className="flex flex-col md:flex-row md:items-center gap-2 border-b border-slate-100 px-4 py-2.5">
+              <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-4 py-2.5">
                 {/* Date range */}
                 <Popover>
                   <PopoverTrigger asChild>
                     <button
                       type="button"
-                      className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 transition-colors"
+                      className="flex w-full items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 transition-colors sm:w-auto"
                     >
                       <CalendarIcon size={13} className="text-slate-400" />
                       <span className="tabular-nums">
@@ -314,7 +314,7 @@ export default function TestStatusPage() {
                 </Popover>
 
                 {/* Search */}
-                <div className="flex w-full md:max-w-[240px] md:flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+                <div className="flex min-w-0 w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all sm:w-auto sm:flex-1 sm:max-w-[240px]">
                   <Search size={13} className="text-slate-400 shrink-0" />
                   <input
                     type="text"
@@ -329,7 +329,7 @@ export default function TestStatusPage() {
                   조회
                 </Button>
 
-                <div className="ml-auto flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 sm:ml-auto">
                   <Button size="sm" variant="outline" className="h-7 gap-1.5 px-3 text-xs text-slate-600 rounded-lg border-slate-200 shadow-none">
                     <Filter size={12} />
                     필터
@@ -399,7 +399,7 @@ export default function TestStatusPage() {
 
               {/* Table (desktop) */}
               <div className="hidden md:block overflow-x-auto">
-              <Table>
+              <Table className="min-w-[640px]">
                 <TableHeader>
                   <TableRow className="bg-slate-50/80 hover:bg-slate-50/80 border-slate-100">
                     <TableHead className="w-10 px-4">
@@ -480,7 +480,7 @@ export default function TestStatusPage() {
               </div>
 
               {/* Footer */}
-              <div className="flex items-center justify-between border-t border-slate-100 px-4 py-2.5 bg-slate-50/50">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-4 py-2.5 bg-slate-50/50">
                 <p className="text-xs text-slate-500">
                   {isLoading && <span className="mr-2 text-slate-400">로딩 중…</span>}
                   총 <span className="font-semibold text-slate-700">{filtered.length}</span>건

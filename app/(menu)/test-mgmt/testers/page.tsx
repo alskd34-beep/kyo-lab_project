@@ -521,13 +521,13 @@ export default function TestersPage() {
             )}
           </div>
 
-          <div className="hidden overflow-auto rounded-lg border border-slate-300 bg-white shadow-md md:block">
+          <div className="hidden overflow-x-auto rounded-lg border border-slate-300 bg-white shadow-md md:block">
             {loading ? (
               <div className="p-16 text-center text-sm font-medium text-slate-600">
                 불러오는 중...
               </div>
             ) : (
-              <table className="w-full text-sm">
+              <table className="w-full min-w-[640px] text-sm">
                 <thead>
                   <tr className="bg-slate-950 text-xs text-white">
                     <th className="sticky top-0 z-10 w-14 bg-slate-950 px-4 py-3 text-left font-bold">
@@ -728,8 +728,8 @@ export default function TestersPage() {
                 )}
               </div>
 
-              <div className="hidden overflow-auto rounded-lg border border-slate-300 bg-white shadow-md md:block">
-                <table className="min-w-full border-collapse text-xs">
+              <div className="hidden overflow-x-auto rounded-lg border border-slate-300 bg-white shadow-md md:block">
+                <table className="min-w-[700px] border-collapse text-xs">
                   <thead>
                     <tr className="bg-slate-950 text-white">
                       <th className="sticky top-0 left-0 z-20 min-w-[100px] border-r border-slate-700 bg-slate-950 px-3 py-3 text-left font-bold">
@@ -817,7 +817,7 @@ export default function TestersPage() {
       )}
 
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent className="max-h-[calc(100dvh-1rem)] gap-0 overflow-hidden border-slate-300 bg-slate-50 p-0 shadow-2xl sm:max-w-xl">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden border-slate-300 bg-slate-50 p-0 shadow-2xl sm:max-w-xl">
           <DialogHeader className="border-b border-slate-200 bg-white px-4 py-4 pr-12 text-left sm:px-5">
             <DialogTitle className="text-lg font-black text-slate-950">
               시험자 추가
@@ -937,7 +937,7 @@ export default function TestersPage() {
       </Dialog>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-h-[calc(100dvh-1rem)] gap-0 overflow-hidden border-slate-300 bg-slate-50 p-0 shadow-2xl sm:max-w-xl">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden border-slate-300 bg-slate-50 p-0 shadow-2xl sm:max-w-xl">
           <DialogHeader className="border-b border-slate-200 bg-white px-4 py-4 pr-12 text-left sm:px-5">
             <DialogTitle className="text-lg font-black text-slate-950">
               시험자 수정
@@ -1055,7 +1055,7 @@ export default function TestersPage() {
       </Dialog>
 
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent className="max-h-[calc(100dvh-1rem)] gap-0 overflow-hidden border-slate-300 bg-white p-0 shadow-2xl sm:max-w-md">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden border-slate-300 bg-white p-0 shadow-2xl sm:max-w-md">
           <DialogHeader className="border-b border-slate-200 bg-rose-50 px-4 py-4 pr-12 text-left sm:px-5">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rose-700 text-white shadow-sm">

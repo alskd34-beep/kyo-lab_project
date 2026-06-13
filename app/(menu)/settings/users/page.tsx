@@ -100,8 +100,8 @@ export default function UsersAdminPage() {
   }
 
   return (
-    <div className="p-3 md:p-8">
-      <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+    <div className="p-3 md:p-5">
+      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-lg font-semibold text-slate-800">사용자 관리</h1>
           <p className="text-xs text-slate-500">총 {users.length}명</p>
@@ -127,7 +127,7 @@ export default function UsersAdminPage() {
       )}
 
       <div className="hidden overflow-x-auto rounded-lg border border-slate-200 bg-white md:block">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[640px] text-sm">
           <thead className="bg-slate-50/80 text-[11px] uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-3 py-2 text-left">사용자</th>
@@ -296,7 +296,7 @@ function CreateForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: 
   }
 
   return (
-    <form onSubmit={submit} className="mb-4 grid grid-cols-1 gap-2 rounded-lg border border-blue-200 bg-blue-50/40 p-3 text-xs md:grid-cols-5">
+    <form onSubmit={submit} className="mb-4 grid grid-cols-1 gap-2 rounded-lg border border-blue-200 bg-blue-50/40 p-3 text-xs sm:grid-cols-2 md:grid-cols-5">
       <input className="rounded border border-slate-200 bg-white px-2 py-1.5" placeholder="아이디" value={username} onChange={e => setU(e.target.value)} />
       <input className="rounded border border-slate-200 bg-white px-2 py-1.5" placeholder="비밀번호" type="password" value={password} onChange={e => setP(e.target.value)} />
       <input className="rounded border border-slate-200 bg-white px-2 py-1.5" placeholder="이름" value={displayName} onChange={e => setD(e.target.value)} />
@@ -308,7 +308,7 @@ function CreateForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: 
         <button type="submit" disabled={busy || !username || !password} className="flex-1 rounded bg-blue-600 px-2 py-1.5 text-white disabled:opacity-50">생성</button>
         <button type="button" onClick={onCancel} className="rounded border border-slate-200 bg-white px-2 py-1.5"><X size={12} /></button>
       </div>
-      {err && <p className="text-red-600 md:col-span-5">{err}</p>}
+      {err && <p className="text-red-600 sm:col-span-2 md:col-span-5">{err}</p>}
     </form>
   )
 }
@@ -385,7 +385,7 @@ function EditUserDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="mx-4 w-[calc(100%-2rem)] max-h-[90vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>사용자 수정</DialogTitle>
           <DialogDescription>{user.username} 계정 정보를 수정합니다.</DialogDescription>

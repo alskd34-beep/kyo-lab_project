@@ -4,6 +4,7 @@ import type { Metadata } from "next"
 import "./globals.css"
 import { ThemeProvider } from "@frontend/components/providers/theme-provider"
 import { AuthProvider } from "@frontend/lib/auth-context"
+import { ToastMessageProvider } from "@frontend/components/common/toast-message"
 import { cn } from "@frontend/lib/utils";
 
 export const metadata: Metadata = {
@@ -31,7 +32,9 @@ export default function RootLayout({
     >
       <body>
         <ThemeProvider>
-          <AuthProvider>{children}</AuthProvider>
+          <AuthProvider>
+            <ToastMessageProvider>{children}</ToastMessageProvider>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

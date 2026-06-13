@@ -314,7 +314,7 @@ export default function QCDashboard() {
                 </Popover>
 
                 {/* Search */}
-                <div className="flex w-full md:max-w-[240px] md:flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+                <div className="flex min-w-0 w-full sm:w-auto sm:flex-1 md:max-w-[240px] items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
                   <Search size={13} className="text-slate-400 shrink-0" />
                   <input
                     type="text"
@@ -343,7 +343,7 @@ export default function QCDashboard() {
 
               {/* Table */}
               <div className="overflow-x-auto">
-              <Table>
+              <Table className="min-w-[640px]">
                 <TableHeader>
                   <TableRow className="bg-slate-50/80 hover:bg-slate-50/80 border-slate-100">
                     <TableHead className="w-10 px-4">

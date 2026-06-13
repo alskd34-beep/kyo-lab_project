@@ -468,8 +468,8 @@ export default function TestMasterPage() {
         )}
       </div>
 
-      <div className="hidden overflow-auto rounded-lg border border-slate-300 bg-white shadow-md md:block">
-        <table className="w-full text-sm">
+      <div className="hidden overflow-x-auto rounded-lg border border-slate-300 bg-white shadow-md md:block">
+        <table className="w-full min-w-[640px] text-sm">
           <thead>
             <tr className="bg-slate-950 text-xs text-white">
               <th className="sticky top-0 z-10 bg-slate-950 px-4 py-3 text-left font-bold">
@@ -584,7 +584,7 @@ export default function TestMasterPage() {
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-h-[calc(100dvh-1rem)] gap-0 overflow-hidden border-slate-300 bg-slate-50 p-0 shadow-2xl sm:max-w-xl">
+        <DialogContent className="max-h-[90vh] w-[calc(100%-2rem)] gap-0 overflow-hidden border-slate-300 bg-slate-50 p-0 shadow-2xl sm:max-w-xl">
           <DialogHeader className="border-b border-slate-200 bg-white px-4 py-4 pr-12 text-left sm:px-5">
             <DialogTitle className="text-lg font-black text-slate-950">
               {editTarget ? "시험항목 수정" : "시험항목 추가"}
@@ -710,7 +710,7 @@ export default function TestMasterPage() {
       </Dialog>
 
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent className="max-h-[calc(100dvh-1rem)] gap-0 overflow-hidden border-slate-300 bg-white p-0 shadow-2xl sm:max-w-md">
+        <DialogContent className="max-h-[90vh] w-[calc(100%-2rem)] gap-0 overflow-hidden border-slate-300 bg-white p-0 shadow-2xl sm:max-w-md">
           <DialogHeader className="border-b border-slate-200 bg-rose-50 px-4 py-4 pr-12 text-left sm:px-5">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rose-700 text-white shadow-sm">

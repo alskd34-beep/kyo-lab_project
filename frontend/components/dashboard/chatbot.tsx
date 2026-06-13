@@ -33,7 +33,7 @@ export default function Chatbot() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  }, [messages.length])
 
   useEffect(() => {
     if (!open) return
@@ -85,7 +85,7 @@ export default function Chatbot() {
     })()
 
     return () => { cancelled = true }
-  }, [open])
+  }, [open, messages.length])
 
   const sendMessage = async () => {
     const text = input.trim()
@@ -254,7 +254,7 @@ export default function Chatbot() {
         {/* Header */}
         <div
           className="flex items-center justify-between px-4 py-3.5 shrink-0"
-          style={{ background: 'linear-gradient(135deg, #1e40af 0%, #4c1d95 100%)' }}
+        style={{ background: 'linear-gradient(135deg, #2563eb 0%, #059669 100%)' }}
         >
           <div className="flex items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20">
@@ -306,7 +306,7 @@ export default function Chatbot() {
               className={`flex gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
             >
               {msg.role === 'bot' && (
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-violet-600 mt-0.5">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-emerald-600 mt-0.5">
                   <Bot size={13} className="text-white" />
                 </div>
               )}

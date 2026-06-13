@@ -429,7 +429,7 @@ export default function ProdStatusPage() {
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    className="flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-slate-50 px-3 text-sm text-slate-800 transition-colors hover:bg-slate-100"
+                    className="flex h-9 w-full items-center gap-1.5 rounded-lg border border-slate-300 bg-slate-50 px-3 text-sm text-slate-800 transition-colors hover:bg-slate-100 sm:w-auto"
                   >
                     <CalendarIcon size={14} className="text-slate-600" />
                     <span className="tabular-nums">
@@ -491,7 +491,7 @@ export default function ProdStatusPage() {
               <Button
                 size="sm"
                 variant="outline"
-                className="h-9 border-emerald-300 bg-emerald-50 font-bold text-emerald-800 hover:bg-emerald-100"
+                className="h-9 w-full border-emerald-300 bg-emerald-50 font-bold text-emerald-800 hover:bg-emerald-100 sm:w-auto"
               >
                 <Download size={13} className="mr-1" />
                 Excel
@@ -500,8 +500,8 @@ export default function ProdStatusPage() {
           </div>
         </div>
 
-        <div className="hidden overflow-auto md:block">
-          <table className="w-full text-sm">
+        <div className="hidden overflow-x-auto md:block">
+          <table className="w-full min-w-[860px] text-sm">
             <thead>
               <tr className="bg-slate-950 text-xs text-white">
                 <th className="sticky top-0 z-10 w-10 bg-slate-950 px-4 py-3 text-left">

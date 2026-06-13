@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"echo \\\"=== next version + scripts ===\\\" && rtk proxy cat package.json | grep -A20 '\\\"scripts\\\"' | head -25 && echo \\\"--- deps of interest ---\\\" && rtk proxy grep -E '\\\"next\\\"|\\\"node-cron\\\"...",
+  "error": "Exit code 1\n=== next version + scripts ===\n  \"scripts\": {\n    \"dev\": \"next dev --turbopack -p 3300\",\n    \"build\": \"next build\",\n    \"start\": \"next start -p 3300\",\n    \"lint\": \"eslint\",\n    \"format\": \"prettier --write \\\"**/*.{ts,tsx}\\\"\",\n    \"typecheck\": \"tsc --noEmit\"\n  },\n  \"dependencies\": {\n    \"@anthropic-ai/sdk\": \"^0.100.1\",\n    \"@supabase/supabase-js\": \"^2.100.1\",\n    \"bcryptjs\": \"^3.0.3\",\n    \"class-variance-authority\": \"^0.7.1\",\n    \"clsx\": \"^2.1.1\",\n    \"date-fns\": \"^4.1.0\",\n    \"jose\": ...",
+  "timestamp": "2026-06-13T09:05:26.051Z",
+  "retry_count": 1
+}

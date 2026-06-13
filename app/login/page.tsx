@@ -8,42 +8,53 @@ import { FlaskConical, Lock, User as UserIcon, Eye, EyeOff } from 'lucide-react'
 const LS_SAVED_ID    = 'kd-saved-id'
 const LS_AUTO_LOGIN  = 'kd-auto-login'
 
+function readLoginPrefs() {
+  if (typeof window === 'undefined') {
+    return {
+      username: 'kyo-admin',
+      rememberId: false,
+      autoLogin: false,
+    }
+  }
+
+  try {
+    const savedId = localStorage.getItem(LS_SAVED_ID)
+    return {
+      username: savedId || 'kyo-admin',
+      rememberId: Boolean(savedId),
+      autoLogin: localStorage.getItem(LS_AUTO_LOGIN) === '1',
+    }
+  } catch {
+    return {
+      username: 'kyo-admin',
+      rememberId: false,
+      autoLogin: false,
+    }
+  }
+}
+
 export default function LoginPage() {
   const router       = useRouter()
   const params       = useSearchParams()
   const { user, loading, login } = useAuth()
 
   // TODO: 개발 편의용 기본값. 운영 배포 전 빈 문자열로 되돌릴 것.
-  const [username,   setUsername]   = useState('kyo-admin')
+  const initialPrefs = readLoginPrefs()
+  const [username,   setUsername]   = useState(initialPrefs.username)
   const [password,   setPassword]   = useState('kyo-admin')
-  const [rememberId, setRememberId] = useState(false)
-  const [autoLogin,  setAutoLogin]  = useState(false)
+  const [rememberId, setRememberId] = useState(initialPrefs.rememberId)
+  const [autoLogin,  setAutoLogin]  = useState(initialPrefs.autoLogin)
   const [showPw,     setShowPw]     = useState(false)
-  const [prefsLoaded, setPrefsLoaded] = useState(false)
   const [error,      setError]      = useState<string | null>(null)
   const [busy,       setBusy]       = useState(false)
 
   const next = params.get('next') || '/home'
 
-  // Load saved preferences from localStorage on mount
-  useEffect(() => {
-    try {
-      const savedId = localStorage.getItem(LS_SAVED_ID)
-      const auto    = localStorage.getItem(LS_AUTO_LOGIN) === '1'
-      if (savedId) {
-        setUsername(savedId)
-        setRememberId(true)
-      }
-      setAutoLogin(auto)
-    } catch {}
-    setPrefsLoaded(true)
-  }, [])
-
   // 자동로그인 체크되어있고 토큰이 유효해 user가 복원되면 홈으로 이동
   useEffect(() => {
-    if (loading || !prefsLoaded) return
+    if (loading) return
     if (user && autoLogin) router.replace(next)
-  }, [user, loading, autoLogin, prefsLoaded, router, next])
+  }, [user, loading, autoLogin, router, next])
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -68,10 +79,10 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
+    <div className="flex min-h-screen items-center justify-center bg-white p-4">
       <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 shadow-xl">
         <div className="mb-6 flex flex-col items-center gap-2">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-violet-600 text-white">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-emerald-600 text-white">
             <FlaskConical size={22} />
           </div>
           <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">광동제약</p>
@@ -146,7 +157,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={busy || !username || !password}
-            className="w-full rounded-lg bg-gradient-to-br from-blue-600 to-violet-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:opacity-95 active:scale-[0.99] disabled:opacity-50"
+            className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700 active:scale-[0.99] disabled:opacity-50"
           >
             {busy ? '로그인 중…' : '로그인'}
           </button>

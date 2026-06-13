@@ -4,8 +4,9 @@ import { useState, useEffect, useCallback } from 'react'
 import Sidebar from '@frontend/components/dashboard/sidebar'
 import Chatbot from '@frontend/components/dashboard/chatbot'
 import { Avatar, AvatarFallback, AvatarImage } from '@frontend/components/ui/avatar'
-import { Bell, ChevronDown, LogOut, Menu } from 'lucide-react'
+import { ChevronDown, LogOut, Menu } from 'lucide-react'
 import { useAuth } from '@frontend/lib/auth-context'
+import NotificationBell from '@frontend/components/dashboard/notification-bell'
 
 export default function MenuLayout({ children }: { children: React.ReactNode }) {
   const [activeNav, setActiveNav] = useState<string>('')
@@ -27,7 +28,7 @@ export default function MenuLayout({ children }: { children: React.ReactNode }) 
   }, [drawerOpen, closeDrawer])
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-100 font-sans">
+    <div className="flex h-screen overflow-hidden bg-white font-sans">
       <Sidebar
         activeItem={activeNav}
         onNavigate={(navId) => setActiveNav(navId)}
@@ -62,10 +63,7 @@ export default function MenuLayout({ children }: { children: React.ReactNode }) 
           </div>
 
           <div className="flex items-center gap-2.5">
-            <button className="relative rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors">
-              <Bell size={16} />
-              <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-red-500" />
-            </button>
+            <NotificationBell />
 
             <div className="relative">
               <button

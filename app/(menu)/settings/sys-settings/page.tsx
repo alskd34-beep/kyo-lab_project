@@ -36,7 +36,7 @@ export default function SysSettingsPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-xl p-4 md:p-8">
+    <div className="mx-auto w-full max-w-xl p-3 md:p-5">
       <h1 className="mb-1 text-lg font-semibold text-slate-800">시스템 설정</h1>
       <p className="mb-6 text-xs text-slate-500">로그인 사용자: {user?.username}</p>
 

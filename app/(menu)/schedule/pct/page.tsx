@@ -3,9 +3,9 @@
 /**
  * PCT (생산관리) — 구글 시트 연동 보드
  *
- * - 구글 시트에서 생산 배치 정보를 가져와 먼데이.com 스타일 보드로 표시
- * - 셀 편집 가능 (클라이언트 상태로만 유지, 새로고침 시 초기화)
- * - 변경사항 카운팅 + "DB로 보내기" 버튼 자리 (Supabase 동기화는 다음 단계에서 활성화)
+ * - 구글 시트에서 생산 배치 정보를 자동으로 불러와 먼데이.com 스타일 보드로 표시
+ * - 읽기 전용 표시를 기본으로 하고, 로딩 직후 자동 배정을 한 번 수행해 공수/담당자를 채운다
+ * - 수정/추가/삭제는 이 화면에서 하지 않고, 원본 시트와 배정 엔진 결과만 확인한다
  */
 
 import { useState, useMemo, useCallback, useEffect, useRef } from "react"
@@ -26,11 +26,7 @@ import {
   Loader2,
   AlertCircle,
   RefreshCw,
-  Database,
-  Plus,
-  RotateCcw,
   Sparkles,
-  UserMinus,
   AlertTriangle,
   CalendarPlus,
   CheckCircle2,
@@ -227,7 +223,6 @@ export default function PctPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [rows, setRows] = useState<PctRow[]>([])
-  const [originalRows, setOriginalRows] = useState<PctRow[]>([])
 
   // 시험자 + 역량 데이터 (자동 배정용)
   const [testers, setTesters] = useState<Tester[]>([])
@@ -235,6 +230,7 @@ export default function PctPage() {
   const [engineResult, setEngineResult] = useState<EngineResult | null>(null)
   const [assigning, setAssigning] = useState(false)
   const didAutoLoadRef = useRef(false)
+  const didAutoAssignRef = useRef(false)
 
   // 페이지 마운트 시 시험자/역량 fetch (실패 시 fallback PERSON_OPTIONS 사용)
   useEffect(() => {
@@ -266,6 +262,7 @@ export default function PctPage() {
   const loadSheet = useCallback(async () => {
     setLoading(true)
     setError(null)
+    didAutoAssignRef.current = false
     try {
       const res = await fetch(
         `/api/google-sheet?fileId=${encodeURIComponent(fileId)}`,
@@ -275,7 +272,7 @@ export default function PctPage() {
       if (!res.ok) throw new Error(json.error ?? "시트 불러오기 실패")
       const next = rowsFromSheet(json)
       setRows(next)
-      setOriginalRows(next.map((r) => ({ ...r })))
+      setEngineResult(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : "알 수 없는 오류")
     } finally {
@@ -289,55 +286,16 @@ export default function PctPage() {
     void loadSheet()
   }, [loadSheet])
 
-  const onCellChange = useCallback(
-    (rowId: string | number, columnKey: string, newValue: string) => {
-      setRows((prev) =>
-        prev.map((r) => {
-          if (r.id !== rowId) return r
-          return { ...r, [columnKey]: newValue, _dirty: true }
-        })
-      )
-    },
-    []
-  )
-
-  const addRow = useCallback(() => {
-    const id = `new-${Date.now()}`
-    setRows((prev) => [
-      {
-        id,
-        품목코드: "",
-        품목명: "",
-        제조번호: "",
-        제형: "",
-        포장일: "",
-        시험완료요청일: "",
-        긴급: "일반",
-        진행방법: "전항목",
-        상태: "대기",
-        담당자: "",
-        비고: "",
-        _origin: "added",
-        _dirty: true,
-      },
-      ...prev,
-    ])
-  }, [])
-
-  const resetChanges = useCallback(() => {
-    setRows(originalRows.map((r) => ({ ...r })))
-    setEngineResult(null)
-  }, [originalRows])
-
   // AI 자동 배정 — 서버 규칙엔진 호출 (포장일+1 근무일 시작, product_workload 공수,
   // product_test_items→test_item_equipment→역량 Y/O 매칭, 전항목/개별항목, solo/duo)
-  const handleAutoAssign = useCallback(async () => {
-    if (rows.length === 0) return
+  const handleAutoAssign = useCallback(async (sourceRows?: PctRow[]) => {
+    const targetRows = sourceRows ?? rows
+    if (targetRows.length === 0) return
     setAssigning(true)
     setError(null)
     try {
       const payload = {
-        rows: rows.map((r) => ({
+        rows: targetRows.map((r) => ({
           품목코드: r.품목코드,
           품목명: r.품목명,
           제조번호: r.제조번호,
@@ -381,6 +339,7 @@ export default function PctPage() {
           return disp === r.담당자 ? r : { ...r, 담당자: disp, _dirty: true }
         })
       )
+      didAutoAssignRef.current = true
     } catch (e) {
       setError(e instanceof Error ? e.message : "자동 배정 오류")
     } finally {
@@ -388,13 +347,12 @@ export default function PctPage() {
     }
   }, [rows])
 
-  // 담당자 일괄 초기화
-  const clearAllAssignments = useCallback(() => {
-    setRows((prev) =>
-      prev.map((r) => (r.담당자 ? { ...r, 담당자: "", _dirty: true } : r))
-    )
-    setEngineResult(null)
-  }, [])
+  useEffect(() => {
+    if (didAutoAssignRef.current) return
+    if (loading || rows.length === 0) return
+    didAutoAssignRef.current = true
+    void handleAutoAssign(rows)
+  }, [handleAutoAssign, loading, rows])
 
   // 이번 세션에서 "스케줄 생성"을 눌러 만든 결과 (팝업/배너용). null이면 아직 생성 안 함.
   const [scheduleStats, setScheduleStats] = useState<{
@@ -447,11 +405,7 @@ export default function PctPage() {
   }, [rows.length, engineResult, scheduleStats])
 
   const stats = useMemo(() => {
-    const added = rows.filter((r) => r._origin === "added").length
-    const modified = rows.filter(
-      (r) => r._origin === "sheet" && r._dirty
-    ).length
-    return { total: rows.length, added, modified, changes: added + modified }
+    return { total: rows.length }
   }, [rows])
 
   // 시험자 목록을 DB 우선, 실패 시 fallback 사용
@@ -462,42 +416,17 @@ export default function PctPage() {
 
   // 보드 컬럼 정의 — 너비 최적화로 가로 폭 절약 (총 ~1180px → 가로 스크롤 최소)
   const columns: ColumnDef[] = [
-    {
-      key: "품목명",
-      label: "품목명",
-      kind: "text",
-      width: 180,
-      editable: true,
-    },
-    { key: "품목코드", label: "코드", kind: "mono", width: 70, editable: true },
-    {
-      key: "제조번호",
-      label: "제조번호",
-      kind: "mono",
-      width: 80,
-      editable: true,
-    },
-    { key: "제형", label: "제형", kind: "text", width: 80, editable: true },
-    {
-      key: "포장일",
-      label: "포장일",
-      kind: "date",
-      width: 100,
-      editable: true,
-    },
-    {
-      key: "시험완료요청일",
-      label: "완료요청일",
-      kind: "date",
-      width: 110,
-      editable: true,
-    },
+    { key: "품목명", label: "품목명", kind: "text", width: 180 },
+    { key: "품목코드", label: "코드", kind: "mono", width: 70 },
+    { key: "제조번호", label: "제조번호", kind: "mono", width: 80 },
+    { key: "제형", label: "제형", kind: "text", width: 80 },
+    { key: "포장일", label: "포장일", kind: "date", width: 100 },
+    { key: "시험완료요청일", label: "완료요청일", kind: "date", width: 110 },
     {
       key: "긴급",
       label: "긴급",
       kind: "chip",
       width: 70,
-      editable: true,
       options: [...URGENT_OPTIONS],
       chipColor: { 일반: "slate", 긴급: "red" },
     },
@@ -506,7 +435,6 @@ export default function PctPage() {
       label: "진행방법",
       kind: "chip",
       width: 95,
-      editable: true,
       options: [...METHOD_OPTIONS],
       chipColor: { 전항목: "blue", 개별항목: "violet" },
     },
@@ -515,7 +443,6 @@ export default function PctPage() {
       label: "상태",
       kind: "chip",
       width: 85,
-      editable: true,
       options: [...STATUS_OPTIONS],
       chipColor: {
         대기: "slate",
@@ -530,11 +457,10 @@ export default function PctPage() {
       label: "담당자",
       kind: "person",
       width: 130,
-      editable: true,
       options: personOptions,
     },
     { key: "공수", label: "공수(일)", kind: "number", width: 70 },
-    { key: "비고", label: "비고", kind: "text", width: 140, editable: true },
+    { key: "비고", label: "비고", kind: "text", width: 140 },
   ]
 
   // 품목코드 → 공수(일). 자동 배정 결과(서버 product_workload)에서 추출.
@@ -596,14 +522,7 @@ export default function PctPage() {
         value: stats.total,
         accent: "text-slate-900",
         bg: "bg-slate-50",
-        note: rows.length > 0 ? "현재 시트 반영됨" : "시트를 불러오세요",
-      },
-      {
-        label: "변경",
-        value: stats.changes,
-        accent: "text-amber-700",
-        bg: "bg-amber-50",
-        note: `${stats.added} 추가 · ${stats.modified} 수정`,
+        note: rows.length > 0 ? "원본 시트 자동 반영됨" : "시트를 불러오세요",
       },
       {
         label: "자동 배정",
@@ -611,8 +530,8 @@ export default function PctPage() {
         accent: "text-emerald-700",
         bg: "bg-emerald-50",
         note: engineResult
-          ? `${engineResult.stats.testersUsed}명 참여`
-          : "배정 대기",
+          ? `${engineResult.stats.testersUsed}명 참여 · 공수 자동 채움`
+          : "자동 채움 대기",
       },
       {
         label: "스케줄",
@@ -655,11 +574,11 @@ export default function PctPage() {
   )
 
   return (
-    <div className="relative overflow-x-hidden px-3 py-3 sm:px-4 lg:px-6">
+    <div className="relative overflow-x-hidden p-3 md:p-5">
       <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[320px] bg-[radial-gradient(circle_at_10%_10%,rgba(16,185,129,0.12),transparent_28%),radial-gradient(circle_at_90%_0%,rgba(59,130,246,0.12),transparent_30%),linear-gradient(to_bottom,rgba(241,245,249,0.96),transparent_65%)]" />
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4">
         <section className="overflow-hidden rounded-lg border border-slate-200 bg-white text-slate-900 shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
-          <div className="grid gap-0 xl:grid-cols-[minmax(0,1.18fr)_minmax(340px,0.82fr)]">
+          <div className="grid grid-cols-1 gap-0 xl:grid-cols-[minmax(0,1.18fr)_minmax(340px,0.82fr)]">
             <div className="relative border-b border-slate-100 bg-[linear-gradient(180deg,rgba(248,250,252,0.98),rgba(255,255,255,1))] p-4 sm:p-5 xl:border-r xl:border-b-0">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.08),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(59,130,246,0.08),transparent_35%)]" />
               <div className="relative space-y-4">
@@ -667,6 +586,10 @@ export default function PctPage() {
                   <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-slate-600 shadow-sm">
                     <Factory size={12} />
                     PCT 시트 허브
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-blue-700 shadow-sm">
+                    <Sparkles size={12} />
+                    읽기 전용
                   </span>
                   <span
                     className={cn(
@@ -685,9 +608,9 @@ export default function PctPage() {
                     PCT (생산관리)
                   </h1>
                   <p className="max-w-2xl text-sm leading-6 text-slate-600">
-                    구글 스프레드시트에서 생산 배치를 불러와 바로 편집하는 작업
-                    허브입니다. 모바일에서는 손가락 기준으로 눌리기 쉽게,
-                    데스크톱에서는 한 눈에 흐름이 보이도록 정리했습니다.
+                    구글 스프레드시트에서 생산 배치를 자동 불러오기만 하고,
+                    이 화면에서는 수정하지 않습니다. 데스크톱에서는 한 눈에
+                    흐름이 보이도록, 모바일에서는 읽기 편하게 정리했습니다.
                   </p>
                 </div>
 
@@ -823,73 +746,19 @@ export default function PctPage() {
                     ) : (
                       <Sparkles size={13} />
                     )}
-                    {assigning ? "배정 중..." : "AI 자동 배정"}
+                    {assigning ? "자동 채움 중..." : "자동 채움 / 배정"}
                   </Button>
-                  <Button
-                    onClick={clearAllAssignments}
-                    variant="outline"
-                    size="sm"
-                    disabled={rows.every((r) => !r.담당자)}
-                    className="h-10 gap-1.5 rounded-lg border-slate-200 bg-white px-3 text-sm text-slate-700 hover:bg-slate-50"
-                  >
-                    <UserMinus size={13} />
-                    담당자 초기화
-                  </Button>
-                </div>
-
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <Button
-                    onClick={addRow}
-                    variant="outline"
-                    size="sm"
-                    className="h-10 gap-1.5 rounded-lg border-slate-200 bg-white px-3 text-sm text-slate-700 hover:bg-slate-50"
-                  >
-                    <Plus size={13} />행 추가
-                  </Button>
-                  <Button
-                    onClick={resetChanges}
-                    variant="outline"
-                    size="sm"
-                    disabled={stats.changes === 0}
-                    className="h-10 gap-1.5 rounded-lg border-slate-200 bg-white px-3 text-sm text-slate-700 hover:bg-slate-50"
-                  >
-                    <RotateCcw size={13} />
-                    원본 복원
-                  </Button>
-                </div>
-
-                <div className="grid gap-2 sm:grid-cols-2">
                   <Button
                     onClick={handleGenerateSchedule}
                     disabled={
                       !engineResult || engineResult.assignments.length === 0
                     }
                     size="sm"
-                    title="AI 자동 배정 결과를 월간 스케줄로 전송 (먼저 자동 배정 필요)"
+                    title="자동 배정 결과를 월간 스케줄 스냅샷으로 전송"
                     className="h-10 gap-1.5 rounded-lg bg-emerald-600 px-3 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
                   >
                     <CalendarPlus size={13} />
                     스케줄 생성
-                  </Button>
-                  <Button
-                    onClick={() =>
-                      alert(
-                        "Supabase 영속화는 다음 단계에서 활성화됩니다.\n현재 변경사항: " +
-                          stats.changes +
-                          "건"
-                      )
-                    }
-                    disabled={stats.changes === 0}
-                    size="sm"
-                    variant="outline"
-                    className="h-10 gap-1.5 rounded-lg border-slate-200 bg-white px-3 text-sm text-slate-700 hover:bg-slate-50"
-                    title="Supabase 동기화 — 다음 단계에서 활성화"
-                  >
-                    <Database size={13} />
-                    DB 동기화
-                    <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-600">
-                      준비중
-                    </span>
                   </Button>
                 </div>
 
@@ -922,26 +791,17 @@ export default function PctPage() {
                     현재 단계{" "}
                     <span className="text-slate-900">{workflowStep}/4</span>
                   </span>
+                  <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 font-semibold text-blue-700">
+                    읽기 전용
+                  </span>
                   <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 font-medium text-slate-600">
                     총 <b className="text-slate-900">{stats.total}</b>건
                   </span>
-                  {stats.added > 0 && (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-700">
-                      <Plus size={10} /> 추가 {stats.added}
-                    </span>
-                  )}
-                  {stats.modified > 0 && (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 font-semibold text-amber-700">
-                      ✎ 수정 {stats.modified}
-                    </span>
-                  )}
-                  {stats.changes === 0 && (
-                    <span
-                      className={`rounded-full border border-dashed border-slate-200 px-2.5 py-1 ${TXT_MUTED}`}
-                    >
-                      변경사항 없음
-                    </span>
-                  )}
+                  <span
+                    className={`rounded-full border border-dashed border-slate-200 px-2.5 py-1 ${TXT_MUTED}`}
+                  >
+                    수정/추가 비활성화
+                  </span>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <a
@@ -951,16 +811,6 @@ export default function PctPage() {
                     월간 스케줄 보기
                     <ArrowRight size={14} />
                   </a>
-                  <Button
-                    onClick={resetChanges}
-                    variant="outline"
-                    size="sm"
-                    disabled={stats.changes === 0}
-                    className="h-9 gap-1.5 rounded-lg border-slate-200 bg-white px-3 text-sm text-slate-700 hover:bg-slate-50"
-                  >
-                    <RotateCcw size={13} />
-                    원본으로 되돌리기
-                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -1106,14 +956,15 @@ export default function PctPage() {
             {/* 보드 */}
             <Card className={`${BORDER} ${CARD_BG}`}>
               <CardContent className="p-3 sm:p-4">
-                <MondayBoard
-                  groups={groups}
-                  columns={columns}
-                  onCellChange={onCellChange}
-                  emptyMessage="표시할 행이 없습니다."
-                  defaultCollapsed
-                  showToggleAll
-                />
+                <div className="overflow-x-auto">
+                  <MondayBoard
+                    groups={groups}
+                    columns={columns}
+                    emptyMessage="표시할 행이 없습니다."
+                    defaultCollapsed
+                    showToggleAll
+                  />
+                </div>
               </CardContent>
             </Card>
 
@@ -1128,8 +979,8 @@ export default function PctPage() {
                   className={`list-inside list-disc space-y-0.5 ${TXT_TERTIARY}`}
                 >
                   <li>
-                    셀을 클릭하면 편집할 수 있습니다. 변경사항은 새로고침 시
-                    초기화됩니다 (DB 영속화는 다음 단계에서 활성화).
+                    이 화면은 읽기 전용입니다. 원본 시트에서 가져온 데이터와
+                    자동 배정 결과만 확인할 수 있습니다.
                   </li>
                   <li>
                     포장일이 비어있거나 형식이 맞지 않으면 &quot;기간 미정&quot;
@@ -1152,14 +1003,7 @@ export default function PctPage() {
                     </b>
                     : 시험자관리에 등록된 시험자 + 역량 기준으로 부하 최소 분배.
                     비고 또는 긴급 컬럼에 &quot;긴급&quot; 단어가 있으면 최우선
-                    처리.
-                  </li>
-                  <li>
-                    <b className="text-slate-700 dark:text-slate-200">
-                      수동 배정
-                    </b>
-                    : 각 행의 담당자 셀을 클릭해 드롭다운에서 직접 선택할 수
-                    있습니다.
+                    처리합니다.
                   </li>
                 </ul>
               </CardContent>

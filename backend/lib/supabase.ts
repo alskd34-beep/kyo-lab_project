@@ -17,9 +17,13 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 /** 일반 클라이언트 (Row Level Security 적용) */
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
-/** 서버 전용 Admin 클라이언트 (RLS 우회 - API Route에서만 사용) */
-// export const supabaseAdmin = createClient(
-//   process.env.SUPABASE_URL!,
-//   process.env.SUPABASE_SERVICE_ROLE_KEY!,
-//   { auth: { autoRefreshToken: false, persistSession: false } }
-// )
+/**
+ * 서버 전용 Admin 클라이언트 (RLS 우회 - API Route / 크론에서만 사용)
+ * SERVICE_ROLE 키가 없으면 anon 클라이언트로 폴백한다.
+ */
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+export const supabaseAdmin = serviceRoleKey
+  ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    })
+  : supabase

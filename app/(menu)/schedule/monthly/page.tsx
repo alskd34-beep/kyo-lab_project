@@ -351,16 +351,16 @@ export default function MonthlySchedulePage() {
   }
 
   return (
-    <div className="p-6">
-      <div className="mx-auto max-w-[1800px] space-y-5">
+    <div className="p-3 md:p-5">
+      <div className="mx-auto max-w-full space-y-5">
 
         {/* Header */}
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-600 shadow-md shadow-violet-600/30">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 shadow-md shadow-violet-600/30">
             <Calendar size={20} className="text-white" />
           </div>
-          <div>
-            <h1 className={`text-xl font-bold ${TXT_PRIMARY}`}>월간 QC 시험 스케줄</h1>
+          <div className="min-w-0">
+            <h1 className={`text-base font-bold sm:text-xl ${TXT_PRIMARY}`}>월간 QC 시험 스케줄</h1>
             <p className={`text-xs ${TXT_MUTED}`}>
               생성된 주간 스케줄과 PCT 생산관리에서 전송된 배정이 시험자×날짜 그리드로 통합 표시됩니다.
             </p>
@@ -399,8 +399,8 @@ export default function MonthlySchedulePage() {
 
         {/* 월 네비게이션 */}
         <Card className={`${BORDER} ${CARD_BG}`}>
-          <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
-            <div className="flex items-center gap-2">
+          <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -434,7 +434,7 @@ export default function MonthlySchedulePage() {
               type="month"
               value={month}
               onChange={e => setMonth(e.target.value)}
-              className={`h-9 rounded-lg border ${BORDER} bg-white dark:bg-slate-800 px-3 text-sm tabular-nums outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 dark:focus:ring-violet-900/40 ${TXT_PRIMARY} [color-scheme:light] dark:[color-scheme:dark]`}
+              className={`h-9 w-full rounded-lg border sm:w-auto ${BORDER} bg-white dark:bg-slate-800 px-3 text-sm tabular-nums outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 dark:focus:ring-violet-900/40 ${TXT_PRIMARY} [color-scheme:light] dark:[color-scheme:dark]`}
             />
           </CardContent>
         </Card>
@@ -549,7 +549,7 @@ export default function MonthlySchedulePage() {
                   </p>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="w-full border-collapse text-xs">
+                    <table className="w-full min-w-[640px] border-collapse text-xs">
                       <thead>
                         <tr className="bg-slate-100 dark:bg-slate-800/60">
                           <th

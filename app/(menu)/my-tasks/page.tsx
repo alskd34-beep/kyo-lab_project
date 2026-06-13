@@ -1,0 +1,239 @@
+"use client"
+
+import { useCallback, useEffect, useState } from "react"
+import {
+  Play, CheckCircle2, Circle, Loader2, AlertTriangle, Clock,
+} from "lucide-react"
+
+interface JobItem {
+  id: string; testItemName: string; sequenceOrder: number
+  status: string; clearedAt: string | null; elapsedMinutes: number | null
+}
+interface Job {
+  id: string; orderId: string; qcNo: string; productName: string; batchNo: string
+  workStartDate: string | null; workEndDate: string | null; status: string
+  isUrgent: boolean; dueDate: string | null; items: JobItem[]
+}
+interface PendingOrder {
+  id: string; productCode: string; productName: string; batchNo: string
+  dueDate: string | null; isUrgent: boolean; method: string
+}
+
+const STATUS_OPTIONS = ["진행중", "검토중", "완료", "지연"]
+const STATUS_CLS: Record<string, string> = {
+  진행중: "bg-violet-50 text-violet-700 border-violet-200",
+  검토중: "bg-blue-50 text-blue-700 border-blue-200",
+  완료:   "bg-emerald-50 text-emerald-700 border-emerald-200",
+  지연:   "bg-red-50 text-red-700 border-red-200",
+}
+
+function dDay(due: string | null): number | null {
+  if (!due) return null
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const d = new Date(due); d.setHours(0, 0, 0, 0)
+  return Math.round((d.getTime() - today.getTime()) / 86400000)
+}
+
+export default function MyTasksPage() {
+  const [linked, setLinked] = useState(true)
+  const [pending, setPending] = useState<PendingOrder[]>([])
+  const [jobs, setJobs] = useState<Job[]>([])
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [msg, setMsg] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await fetch("/api/qc-jobs", { credentials: "include" })
+      const data = await res.json()
+      setLinked(data.testerLinked ?? false)
+      setPending(data.pendingOrders ?? [])
+      setJobs(data.jobs ?? [])
+    } finally { setLoading(false) }
+  }, [])
+  useEffect(() => { void load() }, [load])
+
+  const flash = (m: string) => { setMsg(m); setTimeout(() => setMsg(null), 3500) }
+
+  const start = async (orderId: string) => {
+    setBusy(orderId)
+    try {
+      const res = await fetch("/api/qc-jobs", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      flash(`작업 시작 — QC ${data.qcNo}`)
+      await load()
+    } catch (e) { flash(`시작 실패: ${e instanceof Error ? e.message : ""}`) }
+    finally { setBusy(null) }
+  }
+
+  const clearItem = async (jobId: string, itemId: string) => {
+    setBusy(itemId)
+    try {
+      const res = await fetch(`/api/qc-jobs/${jobId}/items`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId, action: "clear" }),
+      })
+      if (!res.ok) throw new Error((await res.json()).error)
+      await load()
+    } catch (e) { flash(`처리 실패: ${e instanceof Error ? e.message : ""}`) }
+    finally { setBusy(null) }
+  }
+
+  const patchJob = async (jobId: string, patch: Record<string, string>) => {
+    try {
+      const res = await fetch(`/api/qc-jobs/${jobId}`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      })
+      if (!res.ok) throw new Error((await res.json()).error)
+      await load()
+    } catch (e) { flash(`저장 실패: ${e instanceof Error ? e.message : ""}`) }
+  }
+
+  if (loading) return <div className="p-3 md:p-5 text-sm text-slate-400">불러오는 중…</div>
+
+  if (!linked) {
+    return (
+      <div className="p-3 md:p-5">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-6 text-center">
+          <AlertTriangle className="mx-auto mb-2 text-amber-500" size={24} />
+          <p className="text-sm font-semibold text-amber-800">계정에 시험자(담당자)가 연결되어 있지 않습니다.</p>
+          <p className="mt-1 text-xs text-amber-700">관리자에게 계정-시험자 연결을 요청하세요.</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-4 p-3 md:p-5">
+      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+        <h1 className="text-base font-bold text-slate-900 sm:text-lg">내 작업</h1>
+        <p className="mt-1 text-xs font-medium text-slate-600">배정된 오더를 시작하고 시험항목별로 진행 상황을 기록합니다.</p>
+      </div>
+
+      {msg && <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">{msg}</div>}
+
+      {/* 배정 대기 */}
+      {pending.length > 0 && (
+        <section>
+          <h2 className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">배정됨 · 시작 대기 ({pending.length})</h2>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {pending.map(o => {
+              const dd = dDay(o.dueDate)
+              return (
+                <div key={o.id} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">{o.productName}</p>
+                      <p className="font-mono text-xs text-slate-500">{o.batchNo}</p>
+                    </div>
+                    {o.isUrgent && <span className="shrink-0 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700">긴급</span>}
+                  </div>
+                  <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
+                    <span>{o.method}</span>
+                    {o.dueDate && <span>· 완료예정 {o.dueDate}{dd != null && dd <= 7 && <span className="ml-1 font-semibold text-red-600">D{dd >= 0 ? `-${dd}` : `+${-dd}`}</span>}</span>}
+                  </div>
+                  <button
+                    onClick={() => start(o.id)} disabled={busy !== null}
+                    className="mt-3 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {busy === o.id ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} />}작업 시작
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* 진행 작업 */}
+      <section>
+        <h2 className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">진행 중 작업 ({jobs.length})</h2>
+        {jobs.length === 0 ? (
+          <p className="rounded-xl border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-400">진행 중인 작업이 없습니다.</p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {jobs.map(job => {
+              const cleared = job.items.filter(i => i.status === "cleared").length
+              const dd = dDay(job.dueDate)
+              return (
+                <div key={job.id} className="rounded-xl border border-slate-200 bg-white shadow-sm">
+                  {/* 헤더 */}
+                  <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 md:flex-row md:items-center md:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm font-bold text-blue-700">QC {job.qcNo}</span>
+                        {job.isUrgent && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700">긴급</span>}
+                        {dd != null && dd <= 7 && <span className="inline-flex items-center gap-0.5 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700"><Clock size={10} />D{dd >= 0 ? `-${dd}` : `+${-dd}`}</span>}
+                      </div>
+                      <p className="mt-0.5 truncate text-sm font-semibold text-slate-900">{job.productName} <span className="font-mono text-xs font-normal text-slate-500">/ {job.batchNo}</span></p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="text-xs text-slate-500">시작
+                        <input type="date" value={job.workStartDate ?? ""} onChange={e => patchJob(job.id, { workStartDate: e.target.value })}
+                          className="ml-1 h-8 rounded-lg border border-slate-300 bg-white px-2 text-xs text-slate-900 focus-visible:border-blue-600 focus-visible:outline-none" />
+                      </label>
+                      <label className="text-xs text-slate-500">종료
+                        <input type="date" value={job.workEndDate ?? ""} onChange={e => patchJob(job.id, { workEndDate: e.target.value })}
+                          className="ml-1 h-8 rounded-lg border border-slate-300 bg-white px-2 text-xs text-slate-900 focus-visible:border-blue-600 focus-visible:outline-none" />
+                      </label>
+                      <select value={job.status} onChange={e => patchJob(job.id, { status: e.target.value })}
+                        className={`h-8 rounded-full border px-2 text-[11px] font-semibold focus-visible:outline-none ${STATUS_CLS[job.status] ?? ""}`}>
+                        {STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* 항목 체크리스트 */}
+                  <div className="px-4 py-3">
+                    <div className="mb-2 flex items-center justify-between text-xs">
+                      <span className="font-semibold text-slate-600">시험항목 진행 {cleared}/{job.items.length}</span>
+                    </div>
+                    {job.items.length === 0 ? (
+                      <p className="py-2 text-xs text-slate-400">등록된 시험항목이 없습니다. (품목-시험항목 매핑 확인 필요)</p>
+                    ) : (
+                      <ul className="flex flex-col gap-1">
+                        {job.items.map(it => {
+                          const done = it.status === "cleared"
+                          return (
+                            <li key={it.id} className={`flex items-center justify-between rounded-lg border px-3 py-2 ${done ? "border-emerald-200 bg-emerald-50/60" : "border-slate-200 bg-white"}`}>
+                              <div className="flex items-center gap-2">
+                                {done
+                                  ? <CheckCircle2 size={16} className="text-emerald-500" />
+                                  : <Circle size={16} className="text-slate-300" />}
+                                <span className={`text-sm ${done ? "font-medium text-emerald-800" : "text-slate-700"}`}>{it.testItemName}</span>
+                              </div>
+                              {done ? (
+                                <span className="text-[11px] text-emerald-600">
+                                  {it.clearedAt && new Date(it.clearedAt).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                                  {it.elapsedMinutes != null && ` · ${it.elapsedMinutes}분`}
+                                </span>
+                              ) : (
+                                <button onClick={() => clearItem(job.id, it.id)} disabled={busy !== null}
+                                  className="inline-flex h-7 items-center gap-1 rounded-md bg-blue-600 px-2.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+                                  {busy === it.id ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}완료
+                                </button>
+                              )}
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </section>
+    </div>
+  )
+}

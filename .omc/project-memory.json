@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1780849428128,
-  "projectRoot": "/Users/kyo/project_kyo",
+  "lastScanned": 1781317153116,
+  "projectRoot": "/Users/huus/workspace/kyo-project/kyo-project",
   "techStack": {
     "languages": [
       {
@@ -42,7 +42,7 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "cd /Users/kyo/project_kyo\nnpx tsc --noEmit 2>&1 | grep -E \"scheduleEngine|pct-generate|pct-schedule-bridge|schedule/pct|schedule/monthly\" || echo \"✅ 이번 작업 파일 타입 에러 없음\"\necho \"--- 전체 에러 수 (기존 8개 = 회귀 없음 기대) ---\"\nnpx tsc --noEmit 2>&1 | grep -cE \"error TS\"",
+    "buildCommand": "echo \"=== CapabilityRow fields ===\"; rtk proxy sed -n '13,20p' backend/services/testers.ts\necho \"=== typecheck (new files) ===\"; rtk tsc --noEmit 2>&1 | grep -E \"pctAssign|codexCli|schedule/orders|pct-orders/assign\" || echo \"타입에러 없음\"",
     "testCommand": null,
     "lintCommand": "npm run lint",
     "devCommand": "npm run dev",
@@ -66,6 +66,7 @@
     "workspaces": [],
     "mainDirectories": [
       "app",
+      "docs",
       "public",
       "scripts"
     ],
@@ -79,9 +80,10 @@
     "app": {
       "path": "app",
       "purpose": "Application code",
-      "fileCount": 3,
-      "lastAccessed": 1780849428118,
+      "fileCount": 4,
+      "lastAccessed": 1781317153090,
       "keyFiles": [
+        "AGENTS.md",
         "favicon.ico",
         "globals.css",
         "layout.tsx"
@@ -90,31 +92,45 @@
     "backend": {
       "path": "backend",
       "purpose": null,
-      "fileCount": 0,
-      "lastAccessed": 1780849428118,
-      "keyFiles": []
+      "fileCount": 1,
+      "lastAccessed": 1781317153092,
+      "keyFiles": [
+        "AGENTS.md"
+      ]
+    },
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 1,
+      "lastAccessed": 1781317153097,
+      "keyFiles": [
+        "ARCHITECTURE.md"
+      ]
     },
     "frontend": {
       "path": "frontend",
       "purpose": null,
-      "fileCount": 0,
-      "lastAccessed": 1780849428119,
-      "keyFiles": []
+      "fileCount": 1,
+      "lastAccessed": 1781317153098,
+      "keyFiles": [
+        "AGENTS.md"
+      ]
     },
     "public": {
       "path": "public",
       "purpose": "Public files",
       "fileCount": 1,
-      "lastAccessed": 1780849428119,
+      "lastAccessed": 1781317153099,
       "keyFiles": []
     },
     "scripts": {
       "path": "scripts",
       "purpose": "Build/utility scripts",
-      "fileCount": 3,
-      "lastAccessed": 1780849428119,
+      "fileCount": 4,
+      "lastAccessed": 1781317153103,
       "keyFiles": [
         "bulk_add_jeonhangmok.ts",
+        "manhours_minus_one.mjs",
         "migrate.ts",
         "seed_pqm.ts"
       ]
@@ -123,7 +139,7 @@
       "path": "supabase",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1780849428119,
+      "lastAccessed": 1781317153104,
       "keyFiles": [
         "README.md"
       ]
@@ -132,7 +148,7 @@
       "path": "types",
       "purpose": "Type definitions",
       "fileCount": 2,
-      "lastAccessed": 1780849428119,
+      "lastAccessed": 1781317153105,
       "keyFiles": [
         "pqm.ts",
         "qc.ts"
@@ -141,15 +157,17 @@
     "app/api": {
       "path": "app/api",
       "purpose": "API routes",
-      "fileCount": 0,
-      "lastAccessed": 1780849428119,
-      "keyFiles": []
+      "fileCount": 1,
+      "lastAccessed": 1781317153111,
+      "keyFiles": [
+        "AGENTS.md"
+      ]
     },
     "backend/lib": {
       "path": "backend/lib",
       "purpose": "Library code",
       "fileCount": 4,
-      "lastAccessed": 1780849428119,
+      "lastAccessed": 1781317153112,
       "keyFiles": [
         "auth-cookies.ts",
         "auth.ts",
@@ -159,8 +177,8 @@
     "backend/services": {
       "path": "backend/services",
       "purpose": "Business logic services",
-      "fileCount": 10,
-      "lastAccessed": 1780849428120,
+      "fileCount": 12,
+      "lastAccessed": 1781317153113,
       "keyFiles": [
         "batches.ts",
         "chat.ts",
@@ -171,14 +189,14 @@
       "path": "frontend/components",
       "purpose": "UI components",
       "fileCount": 0,
-      "lastAccessed": 1780849428120,
+      "lastAccessed": 1781317153114,
       "keyFiles": []
     },
     "frontend/lib": {
       "path": "frontend/lib",
       "purpose": "Library code",
       "fileCount": 4,
-      "lastAccessed": 1780849428120,
+      "lastAccessed": 1781317153115,
       "keyFiles": [
         "auth-context.tsx",
         "pct-schedule-bridge.ts",
@@ -188,8 +206,8 @@
     "supabase/migrations": {
       "path": "supabase/migrations",
       "purpose": "Database migrations",
-      "fileCount": 8,
-      "lastAccessed": 1780849428120,
+      "fileCount": 9,
+      "lastAccessed": 1781317153116,
       "keyFiles": [
         "0001_init_qc_schema.sql",
         "0002_seed_qc_demo.sql",
@@ -199,9 +217,45 @@
   },
   "hotPaths": [
     {
+      "path": "frontend/components/dashboard/sidebar.tsx",
+      "accessCount": 20,
+      "lastAccessed": 1781342656988,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/settings/users/page.tsx",
+      "accessCount": 10,
+      "lastAccessed": 1781341138402,
+      "type": "file"
+    },
+    {
       "path": "frontend/lib/pct-schedule-bridge.ts",
+      "accessCount": 7,
+      "lastAccessed": 1781341823898,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/test-mgmt/test-master/page.tsx",
+      "accessCount": 6,
+      "lastAccessed": 1781341135386,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/layout.tsx",
+      "accessCount": 6,
+      "lastAccessed": 1781342573859,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/page.tsx",
       "accessCount": 5,
-      "lastAccessed": 1781095548249,
+      "lastAccessed": 1781340005758,
+      "type": "file"
+    },
+    {
+      "path": "backend/lib/supabase.ts",
+      "accessCount": 5,
+      "lastAccessed": 1781341805758,
       "type": "file"
     },
     {
@@ -211,21 +265,33 @@
       "type": "file"
     },
     {
-      "path": "frontend/components/dashboard/sidebar.tsx",
+      "path": "app/(menu)/home/page.tsx",
       "accessCount": 4,
-      "lastAccessed": 1780932453276,
+      "lastAccessed": 1781339995587,
+      "type": "file"
+    },
+    {
+      "path": "backend/lib/auth.ts",
+      "accessCount": 4,
+      "lastAccessed": 1781341124988,
+      "type": "file"
+    },
+    {
+      "path": "backend/services/manhours.ts",
+      "accessCount": 4,
+      "lastAccessed": 1781341176790,
+      "type": "file"
+    },
+    {
+      "path": "backend/services/productTestItems.ts",
+      "accessCount": 4,
+      "lastAccessed": 1781341176886,
       "type": "file"
     },
     {
       "path": "backend/lib/guard.ts",
       "accessCount": 3,
       "lastAccessed": 1780850057268,
-      "type": "file"
-    },
-    {
-      "path": "backend/lib/auth.ts",
-      "accessCount": 3,
-      "lastAccessed": 1780850057761,
       "type": "file"
     },
     {
@@ -236,14 +302,38 @@
     },
     {
       "path": "types/pqm.ts",
-      "accessCount": 2,
-      "lastAccessed": 1780849985963,
+      "accessCount": 3,
+      "lastAccessed": 1781341131363,
       "type": "file"
     },
     {
-      "path": "backend/lib/supabase.ts",
-      "accessCount": 2,
-      "lastAccessed": 1780850057915,
+      "path": "app/(menu)/product-test/products/page.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1781341134714,
+      "type": "file"
+    },
+    {
+      "path": "app/api/products/route.ts",
+      "accessCount": 3,
+      "lastAccessed": 1781341141865,
+      "type": "file"
+    },
+    {
+      "path": "app/api/test-items/route.ts",
+      "accessCount": 3,
+      "lastAccessed": 1781341149636,
+      "type": "file"
+    },
+    {
+      "path": "frontend/lib/weekly-planner.ts",
+      "accessCount": 3,
+      "lastAccessed": 1781341166307,
+      "type": "file"
+    },
+    {
+      "path": "app/api/google-sheet/route.ts",
+      "accessCount": 3,
+      "lastAccessed": 1781341811262,
       "type": "file"
     },
     {
@@ -259,21 +349,87 @@
       "type": "file"
     },
     {
-      "path": "backend/services/manhours.ts",
+      "path": "frontend/components/ui/button.tsx",
       "accessCount": 2,
-      "lastAccessed": 1780931500392,
+      "lastAccessed": 1781339603858,
       "type": "file"
     },
     {
-      "path": "backend/services/productTestItems.ts",
+      "path": "frontend/components/ui/card.tsx",
       "accessCount": 2,
-      "lastAccessed": 1781094244627,
+      "lastAccessed": 1781339604141,
       "type": "file"
     },
     {
-      "path": "frontend/lib/weekly-planner.ts",
+      "path": "frontend/components/ui/badge.tsx",
       "accessCount": 2,
-      "lastAccessed": 1781094282141,
+      "lastAccessed": 1781339604291,
+      "type": "file"
+    },
+    {
+      "path": "frontend/components/ui/input.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1781339604431,
+      "type": "file"
+    },
+    {
+      "path": "types/qc.ts",
+      "accessCount": 2,
+      "lastAccessed": 1781341131098,
+      "type": "file"
+    },
+    {
+      "path": "backend/services/users.ts",
+      "accessCount": 2,
+      "lastAccessed": 1781341133818,
+      "type": "file"
+    },
+    {
+      "path": "backend/services/chat.ts",
+      "accessCount": 2,
+      "lastAccessed": 1781341134396,
+      "type": "file"
+    },
+    {
+      "path": "backend/services/batches.ts",
+      "accessCount": 2,
+      "lastAccessed": 1781341134480,
+      "type": "file"
+    },
+    {
+      "path": "app/api/batches/route.ts",
+      "accessCount": 2,
+      "lastAccessed": 1781341141760,
+      "type": "file"
+    },
+    {
+      "path": "backend/services/tests.ts",
+      "accessCount": 2,
+      "lastAccessed": 1781341142024,
+      "type": "file"
+    },
+    {
+      "path": "app/api/auth/login/route.ts",
+      "accessCount": 2,
+      "lastAccessed": 1781341153859,
+      "type": "file"
+    },
+    {
+      "path": "app/api/users/route.ts",
+      "accessCount": 2,
+      "lastAccessed": 1781341153912,
+      "type": "file"
+    },
+    {
+      "path": "app/api/dashboard/route.ts",
+      "accessCount": 2,
+      "lastAccessed": 1781341156957,
+      "type": "file"
+    },
+    {
+      "path": "frontend/lib/auth-context.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1781341163240,
       "type": "file"
     },
     {
@@ -283,57 +439,9 @@
       "type": "file"
     },
     {
-      "path": "backend/services/batches.ts",
-      "accessCount": 1,
-      "lastAccessed": 1780849942170,
-      "type": "file"
-    },
-    {
-      "path": "backend/services/chat.ts",
-      "accessCount": 1,
-      "lastAccessed": 1780849942328,
-      "type": "file"
-    },
-    {
-      "path": "backend/services/tests.ts",
-      "accessCount": 1,
-      "lastAccessed": 1780849942344,
-      "type": "file"
-    },
-    {
-      "path": "backend/services/users.ts",
-      "accessCount": 1,
-      "lastAccessed": 1780849944892,
-      "type": "file"
-    },
-    {
-      "path": "frontend/lib/auth-context.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1780849946539,
-      "type": "file"
-    },
-    {
       "path": "frontend/lib/utils.ts",
       "accessCount": 1,
       "lastAccessed": 1780849946727,
-      "type": "file"
-    },
-    {
-      "path": "types/qc.ts",
-      "accessCount": 1,
-      "lastAccessed": 1780849947099,
-      "type": "file"
-    },
-    {
-      "path": "app/api/auth/login/route.ts",
-      "accessCount": 1,
-      "lastAccessed": 1780849949063,
-      "type": "file"
-    },
-    {
-      "path": "app/(menu)/page.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1780849949153,
       "type": "file"
     },
     {
@@ -349,63 +457,9 @@
       "type": "file"
     },
     {
-      "path": "app/(menu)/home/page.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1780849949301,
-      "type": "file"
-    },
-    {
-      "path": "app/(menu)/test-mgmt/test-master/page.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1780849949353,
-      "type": "file"
-    },
-    {
-      "path": "app/(menu)/layout.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1780849949409,
-      "type": "file"
-    },
-    {
       "path": "app/api/auth/refresh/route.ts",
       "accessCount": 1,
       "lastAccessed": 1780849949469,
-      "type": "file"
-    },
-    {
-      "path": "frontend/components/ui/button.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1780849949577,
-      "type": "file"
-    },
-    {
-      "path": "frontend/components/ui/card.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1780849949589,
-      "type": "file"
-    },
-    {
-      "path": "app/api/products/route.ts",
-      "accessCount": 1,
-      "lastAccessed": 1780849949672,
-      "type": "file"
-    },
-    {
-      "path": "app/api/dashboard/route.ts",
-      "accessCount": 1,
-      "lastAccessed": 1780849949882,
-      "type": "file"
-    },
-    {
-      "path": "app/api/batches/route.ts",
-      "accessCount": 1,
-      "lastAccessed": 1780849949933,
-      "type": "file"
-    },
-    {
-      "path": "app/api/test-items/route.ts",
-      "accessCount": 1,
-      "lastAccessed": 1780849951919,
       "type": "file"
     },
     {
@@ -415,33 +469,9 @@
       "type": "file"
     },
     {
-      "path": "app/(menu)/product-test/products/page.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1780849952172,
-      "type": "file"
-    },
-    {
-      "path": "app/api/google-sheet/route.ts",
-      "accessCount": 1,
-      "lastAccessed": 1780849952321,
-      "type": "file"
-    },
-    {
       "path": "app/(menu)/schedule/weekly/page.tsx",
       "accessCount": 1,
       "lastAccessed": 1780849952595,
-      "type": "file"
-    },
-    {
-      "path": "app/(menu)/settings/users/page.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1780849952762,
-      "type": "file"
-    },
-    {
-      "path": "app/api/users/route.ts",
-      "accessCount": 1,
-      "lastAccessed": 1780849954807,
       "type": "file"
     },
     {
@@ -466,18 +496,6 @@
       "path": "app/api/users/[id]/route.ts",
       "accessCount": 1,
       "lastAccessed": 1780849957883,
-      "type": "file"
-    },
-    {
-      "path": "frontend/components/ui/badge.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1780849958030,
-      "type": "file"
-    },
-    {
-      "path": "frontend/components/ui/input.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1780849958387,
       "type": "file"
     },
     {
