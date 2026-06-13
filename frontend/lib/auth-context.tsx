@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 
 export type UserRole = 'admin' | 'user'
 
@@ -26,6 +27,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user,    setUser]    = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
   const refreshTimer = useRef<ReturnType<typeof setInterval> | null>(null)
+  const router = useRouter()
 
   const fetchMe = useCallback(async (): Promise<AuthUser | null> => {
     const r = await fetch('/api/auth/me', { cache: 'no-store' })
@@ -86,7 +88,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
     setUser(null)
-  }, [])
+    router.push('/login')
+  }, [router])
 
   return (
     <Ctx.Provider value={{ user, loading, login, logout, refresh }}>

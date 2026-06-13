@@ -1,9 +1,10 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
 import {
   RefreshCw, Sparkles, History, AlertCircle, Pencil, X, Loader2, Database,
+  ChevronDown, ChevronRight,
 } from "lucide-react"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -49,6 +50,27 @@ const FIELD_LABEL: Record<string, string> = {
   method: "진행방법", status: "상태", note: "비고", assigneeTesterId: "담당자",
 }
 
+const GROUP_COLORS = [
+  "bg-blue-500", "bg-emerald-500", "bg-violet-500",
+  "bg-amber-500", "bg-rose-500", "bg-teal-500", "bg-fuchsia-500",
+]
+
+// ─── Utils ───────────────────────────────────────────────────────────────────
+function isoToWeek(iso: string | null): { weekKey: string; weekLabel: string } {
+  if (!iso) return { weekKey: "no-date", weekLabel: "기간 미정" }
+  const d = new Date(iso + "T00:00:00Z")
+  const dow = (d.getUTCDay() + 6) % 7
+  const monday = new Date(d)
+  monday.setUTCDate(d.getUTCDate() - dow)
+  const sunday = new Date(monday)
+  sunday.setUTCDate(monday.getUTCDate() + 6)
+  const fmt = (x: Date) => `${x.getUTCMonth() + 1}/${x.getUTCDate()}`
+  return {
+    weekKey: monday.toISOString().slice(0, 10),
+    weekLabel: `${fmt(monday)} ~ ${fmt(sunday)}`,
+  }
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function OrdersPage() {
   const { user } = useAuth()
@@ -64,6 +86,7 @@ export default function OrdersPage() {
   const [editTarget, setEditTarget] = useState<OrderRow | null>(null)
   const [historyTarget, setHistoryTarget] = useState<OrderRow | null>(null)
   const [showLog, setShowLog] = useState(false)
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -121,6 +144,39 @@ export default function OrdersPage() {
 
   const unsyncedCount = rows.filter(r => !r.productSynced).length
 
+  // ─── 주차별 그룹 ─────────────────────────────────────────────────────────
+  const groups = useMemo(() => {
+    const buckets = new Map<string, { label: string; color: string; rows: OrderRow[] }>()
+    let colorIdx = 0
+    for (const r of rows) {
+      const { weekKey, weekLabel } = isoToWeek(r.packagingDate)
+      if (!buckets.has(weekKey)) {
+        const color = weekKey === "no-date" ? "bg-slate-400" : GROUP_COLORS[colorIdx++ % GROUP_COLORS.length]
+        buckets.set(weekKey, { label: weekLabel, color, rows: [] })
+      }
+      buckets.get(weekKey)!.rows.push(r)
+    }
+    const sorted = Array.from(buckets.entries()).sort(([a], [b]) => {
+      if (a === "no-date") return 1
+      if (b === "no-date") return -1
+      return a.localeCompare(b)
+    })
+    return sorted.map(([key, val]) => ({ key, ...val }))
+  }, [rows])
+
+  const toggleGroup = (key: string) =>
+    setCollapsed(prev => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
+
+  const allCollapsed = groups.length > 0 && groups.every(g => collapsed.has(g.key))
+  const toggleAll = () => {
+    if (allCollapsed) setCollapsed(new Set())
+    else setCollapsed(new Set(groups.map(g => g.key)))
+  }
+
   return (
     <div className="flex flex-col gap-4 p-3 md:p-5">
       {/* 헤더 */}
@@ -169,7 +225,16 @@ export default function OrdersPage() {
           <option value="">전체 상태</option>
           {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
-        <span className="text-xs font-medium text-slate-500">총 {rows.length}건</span>
+        <span className="text-xs font-medium text-slate-500">총 {rows.length}건 · {groups.length}주차</span>
+        {groups.length > 0 && (
+          <button
+            onClick={toggleAll}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
+          >
+            {allCollapsed ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+            {allCollapsed ? "전체 펼치기" : "전체 접기"}
+          </button>
+        )}
         <button
           onClick={() => setShowLog(true)}
           className="ml-auto inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
@@ -178,73 +243,110 @@ export default function OrdersPage() {
         </button>
       </div>
 
-      {/* 테이블 */}
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full min-w-[920px] text-sm">
-          <thead>
-            <tr className="border-b border-slate-200 bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              <th className="px-3 py-2.5">품목명</th>
-              <th className="px-3 py-2.5">품목코드</th>
-              <th className="px-3 py-2.5">제조번호</th>
-              <th className="px-3 py-2.5">제형</th>
-              <th className="px-3 py-2.5">포장일</th>
-              <th className="px-3 py-2.5">완료예정</th>
-              <th className="px-3 py-2.5">긴급</th>
-              <th className="px-3 py-2.5">진행방법</th>
-              <th className="px-3 py-2.5">공수</th>
-              <th className="px-3 py-2.5">담당자</th>
-              <th className="px-3 py-2.5">상태</th>
-              <th className="px-3 py-2.5 text-right">관리</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={12} className="px-3 py-10 text-center text-slate-400">불러오는 중…</td></tr>
-            ) : rows.length === 0 ? (
-              <tr><td colSpan={12} className="px-3 py-10 text-center text-slate-400">적재된 오더가 없습니다. “지금 적재”로 시트를 불러오세요.</td></tr>
-            ) : rows.map(r => (
-              <tr key={r.id} className="border-b border-slate-100 text-slate-700 hover:bg-slate-50">
-                <td className="px-3 py-2.5 font-medium text-slate-900">
-                  <div className="flex items-center gap-1.5">
-                    {r.productName}
-                    {!r.productSynced && (
-                      <span title="품목마스터 미동기화" className="inline-flex items-center rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">미동기화</span>
-                    )}
+      {/* 주차별 그룹 테이블 */}
+      {loading ? (
+        <div className="rounded-xl border border-slate-200 bg-white px-3 py-10 text-center text-slate-400 shadow-sm">불러오는 중…</div>
+      ) : rows.length === 0 ? (
+        <div className="rounded-xl border border-slate-200 bg-white px-3 py-10 text-center text-slate-400 shadow-sm">
+          적재된 오더가 없습니다. &quot;지금 적재&quot;로 시트를 불러오세요.
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {groups.map(g => {
+            const isCollapsed = collapsed.has(g.key)
+            const assigned = g.rows.filter(r => r.assigneeName).length
+            return (
+              <div key={g.key} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                {/* 그룹 헤더 */}
+                <button
+                  onClick={() => toggleGroup(g.key)}
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50"
+                >
+                  <span className={`h-3 w-1.5 shrink-0 rounded-full ${g.color}`} />
+                  <span className="flex-1 text-sm font-bold text-slate-800">{g.label}</span>
+                  <span className="text-xs font-medium text-slate-500">
+                    배정 {assigned}/{g.rows.length}건
+                  </span>
+                  {isCollapsed
+                    ? <ChevronRight size={16} className="text-slate-400" />
+                    : <ChevronDown size={16} className="text-slate-400" />
+                  }
+                </button>
+
+                {/* 테이블 */}
+                {!isCollapsed && (
+                  <div className="overflow-x-auto border-t border-slate-100">
+                    <table className="w-full min-w-[920px] text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-100 bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                          <th className="px-3 py-2">품목명</th>
+                          <th className="px-3 py-2">품목코드</th>
+                          <th className="px-3 py-2">제조번호</th>
+                          <th className="px-3 py-2">제형</th>
+                          <th className="px-3 py-2">포장일</th>
+                          <th className="px-3 py-2">완료예정</th>
+                          <th className="px-3 py-2">긴급</th>
+                          <th className="px-3 py-2">진행방법</th>
+                          <th className="px-3 py-2">공수</th>
+                          <th className="px-3 py-2">담당자</th>
+                          <th className="px-3 py-2">상태</th>
+                          <th className="px-3 py-2 text-right">관리</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {g.rows.map(r => (
+                          <tr key={r.id} className="border-b border-slate-100 last:border-0 text-slate-700 hover:bg-slate-50">
+                            <td className="px-3 py-2.5 font-medium text-slate-900">
+                              <div className="flex items-center gap-1.5">
+                                {r.productName}
+                                {!r.productSynced && (
+                                  <span title="품목마스터 미동기화" className="inline-flex items-center rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">미동기화</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2.5 font-mono text-xs">{r.productCode}</td>
+                            <td className="px-3 py-2.5 font-mono text-xs">{r.batchNo}</td>
+                            <td className="px-3 py-2.5">{r.dosageForm ?? "-"}</td>
+                            <td className="px-3 py-2.5">{r.packagingDate ?? "-"}</td>
+                            <td className="px-3 py-2.5">{r.dueDate ?? "-"}</td>
+                            <td className="px-3 py-2.5">
+                              {r.isUrgent
+                                ? <span className="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700">긴급</span>
+                                : <span className="text-slate-400">일반</span>}
+                            </td>
+                            <td className="px-3 py-2.5">{r.method}</td>
+                            <td className="px-3 py-2.5">{r.manhours != null ? `${r.manhours}h` : "-"}</td>
+                            <td className="px-3 py-2.5">
+                              {r.assigneeName
+                                ? <span className="font-medium text-slate-800">{r.assigneeName}</span>
+                                : <span className="text-slate-400">미배정</span>}
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${STATUS_CLS[r.status] ?? STATUS_CLS["대기"]}`}>{r.status}</span>
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <div className="flex items-center justify-end gap-1">
+                                <button onClick={() => setHistoryTarget(r)} title="수정이력" className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+                                  <History size={15} />
+                                </button>
+                                {isAdmin && (
+                                  <button onClick={() => setEditTarget(r)} title="수정" className="rounded-md p-1.5 text-slate-400 hover:bg-blue-50 hover:text-blue-600">
+                                    <Pencil size={15} />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                </td>
-                <td className="px-3 py-2.5 font-mono text-xs">{r.productCode}</td>
-                <td className="px-3 py-2.5 font-mono text-xs">{r.batchNo}</td>
-                <td className="px-3 py-2.5">{r.dosageForm ?? "-"}</td>
-                <td className="px-3 py-2.5">{r.packagingDate ?? "-"}</td>
-                <td className="px-3 py-2.5">{r.dueDate ?? "-"}</td>
-                <td className="px-3 py-2.5">
-                  {r.isUrgent
-                    ? <span className="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700">긴급</span>
-                    : <span className="text-slate-400">일반</span>}
-                </td>
-                <td className="px-3 py-2.5">{r.method}</td>
-                <td className="px-3 py-2.5">{r.manhours != null ? `${r.manhours}h` : "-"}</td>
-                <td className="px-3 py-2.5">{r.assigneeName ?? <span className="text-slate-400">미배정</span>}</td>
-                <td className="px-3 py-2.5">
-                  <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${STATUS_CLS[r.status] ?? STATUS_CLS["대기"]}`}>{r.status}</span>
-                </td>
-                <td className="px-3 py-2.5">
-                  <div className="flex items-center justify-end gap-1">
-                    <button onClick={() => setHistoryTarget(r)} title="수정이력" className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
-                      <History size={15} />
-                    </button>
-                    {isAdmin && (
-                      <button onClick={() => setEditTarget(r)} title="수정" className="rounded-md p-1.5 text-slate-400 hover:bg-blue-50 hover:text-blue-600">
-                        <Pencil size={15} />
-                      </button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {editTarget && (
         <EditModal

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import {
   Play, CheckCircle2, Circle, Loader2, AlertTriangle, Clock,
 } from "lucide-react"
+import { DateField } from "@frontend/components/ui/date-field"
 
 interface JobItem {
   id: string; testItemName: string; sequenceOrder: number
@@ -177,14 +178,30 @@ export default function MyTasksPage() {
                       <p className="mt-0.5 truncate text-sm font-semibold text-slate-900">{job.productName} <span className="font-mono text-xs font-normal text-slate-500">/ {job.batchNo}</span></p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <label className="text-xs text-slate-500">시작
-                        <input type="date" value={job.workStartDate ?? ""} onChange={e => patchJob(job.id, { workStartDate: e.target.value })}
-                          className="ml-1 h-8 rounded-lg border border-slate-300 bg-white px-2 text-xs text-slate-900 focus-visible:border-blue-600 focus-visible:outline-none" />
-                      </label>
-                      <label className="text-xs text-slate-500">종료
-                        <input type="date" value={job.workEndDate ?? ""} onChange={e => patchJob(job.id, { workEndDate: e.target.value })}
-                          className="ml-1 h-8 rounded-lg border border-slate-300 bg-white px-2 text-xs text-slate-900 focus-visible:border-blue-600 focus-visible:outline-none" />
-                      </label>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs text-slate-500">시작</span>
+                        <div className="w-36">
+                          <DateField
+                            size="sm"
+                            noLabel
+                            value={job.workStartDate ?? ""}
+                            onChange={v => patchJob(job.id, { workStartDate: v })}
+                            placeholder="시작일"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs text-slate-500">종료</span>
+                        <div className="w-36">
+                          <DateField
+                            size="sm"
+                            noLabel
+                            value={job.workEndDate ?? ""}
+                            onChange={v => patchJob(job.id, { workEndDate: v })}
+                            placeholder="종료일"
+                          />
+                        </div>
+                      </div>
                       <select value={job.status} onChange={e => patchJob(job.id, { status: e.target.value })}
                         className={`h-8 rounded-full border px-2 text-[11px] font-semibold focus-visible:outline-none ${STATUS_CLS[job.status] ?? ""}`}>
                         {STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}

@@ -135,14 +135,16 @@ export default function TestItemsPage() {
     }
   }
 
-  async function loadLinkedItems(productId: string) {
+  async function loadLinkedItems(productId: string): Promise<ProductTestItemRow[]> {
     try {
       const res = await fetch(`/api/product-test-items?productId=${productId}`)
       if (!res.ok) throw new Error(await res.text())
       const data = (await res.json()) as { rows: ProductTestItemRow[] }
       setLinkedItems(data.rows)
+      return data.rows
     } catch (e) {
       setError(String(e))
+      return []
     }
   }
 
@@ -292,7 +294,7 @@ export default function TestItemsPage() {
       )
       await Promise.all(promises)
       const refreshed = await loadLinkedItems(selectedProduct.id)
-      if (refreshed && refreshed.length > 0) await reorderLinked(refreshed)
+      if (refreshed.length > 0) await reorderLinked(refreshed)
       setSelectedToAdd(new Set())
       setAddDialogOpen(false)
     } catch (e) {

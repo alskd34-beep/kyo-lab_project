@@ -42,7 +42,7 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "echo \"=== CapabilityRow fields ===\"; rtk proxy sed -n '13,20p' backend/services/testers.ts\necho \"=== typecheck (new files) ===\"; rtk tsc --noEmit 2>&1 | grep -E \"pctAssign|codexCli|schedule/orders|pct-orders/assign\" || echo \"타입에러 없음\"",
+    "buildCommand": "rtk tsc --noEmit 2>&1 | grep -E \"date-field|my-tasks\" | head -20",
     "testCommand": null,
     "lintCommand": "npm run lint",
     "devCommand": "npm run dev",
@@ -247,21 +247,27 @@
       "type": "file"
     },
     {
+      "path": "backend/lib/supabase.ts",
+      "accessCount": 6,
+      "lastAccessed": 1781350098318,
+      "type": "file"
+    },
+    {
+      "path": "frontend/lib/auth-context.tsx",
+      "accessCount": 6,
+      "lastAccessed": 1781350936259,
+      "type": "file"
+    },
+    {
       "path": "app/(menu)/page.tsx",
       "accessCount": 5,
       "lastAccessed": 1781340005758,
       "type": "file"
     },
     {
-      "path": "backend/lib/supabase.ts",
-      "accessCount": 5,
-      "lastAccessed": 1781341805758,
-      "type": "file"
-    },
-    {
       "path": "frontend/components/board/MondayBoard.tsx",
-      "accessCount": 4,
-      "lastAccessed": 1780921389827,
+      "accessCount": 5,
+      "lastAccessed": 1781349476799,
       "type": "file"
     },
     {
@@ -289,6 +295,18 @@
       "type": "file"
     },
     {
+      "path": "app/api/test-items/route.ts",
+      "accessCount": 4,
+      "lastAccessed": 1781350009428,
+      "type": "file"
+    },
+    {
+      "path": "app/api/products/route.ts",
+      "accessCount": 4,
+      "lastAccessed": 1781350035386,
+      "type": "file"
+    },
+    {
       "path": "backend/lib/guard.ts",
       "accessCount": 3,
       "lastAccessed": 1780850057268,
@@ -313,18 +331,6 @@
       "type": "file"
     },
     {
-      "path": "app/api/products/route.ts",
-      "accessCount": 3,
-      "lastAccessed": 1781341141865,
-      "type": "file"
-    },
-    {
-      "path": "app/api/test-items/route.ts",
-      "accessCount": 3,
-      "lastAccessed": 1781341149636,
-      "type": "file"
-    },
-    {
       "path": "frontend/lib/weekly-planner.ts",
       "accessCount": 3,
       "lastAccessed": 1781341166307,
@@ -334,6 +340,12 @@
       "path": "app/api/google-sheet/route.ts",
       "accessCount": 3,
       "lastAccessed": 1781341811262,
+      "type": "file"
+    },
+    {
+      "path": "app/api/auth/login/route.ts",
+      "accessCount": 3,
+      "lastAccessed": 1781350973159,
       "type": "file"
     },
     {
@@ -409,12 +421,6 @@
       "type": "file"
     },
     {
-      "path": "app/api/auth/login/route.ts",
-      "accessCount": 2,
-      "lastAccessed": 1781341153859,
-      "type": "file"
-    },
-    {
       "path": "app/api/users/route.ts",
       "accessCount": 2,
       "lastAccessed": 1781341153912,
@@ -427,9 +433,9 @@
       "type": "file"
     },
     {
-      "path": "frontend/lib/auth-context.tsx",
+      "path": "frontend/components/ui/calendar.tsx",
       "accessCount": 2,
-      "lastAccessed": 1781341163240,
+      "lastAccessed": 1781352218149,
       "type": "file"
     },
     {
@@ -496,12 +502,6 @@
       "path": "app/api/users/[id]/route.ts",
       "accessCount": 1,
       "lastAccessed": 1780849957883,
-      "type": "file"
-    },
-    {
-      "path": "frontend/components/ui/calendar.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1780849960399,
       "type": "file"
     },
     {
