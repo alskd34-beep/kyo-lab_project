@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Card, CardContent } from '@frontend/components/ui/card'
 import { Avatar, AvatarFallback } from '@frontend/components/ui/avatar'
 import type { BatchSummary, BatchStatus, DashboardStats } from '@shared/pqm'
@@ -110,51 +110,79 @@ export default function HomePage() {
   const [tableauError, setTableauError] = useState<string | null>(null)
   const [isTableauLoading, setIsTableauLoading] = useState(true)
 
-  useEffect(() => {
-    let cancelled = false
+  const loadHomeData = useCallback(async (signal?: AbortSignal) => {
+    if (signal?.aborted) return
+    setIsLoading(true)
+    setIsTableauLoading(true)
 
-    Promise.all([
-      fetch('/api/dashboard').then(async r => {
+    const dashboardPromise = Promise.all([
+      fetch('/api/dashboard', { signal }).then(async r => {
         if (!r.ok) throw new Error(await r.text())
         return r.json() as Promise<DashboardStats>
       }),
-      fetch('/api/batches?limit=10').then(async r => {
+      fetch('/api/batches?limit=10', { signal }).then(async r => {
         if (!r.ok) throw new Error(await r.text())
         return r.json() as Promise<{ rows: BatchSummary[] }>
       }),
     ])
-      .then(([statsData, batchData]) => {
-        if (cancelled) return
-        setStats(statsData)
-        setUpcoming(batchData.rows.length > 0 ? batchData.rows : DEMO_UPCOMING)
-        setUsingDemo(false)
-      })
-      .catch(() => {
-        if (cancelled) return
-        setUsingDemo(true)
-      })
-      .finally(() => { if (!cancelled) setIsLoading(false) })
 
-    fetch('/api/tableau/summary?limit=5')
-      .then(async r => {
-        const json = await r.json()
-        if (!r.ok) throw new Error(json.error ?? 'Tableau 정보를 불러오지 못했습니다')
-        return json as { row: TableauSummary }
-      })
-      .then(data => {
-        if (cancelled) return
-        setTableau(data.row)
-        setTableauError(null)
-      })
-      .catch(err => {
-        if (cancelled) return
-        setTableau(null)
-        setTableauError(err instanceof Error ? err.message : 'Tableau 연동 오류')
-      })
-      .finally(() => { if (!cancelled) setIsTableauLoading(false) })
+    const tableauPromise = fetch('/api/tableau/summary?limit=5', { signal }).then(async r => {
+      const json = await r.json()
+      if (!r.ok) throw new Error(json.error ?? 'Tableau 정보를 불러오지 못했습니다')
+      return json as { row: TableauSummary }
+    })
 
-    return () => { cancelled = true }
+    try {
+      const [statsData, batchData] = await dashboardPromise
+      if (signal?.aborted) return
+      setStats(statsData)
+      setUpcoming(batchData.rows.length > 0 ? batchData.rows : DEMO_UPCOMING)
+      setUsingDemo(false)
+    } catch {
+      if (signal?.aborted) return
+      setUsingDemo(true)
+    } finally {
+      if (signal?.aborted) return
+      setIsLoading(false)
+    }
+
+    try {
+      const data = await tableauPromise
+      if (signal?.aborted) return
+      setTableau(data.row)
+      setTableauError(null)
+    } catch (err) {
+      if (signal?.aborted) return
+      setTableau(null)
+      setTableauError(err instanceof Error ? err.message : 'Tableau 연동 오류')
+    } finally {
+      if (signal?.aborted) return
+      setIsTableauLoading(false)
+    }
   }, [])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const refreshOnVisible = () => {
+      if (!document.hidden) void loadHomeData(controller.signal)
+    }
+
+    void loadHomeData(controller.signal)
+
+    const refreshTimer = window.setInterval(() => {
+      void loadHomeData(controller.signal)
+    }, 60_000)
+
+    window.addEventListener('focus', refreshOnVisible)
+    document.addEventListener('visibilitychange', refreshOnVisible)
+
+    return () => {
+      controller.abort()
+      window.clearInterval(refreshTimer)
+      window.removeEventListener('focus', refreshOnVisible)
+      document.removeEventListener('visibilitychange', refreshOnVisible)
+    }
+  }, [loadHomeData])
 
   const KPI_CARDS = [
     { label: '전체 배치',  value: stats.totalBatches, unit: '건', sub: '총 생산배치 수',   accent: 'text-slate-800',   bg: 'bg-white',         border: 'border-slate-200' },
