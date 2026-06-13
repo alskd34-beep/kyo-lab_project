@@ -39,6 +39,7 @@ export async function POST(req: NextRequest) {
       unit:             body.unit,
       productType:      body.productType,
       packageSpec:      body.packageSpec,
+      avgHours:         body.avgHours,
     })
     return Response.json({ row }, { status: 201 })
   } catch (err) {
