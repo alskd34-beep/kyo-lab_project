@@ -42,7 +42,7 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "rtk tsc --noEmit 2>&1 | grep -E \"date-field|my-tasks\" | head -20",
+    "buildCommand": "rtk tsc --noEmit 2>&1 | grep \"date-field\" | head -20",
     "testCommand": null,
     "lintCommand": "npm run lint",
     "devCommand": "npm run dev",
