@@ -100,7 +100,7 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
   // ── 기존 오더 로드 (삭제 제외) ─────────────────────────────────────────────
   const { data: existingRows, error: exErr } = await supabaseAdmin
     .from('pct_orders')
-    .select('id, batch_no, product_code, product_name, dosage_form, packaging_date, due_date, is_urgent, method, note, status')
+    .select('*')   // locked 컬럼(0015)까지 받되 미적용 시 자동 누락 — 방어적
     .neq('status', '삭제')
   if (exErr) throw exErr
   const existingByKey = new Map<string, ExistingOrder & { batch_no: string; product_code: string }>()
@@ -163,9 +163,9 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
         result.created++
         await logIngest(key, 'new', '대기', fileId)
       }
-    } else if (diffChanged(existing, row) && isLockedStatus(existing.status)) {
+    } else if (diffChanged(existing, row) && (isLockedStatus(existing.status) || (existing as { locked?: boolean }).locked)) {
       // ── 변경 차단 ──────────────────────────────────────────────────────────
-      // 작업 진행/LOCK 상태 오더는 시트 변경을 자동 반영하지 않는다(일정·배정 보존).
+      // 작업 진행 상태이거나 관리자 확정(LOCK)된 오더는 시트 변경을 자동 반영하지 않는다(일정·배정 보존).
       // before/after 를 pct_order_edits 에 기록하고 감독관 알림만 생성한다.
       const changes = CHANGE_FIELDS.filter(f => f.oldVal(existing) !== f.newVal(row))
       for (const c of changes) {

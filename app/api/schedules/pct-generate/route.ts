@@ -16,6 +16,7 @@ import {
   type EngineEquip,
   type EngineWorkload,
 } from '@backend/services/scheduleEngine'
+import { buildGroupsFromOrders, type OrderForGrouping } from '@backend/services/concurrentGroups'
 
 export const runtime = 'nodejs'
 
@@ -101,14 +102,95 @@ export async function POST(req: NextRequest) {
       담당자:   r.담당자 || undefined,
     }))
 
+    // ── 동시분석 그룹 인지: 그룹 대표만 엔진에 투입, 결과를 멤버에게 전파 ────────
+    // 행 인덱스를 id로 사용해 순수 그룹핑 (DB 오더 불필요)
+    const forGrouping: OrderForGrouping[] = rows.map((r, i) => ({
+      id: String(i),
+      productCode: r.품목코드,
+      productName: r.품목명,
+      batchNo:     r.제조번호,
+      packagingDate: r.포장일 || null,
+      dueDate:     null,  // 클라이언트 페이로드 미포함 — 조건4(동코드)로 커버
+    }))
+
+    const builtGroups = buildGroupsFromOrders(forGrouping)
+
+    // 그룹별 최소 인덱스를 대표로 선정
+    const repIdxSet = new Set<number>()
+    const memberToRepIdx = new Map<number, number>()
+
+    for (const group of builtGroups) {
+      const indices = group.items.map(item => Number(item.orderId))
+      const repIdx = Math.min(...indices)
+      repIdxSet.add(repIdx)
+      for (const idx of indices) {
+        if (idx !== repIdx) memberToRepIdx.set(idx, repIdx)
+      }
+    }
+
+    // 대표 행만 엔진에 전달 (그룹당 공수 1회, PRD 원칙4)
+    const repRows = rows.filter((_, i) => repIdxSet.has(i))
     const year = body.year ?? new Date().getFullYear()
+
     const result = generatePctSchedule({
-      rows, testers, capabilities,
+      rows: repRows, testers, capabilities,
       matrix: matrix.map(m => ({ testerId: m.testerId, capabilityId: m.capabilityId, level: m.proficiencyLevel })),
       productItems, equipment, workload, year,
     })
 
-    return Response.json(result)
+    // 대표 배정 결과를 키(코드|제조번호)로 인덱싱
+    const repAssignsByKey = new Map<string, typeof result.assignments>()
+    for (const a of result.assignments) {
+      const k = `${a.productCode}|${a.batchNo}`
+      const arr = repAssignsByKey.get(k) ?? []
+      arr.push(a)
+      repAssignsByKey.set(k, arr)
+    }
+
+    // 비대표 멤버에게 대표의 배정 전파 (or 대표 미배정 시 멤버도 미배정 추가)
+    const extraAssignments: typeof result.assignments = []
+    const extraUnassigned: typeof result.unassigned = []
+
+    for (const [memberIdx, repIdx] of memberToRepIdx) {
+      const mRow = rows[memberIdx]
+      const rRow = rows[repIdx]
+      const repAssigns = repAssignsByKey.get(`${rRow.품목코드}|${rRow.제조번호}`)
+
+      if (repAssigns && repAssigns.length > 0) {
+        // H1 fix: 멤버 자신의 시험항목 조회 (대표 testItems 오염 방지)
+        const memberTestItems = itemsByCode.get(mRow.품목코드) ?? repAssigns[0]?.testItems ?? []
+        for (const ra of repAssigns) {
+          // H2 fix: 개별항목 복수 전파 시 key 충돌 방지 — 시험항목명 포함
+          const itemSuffix = ra.testItems.join('+') || 'all'
+          extraAssignments.push({
+            ...ra,
+            key:         `${mRow.품목코드}|${mRow.제조번호}|${ra.testerName}|${itemSuffix}|concurrent`,
+            productCode: mRow.품목코드,
+            productName: mRow.품목명,
+            batchNo:     mRow.제조번호,
+            testItems:   memberTestItems,
+          })
+        }
+      } else {
+        extraUnassigned.push({
+          productCode: mRow.품목코드,
+          productName: mRow.품목명,
+          batchNo:     mRow.제조번호,
+          testItems:   itemsByCode.get(mRow.품목코드) ?? [],
+          reason:      '동시분석 그룹 대표 미배정',
+        })
+      }
+    }
+
+    const finalAssignments = [...result.assignments, ...extraAssignments]
+    const finalUnassigned  = [...result.unassigned,  ...extraUnassigned]
+
+    return Response.json({
+      ...result,
+      assignments: finalAssignments,
+      unassigned:  finalUnassigned,
+      stats: { ...result.stats, assigned: finalAssignments.length },
+    })
   } catch (err) {
     console.error('[api/schedules/pct-generate]', err)
     const msg = err instanceof Error ? err.message : '서버 오류'

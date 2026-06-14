@@ -40,6 +40,7 @@ export async function POST(req: NextRequest) {
       productType:      body.productType,
       packageSpec:      body.packageSpec,
       avgHours:         body.avgHours,
+      avgWorkdays:      body.avgWorkdays,
     })
     return Response.json({ row }, { status: 201 })
   } catch (err) {

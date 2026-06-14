@@ -47,6 +47,7 @@ interface ProductRow {
   packageSpec: string | null
   avgHours: number | null
   avgHoursPackageUnit: string | null
+  avgWorkdays: number | null
   isActive: boolean
   sortOrder: number
 }
@@ -62,7 +63,7 @@ interface ProductFormState {
   productType: string
   unit: string
   packageSpec: string
-  avgHours: string
+  avgWorkdays: string
 }
 
 const EMPTY_PRODUCT_FORM: ProductFormState = {
@@ -76,7 +77,7 @@ const EMPTY_PRODUCT_FORM: ProductFormState = {
   productType: "",
   unit: "",
   packageSpec: "",
-  avgHours: "",
+  avgWorkdays: "",
 }
 
 const DIFFICULTY_OPTIONS = [
@@ -219,7 +220,7 @@ function ProductsPanel() {
       productType: row.productType ?? "",
       unit: row.unit ?? "",
       packageSpec: row.packageSpec ?? "",
-      avgHours: row.avgHours != null ? String(row.avgHours) : "",
+      avgWorkdays: row.avgWorkdays != null ? String(row.avgWorkdays) : "",
     })
     setDialogOpen(true)
   }
@@ -231,9 +232,9 @@ function ProductsPanel() {
 
   async function handleSave() {
     if (!form.productCode.trim() || !form.name.trim()) return
-    const avgHours = Number(form.avgHours)
-    if (!form.avgHours.trim() || Number.isNaN(avgHours) || avgHours < 0) {
-      setError("공수는 0 이상의 숫자로 입력하세요.")
+    const avgWorkdays = Number(form.avgWorkdays)
+    if (!form.avgWorkdays.trim() || Number.isNaN(avgWorkdays) || avgWorkdays < 0) {
+      setError("공수는 0 이상의 숫자(일)로 입력하세요.")
       return
     }
     setSaving(true)
@@ -248,7 +249,7 @@ function ProductsPanel() {
         productType: form.productType || null,
         unit: form.unit || null,
         packageSpec: form.packageSpec || null,
-        avgHours,
+        avgWorkdays,
       }
       if (editTarget) {
         const res = await fetch("/api/products", {
@@ -603,9 +604,9 @@ function ProductsPanel() {
                       {row.packageSpec ?? "—"}
                     </td>
                     <td className="px-4 py-2.5 text-xs font-bold text-slate-950">
-                      {row.avgHours != null ? (
+                      {row.avgWorkdays != null ? (
                         <div className="flex flex-col">
-                          <span>{row.avgHours.toFixed(2)}h</span>
+                          <span>{row.avgWorkdays}일</span>
                           <span className="text-[10px] font-medium text-slate-500">
                             {row.avgHoursPackageUnit ?? row.unit ?? "대표"}
                           </span>
@@ -738,7 +739,7 @@ function ProductsPanel() {
                   </div>
                   <div>
                     <span className="font-bold text-slate-600">공수:</span>{" "}
-                    {row.avgHours != null ? `${row.avgHours.toFixed(2)}h` : "—"}
+                    {row.avgWorkdays != null ? `${row.avgWorkdays}일` : "—"}
                   </div>
                 </div>
               </div>
@@ -940,16 +941,16 @@ function ProductsPanel() {
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div className="flex flex-col gap-1.5 sm:col-span-2">
                       <label className={labelClass}>
-                        공수(시간) <span className="text-rose-600">*</span>
+                        공수(일) <span className="text-rose-600">*</span>
                       </label>
                       <Input
                         className={inputClass}
                         type="number"
                         min={0}
-                        step={0.01}
-                        value={form.avgHours}
-                        onChange={f("avgHours")}
-                        placeholder="예) 4.50"
+                        step={1}
+                        value={form.avgWorkdays}
+                        onChange={f("avgWorkdays")}
+                        placeholder="예) 3"
                       />
                     </div>
                   </div>
@@ -972,7 +973,7 @@ function ProductsPanel() {
                   saving ||
                   !form.productCode.trim() ||
                   !form.name.trim() ||
-                  !form.avgHours.trim()
+                  !form.avgWorkdays.trim()
                 }
                 className="h-10 w-full bg-blue-700 px-5 font-bold text-white shadow-sm hover:bg-blue-800 sm:w-auto"
               >

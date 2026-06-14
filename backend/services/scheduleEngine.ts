@@ -279,25 +279,30 @@ export function generatePctSchedule(input: EngineInput): EngineResult {
       // 개별항목: 시험항목별 분배 (동시 진행 → 동일 기간)
       let any = false
       for (const ti of effectiveItems) {
+        // [규칙2] 개별 중금속 시험은 공수 1DAY 고정(PRD). 그 외 항목은 품목 공수를 따른다.
+        const isHeavyMetal = ti.includes('중금속')
+        const itemWorkdays = isHeavyMetal ? 1 : workdays
+        const itemDates = isHeavyMetal ? workingDaysAfter(date, 1) : dates
+        const itemStart = itemDates[0] ?? startDate
         const { caps, duo } = reqOf(ti)
         let testerName = '', testerId = '', isDuo = false, partner: string | null = null
         if (duo) {
           const d = pickDuo(caps)
           if (!d) continue
           testerName = d.lead.name; testerId = d.lead.id; isDuo = true; partner = d.partner.name
-          addLoad(d.lead.id, workdays); addLoad(d.partner.id, workdays)
+          addLoad(d.lead.id, itemWorkdays); addLoad(d.partner.id, itemWorkdays)
         } else {
           const t = pickSolo(caps)
           if (!t) continue
           testerName = t.name; testerId = t.id
-          addLoad(t.id, workdays)
+          addLoad(t.id, itemWorkdays)
         }
         assignments.push({
           key: `${code}-${r.제조번호}-${ti}-${testerId}`,
           productCode: code, productName: r.품목명, batchNo: r.제조번호,
           testerName, testerId, testItems: [ti], method: '개별항목',
-          isDuo, duoPartner: partner, isUrgent: r.긴급, startDate, dates, workdays,
-          note: r.긴급 ? '긴급' : '',
+          isDuo, duoPartner: partner, isUrgent: r.긴급, startDate: itemStart, dates: itemDates, workdays: itemWorkdays,
+          note: isHeavyMetal ? '개별 중금속(1일 고정)' : (r.긴급 ? '긴급' : ''),
         })
         any = true
       }

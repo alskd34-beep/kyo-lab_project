@@ -20,8 +20,9 @@ export interface PctOrderRow {
   productSynced: boolean
   note: string | null
   ingestState: string
-  manhours: number | null   // 품목명 기준 평균공수(시간) 합
+  workdays: number | null   // 품목코드 기준 공수(일, DAY) — product_workload.avg_workdays
   hasJob: boolean           // QC 작업 시작 여부
+  locked: boolean           // 관리자 확정/LOCK (원칙1·3). 컬럼 미적용 환경에서는 false
   createdAt: string
   updatedAt: string
 }
@@ -69,18 +70,18 @@ export async function listOrders(filters: {
     for (const t of testers ?? []) nameByTester.set(t.id as string, t.name as string)
   }
 
-  // 공수: product_code → products.avg_hours(품목 기준)
+  // 공수: product_code → product_workload.avg_workdays(일, 단일 소스)
   const codes = [...new Set(orders.map(o => o.product_code as string))]
-  const manhoursByCode = new Map<string, number>()
+  const workdaysByCode = new Map<string, number>()
   const jobOrderIds = new Set<string>()
   {
-    const { data: prods } = await supabaseAdmin
-      .from('products')
-      .select('product_code, avg_hours')
+    const { data: wl } = await supabaseAdmin
+      .from('product_workload')
+      .select('product_code, avg_workdays')
       .in('product_code', codes)
-    for (const p of prods ?? []) {
-      const avg = Number(p.avg_hours) || 0
-      if (avg > 0) manhoursByCode.set(p.product_code as string, avg)
+    for (const w of wl ?? []) {
+      const d = Number(w.avg_workdays) || 0
+      if (d > 0) workdaysByCode.set(w.product_code as string, d)
     }
   }
   // QC 작업 시작 여부
@@ -105,11 +106,28 @@ export async function listOrders(filters: {
     productSynced: !!o.product_synced,
     note: (o.note as string) ?? null,
     ingestState: o.ingest_state as string,
-    manhours: manhoursByCode.get(o.product_code as string) ?? null,
+    workdays: workdaysByCode.get(o.product_code as string) ?? null,
     hasJob: jobOrderIds.has(o.id as string),
+    locked: !!o.locked,   // select('*') 결과. 컬럼 미적용 시 undefined → false
     createdAt: o.created_at as string,
     updatedAt: o.updated_at as string,
   }))
+}
+
+/**
+ * 관리자 확정/LOCK 토글 (PRD 원칙1: 확정 → LOCK / 원칙3: LOCK 존중).
+ * lock=true 면 자동배정·재배정·시트 자동반영 대상에서 제외된다.
+ * locked 컬럼(0015) 미적용 환경에서는 명확한 에러를 던진다.
+ */
+export async function setOrderLock(orderId: string, lock: boolean, userId: string | null): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from('pct_orders')
+    .update({ locked: lock, locked_by: lock ? userId : null, locked_at: lock ? new Date().toISOString() : null })
+    .eq('id', orderId)
+  if (error) {
+    // 컬럼 미존재(마이그레이션 0015 미적용) 등
+    throw new Error(`확정/잠금 실패: ${error.message} (마이그레이션 0015 적용 필요 가능)`)
+  }
 }
 
 /**

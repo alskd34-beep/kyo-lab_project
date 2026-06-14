@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
 import {
   RefreshCw, Sparkles, History, AlertCircle, Pencil, X, Loader2, Database,
-  ChevronDown, ChevronRight,
+  ChevronDown, ChevronRight, Lock, LockOpen,
 } from "lucide-react"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -24,8 +24,9 @@ interface OrderRow {
   productSynced: boolean
   note: string | null
   ingestState: string
-  manhours: number | null
+  workdays: number | null
   hasJob: boolean
+  locked: boolean
 }
 interface Tester { id: string; name: string }
 interface EditRow {
@@ -121,6 +122,24 @@ export default function OrdersPage() {
       await load()
     } catch (e) {
       flash(`적재 실패: ${e instanceof Error ? e.message : ""}`)
+    } finally { setBusy(null) }
+  }
+
+  const toggleLock = async (r: OrderRow) => {
+    const lock = !r.locked
+    setBusy(`lock-${r.id}`)
+    try {
+      const res = await fetch(`/api/pct-orders/${r.id}/lock`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lock }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      flash(lock ? "확정(잠금)되었습니다. 자동배정·시트변경에서 보호됩니다." : "잠금이 해제되었습니다.")
+      await load()
+    } catch (e) {
+      flash(`확정/잠금 실패: ${e instanceof Error ? e.message : ""}`)
     } finally { setBusy(null) }
   }
 
@@ -315,20 +334,37 @@ export default function OrdersPage() {
                                 : <span className="text-slate-400">일반</span>}
                             </td>
                             <td className="px-3 py-2.5">{r.method}</td>
-                            <td className="px-3 py-2.5">{r.manhours != null ? `${r.manhours}h` : "-"}</td>
+                            <td className="px-3 py-2.5">{r.workdays != null ? `${r.workdays}일` : "-"}</td>
                             <td className="px-3 py-2.5">
                               {r.assigneeName
                                 ? <span className="font-medium text-slate-800">{r.assigneeName}</span>
                                 : <span className="text-slate-400">미배정</span>}
                             </td>
                             <td className="px-3 py-2.5">
-                              <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${STATUS_CLS[r.status] ?? STATUS_CLS["대기"]}`}>{r.status}</span>
+                              <div className="flex items-center gap-1">
+                                <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${STATUS_CLS[r.status] ?? STATUS_CLS["대기"]}`}>{r.status}</span>
+                                {r.locked && (
+                                  <span title="관리자 확정(LOCK)" className="inline-flex items-center gap-0.5 rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-700">
+                                    <Lock size={10} />확정
+                                  </span>
+                                )}
+                              </div>
                             </td>
                             <td className="px-3 py-2.5">
                               <div className="flex items-center justify-end gap-1">
                                 <button onClick={() => setHistoryTarget(r)} title="수정이력" className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
                                   <History size={15} />
                                 </button>
+                                {isAdmin && (
+                                  <button
+                                    onClick={() => toggleLock(r)}
+                                    disabled={busy === `lock-${r.id}`}
+                                    title={r.locked ? "잠금 해제" : "확정(잠금)"}
+                                    className={`rounded-md p-1.5 ${r.locked ? "text-amber-600 hover:bg-amber-50" : "text-slate-400 hover:bg-emerald-50 hover:text-emerald-600"}`}
+                                  >
+                                    {busy === `lock-${r.id}` ? <Loader2 size={15} className="animate-spin" /> : r.locked ? <LockOpen size={15} /> : <Lock size={15} />}
+                                  </button>
+                                )}
                                 {isAdmin && (
                                   <button onClick={() => setEditTarget(r)} title="수정" className="rounded-md p-1.5 text-slate-400 hover:bg-blue-50 hover:text-blue-600">
                                     <Pencil size={15} />

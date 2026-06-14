@@ -7,7 +7,9 @@
  *   2) 품목명 동일
  *   3) 품목코드 다름 + 품목명 동일 (사실상 2에 포함)
  *   4) 품목코드 동일 + 품목명 다름
- *   5) 품목명 포함관계 (한쪽 품목명이 다른쪽 품목명의 substring)
+ *   5) 유사 품목명 — (a) 한쪽이 다른쪽의 substring 이거나,
+ *      (b) 회사명 접두어 제거 후 공통 접두어가 MIN_PREFIX_LEN 이상
+ *         (예: 베니톨정·베니톨에스정·베니톨플러스정 → 공통 접두어 '베니톨' → 동일 그룹)
  *
  * 그룹별:
  *   - test_start_date = MAX(그룹 내 packaging_date) + 1일 (없으면 무시, 전부 없으면 null)
@@ -60,18 +62,65 @@ function addOneDay(iso: string): string {
   return d.toISOString().slice(0, 10)
 }
 
+// ─── 유사 품목명(공통 접두어) 판정 ─────────────────────────────────────────────
+/** 유사명으로 묶기 위한 공통 접두어 최소 길이(한글 글자 수) */
+const MIN_PREFIX_LEN = 3
+/**
+ * 회사명 접두어 — 이 토큰만 공유하는 건 "유사"로 보지 않는다(과묶음 방지).
+ * 예: '광동마음정액' vs '광동비타민' 은 '광동'만 공유하므로 그룹화하지 않는다.
+ */
+const COMPANY_PREFIXES = ['광동제약', '광동'] as const
+
+/** 공백 제거 + trim 정규화 */
+function normalizeName(s: string): string {
+  return (s ?? '').replace(/\s+/g, '').trim()
+}
+
+/** 앞쪽 회사명 접두어 제거 (가장 긴 것 우선) */
+function stripCompany(s: string): string {
+  for (const c of COMPANY_PREFIXES) {
+    if (s.startsWith(c)) return s.slice(c.length)
+  }
+  return s
+}
+
+/** 두 문자열의 공통 접두어 길이 */
+function commonPrefixLen(a: string, b: string): number {
+  const n = Math.min(a.length, b.length)
+  let i = 0
+  while (i < n && a[i] === b[i]) i++
+  return i
+}
+
+/**
+ * 유사 품목명 여부.
+ * (a) 한쪽이 다른쪽의 substring 이거나,
+ * (b) 회사명 접두어를 떼어낸 뒤 공통 접두어가 MIN_PREFIX_LEN 이상이면 유사로 본다.
+ *     (베니톨정/베니톨에스정/베니톨플러스정 → '베니톨' 공유 → 유사)
+ */
+function similarName(an: string, bn: string): boolean {
+  if (!an || !bn) return false
+  // (a) 포함관계
+  if (an.includes(bn) || bn.includes(an)) return true
+  // (b) 회사명 제거 후 공통 접두어
+  const sa = stripCompany(an)
+  const sb = stripCompany(bn)
+  if (!sa || !sb) return false
+  return commonPrefixLen(sa, sb) >= MIN_PREFIX_LEN
+}
+
 /** 두 오더가 동일 그룹 조건(OR) 중 하나라도 충족하는가 */
 function sameGroup(a: OrderForGrouping, b: OrderForGrouping): boolean {
-  const an = (a.productName ?? '').trim()
-  const bn = (b.productName ?? '').trim()
+  const an = normalizeName(a.productName)
+  const bn = normalizeName(b.productName)
   // 1) 품목코드 동일 AND 완료요청일 동일
   if (a.productCode === b.productCode && a.dueDate && b.dueDate && a.dueDate === b.dueDate) return true
   // 2 & 3) 품목명 동일 (코드 동일/상이 무관)
   if (an && bn && an === bn) return true
   // 4) 품목코드 동일 + 품목명 다름
   if (a.productCode === b.productCode) return true
-  // 5) 품목명 포함관계 (한쪽이 다른쪽의 substring)
-  if (an && bn && (an.includes(bn) || bn.includes(an))) return true
+  // 5) 유사 품목명 (포함관계 또는 공통 접두어)
+  if (similarName(an, bn)) return true
   return false
 }
 

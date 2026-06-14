@@ -29,6 +29,7 @@ import {
   type EngineEquip,
   type EngineWorkload,
 } from '@backend/services/scheduleEngine'
+import { buildGroupsFromOrders, type OrderForGrouping } from '@backend/services/concurrentGroups'
 
 export interface AssignResult {
   mode: 'codex' | 'rule'
@@ -43,21 +44,62 @@ interface OrderForAssign {
   product_name: string
   batch_no: string
   packaging_date: string | null
+  due_date: string | null
   is_urgent: boolean
   method: string
 }
 
+/** 배정 선택 함수 — 오더 1건 → 시험자(또는 null) */
+type PickFn = (order: OrderForAssign) => { id: string; name: string } | null
+
 /** 대상 오더 로드 (orderIds 미지정 시 미배정 '대기' 전체) */
 async function loadTargetOrders(orderIds?: string[]): Promise<OrderForAssign[]> {
+  // select('*') 로 locked 컬럼까지 받되(0015 미적용 시 자동 누락), 잠긴 오더는 배정 제외.
   let q = supabaseAdmin
     .from('pct_orders')
-    .select('id, product_code, product_name, batch_no, packaging_date, is_urgent, method')
+    .select('*')
     .neq('status', '삭제')
   if (orderIds && orderIds.length > 0) q = q.in('id', orderIds)
   else q = q.eq('status', '대기').is('assignee_tester_id', null)
   const { data, error } = await q
   if (error) throw error
-  return (data ?? []) as OrderForAssign[]
+  // [원칙3] LOCK(확정) 오더는 자동배정/재배정 대상에서 제외
+  return (data ?? []).filter(o => !o.locked) as OrderForAssign[]
+}
+
+/**
+ * [동시분석] 대상 오더를 동시분석 그룹으로 묶고, 그룹별 대표 오더를 선정한다.
+ * - 그룹핑 규칙은 concurrentGroups.buildGroupsFromOrders 와 100% 동일(코드 일원화).
+ * - 대표(rep) = 그룹 내 최소 id (concurrentGroups 의 group_key 규칙과 일치 → 결정적).
+ * - 엔진/LLM 에는 대표만 태워 공수를 그룹당 1회만 계산(PRD 원칙4: 동시분석 시 공수 미증가).
+ * - 배정 후 그룹의 모든 멤버에 대표의 시험자를 전파 → 동일/유사 품목을 한 사람이 동시분석.
+ *
+ * @returns reps 대표 오더 목록, memberToRep 멤버 orderId → 대표 오더
+ */
+function groupOrders(orders: OrderForAssign[]): {
+  reps: OrderForAssign[]
+  memberToRep: Map<string, OrderForAssign>
+} {
+  const forGrouping: OrderForGrouping[] = orders.map(o => ({
+    id: o.id,
+    productCode: o.product_code,
+    productName: o.product_name,
+    batchNo: o.batch_no,
+    packagingDate: o.packaging_date,
+    dueDate: o.due_date,
+  }))
+  const built = buildGroupsFromOrders(forGrouping)
+  const orderById = new Map(orders.map(o => [o.id, o]))
+  const reps: OrderForAssign[] = []
+  const memberToRep = new Map<string, OrderForAssign>()
+  for (const g of built) {
+    const repId = g.items.map(i => i.orderId).reduce((a, b) => (a < b ? a : b))
+    const rep = orderById.get(repId)
+    if (!rep) continue
+    reps.push(rep)
+    for (const it of g.items) memberToRep.set(it.orderId, rep)
+  }
+  return { reps, memberToRep }
 }
 
 /**
@@ -144,16 +186,19 @@ function withForcedRules(
 
 /**
  * [규칙4] 시험자별 최근 HIGH 난이도 부담 수 → penalty 점수(Record).
- * 진행 중(미완료) 보유 업무 중 품목 난이도가 High 인 건수를 부담 프록시로 집계해,
+ * PRD: "최근 2주 기준 HIGH 난이도 업무가 많으면 차주 MEDIUM/LOW 우선 배정".
+ * 최근 14일 내 받은(created_at) HIGH 난이도 배정 건수를 집계해,
  * 엔진 초기 부하(initialLoad)로 실어 차주 MEDIUM/LOW 배정에서 후순위로 민다.
  */
 async function highDifficultyPenalty(): Promise<Record<string, number>> {
+  const twoWeeksAgoIso = new Date(Date.now() - 14 * 86400000).toISOString()
   const [{ data: orders }, { data: prods }] = await Promise.all([
     supabaseAdmin
       .from('pct_orders')
       .select('assignee_tester_id, product_code')
       .not('assignee_tester_id', 'is', null)
-      .not('status', 'in', '("완료","삭제")'),
+      .neq('status', '삭제')
+      .gte('created_at', twoWeeksAgoIso),   // [규칙4] 최근 2주(14일)
     supabaseAdmin.from('products').select('product_code, difficulty'),
   ])
   const diffByCode = new Map<string, string>()
@@ -210,7 +255,7 @@ interface CodexAssignResponse {
   assignments: Array<{ orderId: string; testerId: string | null }>
 }
 
-async function autoAssignCodex(orders: OrderForAssign[], excludedTesterIds: Set<string>): Promise<AssignResult> {
+async function autoAssignCodex(orders: OrderForAssign[], excludedTesterIds: Set<string>): Promise<{ mode: 'codex'; pick: PickFn }> {
   const [allTesters, capabilities, matrix, itemsByCode, workload] = await Promise.all([
     listTesters(), listCapabilities(), listCapabilityMatrix(), productItemsByCode(), currentWorkload(),
   ])
@@ -274,12 +319,11 @@ async function autoAssignCodex(orders: OrderForAssign[], excludedTesterIds: Set<
     testers: testers.map(t => ({ id: t.id, name: t.name })),
     weekIndex: isoWeekIndex(new Date()),
   })
-  const applied = await applyAssignments(orders, pick)
-  return { mode: 'codex', ...applied }
+  return { mode: 'codex', pick }
 }
 
 // ─── 규칙엔진 배분 (폴백) ──────────────────────────────────────────────────────
-async function autoAssignRule(orders: OrderForAssign[], excludedTesterIds: Set<string>): Promise<AssignResult> {
+async function autoAssignRule(orders: OrderForAssign[], excludedTesterIds: Set<string>): Promise<{ mode: 'rule'; pick: PickFn }> {
   const [allTesters, capabilities, matrix, productsRes, ptiRes, testItemsRes, equipRes, workloadRes] =
     await Promise.all([
       listTesters(),
@@ -331,8 +375,8 @@ async function autoAssignRule(orders: OrderForAssign[], excludedTesterIds: Set<s
   const rows: EnginePctRow[] = orders.map(o => {
     const code = (o.product_code ?? '').trim()
     const wd = workdaysByCode.get(code)
-    // 공수 미상(undefined)이면 엔진 기본 3일 → 긴급 허용. 공수가 있으면 3일 이하만 긴급 인정.
-    const urgent = !!o.is_urgent && (wd == null || emergencyAllowed(wd))
+    // [규칙3] 긴급은 공수 ≤3DAY 품목만 허용(PRD). 공수 미상정 품목은 ≤3DAY 보장이 안 되므로 긴급 제외.
+    const urgent = !!o.is_urgent && wd != null && emergencyAllowed(wd)
     return {
       품목코드: code,
       품목명:   o.product_name ?? '',
@@ -360,8 +404,7 @@ async function autoAssignRule(orders: OrderForAssign[], excludedTesterIds: Set<s
     (o) => testerByKey.get(`${o.product_code}|${o.batch_no}`) ?? null,
     { itemsByCode, testers: testers.map(t => ({ id: t.id, name: t.name })), weekIndex: isoWeekIndex(new Date()) },
   )
-  const applied = await applyAssignments(orders, pick)
-  return { mode: 'rule', ...applied }
+  return { mode: 'rule', pick }
 }
 
 /**
@@ -371,18 +414,28 @@ export async function autoAssign(orderIds?: string[]): Promise<AssignResult> {
   const orders = await loadTargetOrders(orderIds)
   if (orders.length === 0) return { mode: 'rule', assigned: 0, unassigned: 0, details: [] }
 
+  // [동시분석] 동일 품목코드/유사 품목명을 한 그룹으로 묶고 대표만 배정 대상으로 삼는다.
+  // 엔진/LLM 에는 reps 만 태워 공수를 그룹당 1회 계산하고, 배정 결과를 멤버 전체에 전파한다.
+  const { reps, memberToRep } = groupOrders(orders)
+
   // 휴가/출장 중인 시험자 제외 (요구사항: 휴가 기간 중인 시험자는 자동 배정 대상 제외)
   const { from, to } = leaveWindow(orders)
   const excludedTesterIds = await testersOnLeave(from, to).catch(() => new Set<string>())
 
+  let resolved: { mode: 'codex' | 'rule'; pick: PickFn } | null = null
   if (codexAssignEnabled()) {
     try {
-      return await autoAssignCodex(orders, excludedTesterIds)
+      resolved = await autoAssignCodex(reps, excludedTesterIds)
     } catch (err) {
       console.error('[pctAssign] Codex 배분 실패 — 규칙엔진 폴백:', err)
     }
   }
-  return autoAssignRule(orders, excludedTesterIds)
+  if (!resolved) resolved = await autoAssignRule(reps, excludedTesterIds)
+
+  // [동시분석] 각 멤버는 자신이 속한 그룹 대표의 배정 결과를 따른다(한 시험자가 동시분석).
+  const groupPick: PickFn = (o) => resolved!.pick(memberToRep.get(o.id) ?? o)
+  const applied = await applyAssignments(orders, groupPick)
+  return { mode: resolved.mode, ...applied }
 }
 
 /** 수동 단일 배정 (담당자 변경 시 재배정 이력 기록) */

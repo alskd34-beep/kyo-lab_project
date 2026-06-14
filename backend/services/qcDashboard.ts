@@ -3,13 +3,14 @@
  *
  * 기존 테이블만 읽어 JS에서 집계한다.
  *  - pct_orders      : 상태/배정/품목/긴급/동기화 카운트
- *  - products        : product_code → avg_hours(공수) / difficulty(난이도) 매핑
+ *  - product_workload: product_code → avg_workdays(공수 DAY, 절대값)
+ *  - products        : product_code → difficulty(난이도) 매핑
  *  - reassignment_history : 재배정 총건수 + 시험자(after_user)별 집계
  *  - testers         : id → name
  *
- * "보유 DAY"는 현재 미완료(대기/진행중/검토중/지연) 배정 오더의 공수 합이며,
- * 공수는 products.avg_hours(시간)을 8시간=1일로 환산한다.
- * avg_hours 미등록 품목은 1일로 간주하는 근사치다.
+ * "보유 DAY"는 현재 미완료(대기/진행중/검토중/지연) 배정 오더의 공수(DAY) 합이며,
+ * 공수는 자동배정과 동일하게 product_workload.avg_workdays(DAY 단위, PRD 절대값)를 쓴다.
+ * 공수 미등록 품목은 1일로 간주하는 근사치다.
  */
 
 import { supabaseAdmin } from '@backend/lib/supabase'
@@ -32,7 +33,8 @@ export interface QcDashboard {
 // 미완료(보유 중) 상태 — 보유 DAY / 난이도 분포 산정 대상
 const OPEN_STATUSES = new Set(['대기', '진행중', '검토중', '지연'])
 const PSYCHOTROPIC_NAMES = new Set(['자이렌정', '아디펙스정'])
-const HOURS_PER_DAY = 8
+// 공수(DAY) 미등록 품목 근사치
+const DEFAULT_WORKDAYS = 1
 
 export async function getQcDashboard(): Promise<QcDashboard> {
   // 1) 오더 (삭제 제외)
@@ -43,22 +45,24 @@ export async function getQcDashboard(): Promise<QcDashboard> {
   if (orderErr) throw orderErr
   const orders = (orderData ?? []) as Record<string, unknown>[]
 
-  // 2) products 매핑 (product_code → avg_hours / difficulty)
+  // 2) 매핑: product_workload(공수 DAY) + products(난이도)
   const codes = [...new Set(orders.map(o => o.product_code as string).filter(Boolean))]
-  const avgHoursByCode = new Map<string, number>()
+  const workdaysByCode = new Map<string, number>()
   const difficultyByCode = new Map<string, string>()
   if (codes.length > 0) {
-    const { data: prods, error: prodErr } = await supabaseAdmin
-      .from('products')
-      .select('product_code, avg_hours, difficulty')
-      .in('product_code', codes)
-    if (prodErr) throw prodErr
-    for (const p of prods ?? []) {
-      const code = p.product_code as string
-      const avg = Number(p.avg_hours)
-      if (avg > 0) avgHoursByCode.set(code, avg)
+    const [wlRes, prodRes] = await Promise.all([
+      supabaseAdmin.from('product_workload').select('product_code, avg_workdays').in('product_code', codes),
+      supabaseAdmin.from('products').select('product_code, difficulty').in('product_code', codes),
+    ])
+    if (wlRes.error) throw wlRes.error
+    if (prodRes.error) throw prodRes.error
+    for (const w of wlRes.data ?? []) {
+      const days = Number(w.avg_workdays)
+      if (days > 0) workdaysByCode.set(w.product_code as string, days)
+    }
+    for (const p of prodRes.data ?? []) {
       const diff = (p.difficulty as string | null)?.toUpperCase()
-      if (diff) difficultyByCode.set(code, diff)
+      if (diff) difficultyByCode.set(p.product_code as string, diff)
     }
   }
 
@@ -103,8 +107,8 @@ export async function getQcDashboard(): Promise<QcDashboard> {
 
     // 미완료 배정 오더만 보유 DAY / 난이도 분포 산정
     if (assignee && OPEN_STATUSES.has(status)) {
-      const hours = avgHoursByCode.get(code) ?? HOURS_PER_DAY // 미등록 → 1일(근사치)
-      daysByTester.set(assignee, (daysByTester.get(assignee) ?? 0) + hours / HOURS_PER_DAY)
+      const days = workdaysByCode.get(code) ?? DEFAULT_WORKDAYS // 공수 미등록 → 1일(근사치)
+      daysByTester.set(assignee, (daysByTester.get(assignee) ?? 0) + days)
 
       const bucket = diffByTester.get(assignee) ?? { high: 0, medium: 0, low: 0 }
       const diff = difficultyByCode.get(code)
