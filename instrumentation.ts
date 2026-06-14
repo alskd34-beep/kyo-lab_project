@@ -33,5 +33,16 @@ export async function register() {
   cron.schedule('0 9 * * *', () => void run('09:00'), opts)   // 매일 09:00
   cron.schedule('0 14 * * *', () => void run('14:00'), opts)  // 매일 14:00
 
-  console.log('[pct-cron] PCT 자동 적재 스케줄 등록 완료 (09:00, 14:00 KST)')
+  // 장비 예약 대기(WAITING) 24시간 초과분 자동 취소 — 매시 정각
+  cron.schedule('0 * * * *', () => void (async () => {
+    try {
+      const { autoCancelStaleWaiting } = await import('@backend/services/equipmentReservation')
+      const n = await autoCancelStaleWaiting()
+      if (n > 0) console.log(`[equip-cron] 대기 예약 자동취소 ${n}건 (24h 초과)`)
+    } catch (err) {
+      console.error('[equip-cron] 자동취소 실패', err)
+    }
+  })(), opts)
+
+  console.log('[pct-cron] PCT 자동 적재 스케줄 등록 완료 (09:00, 14:00 KST) + 장비 대기 자동취소(매시)')
 }

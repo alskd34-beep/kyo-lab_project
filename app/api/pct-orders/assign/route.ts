@@ -20,10 +20,14 @@ export async function POST(req: NextRequest) {
       orderIds?: string[]
       orderId?: string
       testerId?: string | null
+      reason?: string | null
     }
     if (body.mode === 'manual') {
       if (!body.orderId) return Response.json({ error: 'orderId는 필수입니다.' }, { status: 400 })
-      await assignManually(body.orderId, body.testerId ?? null)
+      await assignManually(body.orderId, body.testerId ?? null, {
+        changedBy: auth.payload.sub,
+        reason: body.reason ?? null,
+      })
       return Response.json({ ok: true })
     }
     const result = await autoAssign(body.orderIds)

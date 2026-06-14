@@ -52,6 +52,12 @@ export interface EngineInput {
   workload: EngineWorkload[]
   year: number
   defaultWorkdays?: number  // 공수 미상 시 (기본 3)
+  /**
+   * 시험자별 초기 부하 가산치 (testerId → 점수).
+   * 난이도 기반 배정에 사용: 최근 2주 HIGH 난이도 업무가 많은 시험자에게 penalty 를 미리 실어
+   * 차주 MEDIUM/LOW 배정에서 후순위로 밀어낸다. (assignRules.difficultyPenalty 산출값)
+   */
+  initialLoad?: Record<string, number>
 }
 
 // ─── 출력 타입 ─────────────────────────────────────────────────────────────────
@@ -192,9 +198,10 @@ export function generatePctSchedule(input: EngineInput): EngineResult {
   const duoPool  = activeTesters.filter(t => t.canDuo)
   const testerByName = new Map(activeTesters.map(t => [t.name, t]))
 
-  // 부하(누적 근무일) 추적
+  // 부하(누적 근무일) 추적 — 난이도 penalty(initialLoad)를 초기값으로 실어
+  // "최근 HIGH 부담이 큰 시험자"를 MEDIUM/LOW 배정에서 후순위로 밀어낸다.
   const load = new Map<string, number>()
-  for (const t of activeTesters) load.set(t.id, 0)
+  for (const t of activeTesters) load.set(t.id, input.initialLoad?.[t.id] ?? 0)
   const addLoad = (id: string, d: number) => load.set(id, (load.get(id) ?? 0) + d)
   const getLoad = (id: string) => load.get(id) ?? 0
 

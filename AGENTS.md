@@ -85,3 +85,11 @@ Supabase (Postgres)   ← schema in supabase/migrations
 
 ## UX Preferences
 - 별도 요청이 없으면 데이터 수정 작업은 인라인 편집보다 모달/Dialog를 기본 UX로 사용한다.
+
+## QC 시험 스케줄 자동배정 (PCT 워크플로우)
+제조팀 구글시트(PCT) 생산계획을 적재해 QC 시험 스케줄을 자동 생성하고, AI가 시험자 배정을 추천하면 관리자가 확정·LOCK 하는 워크플로우.
+- **프로세스 정의 단일 기준**: `.claude/commands/qc-schedule-process.md` (슬래시 커맨드 `/qc-schedule-process`).
+- **구현 현황 추적**: `docs/qc-schedule-status.md`.
+- 핵심 원칙: ① AI는 추천·관리자가 확정 ② 시험 시작(IN_PROGRESS)/완료 후 일정 변경 금지 ③ LOCK 상태 존중 ④ 공수는 DAY 단위(품목마스터가 절대값).
+- 주요 테이블: `pct_orders`, `pct_ingest_log`, `pct_order_edits`, `qc_jobs`, `qc_job_items`, `notifications`, `app_settings`, `operator_schedule`(휴가), `equipment_reservation`(장비예약), `reassignment_history`(재배정이력).
+- 적재 크론은 `instrumentation.ts`(9시/14시 Asia/Seoul), 수동 트리거 `POST /api/cron/ingest-pct`(admin).

@@ -11,6 +11,7 @@
 import { supabaseAdmin } from '@backend/lib/supabase'
 import { fetchPctSheet, type SheetPctRow } from '@backend/lib/googleSheet'
 import { createNotification } from '@backend/services/notifications'
+import { rebuildGroups } from '@backend/services/concurrentGroups'
 
 // 기존 PCT 화면이 쓰던 기본 시트 ID (폴백)
 const DEFAULT_FILE_ID = '1H9_lR-_tpEHKSpVD2qLbxX5cqXRG_s5rpbGs-gqSPxU'
@@ -20,12 +21,36 @@ export interface IngestResult {
   total: number
   created: number
   updated: number
+  blocked: number      // 작업 진행/LOCK 상태로 변경 차단된 건수
   deleted: number
   unsynced: number
   deadlineAlerts: number
 }
 
 const keyOf = (batchNo: string, code: string) => `${batchNo}|${code}`
+
+/**
+ * 변경 차단 대상 상태.
+ * 작업이 이미 진행/완료되었거나 LOCK 된 오더는 생산계획(시트) 변경을 자동 반영하지 않는다.
+ * (영문 상태 전환 후 LOCKED/IN_PROGRESS/REVIEW/COMPLETED 등을 추가)
+ */
+const LOCKED_STATUSES = new Set(['진행중', '검토중', '완료', '지연', 'LOCKED', 'IN_PROGRESS', 'REVIEW', 'COMPLETED'])
+const isLockedStatus = (status: string) => LOCKED_STATUSES.has(status)
+
+/** 변경 차단 시 before/after 비교 대상 필드 (라벨, 기존값, 신규값) */
+const CHANGE_FIELDS: Array<{
+  label: string
+  oldVal: (e: ExistingOrder) => string
+  newVal: (r: SheetPctRow) => string
+}> = [
+  { label: '품목명',     oldVal: e => e.product_name,            newVal: r => r.productName },
+  { label: '제형',       oldVal: e => e.dosage_form ?? '',       newVal: r => r.dosageForm },
+  { label: '포장완료일', oldVal: e => e.packaging_date ?? '',    newVal: r => r.packagingDate ?? '' },
+  { label: '완료예정일', oldVal: e => e.due_date ?? '',          newVal: r => r.dueDate ?? '' },
+  { label: '긴급',       oldVal: e => String(e.is_urgent),       newVal: r => String(r.isUrgent) },
+  { label: '진행방법',   oldVal: e => e.method,                  newVal: r => r.method },
+  { label: '비고',       oldVal: e => e.note ?? '',              newVal: r => r.note },
+]
 
 /** 시트 ID 해석: app_settings > env > 기본값 */
 export async function resolveSheetFileId(): Promise<string> {
@@ -88,7 +113,7 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
   const productCodes = new Set((prodRows ?? []).map(p => String(p.product_code)))
 
   const result: IngestResult = {
-    fileId, total: sheetRows.length, created: 0, updated: 0, deleted: 0, unsynced: 0, deadlineAlerts: 0,
+    fileId, total: sheetRows.length, created: 0, updated: 0, blocked: 0, deleted: 0, unsynced: 0, deadlineAlerts: 0,
   }
   const seen = new Set<string>()
   const nowIso = new Date().toISOString()
@@ -138,6 +163,32 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
         result.created++
         await logIngest(key, 'new', '대기', fileId)
       }
+    } else if (diffChanged(existing, row) && isLockedStatus(existing.status)) {
+      // ── 변경 차단 ──────────────────────────────────────────────────────────
+      // 작업 진행/LOCK 상태 오더는 시트 변경을 자동 반영하지 않는다(일정·배정 보존).
+      // before/after 를 pct_order_edits 에 기록하고 감독관 알림만 생성한다.
+      const changes = CHANGE_FIELDS.filter(f => f.oldVal(existing) !== f.newVal(row))
+      for (const c of changes) {
+        await supabaseAdmin.from('pct_order_edits').insert({
+          order_id: existing.id,
+          field: c.label,
+          old_value: c.oldVal(existing),
+          new_value: c.newVal(row),
+          reason: '생산계획 변경 차단(작업 진행/LOCK 상태) — 자동 미반영',
+        })
+      }
+      // 존재 추적용 last_seen_at 만 갱신, 실제 필드는 보존
+      await supabaseAdmin.from('pct_orders').update({ last_seen_at: nowIso }).eq('id', existing.id)
+      result.blocked++
+      await logIngest(key, 'blocked', existing.status, fileId)
+      const summary = changes.map(c => `${c.label}: ${c.oldVal(existing) || '-'} → ${c.newVal(row) || '-'}`).join(', ')
+      await createNotification({
+        type: 'status_changed',
+        severity: 'warning',
+        title: '생산계획 변경 차단',
+        body: `${existing.product_name} (${row.batchNo}) 는 '${existing.status}' 상태로 시트 변경이 자동 반영되지 않았습니다. 변경내용: ${summary || '없음'}. 필요 시 수동 반영하세요.`,
+        relatedOrderId: existing.id,
+      })
     } else if (diffChanged(existing, row)) {
       // ── 변경 ────────────────────────────────────────────────────────────────
       const { error } = await supabaseAdmin.from('pct_orders').update({
@@ -177,6 +228,17 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
     }
   }
 
+  // ── 동시분석 그룹 자동 재생성 ──────────────────────────────────────────────
+  // 적재로 오더가 신규/변경/삭제되면 그룹 구성이 달라질 수 있으므로 즉시 재구성한다.
+  // (group_lock=true 그룹과 멤버는 rebuildGroups 내부에서 보존)
+  let groupsCreated = 0
+  try {
+    const r = await rebuildGroups()
+    groupsCreated = r.created
+  } catch (err) {
+    console.error('[pct-ingest] 동시분석 그룹 재생성 실패', err)
+  }
+
   // ── 마감 임박(D-7) 미완료 알림 ─────────────────────────────────────────────
   result.deadlineAlerts = await notifyDeadlines()
 
@@ -184,14 +246,14 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
   await createNotification({
     type: 'ingest',
     title: 'PCT 시트 적재 완료',
-    body: `신규 ${result.created} · 변경 ${result.updated} · 삭제 ${result.deleted} · 미동기화 ${result.unsynced}`,
+    body: `신규 ${result.created} · 변경 ${result.updated} · 차단 ${result.blocked} · 삭제 ${result.deleted} · 미동기화 ${result.unsynced} · 동시분석그룹 ${groupsCreated}`,
     severity: 'info',
   })
 
   return result
 }
 
-async function logIngest(orderKey: string, changeType: 'new' | 'updated' | 'deleted', status: string, fileId: string) {
+async function logIngest(orderKey: string, changeType: 'new' | 'updated' | 'blocked' | 'deleted', status: string, fileId: string) {
   await supabaseAdmin.from('pct_ingest_log').insert({
     order_key: orderKey, change_type: changeType, status, file_id: fileId,
   })

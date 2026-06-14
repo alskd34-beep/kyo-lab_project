@@ -65,6 +65,10 @@ const NAV_SECTIONS: NavSection[] = [
           { id: "schedule-pct", label: "AI 스케줄", live: true },
           { id: "schedule-monthly", label: "월간 스케줄", live: true },
           { id: "schedule-orders", label: "오더 배정", live: true, adminOnly: true },
+          { id: "schedule-groups", label: "동시분석 그룹", live: true, adminOnly: true },
+          { id: "schedule-vacation", label: "휴가 캘린더", live: true },
+          { id: "schedule-reassign", label: "재배정 이력", live: true, adminOnly: true },
+          { id: "schedule-dashboard", label: "관리자 대시보드", live: true, adminOnly: true },
         ],
       },
       { id: "my-tasks", icon: <ClipboardList size={18} />, label: "내 작업", live: true },
@@ -142,6 +146,7 @@ const NAV_SECTIONS: NavSection[] = [
         icon: <Cpu size={18} />,
         label: "장비관리",
         subItems: [
+          { id: "equip-reservation", label: "장비 예약", live: true },
           { id: "equip-operation", label: "장비 가동 현황" },
           { id: "equip-backup", label: "장비 백업 현황" },
           { id: "equip-usage", label: "장비 사용현황" },
@@ -189,6 +194,10 @@ const PATH_MAP: Record<string, string> = {
   "schedule-weekly": "/schedule/weekly",
   "schedule-monthly": "/schedule/monthly",
   "schedule-orders": "/schedule/orders",
+  "schedule-groups": "/schedule/groups",
+  "schedule-vacation": "/schedule/vacation",
+  "schedule-reassign": "/schedule/reassignments",
+  "schedule-dashboard": "/schedule/dashboard",
   "my-tasks": "/my-tasks",
   // 시험관리
   "test-status": "/test-mgmt/test-status",
@@ -222,6 +231,7 @@ const PATH_MAP: Record<string, string> = {
   stats: "/insights/stats",
   "ins-report": "/insights/ins-report",
   // 장비관리
+  "equip-reservation": "/equipment/reservation",
   "equip-operation": "/equipment/equip-operation",
   "equip-backup": "/equipment/equip-backup",
   "equip-usage": "/equipment/equip-usage",
