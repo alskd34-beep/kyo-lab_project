@@ -7,8 +7,10 @@
 
 import { NextRequest } from 'next/server'
 import { requireAuth } from '@backend/lib/guard'
-import { supabase } from '@backend/lib/supabase'
+import { supabaseAdmin } from '@backend/lib/supabase'
+import { selectAll } from '@backend/lib/supabasePage'
 import { listTesters, listCapabilities, listCapabilityMatrix } from '@backend/services/testers'
+import { getHolidaySet } from '@backend/services/holidays'
 import {
   generatePctSchedule,
   type EnginePctRow,
@@ -25,6 +27,7 @@ interface ClientRow {
   품목명?: string
   제조번호?: string
   포장일?: string
+  완료예정일?: string  // QC완료예정일 — 역순 ALAP 스케줄링 기준
   긴급?: string        // '일반' | '긴급'
   진행방법?: string    // '전항목' | '개별항목'
   담당자?: string
@@ -45,15 +48,17 @@ export async function POST(req: NextRequest) {
     const [
       testers, capabilities, matrix,
       productsRes, ptiRes, testItemsRes, equipRes, workloadRes,
+      holidays,
     ] = await Promise.all([
       listTesters(),
       listCapabilities(),
       listCapabilityMatrix(),
-      supabase.from('products').select('id, product_code'),
-      supabase.from('product_test_items').select('product_id, test_item_id'),
-      supabase.from('test_items').select('id, name, requires_duo'),
-      supabase.from('test_item_equipment').select('test_item, required_equipment, is_universal'),
-      supabase.from('product_workload').select('product_code, avg_workdays'),
+      selectAll(supabaseAdmin, 'products', 'id, product_code'),
+      selectAll(supabaseAdmin, 'product_test_items', 'product_id, test_item_id'),
+      selectAll(supabaseAdmin, 'test_items', 'id, name, requires_duo'),
+      selectAll(supabaseAdmin, 'test_item_equipment', 'test_item, required_equipment, is_universal'),
+      selectAll(supabaseAdmin, 'product_workload', 'product_code, avg_workdays'),
+      getHolidaySet(),
     ])
 
     const firstErr = [productsRes, ptiRes, testItemsRes, equipRes, workloadRes].find(r => r.error)
@@ -97,6 +102,7 @@ export async function POST(req: NextRequest) {
       품목명:   r.품목명 ?? '',
       제조번호: r.제조번호 ?? '',
       포장일:   r.포장일 ?? '',
+      완료예정일: r.완료예정일 || undefined,
       긴급:     r.긴급 === '긴급',
       진행방법: r.진행방법 === '개별항목' ? '개별항목' : '전항목',
       담당자:   r.담당자 || undefined,
@@ -135,7 +141,7 @@ export async function POST(req: NextRequest) {
     const result = generatePctSchedule({
       rows: repRows, testers, capabilities,
       matrix: matrix.map(m => ({ testerId: m.testerId, capabilityId: m.capabilityId, level: m.proficiencyLevel })),
-      productItems, equipment, workload, year,
+      productItems, equipment, workload, year, holidays,
     })
 
     // 대표 배정 결과를 키(코드|제조번호)로 인덱싱

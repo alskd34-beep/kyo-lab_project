@@ -9,6 +9,7 @@
  */
 
 import { supabaseAdmin } from '@backend/lib/supabase'
+import { selectAll } from '@backend/lib/supabasePage'
 import { listTesters, listCapabilities, listCapabilityMatrix } from '@backend/services/testers'
 import { testersOnLeave } from '@backend/services/operatorSchedule'
 import { createNotification } from '@backend/services/notifications'
@@ -134,9 +135,9 @@ async function currentWorkload(): Promise<Map<string, number>> {
 /** 품목코드 → 시험항목명 목록 */
 async function productItemsByCode(): Promise<Map<string, string[]>> {
   const [productsRes, ptiRes, testItemsRes] = await Promise.all([
-    supabaseAdmin.from('products').select('id, product_code'),
-    supabaseAdmin.from('product_test_items').select('product_id, test_item_id'),
-    supabaseAdmin.from('test_items').select('id, name'),
+    selectAll(supabaseAdmin, 'products', 'id, product_code'),
+    selectAll(supabaseAdmin, 'product_test_items', 'product_id, test_item_id'),
+    selectAll(supabaseAdmin, 'test_items', 'id, name'),
   ])
   const codeById = new Map<string, string>()
   for (const p of productsRes.data ?? []) codeById.set(p.id as string, String(p.product_code))
@@ -329,11 +330,11 @@ async function autoAssignRule(orders: OrderForAssign[], excludedTesterIds: Set<s
       listTesters(),
       listCapabilities(),
       listCapabilityMatrix(),
-      supabaseAdmin.from('products').select('id, product_code'),
-      supabaseAdmin.from('product_test_items').select('product_id, test_item_id'),
-      supabaseAdmin.from('test_items').select('id, name, requires_duo'),
-      supabaseAdmin.from('test_item_equipment').select('test_item, required_equipment, is_universal'),
-      supabaseAdmin.from('product_workload').select('product_code, avg_workdays'),
+      selectAll(supabaseAdmin, 'products', 'id, product_code'),
+      selectAll(supabaseAdmin, 'product_test_items', 'product_id, test_item_id'),
+      selectAll(supabaseAdmin, 'test_items', 'id, name, requires_duo'),
+      selectAll(supabaseAdmin, 'test_item_equipment', 'test_item, required_equipment, is_universal'),
+      selectAll(supabaseAdmin, 'product_workload', 'product_code, avg_workdays'),
     ])
 
   // 휴가/출장 중인 시험자는 배정 후보에서 제외

@@ -605,12 +605,7 @@ function ProductsPanel() {
                     </td>
                     <td className="px-4 py-2.5 text-xs font-bold text-slate-950">
                       {row.avgWorkdays != null ? (
-                        <div className="flex flex-col">
-                          <span>{row.avgWorkdays}일</span>
-                          <span className="text-[10px] font-medium text-slate-500">
-                            {row.avgHoursPackageUnit ?? row.unit ?? "대표"}
-                          </span>
-                        </div>
+                        <span>{row.avgWorkdays}일</span>
                       ) : (
                         <span className="text-slate-500">—</span>
                       )}

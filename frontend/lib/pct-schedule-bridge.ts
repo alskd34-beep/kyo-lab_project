@@ -41,6 +41,13 @@ export interface PctMonthlyAssignment {
   isUrgent:      boolean
   /** 비고 */
   note:          string
+  /** 배정 유형 — PRODUCT(품목 통배정) / INDIVIDUAL_ITEM(시험항목 단위 분산) */
+  assignmentType?:    'PRODUCT' | 'INDIVIDUAL_ITEM'
+  /** INDIVIDUAL_ITEM 일 때 배정된 시험항목명 */
+  testItemName?:      string | null
+  /** 원 품목명/코드 (개별항목 분산 시) */
+  parentProductName?: string | null
+  parentProductCode?: string | null
   /** 생성 시각 (ISO) */
   createdAt:     string
 }
@@ -61,6 +68,10 @@ export interface EngineAssignmentLike {
   dates:       string[]
   workdays:    number
   note:        string
+  assignmentType?:    'PRODUCT' | 'INDIVIDUAL_ITEM'
+  testItemName?:      string | null
+  parentProductName?: string | null
+  parentProductCode?: string | null
 }
 
 /** 규칙 엔진 배정 결과를 월간 스냅샷으로 저장 */
@@ -80,6 +91,10 @@ export function savePctMonthlyFromEngine(items: EngineAssignmentLike[]): void {
     duoPartner:    a.duoPartner,
     isUrgent:      a.isUrgent,
     note:          a.note,
+    assignmentType:    a.assignmentType,
+    testItemName:      a.testItemName ?? null,
+    parentProductName: a.parentProductName ?? null,
+    parentProductCode: a.parentProductCode ?? null,
     createdAt:     new Date().toISOString(),
   }))
   savePctMonthlySnapshot(assignments)

@@ -27,6 +27,7 @@ interface ScheduleRow {
   id: number | string  // PCT 출처일 때는 string key
   tester_id: number | string
   batch_id: number | string
+  batch_no?: string | number  // 제조번호(실제 시트 값) 표시용. PCT 출처에서 set; DB 출처는 batch_id로 폴백
   product_code?: string  // PCT 출처 표시용
   product_name: string
   test_items: string[]
@@ -164,8 +165,12 @@ export default function MonthlySchedulePage() {
         id:             `pct-${a.key}`,
         tester_id:      `pct-${a.testerName}`,
         batch_id:       `pct-${a.productCode}-${a.batchNo}`,
+        batch_no:       a.batchNo,
         product_code:   a.productCode,
-        product_name:   a.productName,
+        // 개별항목 분산 배정은 [개별] 품목명 - 시험항목명 으로 구분 표기
+        product_name:   a.assignmentType === 'INDIVIDUAL_ITEM' && a.testItemName
+                          ? `[개별] ${a.productName} - ${a.testItemName}`
+                          : a.productName,
         test_items:     a.testItems,
         scheduled_date: a.scheduledDate,
         dates:          a.dates,
@@ -278,7 +283,7 @@ export default function MonthlySchedulePage() {
     날짜:     r.scheduled_date,
     품목명:   r.product_name,
     코드:     r.product_code ?? '',
-    제조번호: typeof r.batch_id === 'string' ? r.batch_id.replace(/^pct-/, '') : r.batch_id,
+    제조번호: r.batch_no ?? (typeof r.batch_id === 'string' ? r.batch_id.replace(/^pct-/, '') : r.batch_id),
     담당자:   testerNameById.get(r.tester_id) ?? String(r.tester_id),
     공수:     r.avg_hours != null && r.avg_hours > 0 ? r.avg_hours.toFixed(1) : (r.workdays ? `${r.workdays}일` : '—'),
     긴급:     r.is_urgent ? '긴급' : '일반',
@@ -610,7 +615,7 @@ export default function MonthlySchedulePage() {
                                       return (
                                         <div
                                           key={`${r.id}-${d}`}
-                                          title={`${r.product_name} (배치 ${r.batch_id})\n시험항목: ${r.test_items?.join(', ') ?? '-'}\n공수: ${r.avg_hours != null && r.avg_hours > 0 ? `${r.avg_hours.toFixed(1)}h (${r.workdays}일)` : `${r.workdays}일`}\n${r.note ?? ''}`}
+                                          title={`${r.product_name} (배치 ${r.batch_no ?? r.batch_id})\n시험항목: ${r.test_items?.join(', ') ?? '-'}\n공수: ${r.avg_hours != null && r.avg_hours > 0 ? `${r.avg_hours.toFixed(1)}h (${r.workdays}일)` : `${r.workdays}일`}\n${r.note ?? ''}`}
                                           className={`truncate rounded-sm border px-1 py-0.5 text-[9px] font-medium cursor-help transition-colors ${style.bg} ${style.border} ${TXT_PRIMARY}`}
                                         >
                                           {r.product_name.slice(0, 6)}

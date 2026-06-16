@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import {
   AlertTriangle,
+  Copy,
   Link2,
   PackagePlus,
   Plus,
@@ -92,6 +93,17 @@ export default function TestItemsPage() {
   )
   const [unlinkLoading, setUnlinkLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // 선택 일괄 삭제
+  const [selectedLinked, setSelectedLinked] = useState<Set<string>>(new Set())
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false)
+  // 다른 품목에서 시험항목 복사
+  const [copyDialogOpen, setCopyDialogOpen] = useState(false)
+  const [copySourceSearch, setCopySourceSearch] = useState("")
+  const [copySource, setCopySource] = useState<ProductRow | null>(null)
+  const [copySourceItems, setCopySourceItems] = useState<ProductTestItemRow[]>([])
+  const [copySelected, setCopySelected] = useState<Set<string>>(new Set())
+  const [copyLoading, setCopyLoading] = useState(false)
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -101,6 +113,7 @@ export default function TestItemsPage() {
   }, [])
 
   useEffect(() => {
+    setSelectedLinked(new Set())
     if (!selectedProduct) {
       queueMicrotask(() => {
         setLinkedItems([])
@@ -217,6 +230,19 @@ export default function TestItemsPage() {
     return { linked, mandatory, optional }
   }, [linkedItems])
 
+  // 복사 원본 품목 후보(현재 품목 제외 + 검색)
+  const copyFilteredProducts = useMemo(() => {
+    const q = copySourceSearch.trim().toLowerCase()
+    return products
+      .filter((p) => p.id !== selectedProduct?.id)
+      .filter(
+        (p) =>
+          !q ||
+          p.name.toLowerCase().includes(q) ||
+          p.productCode.toLowerCase().includes(q)
+      )
+  }, [products, copySourceSearch, selectedProduct])
+
   function openAddDialog() {
     setSelectedToAdd(new Set())
     setDialogSearch("")
@@ -301,6 +327,124 @@ export default function TestItemsPage() {
       setError(String(e))
     } finally {
       setAddLoading(false)
+    }
+  }
+
+  // ── 선택 일괄 삭제 ──
+  function toggleSelectLinked(testItemId: string) {
+    setSelectedLinked((prev) => {
+      const next = new Set(prev)
+      if (next.has(testItemId)) next.delete(testItemId)
+      else next.add(testItemId)
+      return next
+    })
+  }
+  function toggleSelectAllLinked() {
+    setSelectedLinked((prev) =>
+      prev.size === linkedItems.length && linkedItems.length > 0
+        ? new Set()
+        : new Set(linkedItems.map((i) => i.testItemId))
+    )
+  }
+  async function handleBulkDelete() {
+    if (!selectedProduct || selectedLinked.size === 0) return
+    setBulkDeleteLoading(true)
+    const ids = Array.from(selectedLinked)
+    const remaining = linkedItems.filter(
+      (i) => !selectedLinked.has(i.testItemId)
+    )
+    setLinkedItems(remaining)
+    try {
+      await Promise.all(
+        ids.map((testItemId) =>
+          fetch("/api/product-test-items", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              productId: selectedProduct.id,
+              testItemId,
+            }),
+          })
+        )
+      )
+      if (remaining.length > 0) await reorderLinked(remaining)
+      setSelectedLinked(new Set())
+      setBulkDeleteOpen(false)
+    } catch (e) {
+      setError(String(e))
+      await loadLinkedItems(selectedProduct.id)
+    } finally {
+      setBulkDeleteLoading(false)
+    }
+  }
+
+  // ── 다른 품목에서 복사 ──
+  function openCopyDialog() {
+    setCopySource(null)
+    setCopySourceItems([])
+    setCopySelected(new Set())
+    setCopySourceSearch("")
+    setError(null)
+    setCopyDialogOpen(true)
+  }
+  async function selectCopySource(product: ProductRow) {
+    setCopySource(product)
+    setCopySourceItems([])
+    setCopySelected(new Set())
+    try {
+      const res = await fetch(`/api/product-test-items?productId=${product.id}`)
+      if (!res.ok) throw new Error(await res.text())
+      const data = (await res.json()) as { rows: ProductTestItemRow[] }
+      setCopySourceItems(data.rows)
+      // 현재 품목에 아직 없는 항목만 기본 선택(중복 제외)
+      setCopySelected(
+        new Set(
+          data.rows
+            .filter((r) => !linkedIds.has(r.testItemId))
+            .map((r) => r.testItemId)
+        )
+      )
+    } catch (e) {
+      setError(String(e))
+    }
+  }
+  function toggleCopySelect(testItemId: string) {
+    setCopySelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(testItemId)) next.delete(testItemId)
+      else next.add(testItemId)
+      return next
+    })
+  }
+  async function handleCopy() {
+    if (!selectedProduct || copySelected.size === 0) return
+    setCopyLoading(true)
+    try {
+      const toAdd = Array.from(copySelected).filter((id) => !linkedIds.has(id))
+      const maxOrder = linkedItems.reduce(
+        (max, item) => Math.max(max, item.sequenceOrder),
+        -1
+      )
+      await Promise.all(
+        toAdd.map((testItemId, idx) =>
+          fetch("/api/product-test-items", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              productId: selectedProduct.id,
+              testItemId,
+              sequenceOrder: maxOrder + 1 + idx,
+            }),
+          })
+        )
+      )
+      const refreshed = await loadLinkedItems(selectedProduct.id)
+      if (refreshed.length > 0) await reorderLinked(refreshed)
+      setCopyDialogOpen(false)
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setCopyLoading(false)
     }
   }
 
@@ -468,6 +612,25 @@ export default function TestItemsPage() {
                     <Badge className="border-slate-600 bg-slate-600 text-xs font-bold text-white hover:bg-slate-600">
                       선택 {summary.optional}
                     </Badge>
+                    {selectedLinked.size > 0 && (
+                      <Button
+                        onClick={() => setBulkDeleteOpen(true)}
+                        size="sm"
+                        className="h-9 bg-rose-700 text-white shadow-sm hover:bg-rose-800"
+                      >
+                        <Trash2 size={15} className="mr-1" />
+                        선택 삭제 ({selectedLinked.size})
+                      </Button>
+                    )}
+                    <Button
+                      onClick={openCopyDialog}
+                      size="sm"
+                      variant="outline"
+                      className="h-9 border-slate-300 text-slate-800 shadow-sm hover:bg-slate-100"
+                    >
+                      <Copy size={15} className="mr-1" />
+                      다른 품목에서 복사
+                    </Button>
                     <Button
                       onClick={openAddDialog}
                       size="sm"
@@ -498,6 +661,14 @@ export default function TestItemsPage() {
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  className="cb-custom"
+                                  checked={selectedLinked.has(item.testItemId)}
+                                  onChange={() =>
+                                    toggleSelectLinked(item.testItemId)
+                                  }
+                                />
                                 <span className="text-[11px] font-bold text-slate-500">
                                   {idx + 1}
                                 </span>
@@ -532,6 +703,18 @@ export default function TestItemsPage() {
                   <table className="w-full min-w-[560px] text-sm">
                     <thead>
                       <tr className="bg-slate-950 text-xs text-white">
+                        <th className="sticky top-0 z-10 w-10 bg-slate-950 px-3 py-3 text-center font-bold">
+                          <input
+                            type="checkbox"
+                            className="cb-custom"
+                            checked={
+                              linkedItems.length > 0 &&
+                              selectedLinked.size === linkedItems.length
+                            }
+                            onChange={toggleSelectAllLinked}
+                            title="전체 선택"
+                          />
+                        </th>
                         <th className="sticky top-0 z-10 w-16 bg-slate-950 px-4 py-3 text-center font-bold">
                           순서
                         </th>
@@ -550,7 +733,7 @@ export default function TestItemsPage() {
                       {linkedItems.length === 0 ? (
                         <tr>
                           <td
-                            colSpan={4}
+                            colSpan={5}
                             className="py-16 text-center text-sm font-medium text-slate-600"
                           >
                             연결된 시험항목이 없습니다. 우측 상단에서
@@ -568,6 +751,16 @@ export default function TestItemsPage() {
                                 idx % 2 === 1 ? "bg-slate-100/80" : "bg-white"
                               }`}
                             >
+                              <td className="px-3 py-2.5 text-center">
+                                <input
+                                  type="checkbox"
+                                  className="cb-custom"
+                                  checked={selectedLinked.has(item.testItemId)}
+                                  onChange={() =>
+                                    toggleSelectLinked(item.testItemId)
+                                  }
+                                />
+                              </td>
                               <td className="px-4 py-2.5 text-center text-xs font-bold text-slate-700">
                                 {idx + 1}
                               </td>
@@ -817,6 +1010,249 @@ export default function TestItemsPage() {
             >
               <Trash2 size={15} className="mr-1.5" />
               {unlinkLoading ? "해제 중..." : "해제"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 다른 품목에서 시험항목 복사 */}
+      <Dialog
+        open={copyDialogOpen}
+        onOpenChange={(open) => {
+          if (!open && !copyLoading) setCopyDialogOpen(false)
+        }}
+      >
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden border-slate-300 bg-slate-50 p-0 shadow-2xl sm:max-w-2xl">
+          <DialogHeader className="border-b border-slate-200 bg-white px-4 py-4 pr-12 text-left sm:px-5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-700 text-white shadow-sm">
+                <Copy size={20} />
+              </div>
+              <div className="min-w-0">
+                <DialogTitle className="text-lg font-black text-slate-950">
+                  다른 품목에서 시험항목 복사
+                </DialogTitle>
+                <DialogDescription className="mt-1 text-xs font-medium text-slate-600">
+                  비슷한 품목을 선택하면 그 품목의 시험항목을{" "}
+                  <span className="font-bold text-blue-700">
+                    {selectedProduct?.name}
+                  </span>
+                  에 복사합니다. (이미 연결된 항목은 자동 제외)
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="max-h-[65dvh] overflow-y-auto px-4 py-4 sm:px-5">
+            <div className="grid gap-4">
+              <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+                <p className="mb-2 text-sm font-bold text-slate-950">
+                  1. 복사할 원본 품목 선택
+                </p>
+                <div className="relative">
+                  <Search
+                    size={14}
+                    className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-600"
+                  />
+                  <Input
+                    type="text"
+                    placeholder="품목명 / 코드 검색..."
+                    value={copySourceSearch}
+                    onChange={(e) => setCopySourceSearch(e.target.value)}
+                    className="h-10 bg-slate-50 pl-9"
+                  />
+                </div>
+                <div className="mt-3 max-h-48 overflow-y-auto rounded-lg border border-slate-200">
+                  {copyFilteredProducts.length === 0 ? (
+                    <p className="py-8 text-center text-sm font-medium text-slate-600">
+                      검색 결과가 없습니다.
+                    </p>
+                  ) : (
+                    <ul className="divide-y divide-slate-100">
+                      {copyFilteredProducts.slice(0, 100).map((p) => (
+                        <li key={p.id}>
+                          <button
+                            onClick={() => void selectCopySource(p)}
+                            className={`flex w-full items-center gap-2 px-4 py-2.5 text-left hover:bg-blue-50 ${
+                              copySource?.id === p.id ? "bg-blue-100" : ""
+                            }`}
+                          >
+                            <span className="font-mono text-[10px] font-bold text-blue-700">
+                              {p.productCode}
+                            </span>
+                            <span className="flex-1 truncate text-sm font-medium text-slate-800">
+                              {p.name}
+                            </span>
+                            {copySource?.id === p.id && (
+                              <span className="text-xs font-bold text-blue-700">
+                                선택됨
+                              </span>
+                            )}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </section>
+
+              {copySource && (
+                <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-sm font-bold text-slate-950">
+                      2. 복사할 시험항목
+                      {copySelected.size > 0 && (
+                        <span className="ml-1 font-bold text-blue-700">
+                          ({copySelected.size}개 선택)
+                        </span>
+                      )}
+                    </p>
+                    <div className="flex gap-2 text-xs">
+                      <button
+                        onClick={() =>
+                          setCopySelected(
+                            new Set(
+                              copySourceItems
+                                .filter((r) => !linkedIds.has(r.testItemId))
+                                .map((r) => r.testItemId)
+                            )
+                          )
+                        }
+                        className="font-bold text-blue-700 hover:underline"
+                      >
+                        미연결 전체
+                      </button>
+                      <button
+                        onClick={() => setCopySelected(new Set())}
+                        className="font-bold text-slate-500 hover:underline"
+                      >
+                        전체해제
+                      </button>
+                    </div>
+                  </div>
+                  <div className="max-h-56 overflow-y-auto rounded-lg border border-slate-200">
+                    {copySourceItems.length === 0 ? (
+                      <p className="py-8 text-center text-sm font-medium text-slate-600">
+                        이 품목에는 연결된 시험항목이 없습니다.
+                      </p>
+                    ) : (
+                      <ul className="divide-y divide-slate-100">
+                        {copySourceItems
+                          .slice()
+                          .sort((a, b) => a.sequenceOrder - b.sequenceOrder)
+                          .map((r) => {
+                            const already = linkedIds.has(r.testItemId)
+                            return (
+                              <li key={r.testItemId}>
+                                <label
+                                  className={`flex items-center gap-3 px-4 py-2.5 ${
+                                    already
+                                      ? "opacity-50"
+                                      : "cursor-pointer hover:bg-slate-50"
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    className="cb-custom"
+                                    disabled={already}
+                                    checked={copySelected.has(r.testItemId)}
+                                    onChange={() =>
+                                      toggleCopySelect(r.testItemId)
+                                    }
+                                  />
+                                  <span className="flex-1 text-sm font-medium text-slate-800">
+                                    {r.testItemName}
+                                  </span>
+                                  {already && (
+                                    <span className="text-[10px] font-bold text-slate-500">
+                                      이미 연결됨
+                                    </span>
+                                  )}
+                                </label>
+                              </li>
+                            )
+                          })}
+                      </ul>
+                    )}
+                  </div>
+                </section>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter className="border-t border-slate-200 bg-white px-4 py-4 sm:px-5">
+            <Button
+              variant="outline"
+              onClick={() => setCopyDialogOpen(false)}
+              disabled={copyLoading}
+              className="h-10 border-slate-300 text-slate-800 hover:bg-slate-100"
+            >
+              취소
+            </Button>
+            <Button
+              onClick={() => void handleCopy()}
+              disabled={copyLoading || copySelected.size === 0}
+              className="h-10 bg-blue-700 px-5 font-bold text-white shadow-sm hover:bg-blue-800"
+            >
+              <Copy size={15} className="mr-1.5" />
+              {copyLoading ? "복사 중..." : `복사 (${copySelected.size})`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 선택 일괄 삭제 확인 */}
+      <Dialog
+        open={bulkDeleteOpen}
+        onOpenChange={(open) => {
+          if (!open && !bulkDeleteLoading) setBulkDeleteOpen(false)
+        }}
+      >
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden border-slate-300 bg-white p-0 shadow-2xl sm:max-w-md">
+          <DialogHeader className="border-b border-slate-200 bg-rose-50 px-4 py-4 pr-12 text-left sm:px-5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rose-700 text-white shadow-sm">
+                <AlertTriangle size={20} />
+              </div>
+              <div className="min-w-0">
+                <DialogTitle className="text-lg font-black text-slate-950">
+                  선택 항목 일괄 삭제
+                </DialogTitle>
+                <DialogDescription className="mt-1 text-xs font-medium text-rose-800">
+                  선택한 시험항목 연결을 한 번에 제거합니다.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="px-4 py-4 sm:px-5">
+            <div className="rounded-lg border border-rose-200 bg-rose-50/70 p-4">
+              <p className="text-sm font-bold text-slate-950">
+                {selectedLinked.size}개 시험항목
+              </p>
+              <p className="mt-2 text-sm font-medium text-slate-700">
+                {selectedProduct?.name}에서 선택한 {selectedLinked.size}개
+                시험항목 연결을 해제하시겠습니까?
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="border-t border-slate-200 bg-white px-4 py-4 sm:px-5">
+            <Button
+              variant="outline"
+              onClick={() => setBulkDeleteOpen(false)}
+              disabled={bulkDeleteLoading}
+              className="h-10 border-slate-300 text-slate-800 hover:bg-slate-100"
+            >
+              취소
+            </Button>
+            <Button
+              onClick={() => void handleBulkDelete()}
+              disabled={bulkDeleteLoading}
+              className="h-10 bg-rose-700 px-5 font-bold text-white shadow-sm hover:bg-rose-800"
+            >
+              <Trash2 size={15} className="mr-1.5" />
+              {bulkDeleteLoading ? "삭제 중..." : `삭제 (${selectedLinked.size})`}
             </Button>
           </DialogFooter>
         </DialogContent>

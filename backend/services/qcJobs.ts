@@ -4,11 +4,13 @@
  * 담당자(user)는 본인 tester(users.tester_id)에 배정된 오더를 시작한다.
  * 시작 시 QC번호 채번 + 시험항목(product_test_items) 기준 체크리스트 생성.
  * 항목 클리어 시 시간 적재 + 감독관(admin) 알림. 상태 변경 시에도 알림.
+ * 시작 전 장비 준비상태(검교정+가용성) 자동 검증 연동.
  */
 
 import { supabaseAdmin } from '@backend/lib/supabase'
 import { generateQcNo } from '@backend/lib/qcNumber'
 import { createNotification } from '@backend/services/notifications'
+import { checkEquipmentReadiness, type ReadinessResult } from '@backend/services/equipmentMaster'
 
 export interface JobItemRow {
   id: string
@@ -45,6 +47,62 @@ export interface PendingOrderRow {
 async function getTesterId(userSub: string): Promise<string | null> {
   const { data } = await supabaseAdmin.from('users').select('tester_id').eq('id', userSub).maybeSingle()
   return (data?.tester_id as string) ?? null
+}
+
+/**
+ * 오더의 품목코드로부터 필요 장비코드 목록을 수집한다.
+ * products → product_test_items → test_items(name) → test_item_equipment(required_equipment)
+ * required_equipment 문자열을 다중구분자 /[,/+]/ 로 토큰화, 중복 제거하여 반환.
+ * ('_'는 복합 장비코드(UV_VIS, SHIMADZU_HPLC, LCMS_TQ 등)의 일부라 분할하지 않음 — 장비 마스터 코드와 정합)
+ * 오류 발생 시 빈 배열로 폴백 (throw 금지).
+ */
+export async function resolveOrderEquipmentCodes(productCode: string): Promise<string[]> {
+  try {
+    const { data: prod } = await supabaseAdmin
+      .from('products').select('id').eq('product_code', productCode).maybeSingle()
+    if (!prod?.id) return []
+
+    const { data: pti } = await supabaseAdmin
+      .from('product_test_items')
+      .select('test_items!inner(name)')
+      .eq('product_id', prod.id)
+    const testItemNames = (pti ?? []).map(r => (r as unknown as { test_items: { name: string } }).test_items.name)
+    if (testItemNames.length === 0) return []
+
+    const { data: eqRows } = await supabaseAdmin
+      .from('test_item_equipment')
+      .select('required_equipment')
+      .in('test_item', testItemNames)
+    const codes = new Set<string>()
+    for (const row of eqRows ?? []) {
+      const raw = (row.required_equipment as string | null) ?? ''
+      for (const token of raw.split(/[,/+]/)) {
+        const t = token.trim()
+        if (t) codes.add(t)
+      }
+    }
+    return Array.from(codes)
+  } catch {
+    return []
+  }
+}
+
+/**
+ * 오더 시작 전 장비 준비상태 조회.
+ * 오더의 product_code → 장비코드 목록 → checkEquipmentReadiness(오늘 기준).
+ */
+export async function getStartReadiness(orderId: string): Promise<ReadinessResult & { equipmentCodes: string[] }> {
+  const { data: order } = await supabaseAdmin
+    .from('pct_orders').select('product_code').eq('id', orderId).maybeSingle()
+  const productCode = (order?.product_code as string) ?? ''
+  const equipmentCodes = productCode ? await resolveOrderEquipmentCodes(productCode) : []
+  const date = new Date().toISOString().slice(0, 10)
+  if (equipmentCodes.length === 0) {
+    // 장비 없으면 항상 OK
+    return { ok: true, checks: [], equipmentCodes }
+  }
+  const readiness = await checkEquipmentReadiness({ equipmentCodes, date })
+  return { ...readiness, equipmentCodes }
 }
 
 /**
@@ -129,8 +187,8 @@ export async function listWorkspace(userSub: string): Promise<{ testerLinked: bo
   return { testerLinked: true, pendingOrders, jobs }
 }
 
-/** 작업 시작 — QC번호 채번 + 항목 체크리스트 생성 + 오더 상태 진행중 + 알림 */
-export async function startJob(orderId: string, userSub: string): Promise<{ jobId: string; qcNo: string }> {
+/** 작업 시작 — 장비 준비상태 검증 + QC번호 채번 + 항목 체크리스트 생성 + 오더 상태 진행중 + 알림 */
+export async function startJob(orderId: string, userSub: string): Promise<{ jobId: string; qcNo: string; warnings?: string[] }> {
   const testerId = await getTesterId(userSub)
 
   const { data: order, error: oErr } = await supabaseAdmin
@@ -145,13 +203,26 @@ export async function startJob(orderId: string, userSub: string): Promise<{ jobI
     throw new Error('본인에게 배정된 오더만 시작할 수 있습니다.')
   }
 
+  // 장비 준비상태 검증
+  const readiness = await getStartReadiness(orderId)
+  const blockedChecks = readiness.checks.filter(c => c.blocked)
+  if (!readiness.ok && blockedChecks.length > 0) {
+    const reasons = blockedChecks.map(c => c.reason ?? c.name).join(', ')
+    throw new Error(`장비 검증 실패: ${reasons}`)
+  }
+  const warningChecks = readiness.checks.filter(c => c.warning && !c.blocked)
+  const warnings = warningChecks.length > 0
+    ? warningChecks.map(c => c.warning ?? c.reason ?? c.name ?? c.code)
+    : undefined
+
   // 채번 (충돌 시 1회 재시도)
   let qcNo = await generateQcNo()
   let jobId = ''
+  const today = new Date().toISOString().slice(0, 10)
   for (let attempt = 0; attempt < 2; attempt++) {
     const { data, error } = await supabaseAdmin
       .from('qc_jobs')
-      .insert({ order_id: orderId, qc_no: qcNo, assignee_tester_id: testerId, assignee_user_id: userSub, status: '진행중' })
+      .insert({ order_id: orderId, qc_no: qcNo, assignee_tester_id: testerId, assignee_user_id: userSub, status: '진행중', work_start_date: today })
       .select('id')
       .single()
     if (!error) { jobId = data.id as string; break }
@@ -179,15 +250,16 @@ export async function startJob(orderId: string, userSub: string): Promise<{ jobI
   // 오더 상태 진행중
   await supabaseAdmin.from('pct_orders').update({ status: '진행중' }).eq('id', orderId)
 
-  // 감독관 알림
+  // 감독관 알림 (경고 있으면 본문에 덧붙임)
+  const warnSuffix = warnings ? ` ⚠ 경고: ${warnings.join(', ')}` : ''
   await createNotification({
     type: 'status_changed',
     title: '작업 시작',
-    body: `${order.product_name} / ${order.batch_no} — QC ${qcNo} 작업이 시작되었습니다.`,
+    body: `${order.product_name} / ${order.batch_no} — QC ${qcNo} 작업이 시작되었습니다.${warnSuffix}`,
     relatedOrderId: orderId, relatedQcJobId: jobId, severity: 'info',
   })
 
-  return { jobId, qcNo }
+  return { jobId, qcNo, ...(warnings ? { warnings } : {}) }
 }
 
 /** 시작/종료일 수정 */
@@ -232,11 +304,22 @@ export async function clearItem(jobId: string, itemId: string, userSub: string):
   })
 }
 
-/** 작업 상태 변경 — 오더 상태 동기화 + 감독관 알림 */
+/** 작업 상태 변경 — 오더 상태 동기화 + 감독관 알림.
+ *  status === '완료' 이면 work_end_date를 오늘로 설정(이미 설정된 경우 유지).
+ */
 export async function changeJobStatus(jobId: string, userSub: string, status: string): Promise<void> {
   await assertOwner(jobId, userSub)
+  const patch: Record<string, unknown> = { status }
+  if (status === '완료') {
+    // 기존 work_end_date가 없을 때만 오늘로 설정
+    const { data: existing } = await supabaseAdmin
+      .from('qc_jobs').select('work_end_date').eq('id', jobId).maybeSingle()
+    if (!existing?.work_end_date) {
+      patch.work_end_date = new Date().toISOString().slice(0, 10)
+    }
+  }
   const { data: job, error } = await supabaseAdmin
-    .from('qc_jobs').update({ status }).eq('id', jobId)
+    .from('qc_jobs').update(patch).eq('id', jobId)
     .select('order_id').single()
   if (error) throw error
   await supabaseAdmin.from('pct_orders').update({ status }).eq('id', job.order_id)

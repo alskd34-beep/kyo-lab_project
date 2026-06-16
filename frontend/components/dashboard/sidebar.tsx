@@ -42,6 +42,8 @@ interface NavItem {
   /** subItems가 있어도 상단 클릭 시 이 경로로 바로 이동 (서브메뉴도 함께 열림) */
   defaultPath?: string
   adminOnly?: boolean
+  /** 개발 보류 등으로 메뉴에서 임시 숨김 (true면 사이드바에 미표시) */
+  hidden?: boolean
 }
 
 interface NavSection {
@@ -67,6 +69,7 @@ const NAV_SECTIONS: NavSection[] = [
           { id: "schedule-orders", label: "오더 배정", live: true, adminOnly: true },
           { id: "schedule-groups", label: "동시분석 그룹", live: true, adminOnly: true },
           { id: "schedule-vacation", label: "휴가 캘린더", live: true },
+          { id: "schedule-holidays", label: "공휴일 캘린더", live: true, adminOnly: true },
           { id: "schedule-reassign", label: "재배정 이력", live: true, adminOnly: true },
           { id: "schedule-dashboard", label: "관리자 대시보드", live: true, adminOnly: true },
         ],
@@ -124,6 +127,7 @@ const NAV_SECTIONS: NavSection[] = [
         id: "documents",
         icon: <FileText size={18} />,
         label: "문서관리",
+        hidden: true,  // 개발 보류로 임시 숨김 (2026-06-15). 재개 시 이 줄을 제거하거나 false로.
         subItems: [
           { id: "doc-cert", label: "성적서" },
           { id: "doc-std", label: "기준서" },
@@ -146,6 +150,7 @@ const NAV_SECTIONS: NavSection[] = [
         icon: <Cpu size={18} />,
         label: "장비관리",
         subItems: [
+          { id: "equip-master", label: "장비 마스터", live: true },
           { id: "equip-reservation", label: "장비 예약", live: true },
           { id: "equip-operation", label: "장비 가동 현황" },
           { id: "equip-backup", label: "장비 백업 현황" },
@@ -196,6 +201,7 @@ const PATH_MAP: Record<string, string> = {
   "schedule-orders": "/schedule/orders",
   "schedule-groups": "/schedule/groups",
   "schedule-vacation": "/schedule/vacation",
+  "schedule-holidays": "/schedule/holidays",
   "schedule-reassign": "/schedule/reassignments",
   "schedule-dashboard": "/schedule/dashboard",
   "my-tasks": "/my-tasks",
@@ -231,6 +237,7 @@ const PATH_MAP: Record<string, string> = {
   stats: "/insights/stats",
   "ins-report": "/insights/ins-report",
   // 장비관리
+  "equip-master": "/equipment/master",
   "equip-reservation": "/equipment/reservation",
   "equip-operation": "/equipment/equip-operation",
   "equip-backup": "/equipment/equip-backup",
@@ -285,7 +292,7 @@ export default function Sidebar({
   const sections = NAV_SECTIONS.map((section) => ({
     ...section,
     items: section.items
-      .filter((item) => !item.adminOnly || isAdmin)
+      .filter((item) => !item.hidden && (!item.adminOnly || isAdmin))
       .map((item) => ({
         ...item,
         subItems: item.subItems?.filter((sub) => !sub.adminOnly || isAdmin),
