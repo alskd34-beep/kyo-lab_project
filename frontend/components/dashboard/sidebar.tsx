@@ -7,7 +7,6 @@ import { useAuth } from "@frontend/lib/auth-context"
 import {
   Home,
   FlaskConical,
-  Box,
   ShieldCheck,
   AlertTriangle,
   FileText,
@@ -80,21 +79,11 @@ const NAV_SECTIONS: NavSection[] = [
         icon: <FlaskConical size={18} />,
         label: "시험관리",
         subItems: [
-          { id: "test-status", label: "시험현황", live: true },
+          { id: "prod-status", label: "제품시험현황", live: true },
           { id: "test-reg", label: "시험등록", live: true },
           { id: "test-result", label: "결과입력" },
           { id: "test-cert", label: "성적서관리" },
           { id: "testers", label: "시험자 관리", live: true },
-        ],
-      },
-      {
-        id: "product-test",
-        icon: <Box size={18} />,
-        label: "제품시험",
-        subItems: [
-          { id: "prod-status", label: "제품시험현황", live: true },
-          { id: "prod-reg", label: "완제품등록" },
-          { id: "prod-std", label: "기준서관리" },
         ],
       },
       {
@@ -171,6 +160,7 @@ const NAV_SECTIONS: NavSection[] = [
           { id: "products-master", label: "품목 마스터", live: true },
           { id: "test-master", label: "시험항목 마스터", live: true },
           { id: "test-items", label: "품목별 시험항목 관리", live: true },
+          { id: "pretest-checklist", label: "시험 전 확인사항", live: true },
         ],
       },
       {
@@ -219,6 +209,7 @@ const PATH_MAP: Record<string, string> = {
   "products-master": "/product-test/products",
   "test-master": "/test-mgmt/test-master",
   "test-items": "/test-mgmt/test-items",
+  "pretest-checklist": "/test-mgmt/pretest-checklist",
   // 안정성시험
   "stab-status": "/stability/stab-status",
   "stab-plan": "/stability/stab-plan",

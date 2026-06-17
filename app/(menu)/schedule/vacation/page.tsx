@@ -5,7 +5,7 @@ import { useAuth } from "@frontend/lib/auth-context"
 import {
   CalendarDays, Plus, Trash2, X, Loader2, Check, ChevronLeft, ChevronRight, CheckCircle2,
 } from "lucide-react"
-import { DateField } from "@frontend/components/ui/date-field"
+import { DateRangeField } from "@frontend/components/ui/date-range-field"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 type ScheduleType = "ANNUAL" | "HALF_DAY" | "BUSINESS_TRIP"
@@ -351,10 +351,15 @@ function AddModal({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <DateField label="시작일" value={startDate} onChange={setStartDate} />
-            <DateField label="종료일" value={endDate} onChange={setEndDate} />
-          </div>
+          <DateRangeField
+            label="기간 (시작일 ~ 종료일)"
+            startDate={startDate}
+            endDate={endDate}
+            onChange={(s, e) => {
+              setStartDate(s)
+              setEndDate(e)
+            }}
+          />
 
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-600">메모</label>
