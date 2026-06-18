@@ -59,7 +59,7 @@ export default function UsersAdminPage() {
     setLoading(true)
     setError(null)
 
-    const r = await fetch('/api/users', { cache: 'no-store' })
+    const r = await fetch('/api/users', { cache: 'no-store', credentials: 'include' })
     if (r.ok) {
       setUsers((await r.json()).users)
     } else {
@@ -85,7 +85,7 @@ export default function UsersAdminPage() {
 
   const remove = async (id: string) => {
     if (!confirm('정말 삭제하시겠습니까?')) return
-    const r = await fetch(`/api/users/${id}`, { method: 'DELETE' })
+    const r = await fetch(`/api/users/${id}`, { method: 'DELETE', credentials: 'include' })
     if (r.ok) {
       void load()
     } else {
@@ -282,9 +282,10 @@ function CreateForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: 
     setErr(null)
 
     const r = await fetch('/api/users', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ username, password, displayName, role }),
+      method:      'POST',
+      credentials: 'include',
+      headers:     { 'Content-Type': 'application/json' },
+      body:        JSON.stringify({ username, password, displayName, role }),
     })
 
     setBusy(false)
@@ -368,9 +369,10 @@ function EditUserDialog({
     if (password) body.password = password
 
     const r = await fetch(`/api/users/${user.id}`, {
-      method:  'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(body),
+      method:      'PATCH',
+      credentials: 'include',
+      headers:     { 'Content-Type': 'application/json' },
+      body:        JSON.stringify(body),
     })
 
     setBusy(false)
