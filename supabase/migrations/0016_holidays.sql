@@ -1,8 +1,11 @@
 -- 0016_holidays.sql
 -- 공휴일 테이블 생성 및 2026년 대한민국 공휴일 시드 데이터
 -- ⚠️ 수동 적용 대상: Supabase 대시보드 > SQL Editor 에서 직접 실행하세요.
+--
+-- ※ 테이블명 주의: 레거시 `holidays` 테이블(id/date/type/tester_id/note, 시험자용)이
+--   이미 존재하므로 충돌을 피해 공휴일 전용 테이블은 `public_holidays`로 분리한다.
 
-CREATE TABLE IF NOT EXISTS holidays (
+CREATE TABLE IF NOT EXISTS public_holidays (
   date        date        PRIMARY KEY,
   description text        NOT NULL DEFAULT '',
   created_at  timestamptz NOT NULL DEFAULT now()
@@ -10,7 +13,7 @@ CREATE TABLE IF NOT EXISTS holidays (
 
 -- 2026년 대한민국 공휴일
 -- ※ 음력 기반 날짜(설날·추석·부처님오신날) 및 대체공휴일은 운영 전 검증 필요
-INSERT INTO holidays (date, description) VALUES
+INSERT INTO public_holidays (date, description) VALUES
   ('2026-01-01', '신정'),
   ('2026-02-16', '설날연휴'),
   ('2026-02-17', '설날'),

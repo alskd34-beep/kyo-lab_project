@@ -29,7 +29,7 @@ function mapRow(row: { date: string; description: string; created_at?: string })
  */
 export async function listHolidays(year?: number): Promise<HolidayRow[]> {
   try {
-    let q = supabase.from('holidays').select('date, description, created_at').order('date', { ascending: true })
+    let q = supabase.from('public_holidays').select('date, description, created_at').order('date', { ascending: true })
     if (year != null) {
       q = q.like('date', `${year}-%`)
     }
@@ -64,7 +64,7 @@ export async function getHolidaySet(year?: number): Promise<Set<string>> {
 export async function addHoliday(date: string, description: string): Promise<void> {
   try {
     const { error } = await supabase
-      .from('holidays')
+      .from('public_holidays')
       .upsert({ date, description }, { onConflict: 'date' })
     if (error) {
       if ((error as { code?: string }).code === '42P01') return
@@ -82,7 +82,7 @@ export async function addHoliday(date: string, description: string): Promise<voi
  */
 export async function removeHoliday(date: string): Promise<void> {
   try {
-    const { error } = await supabase.from('holidays').delete().eq('date', date)
+    const { error } = await supabase.from('public_holidays').delete().eq('date', date)
     if (error) {
       if ((error as { code?: string }).code === '42P01') return
       throw new Error(`공휴일 삭제 실패: ${error.message}`)
