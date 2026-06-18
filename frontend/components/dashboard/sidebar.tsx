@@ -130,7 +130,7 @@ const NAV_SECTIONS: NavSection[] = [
         label: "인사이트",
         subItems: [
           { id: "dash", label: "대시보드" },
-          { id: "stats", label: "통계분석" },
+          { id: "stats", label: "시험자 운영평가", live: true, adminOnly: true },
           { id: "ins-report", label: "리포트" },
         ],
       },
