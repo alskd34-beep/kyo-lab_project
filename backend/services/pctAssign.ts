@@ -383,6 +383,9 @@ async function autoAssignRule(orders: OrderForAssign[], excludedTesterIds: Set<s
       품목명:   o.product_name ?? '',
       제조번호: o.batch_no ?? '',
       포장일:   o.packaging_date ?? '',
+      // 완료예정일 전달 → 엔진이 역순 ALAP·마감위험(deadlineRisk)·EDD 정렬에 활용.
+      // 캘린더 생성 경로(pct-generate)와 일정 기준을 통일한다. NULL이면 포장일 정방향 폴백.
+      완료예정일: o.due_date ?? undefined,
       긴급:     urgent,
       진행방법: o.method === '개별항목' ? '개별항목' : '전항목',
     }
