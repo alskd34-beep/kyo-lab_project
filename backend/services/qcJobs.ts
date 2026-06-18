@@ -11,6 +11,7 @@ import { supabaseAdmin } from '@backend/lib/supabase'
 import { generateQcNo } from '@backend/lib/qcNumber'
 import { createNotification } from '@backend/services/notifications'
 import { checkEquipmentReadiness, type ReadinessResult } from '@backend/services/equipmentMaster'
+import { listByProduct, type PretestNoteRow } from '@backend/services/productPretestNotes'
 
 export interface JobItemRow {
   id: string
@@ -88,21 +89,34 @@ export async function resolveOrderEquipmentCodes(productCode: string): Promise<s
 }
 
 /**
- * 오더 시작 전 장비 준비상태 조회.
- * 오더의 product_code → 장비코드 목록 → checkEquipmentReadiness(오늘 기준).
+ * 오더 시작 전 준비상태 조회.
+ * - 장비: 오더의 product_code → 장비코드 목록 → checkEquipmentReadiness(오늘 기준).
+ * - 시험 전 확인사항: product_code → products.id → product_pretest_notes.
+ * 두 정보를 함께 반환해 시작 모달에서 한 번에 확인할 수 있게 한다.
  */
-export async function getStartReadiness(orderId: string): Promise<ReadinessResult & { equipmentCodes: string[] }> {
+export async function getStartReadiness(
+  orderId: string,
+): Promise<ReadinessResult & { equipmentCodes: string[]; pretestNotes: PretestNoteRow[] }> {
   const { data: order } = await supabaseAdmin
     .from('pct_orders').select('product_code').eq('id', orderId).maybeSingle()
   const productCode = (order?.product_code as string) ?? ''
+
+  // 시험 전 확인사항 (product_code → products.id → product_pretest_notes)
+  let pretestNotes: PretestNoteRow[] = []
+  if (productCode) {
+    const { data: prod } = await supabaseAdmin
+      .from('products').select('id').eq('product_code', productCode).maybeSingle()
+    if (prod?.id) pretestNotes = await listByProduct(prod.id as string)
+  }
+
   const equipmentCodes = productCode ? await resolveOrderEquipmentCodes(productCode) : []
   const date = new Date().toISOString().slice(0, 10)
   if (equipmentCodes.length === 0) {
-    // 장비 없으면 항상 OK
-    return { ok: true, checks: [], equipmentCodes }
+    // 장비 없으면 장비 검증은 OK (확인사항은 별도 반환)
+    return { ok: true, checks: [], equipmentCodes, pretestNotes }
   }
   const readiness = await checkEquipmentReadiness({ equipmentCodes, date })
-  return { ...readiness, equipmentCodes }
+  return { ...readiness, equipmentCodes, pretestNotes }
 }
 
 /**

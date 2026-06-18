@@ -88,15 +88,25 @@ export default function TestMasterPage() {
     })
   }, [])
 
+  // 실패 응답에서 깔끔한 한국어 메시지만 추출 (raw JSON 노출 방지)
+  async function readError(res: Response): Promise<string> {
+    try {
+      const d = await res.json()
+      return (d && typeof d.error === "string" && d.error) || "요청 처리 중 오류가 발생했습니다."
+    } catch {
+      return "요청 처리 중 오류가 발생했습니다."
+    }
+  }
+
   async function loadItems() {
     setLoading(true)
     try {
       const res = await fetch("/api/test-items")
-      if (!res.ok) throw new Error(await res.text())
+      if (!res.ok) throw new Error(await readError(res))
       const data = (await res.json()) as { rows: TestItemRow[] }
       setRows(data.rows)
     } catch (e) {
-      setError(String(e))
+      setError(e instanceof Error ? e.message : "요청 처리 중 오류가 발생했습니다.")
     } finally {
       setLoading(false)
     }
@@ -136,7 +146,7 @@ export default function TestMasterPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, ...payload }),
     })
-    if (!res.ok) throw new Error(await res.text())
+    if (!res.ok) throw new Error(await readError(res))
     setRows((prev) =>
       prev.map((row) => (row.id === id ? { ...row, ...payload } : row))
     )
@@ -231,7 +241,7 @@ export default function TestMasterPage() {
             requiresDuo: form.requiresDuo,
           }),
         })
-        if (!res.ok) throw new Error(await res.text())
+        if (!res.ok) throw new Error(await readError(res))
         await loadItems()
       }
 
@@ -239,7 +249,7 @@ export default function TestMasterPage() {
       setForm(EMPTY_FORM)
       setEditTarget(null)
     } catch (e) {
-      setError(String(e))
+      setError(e instanceof Error ? e.message : "요청 처리 중 오류가 발생했습니다.")
     } finally {
       setSaving(false)
     }
@@ -255,7 +265,7 @@ export default function TestMasterPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: deleteTarget.id }),
       })
-      if (!res.ok) throw new Error(await res.text())
+      if (!res.ok) throw new Error(await readError(res))
       setDeleteOpen(false)
       setDeleteTarget(null)
     } catch {

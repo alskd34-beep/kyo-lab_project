@@ -66,7 +66,13 @@ export async function createTestItem(input: {
     })
     .select('id, name, category, estimated_hours, requires_duo, is_active, created_at')
     .single()
-  if (error) throw error
+  if (error) {
+    // 23505: unique_violation — 시험항목명 중복
+    if ((error as { code?: string }).code === '23505') {
+      throw new Error(`이미 등록된 시험항목명입니다: "${input.name}"`)
+    }
+    throw error
+  }
   return mapRow(data as Record<string, unknown>)
 }
 
@@ -88,7 +94,15 @@ export async function updateTestItem(
   if (input.isActive        !== undefined) patch.is_active       = input.isActive
 
   const { error } = await supabase.from('test_items').update(patch).eq('id', id)
-  if (error) throw error
+  if (error) {
+    // 23505: unique_violation — 다른 시험항목과 이름 중복
+    if ((error as { code?: string }).code === '23505') {
+      throw new Error(
+        input.name ? `이미 등록된 시험항목명입니다: "${input.name}"` : '이미 등록된 시험항목명입니다.'
+      )
+    }
+    throw error
+  }
 }
 
 export async function deleteTestItem(id: string): Promise<void> {

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
 import {
   RefreshCw, Sparkles, History, AlertCircle, Pencil, X, Loader2, Database,
-  ChevronDown, ChevronRight, Lock, LockOpen,
+  ChevronDown, ChevronRight, Lock, LockOpen, Search,
 } from "lucide-react"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -83,6 +83,7 @@ export default function OrdersPage() {
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState("")
+  const [search, setSearch] = useState("")
 
   const [editTarget, setEditTarget] = useState<OrderRow | null>(null)
   const [historyTarget, setHistoryTarget] = useState<OrderRow | null>(null)
@@ -163,11 +164,23 @@ export default function OrdersPage() {
 
   const unsyncedCount = rows.filter(r => !r.productSynced).length
 
+  // ─── 이름 검색 (품목명·담당자·품목코드·제조번호) ──────────────────────────
+  const filteredRows = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return rows
+    return rows.filter(r =>
+      r.productName.toLowerCase().includes(q) ||
+      r.productCode.toLowerCase().includes(q) ||
+      r.batchNo.toLowerCase().includes(q) ||
+      (r.assigneeName ?? "").toLowerCase().includes(q)
+    )
+  }, [rows, search])
+
   // ─── 주차별 그룹 ─────────────────────────────────────────────────────────
   const groups = useMemo(() => {
     const buckets = new Map<string, { label: string; color: string; rows: OrderRow[] }>()
     let colorIdx = 0
-    for (const r of rows) {
+    for (const r of filteredRows) {
       const { weekKey, weekLabel } = isoToWeek(r.packagingDate)
       if (!buckets.has(weekKey)) {
         const color = weekKey === "no-date" ? "bg-slate-400" : GROUP_COLORS[colorIdx++ % GROUP_COLORS.length]
@@ -181,7 +194,7 @@ export default function OrdersPage() {
       return a.localeCompare(b)
     })
     return sorted.map(([key, val]) => ({ key, ...val }))
-  }, [rows])
+  }, [filteredRows])
 
   const toggleGroup = (key: string) =>
     setCollapsed(prev => {
@@ -244,7 +257,9 @@ export default function OrdersPage() {
           <option value="">전체 상태</option>
           {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
-        <span className="text-xs font-medium text-slate-500">총 {rows.length}건 · {groups.length}주차</span>
+        <span className="text-xs font-medium text-slate-500">
+          {search.trim() ? `검색 ${filteredRows.length}건` : `총 ${rows.length}건`} · {groups.length}주차
+        </span>
         {groups.length > 0 && (
           <button
             onClick={toggleAll}
@@ -254,9 +269,28 @@ export default function OrdersPage() {
             {allCollapsed ? "전체 펼치기" : "전체 접기"}
           </button>
         )}
+        {/* 이름 검색 (적재 이력 옆) */}
+        <div className="relative ml-auto">
+          <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="품목명·담당자·코드·제조번호"
+            className="h-9 w-56 rounded-lg border border-slate-300 bg-white pl-8 pr-7 text-sm text-slate-700 placeholder:text-slate-400 focus-visible:border-blue-600 focus-visible:ring-2 focus-visible:ring-blue-200 focus-visible:outline-none"
+          />
+          {search && (
+            <button
+              onClick={() => setSearch("")}
+              title="검색어 지우기"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            >
+              <X size={13} />
+            </button>
+          )}
+        </div>
         <button
           onClick={() => setShowLog(true)}
-          className="ml-auto inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
         >
           <Database size={15} />적재 이력
         </button>
@@ -268,6 +302,10 @@ export default function OrdersPage() {
       ) : rows.length === 0 ? (
         <div className="rounded-xl border border-slate-200 bg-white px-3 py-10 text-center text-slate-400 shadow-sm">
           적재된 오더가 없습니다. &quot;지금 적재&quot;로 시트를 불러오세요.
+        </div>
+      ) : filteredRows.length === 0 ? (
+        <div className="rounded-xl border border-slate-200 bg-white px-3 py-10 text-center text-slate-400 shadow-sm">
+          &quot;{search.trim()}&quot; 검색 결과가 없습니다.
         </div>
       ) : (
         <div className="flex flex-col gap-3">
