@@ -3,7 +3,9 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
   loadPctMonthlySnapshot,
+  fetchPctMonthlyFromServer,
   clearPctMonthlySnapshot,
+  clearPctMonthlyOnServer,
   type PctMonthlyAssignment,
 } from '@frontend/lib/pct-schedule-bridge'
 import { Card, CardContent, CardHeader, CardTitle } from '@frontend/components/ui/card'
@@ -135,12 +137,16 @@ export default function MonthlySchedulePage() {
   const [pctGeneratedAt, setPctGeneratedAt] = useState<string | null>(null)
 
   useEffect(() => {
-    // localStorage(외부 저장소)는 클라이언트 전용 → 마운트/월 변경 시 스냅샷 동기화
-    const snap = loadPctMonthlySnapshot()
-    /* eslint-disable react-hooks/set-state-in-effect -- 외부 저장소(localStorage) 동기화 */
-    setPctSnapshot(snap?.assignments ?? [])
-    setPctGeneratedAt(snap?.generatedAt ?? null)
-    /* eslint-enable react-hooks/set-state-in-effect */
+    // 서버(DB) 영속본을 우선 조회하고, 없으면 localStorage 폴백.
+    // (AI 스케줄 결과가 기기/브라우저 무관하게 월간에 반영됨)
+    let aborted = false
+    void (async () => {
+      const snap = (await fetchPctMonthlyFromServer()) ?? loadPctMonthlySnapshot()
+      if (aborted) return
+      setPctSnapshot(snap?.assignments ?? [])
+      setPctGeneratedAt(snap?.generatedAt ?? null)
+    })()
+    return () => { aborted = true }
   }, [month])
 
   useEffect(() => {
@@ -356,6 +362,7 @@ export default function MonthlySchedulePage() {
 
   function handleClearPct() {
     clearPctMonthlySnapshot()
+    void clearPctMonthlyOnServer() // 서버(DB) 영속본도 함께 삭제
     setPctSnapshot([])
     setPctGeneratedAt(null)
   }

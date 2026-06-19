@@ -41,6 +41,8 @@ import MondayBoard, {
 import {
   savePctMonthlyFromEngine,
   loadPctMonthlySnapshot,
+  persistPctMonthlyToServer,
+  fetchPctMonthlyFromServer,
 } from "@frontend/lib/pct-schedule-bridge"
 import type { EngineResult } from "@backend/services/scheduleEngine"
 
@@ -370,14 +372,17 @@ export default function PctPage() {
   } | null>(null)
 
   // 페이지 로드 시 기존 스냅샷이 있으면 "이전 생성 이력"으로만 표시 (불러오기=자동생성 오해 방지)
+  // 서버(DB) 영속본을 우선 확인하고, 없으면 localStorage 폴백.
   useEffect(() => {
-    const snap = loadPctMonthlySnapshot()
-    if (snap) {
-      setExistingSnapshot({
-        count: snap.assignments.length,
-        generatedAt: snap.generatedAt,
-      })
-    }
+    void (async () => {
+      const snap = (await fetchPctMonthlyFromServer()) ?? loadPctMonthlySnapshot()
+      if (snap) {
+        setExistingSnapshot({
+          count: snap.assignments.length,
+          generatedAt: snap.generatedAt,
+        })
+      }
+    })()
   }, [])
 
   /**
@@ -386,7 +391,9 @@ export default function PctPage() {
    */
   const handleGenerateSchedule = useCallback(() => {
     if (!engineResult || engineResult.assignments.length === 0) return
-    savePctMonthlyFromEngine(engineResult.assignments)
+    const snapshot = savePctMonthlyFromEngine(engineResult.assignments)
+    // DB 영속화(기기/브라우저 무관 공유). 실패해도 localStorage 캐시는 유지.
+    void persistPctMonthlyToServer(snapshot)
     setScheduleStats({
       saved: engineResult.assignments.length,
       skipped: engineResult.unassigned.length,

@@ -74,8 +74,8 @@ export interface EngineAssignmentLike {
   parentProductCode?: string | null
 }
 
-/** 규칙 엔진 배정 결과를 월간 스냅샷으로 저장 */
-export function savePctMonthlyFromEngine(items: EngineAssignmentLike[]): void {
+/** 규칙 엔진 배정 결과를 월간 스냅샷으로 저장. 저장한 스냅샷을 반환(서버 영속화용). */
+export function savePctMonthlyFromEngine(items: EngineAssignmentLike[]): PctMonthlySnapshot {
   const assignments: PctMonthlyAssignment[] = items.map(a => ({
     key:           a.key,
     scheduledDate: a.startDate,
@@ -97,7 +97,7 @@ export function savePctMonthlyFromEngine(items: EngineAssignmentLike[]): void {
     parentProductCode: a.parentProductCode ?? null,
     createdAt:     new Date().toISOString(),
   }))
-  savePctMonthlySnapshot(assignments)
+  return savePctMonthlySnapshot(assignments)
 }
 
 /** localStorage에 저장된 전체 스냅샷 */
@@ -165,16 +165,55 @@ function normalizeDate(s: string): string | null {
   return `${year}-${String(Number(m[1])).padStart(2, '0')}-${String(Number(m[2])).padStart(2, '0')}`
 }
 
-/** 스냅샷 저장 (덮어쓰기) */
-export function savePctMonthlySnapshot(assignments: PctMonthlyAssignment[]): void {
-  if (typeof window === 'undefined') return
+/** 스냅샷 저장 (덮어쓰기). 저장한 스냅샷을 반환(서버 영속화에 재사용). */
+export function savePctMonthlySnapshot(assignments: PctMonthlyAssignment[]): PctMonthlySnapshot {
   const snapshot: PctMonthlySnapshot = {
     version:     1,
     generatedAt: new Date().toISOString(),
     assignments,
   }
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot)) }
-  catch { /* QuotaExceededError 등 무시 */ }
+  if (typeof window !== 'undefined') {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot)) }
+    catch { /* QuotaExceededError 등 무시 */ }
+  }
+  return snapshot
+}
+
+// ─── 서버(DB) 영속화 — 기기/브라우저 무관 단일 소스 (app_settings) ──────────────
+const SNAPSHOT_API = '/api/schedules/pct-snapshot'
+
+/** 스냅샷을 서버(DB)에 영속화. 성공 여부 반환(실패해도 localStorage는 유지). */
+export async function persistPctMonthlyToServer(snapshot: PctMonthlySnapshot): Promise<boolean> {
+  try {
+    const r = await fetch(SNAPSHOT_API, {
+      method:      'POST',
+      credentials: 'include',
+      headers:     { 'Content-Type': 'application/json' },
+      body:        JSON.stringify({ snapshot }),
+    })
+    return r.ok
+  } catch {
+    return false
+  }
+}
+
+/** 서버(DB) 스냅샷 삭제. */
+export async function clearPctMonthlyOnServer(): Promise<void> {
+  try { await fetch(SNAPSHOT_API, { method: 'DELETE', credentials: 'include' }) }
+  catch { /* 무시 */ }
+}
+
+/** 서버(DB)에서 스냅샷 로드. 없거나 실패면 null. */
+export async function fetchPctMonthlyFromServer(): Promise<PctMonthlySnapshot | null> {
+  try {
+    const r = await fetch(SNAPSHOT_API, { credentials: 'include' })
+    if (!r.ok) return null
+    const { snapshot } = await r.json()
+    if (!snapshot || snapshot.version !== 1 || !Array.isArray(snapshot.assignments)) return null
+    return snapshot as PctMonthlySnapshot
+  } catch {
+    return null
+  }
 }
 
 /** 스냅샷 읽기 (없거나 파싱 실패면 null) */
