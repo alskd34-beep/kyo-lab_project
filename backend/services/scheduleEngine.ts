@@ -64,6 +64,16 @@ export interface EngineInput {
 }
 
 // ─── 출력 타입 ─────────────────────────────────────────────────────────────────
+/** 배정에 부착되는 안정성 동시 링크 (동일 품목코드/유사 품목명 매칭). 엔진이 아니라 라우트 후처리가 채운다. */
+export interface StabilityLink {
+  productCode: string
+  productName: string
+  testType:    string
+  batchNo:     string
+  status:      string
+  matchType:   'code' | 'name'
+}
+
 export interface EngineAssignment {
   key: string
   productCode: string
@@ -86,6 +96,7 @@ export interface EngineAssignment {
   testItemName?: string | null      // INDIVIDUAL_ITEM 일 때 배정된 시험항목명
   parentProductName?: string | null // 원 품목명
   parentProductCode?: string | null // 원 품목코드
+  stabilityLinks?: StabilityLink[]  // 안정성 동시 배정 링크(라우트 후처리에서 부착)
 }
 
 export interface EngineUnassigned {
@@ -109,6 +120,7 @@ export interface EngineResult {
     workloadMatched: number
     workloadMissing: number
     deadlineRisk: number
+    stabilityLinked?: number  // 안정성 동시 배정된 배정 수(라우트 후처리)
   }
 }
 

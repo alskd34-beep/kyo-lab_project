@@ -9,6 +9,16 @@
 
 const STORAGE_KEY = 'kd-pct-monthly-schedules-v1'
 
+/** 배정에 부착된 안정성 동시 링크 (동일 품목코드/유사 품목명 매칭) */
+export interface StabilityLink {
+  productCode: string
+  productName: string
+  testType:    string
+  batchNo:     string
+  status:      string
+  matchType:   'code' | 'name'
+}
+
 /** 월간 페이지에서 그리드에 표시할 단일 항목 */
 export interface PctMonthlyAssignment {
   /** 고유 식별자 (품목코드+제조번호+담당자 조합 해시) */
@@ -48,6 +58,8 @@ export interface PctMonthlyAssignment {
   /** 원 품목명/코드 (개별항목 분산 시) */
   parentProductName?: string | null
   parentProductCode?: string | null
+  /** 안정성 동시 배정 링크 (동일코드/유사명 매칭 시) */
+  stabilityLinks?:    StabilityLink[]
   /** 생성 시각 (ISO) */
   createdAt:     string
 }
@@ -72,6 +84,7 @@ export interface EngineAssignmentLike {
   testItemName?:      string | null
   parentProductName?: string | null
   parentProductCode?: string | null
+  stabilityLinks?:    StabilityLink[]
 }
 
 /** 규칙 엔진 배정 결과를 월간 스냅샷으로 저장. 저장한 스냅샷을 반환(서버 영속화용). */
@@ -95,6 +108,7 @@ export function savePctMonthlyFromEngine(items: EngineAssignmentLike[]): PctMont
     testItemName:      a.testItemName ?? null,
     parentProductName: a.parentProductName ?? null,
     parentProductCode: a.parentProductCode ?? null,
+    stabilityLinks:    a.stabilityLinks,
     createdAt:     new Date().toISOString(),
   }))
   return savePctMonthlySnapshot(assignments)

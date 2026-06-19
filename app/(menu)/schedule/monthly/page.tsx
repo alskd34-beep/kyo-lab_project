@@ -196,6 +196,9 @@ export default function MonthlySchedulePage() {
           a.method ? `방법: ${a.method}` : '',
           `시험항목: ${a.testItems.join(', ')}`,
           a.isDuo && a.duoPartner ? `듀오: ${a.testerName}+${a.duoPartner}` : '',
+          a.stabilityLinks?.length
+            ? `🧪 안정성 동시: ${a.stabilityLinks.map(s => `${s.productName || s.productCode}${s.testType ? `(${s.testType})` : ''}`).join(', ')}`
+            : '',
           a.note || '',
         ].filter(Boolean).join('\n'),
         source:         'pct',

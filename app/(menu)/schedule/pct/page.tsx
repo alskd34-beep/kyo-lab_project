@@ -72,6 +72,25 @@ interface PctRow {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const DEFAULT_FILE_ID = "1H9_lR-_tpEHKSpVD2qLbxX5cqXRG_s5rpbGs-gqSPxU"
+// 안정성 시트(안정성현황과 동일 시트). 동일 품목코드/유사 품목명 매칭 → 담당 시험자에게 안정성 동시 배정.
+const STABILITY_SHEET_ID = "1gvAtB1ETkCol1gM2mmppOUJTgIidEq1IdGaQaiSXdCg"
+
+interface StabilityRowDTO { productCode: string; productName: string; testType: string; batchNo: string; status: string }
+function mapStabilityRows(rows: Record<string, string>[]): StabilityRowDTO[] {
+  const pick = (r: Record<string, string>, keys: string[]) => {
+    for (const k of keys) { const v = r[k]; if (v && v.trim()) return v.trim() }
+    return ""
+  }
+  return rows
+    .map((r) => ({
+      productCode: pick(r, ["안정성시험 계획 정보/품목코드", "품목코드", "자재코드"]),
+      productName: pick(r, ["안정성시험 계획 정보/품목", "품목", "품목명", "자재내역"]),
+      testType:    pick(r, ["안정성시험 계획 정보/시험종류", "시험종류"]),
+      batchNo:     pick(r, ["안정성시험 계획 정보/제조번호", "제조번호"]),
+      status:      pick(r, ["안정성시험 계획 정보/진행상태", "진행상태", "상태"]),
+    }))
+    .filter((s) => s.productCode || s.productName)
+}
 
 const STATUS_OPTIONS = ["대기", "진행중", "검토중", "완료", "지연"]
 const URGENT_OPTIONS = ["일반", "긴급"]
@@ -296,6 +315,19 @@ export default function PctPage() {
     setAssigning(true)
     setError(null)
     try {
+      // 안정성 시트 로드(동시 배정 매칭용). 실패해도 배정은 진행.
+      let stabilityRows: StabilityRowDTO[] = []
+      try {
+        const sres = await fetch(
+          `/api/google-sheet/stability?fileId=${encodeURIComponent(STABILITY_SHEET_ID)}`,
+          { credentials: "include" }
+        )
+        if (sres.ok) {
+          const sjson = await sres.json()
+          stabilityRows = mapStabilityRows(sjson.rows ?? [])
+        }
+      } catch { /* 안정성 시트 실패는 무시 */ }
+
       const payload = {
         rows: targetRows.map((r) => ({
           품목코드: r.품목코드,
@@ -307,6 +339,7 @@ export default function PctPage() {
           진행방법: r.진행방법,
           담당자: r.담당자,
         })),
+        stabilityRows,
       }
       const res = await fetch("/api/schedules/pct-generate", {
         method: "POST",
@@ -871,6 +904,11 @@ export default function PctPage() {
                         </span>
                       )}
                     </span>
+                    {(engineResult.stats.stabilityLinked ?? 0) > 0 && (
+                      <span className="inline-flex items-center gap-1 rounded-md border border-violet-300 bg-violet-100 px-2 py-0.5 font-semibold text-violet-700 dark:border-violet-800 dark:bg-violet-900/50 dark:text-violet-300">
+                        안정성 동시 {engineResult.stats.stabilityLinked}건
+                      </span>
+                    )}
                   </div>
                   {engineResult.unassigned.length > 0 && (
                     <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 dark:border-amber-800 dark:bg-amber-950/40">

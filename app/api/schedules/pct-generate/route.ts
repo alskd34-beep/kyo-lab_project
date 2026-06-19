@@ -17,8 +17,9 @@ import {
   type EngineProductItems,
   type EngineEquip,
   type EngineWorkload,
+  type StabilityLink,
 } from '@backend/services/scheduleEngine'
-import { buildGroupsFromOrders, type OrderForGrouping } from '@backend/services/concurrentGroups'
+import { buildGroupsFromOrders, isSimilarProductName, type OrderForGrouping } from '@backend/services/concurrentGroups'
 
 export const runtime = 'nodejs'
 
@@ -33,12 +34,22 @@ interface ClientRow {
   담당자?: string
 }
 
+/** 안정성 시트 행(클라이언트가 /api/google-sheet/stability에서 받아 전달) */
+interface StabilityClientRow {
+  productCode?: string
+  productName?: string
+  testType?:    string
+  batchNo?:     string
+  status?:      string
+}
+
+
 export async function POST(req: NextRequest) {
   const auth = await requireAuth(req)
   if (!auth.ok) return auth.response
 
   try {
-    const body = await req.json() as { rows?: ClientRow[]; year?: number }
+    const body = await req.json() as { rows?: ClientRow[]; year?: number; stabilityRows?: StabilityClientRow[] }
     const clientRows = body.rows ?? []
     if (clientRows.length === 0) {
       return Response.json({ error: '배정할 행이 없습니다.' }, { status: 400 })
@@ -191,11 +202,43 @@ export async function POST(req: NextRequest) {
     const finalAssignments = [...result.assignments, ...extraAssignments]
     const finalUnassigned  = [...result.unassigned,  ...extraUnassigned]
 
+    // ── 안정성 동시 배정: 동일 품목코드 또는 유사 품목명 매칭 → 담당 시험자에게 부착 ──
+    // 진행중인 안정성 항목만 대상(완료/종료/취소/중단 제외).
+    const activeStability = (body.stabilityRows ?? [])
+      .filter(s => (s.productCode || s.productName) && !/(완료|종료|취소|중단)/.test(s.status ?? ''))
+    const linkAssignments = finalAssignments.map(a => {
+      if (activeStability.length === 0) return a
+      const links: StabilityLink[] = []
+      const seen = new Set<string>()
+      for (const s of activeStability) {
+        const code = (s.productCode ?? '').trim()
+        const sameCode = !!code && code === a.productCode
+        const simName  = !sameCode && isSimilarProductName(s.productName ?? '', a.productName)
+        if (!sameCode && !simName) continue
+        const k = `${code}|${s.batchNo ?? ''}|${s.testType ?? ''}`
+        if (seen.has(k)) continue
+        seen.add(k)
+        links.push({
+          productCode: code,
+          productName: s.productName ?? '',
+          testType:    s.testType ?? '',
+          batchNo:     s.batchNo ?? '',
+          status:      s.status ?? '',
+          matchType:   sameCode ? 'code' : 'name',
+        })
+      }
+      return links.length ? { ...a, stabilityLinks: links } : a
+    })
+
+    const stabilityLinkedCount = linkAssignments.filter(
+      a => (a as { stabilityLinks?: StabilityLink[] }).stabilityLinks?.length,
+    ).length
+
     return Response.json({
       ...result,
-      assignments: finalAssignments,
+      assignments: linkAssignments,
       unassigned:  finalUnassigned,
-      stats: { ...result.stats, assigned: finalAssignments.length },
+      stats: { ...result.stats, assigned: finalAssignments.length, stabilityLinked: stabilityLinkedCount },
     })
   } catch (err) {
     console.error('[api/schedules/pct-generate]', err)

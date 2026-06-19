@@ -109,6 +109,14 @@ function similarName(an: string, bn: string): boolean {
   return commonPrefixLen(sa, sb) >= MIN_PREFIX_LEN
 }
 
+/**
+ * 외부(안정성 매칭 등)에서 재사용할 유사 품목명 판정.
+ * 동시분석 그룹과 동일한 규칙(공백 정규화 후 포함관계/공통 접두어)을 적용한다.
+ */
+export function isSimilarProductName(a: string, b: string): boolean {
+  return similarName(normalizeName(a), normalizeName(b))
+}
+
 /** 두 오더가 동일 그룹 조건(OR) 중 하나라도 충족하는가 */
 function sameGroup(a: OrderForGrouping, b: OrderForGrouping): boolean {
   const an = normalizeName(a.productName)
