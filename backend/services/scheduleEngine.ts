@@ -187,8 +187,10 @@ function normToken(s: string): string {
  * required_equipment 문자열을 capability id 집합으로 변환.
  * 복합값(예: 'HPTLC_이화학_중금속')은 구분자로 분해 후 각 토큰을 capability code/name과 매칭.
  * 매칭되지 않는 토큰은 무시(차단하지 않음).
+ *
+ * 휴가 가용성 제안(leaveSuggestions)이 배정 엔진과 100% 동일한 역량 매칭을 쓰도록 export.
  */
-function buildCapResolver(capabilities: EngineCapability[]) {
+export function buildCapResolver(capabilities: EngineCapability[]) {
   const byNorm = new Map<string, string>() // normalized code/name → capabilityId
   for (const c of capabilities) {
     byNorm.set(normToken(c.code), c.id)
