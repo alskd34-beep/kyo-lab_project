@@ -29,7 +29,7 @@ function parseShortDate(s: string, defaultYear: number): { iso: string; weekKey:
   if (!s) return null
   const m = s.match(/^(\d{1,2})[\.\/](\d{1,2})$/)
   if (!m) return null
-  const [_, mm, dd] = m
+  const [, mm, dd] = m
   const month = Number(mm), day = Number(dd)
   if (month < 1 || month > 12 || day < 1 || day > 31) return null
   const d = new Date(Date.UTC(defaultYear, month - 1, day))

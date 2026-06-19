@@ -10,7 +10,7 @@
  * value / onChange 는 "yyyy-MM-dd" ISO 문자열 기준.
  */
 
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { format, parse, isValid } from "date-fns"
 import { Calendar as CalendarIcon } from "lucide-react"
 import { Button } from "@frontend/components/ui/button"
@@ -112,13 +112,16 @@ export function DateField({
   }
 
   // 외부 value 변경 시 표시 동기화 (단, 포커스 중엔 유지)
-  const isFocused = document.activeElement === inputRef.current
-  if (!isFocused) {
+  useEffect(() => {
+    // ref·activeElement 접근은 렌더 중이 아닌 effect 안에서 수행
+    const isFocused = document.activeElement === inputRef.current
+    if (isFocused) return
     const expected = isoToMasked(value)
     if (inputVal !== expected && maskedToIso(inputVal) !== value) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 외부 value(prop) 변경을 표시 상태에 동기화
       setInputVal(expected)
     }
-  }
+  }, [value, inputVal])
 
   // ── 입력 행 ───────────────────────────────────────────────────────────────
   const inputRow = (

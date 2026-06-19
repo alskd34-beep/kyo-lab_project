@@ -209,7 +209,19 @@ FTIR→ftir, UV-Vis→uv_vis, TOC→toc,
     // 4. 결과를 Supabase schedules 테이블에 저장
     // ============================================================
     if (scheduleData.schedule && scheduleData.schedule.length > 0) {
-      const scheduleRows = scheduleData.schedule.map((item: any) => ({
+      type AiScheduleItem = {
+        tester_id?: string
+        batch_id?: string
+        product_name?: string
+        test_items?: unknown
+        scheduled_date?: string
+        workdays?: number
+        is_urgent?: boolean
+        is_duo?: boolean
+        duo_partner_id?: string
+        note?: string
+      }
+      const scheduleRows = (scheduleData.schedule as AiScheduleItem[]).map((item) => ({
         week_start,
         week_end,
         tester_id: item.tester_id,
@@ -246,10 +258,11 @@ FTIR→ftir, UV-Vis→uv_vis, TOC→toc,
         unassigned: scheduleData.unassigned?.length ?? 0,
       },
     })
-  } catch (error: any) {
+  } catch (error) {
     console.error('QC 스케줄러 오류:', error)
+    const msg = error instanceof Error ? error.message : '스케줄 생성 중 오류가 발생했습니다.'
     return NextResponse.json(
-      { error: error.message || '스케줄 생성 중 오류가 발생했습니다.' },
+      { error: msg },
       { status: 500 }
     )
   }

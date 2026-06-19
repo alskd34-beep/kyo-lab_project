@@ -81,7 +81,9 @@ export default function QCDashboard() {
   const [dateRange, setDateRange]         = useState<DateRange | undefined>(undefined)
 
   useEffect(() => {
+    // 서버·클라이언트 타임존 차이로 인한 하이드레이션 불일치를 피하려 마운트 후(클라이언트)에만 기본 기간 설정
     const today = new Date()
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 클라이언트 전용 시각 동기화(마운트 1회)
     setDateRange({ from: subMonths(today, 1), to: today })
   }, [])
   const [tableData, setTableData]         = useState<TestRow[]>(DEMO_TABLE_DATA)
@@ -96,6 +98,7 @@ export default function QCDashboard() {
     if (dateRange?.to)   params.set('to',   format(dateRange.to,   'yyyy-MM-dd'))
     if (searchValue)     params.set('search', searchValue)
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 데이터 페치(외부 시스템) 시작 시 로딩 표시
     setIsLoading(true)
     fetch(`/api/tests?${params.toString()}`)
       .then(async r => {

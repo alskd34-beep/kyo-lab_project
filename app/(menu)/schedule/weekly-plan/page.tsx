@@ -518,11 +518,11 @@ export default function WeeklyPlanPage() {
                   <li>시험항목별 필요 장비를 추정하고, <b>시험자 역량 시트</b>의 Y/O만 가능한 자격자로 필터링</li>
                   <li>부하 최소 시험자에게 우선 배정 (Solo 시험자만 단독 배정 가능)</li>
                   <li>진행방법 <b>전항목</b>: 한 시험자에게 일괄 / <b>개별항목</b>: 시험항목별 분배</li>
-                  <li>동일 품목코드가 <b className="text-violet-600 dark:text-violet-300">안정성 시트</b>에 있으면 "안정성 동시" 마크 + 정보 표시</li>
+                  <li>동일 품목코드가 <b className="text-violet-600 dark:text-violet-300">안정성 시트</b>에 있으면 &quot;안정성 동시&quot; 마크 + 정보 표시</li>
                   <li>품목별 <b className="text-amber-600 dark:text-amber-300">특이사항</b>은 카드에 자동 부착</li>
                 </ol>
                 <p className={`${TXT_MUTED} pt-2`}>
-                  * 이 페이지는 PCT 시트의 진행방법/담당자가 모두 "전항목/미지정"인 상태로 동작합니다. PCT에서 저장한 값을 반영하려면 Phase A (DB 영속화)가 필요합니다.
+                  * 이 페이지는 PCT 시트의 진행방법/담당자가 모두 &quot;전항목/미지정&quot;인 상태로 동작합니다. PCT에서 저장한 값을 반영하려면 Phase A (DB 영속화)가 필요합니다.
                 </p>
               </CardContent>
             </Card>

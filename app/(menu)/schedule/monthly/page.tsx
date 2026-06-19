@@ -135,15 +135,20 @@ export default function MonthlySchedulePage() {
   const [pctGeneratedAt, setPctGeneratedAt] = useState<string | null>(null)
 
   useEffect(() => {
+    // localStorage(외부 저장소)는 클라이언트 전용 → 마운트/월 변경 시 스냅샷 동기화
     const snap = loadPctMonthlySnapshot()
+    /* eslint-disable react-hooks/set-state-in-effect -- 외부 저장소(localStorage) 동기화 */
     setPctSnapshot(snap?.assignments ?? [])
     setPctGeneratedAt(snap?.generatedAt ?? null)
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [month])
 
   useEffect(() => {
     let aborted = false
+    /* eslint-disable react-hooks/set-state-in-effect -- 데이터 페치 시작: 로딩/에러 상태 초기화 */
     setLoading(true)
     setError(null)
+    /* eslint-enable react-hooks/set-state-in-effect */
     fetch(`/api/schedules/monthly?month=${month}`, { credentials: 'include' })
       .then(async res => {
         const json = await res.json()

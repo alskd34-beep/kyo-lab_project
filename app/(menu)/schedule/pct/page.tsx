@@ -736,7 +736,7 @@ export default function PctPage() {
 
                 <div className="grid gap-2 sm:grid-cols-2">
                   <Button
-                    onClick={handleAutoAssign}
+                    onClick={() => handleAutoAssign()}
                     disabled={rows.length === 0 || assigning}
                     size="sm"
                     title="시험자 역량·장비(test_item_equipment)·공수(product_workload) 기반 규칙 자동 배정"

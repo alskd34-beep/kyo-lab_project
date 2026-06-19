@@ -1,6 +1,7 @@
 "use client"
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
+import type { ReactElement } from "react"
 import { AlertCircle, CheckCircle2, Info, TriangleAlert, X } from "lucide-react"
 import { cn } from "@frontend/lib/utils"
 
@@ -37,7 +38,7 @@ function createId() {
 
 const TOAST_STYLE: Record<
   ToastVariant,
-  { ring: string; accent: string; icon: JSX.Element }
+  { ring: string; accent: string; icon: ReactElement }
 > = {
   info: {
     ring: "border-blue-200 bg-blue-50 text-blue-700 shadow-blue-100/40",

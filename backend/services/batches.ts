@@ -7,19 +7,20 @@ function calcDday(dateStr: string | null): number | null {
 }
 
 export async function listBatches(q: {
-  status?: string; from?: string; to?: string; search?: string
+  status?: string; from?: string; to?: string; search?: string; productId?: string
 } = {}): Promise<BatchSummary[]> {
-  let query = supabase.from('production_batches').select('*').order('qc_completion_deadline')
+  let query = supabase.from('production_batches').select('*').order('qc_planned_completion_date')
   if (q.status && q.status !== 'all') query = query.eq('status', q.status)
-  if (q.from) query = query.gte('packaging_date', q.from)
-  if (q.to)   query = query.lte('packaging_date', q.to)
+  if (q.productId) query = query.eq('product_id', q.productId)
+  if (q.from) query = query.gte('packaging_planned_date', q.from)
+  if (q.to)   query = query.lte('packaging_planned_date', q.to)
   if (q.search) query = query.or(`product_name.ilike.%${q.search}%,batch_no.ilike.%${q.search}%,product_code.ilike.%${q.search}%`)
   const { data, error } = await query
   if (error) throw error
   return (data ?? []).map(r => ({
-    ...(r as any),
+    ...(r as unknown as BatchSummary),
     dDayRecord: calcDday(r.record_review_deadline),
-    dDayQc: calcDday(r.qc_completion_deadline),
+    dDayQc: calcDday(r.qc_planned_completion_date),
   }))
 }
 
@@ -49,7 +50,55 @@ export async function createBatch(input: {
     .single()
   if (error) throw error
   return {
-    ...(data as any),
+    ...(data as unknown as BatchSummary),
+    dDayRecord: calcDday(data.record_review_deadline),
+    dDayQc:    calcDday(data.qc_planned_completion_date),
+  }
+}
+
+export async function getBatch(id: string): Promise<BatchSummary> {
+  const { data, error } = await supabase
+    .from('production_batches')
+    .select('*')
+    .eq('id', id)
+    .single()
+  if (error) throw error
+  return {
+    ...(data as unknown as BatchSummary),
+    dDayRecord: calcDday(data.record_review_deadline),
+    dDayQc:    calcDday(data.qc_planned_completion_date),
+  }
+}
+
+export async function updateBatch(id: string, patch: {
+  productId?: string
+  spec?: string
+  batchNo?: string
+  dosageFormId?: string
+  packagingPlannedDate?: string
+  recordReviewDeadline?: string
+  qcPlannedCompletionDate?: string
+  status?: string
+}): Promise<BatchSummary> {
+  const fields: Record<string, unknown> = {}
+  if (patch.productId !== undefined)               fields.product_id = patch.productId
+  if (patch.spec !== undefined)                    fields.spec = patch.spec
+  if (patch.batchNo !== undefined)                 fields.batch_no = patch.batchNo
+  if (patch.dosageFormId !== undefined)            fields.dosage_form_id = patch.dosageFormId
+  if (patch.packagingPlannedDate !== undefined)    fields.packaging_planned_date = patch.packagingPlannedDate
+  if (patch.recordReviewDeadline !== undefined)    fields.record_review_deadline = patch.recordReviewDeadline
+  if (patch.qcPlannedCompletionDate !== undefined) fields.qc_planned_completion_date = patch.qcPlannedCompletionDate
+  if (patch.status !== undefined)                  fields.status = patch.status
+
+  const { data, error } = await supabase
+    .from('production_batches')
+    .update(fields)
+    .eq('id', id)
+    .select('*')
+    .single()
+  if (error) throw error
+  return {
+    ...(data as unknown as BatchSummary),
     dDayRecord: calcDday(data.record_review_deadline),
     dDayQc:    calcDday(data.qc_planned_completion_date),
   }

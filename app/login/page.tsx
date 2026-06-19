@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { Suspense, useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@frontend/lib/auth-context'
 import { FlaskConical, Lock, User as UserIcon, Eye, EyeOff } from 'lucide-react'
@@ -33,7 +33,7 @@ function readLoginPrefs() {
   }
 }
 
-export default function LoginPage() {
+function LoginForm() {
   const router       = useRouter()
   const params       = useSearchParams()
   const { user, loading, login } = useAuth()
@@ -168,5 +168,14 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  )
+}
+
+// useSearchParams()는 CSR 바일아웃 → 정적 프리렌더를 위해 Suspense 경계로 감싼다
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-white p-4" />}>
+      <LoginForm />
+    </Suspense>
   )
 }
