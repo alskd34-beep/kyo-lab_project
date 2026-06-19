@@ -9,7 +9,7 @@
  */
 
 import { randomUUID } from 'crypto'
-import { supabase } from '@backend/lib/supabase'
+import { supabase, supabaseAdmin } from '@backend/lib/supabase'
 
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions'
 const OPENAI_MODEL   = 'gpt-4o-mini'
@@ -20,10 +20,25 @@ DB 컨텍스트에 없는 사실을 지어내지 말고, 정보가 부족하면 
 const HISTORY_LIMIT  = 10
 const ACTIVE_STATUSES = ['pending', 'in_progress', 'on_hold']
 
+type Role = 'admin' | 'user'
+
+/** 요청자 신원 (권한 스코프 산정용) */
+export interface ChatViewer {
+  userSub: string
+  role: Role
+}
+
+/** 조회 권한 범위: 관리자=전체, 그 외=본인 배정(tester_id)만 */
+interface Scope {
+  isAdmin: boolean
+  testerId: string | null
+}
+
 interface ChatRequest {
   message: string
   /** 기존 호환성을 위해 이름은 conversationId(=dify_conv_id로 매핑) 유지 */
   conversationId?: string
+  viewer: ChatViewer
 }
 
 interface ChatMsg {
@@ -48,8 +63,8 @@ interface TesterLite {
   employee_no: string
 }
 
-/** 메시지에서 언급된 품목/시험자를 찾아 DB 사실 컨텍스트 블록을 생성합니다. */
-async function buildDbContext(message: string): Promise<string> {
+/** 메시지에서 언급된 품목/시험자 + 날짜 의도를 찾아 DB 사실 컨텍스트 블록을 생성합니다. (권한 스코프 적용) */
+async function buildDbContext(message: string, scope: Scope): Promise<string> {
   const sections: string[] = []
 
   try {
@@ -62,26 +77,43 @@ async function buildDbContext(message: string): Promise<string> {
     const products = (prodAll ?? []) as ProductLite[]
     const testers  = (testAll ?? []) as TesterLite[]
 
-    const matchedProducts = matchProducts(message, products)
-    const matchedTesters  = matchTesters(message, testers)
+    const matchedProducts = matchProducts(message, products).slice(0, 3)
+    let matchedTesters    = matchTesters(message, testers)
+    // 비관리자는 본인 시험자 정보만 (타인 일정·업무 노출 차단)
+    if (!scope.isAdmin) matchedTesters = matchedTesters.filter(t => t.id === scope.testerId)
+    matchedTesters = matchedTesters.slice(0, 3)
 
-    // 2) 품목 컨텍스트
-    for (const p of matchedProducts.slice(0, 3)) {
-      const block = await buildProductBlock(p)
+    // 0) 날짜 의도(오늘/내일/이번 주/특정일) → 일정 블록
+    const range = detectDateRange(message)
+    if (range) {
+      const block = await buildScheduleBlock(range, scope)
       if (block) sections.push(block)
     }
 
-    // 3) 시험자 컨텍스트
-    for (const t of matchedTesters.slice(0, 3)) {
-      const block = await buildTesterBlock(t)
-      if (block) sections.push(block)
+    // 2) 품목 컨텍스트 (마스터·시험항목 + PCT 오더·시험 전 확인사항)
+    for (const p of matchedProducts) {
+      const base = await buildProductBlock(p)
+      if (base) sections.push(base)
+      const pct = await buildProductPctBlock(p, scope)
+      if (pct) sections.push(pct)
+    }
+
+    // 3) 시험자 컨텍스트 (기존 역량·할당 + PCT 오더)
+    for (const t of matchedTesters) {
+      const base = await buildTesterBlock(t)
+      if (base) sections.push(base)
+      const pct = await buildTesterOrdersBlock(t, scope)
+      if (pct) sections.push(pct)
     }
   } catch (err) {
     console.error('[chat] buildDbContext 실패', err)
   }
 
   if (sections.length === 0) return ''
-  return `[DB 컨텍스트]\n${sections.join('\n\n')}`
+  const header = scope.isAdmin
+    ? '[DB 컨텍스트]'
+    : '[DB 컨텍스트] (아래는 요청자 본인에게 배정된 범위로 제한된 정보입니다.)'
+  return `${header}\n${sections.join('\n\n')}`
 }
 
 function matchProducts(message: string, products: ProductLite[]): ProductLite[] {
@@ -251,6 +283,220 @@ async function buildTesterBlock(t: TesterLite): Promise<string> {
   return lines.join('\n')
 }
 
+// ─── PCT 오더/작업·시험 전 확인사항·일정 (권한 스코프 적용) ──────────────────────
+
+interface OrderRow {
+  id: string
+  product_code: string
+  product_name: string
+  batch_no: string
+  due_date: string | null
+  method: string | null
+  status: string
+  is_urgent: boolean
+  assignee_tester_id: string | null
+}
+interface JobInfo {
+  qcNo: string
+  status: string
+  items: { name: string; status: string }[]
+}
+
+/** 요청자 신원 → 조회 권한 범위 산정 (관리자=전체, 그 외=본인 tester_id) */
+async function resolveScope(viewer: ChatViewer): Promise<Scope> {
+  if (viewer.role === 'admin') return { isAdmin: true, testerId: null }
+  let testerId: string | null = null
+  try {
+    const { data } = await supabaseAdmin
+      .from('users').select('tester_id').eq('id', viewer.userSub).maybeSingle()
+    testerId = (data?.tester_id as string) ?? null
+  } catch { /* 무시 — 폴백: 본인 연결 없음 */ }
+  return { isAdmin: false, testerId }
+}
+
+/** KST 기준 오늘(YYYY-MM-DD) */
+function kstToday(): string {
+  return new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10)
+}
+function addDays(iso: string, n: number): string {
+  const d = new Date(`${iso}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + n)
+  return d.toISOString().slice(0, 10)
+}
+
+/** 메시지의 날짜 의도를 [from,to] 구간으로 해석 (없으면 null) */
+function detectDateRange(message: string): { label: string; from: string; to: string } | null {
+  const today = kstToday()
+  if (/오늘|금일/.test(message)) return { label: `오늘(${today})`, from: today, to: today }
+  if (/내일|익일/.test(message)) { const t = addDays(today, 1); return { label: `내일(${t})`, from: t, to: t } }
+  if (/이번\s*주|금주|주간/.test(message)) {
+    const dow = new Date(`${today}T00:00:00Z`).getUTCDay() // 0=일
+    const from = addDays(today, dow === 0 ? -6 : 1 - dow)   // 월요일 시작
+    const to = addDays(from, 6)
+    return { label: `이번 주(${from}~${to})`, from, to }
+  }
+  const m = message.match(/(\d{4})[-./](\d{1,2})[-./](\d{1,2})/)
+  if (m) {
+    const iso = `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`
+    return { label: iso, from: iso, to: iso }
+  }
+  const m2 = message.match(/(\d{1,2})\s*월\s*(\d{1,2})\s*일/)
+  if (m2) {
+    const iso = `${today.slice(0, 4)}-${m2[1].padStart(2, '0')}-${m2[2].padStart(2, '0')}`
+    return { label: iso, from: iso, to: iso }
+  }
+  return null
+}
+
+/** 권한 스코프를 적용한 pct_orders 조회 (비관리자는 본인 tester_id로 강제) */
+async function fetchScopedOrders(
+  opts: { productCode?: string; testerId?: string; dueFrom?: string; dueTo?: string },
+  scope: Scope,
+): Promise<OrderRow[]> {
+  let restrictTester: string | null = null
+  if (!scope.isAdmin) {
+    if (!scope.testerId) return [] // 계정에 시험자 미연결 → 조회 불가
+    restrictTester = scope.testerId
+  } else if (opts.testerId) {
+    restrictTester = opts.testerId
+  }
+
+  let q = supabaseAdmin
+    .from('pct_orders')
+    .select('id, product_code, product_name, batch_no, due_date, method, status, is_urgent, assignee_tester_id')
+    .neq('status', '삭제')
+  if (opts.productCode) q = q.eq('product_code', opts.productCode)
+  if (opts.dueFrom) q = q.gte('due_date', opts.dueFrom)
+  if (opts.dueTo) q = q.lte('due_date', opts.dueTo)
+  if (restrictTester) q = q.eq('assignee_tester_id', restrictTester)
+
+  const { data } = await q.order('due_date', { ascending: true }).limit(20)
+  return (data ?? []) as OrderRow[]
+}
+
+/** tester_id → 이름 매핑 */
+async function testerNameMap(ids: (string | null)[]): Promise<Map<string, string>> {
+  const uniq = Array.from(new Set(ids.filter((x): x is string => !!x)))
+  if (uniq.length === 0) return new Map()
+  const { data } = await supabaseAdmin.from('testers').select('id, name').in('id', uniq)
+  return new Map((data ?? []).map(t => [t.id as string, t.name as string]))
+}
+
+/** 오더별 QC 작업·시험항목 진행상태 */
+async function jobItemsForOrders(orderIds: string[]): Promise<Map<string, JobInfo>> {
+  const map = new Map<string, JobInfo>()
+  if (orderIds.length === 0) return map
+  const { data: jobs } = await supabaseAdmin
+    .from('qc_jobs').select('id, order_id, qc_no, status').in('order_id', orderIds)
+  if (!jobs || jobs.length === 0) return map
+  const jobIds = jobs.map(j => j.id as string)
+  const { data: items } = await supabaseAdmin
+    .from('qc_job_items')
+    .select('qc_job_id, test_item_name, status, sequence_order')
+    .in('qc_job_id', jobIds)
+    .order('sequence_order', { ascending: true })
+  const itemsByJob = new Map<string, { name: string; status: string }[]>()
+  for (const it of items ?? []) {
+    const arr = itemsByJob.get(it.qc_job_id as string) ?? []
+    arr.push({ name: it.test_item_name as string, status: it.status as string })
+    itemsByJob.set(it.qc_job_id as string, arr)
+  }
+  for (const j of jobs) {
+    map.set(j.order_id as string, {
+      qcNo: j.qc_no as string,
+      status: j.status as string,
+      items: itemsByJob.get(j.id as string) ?? [],
+    })
+  }
+  return map
+}
+
+const ITEM_STATUS_KO: Record<string, string> = { cleared: '완료', pending: '대기', in_progress: '진행중' }
+function itemStatusKo(s: string): string { return ITEM_STATUS_KO[s] ?? s }
+
+function formatOrderLine(o: OrderRow, names: Map<string, string>, jobs: Map<string, JobInfo>): string {
+  const tester = o.assignee_tester_id ? (names.get(o.assignee_tester_id) ?? '미지정') : '미배정'
+  const ji = jobs.get(o.id)
+  const items = ji && ji.items.length
+    ? ` | 시험항목: ${ji.items.map(it => `${it.name}(${itemStatusKo(it.status)})`).join(', ')}`
+    : ''
+  return `- 품목 ${o.product_name}(${o.product_code}) | 배치 ${o.batch_no} | 완료예정 ${o.due_date ?? '-'}`
+    + ` | 시험방법 ${o.method ?? '-'} | 담당 ${tester} | 상태 ${o.status}${o.is_urgent ? ' | 긴급' : ''}`
+    + (ji ? ` | QC ${ji.qcNo}` : '')
+    + items
+}
+
+/** 시험 전 확인사항(특이사항) — 테이블 미적용(0019 미실행) 시 graceful 폴백 */
+async function fetchPretestNotes(
+  productId: string,
+): Promise<{ content: string; remark: string | null; issue_lot: string | null; created_by_name: string | null }[]> {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('product_pretest_notes')
+      .select('content, remark, issue_lot, created_by_name, created_at')
+      .eq('product_id', productId)
+      .order('created_at', { ascending: false })
+      .limit(10)
+    if (error) return []
+    return (data ?? []) as { content: string; remark: string | null; issue_lot: string | null; created_by_name: string | null }[]
+  } catch { return [] }
+}
+
+/** 일정(완료예정 기준) 블록 */
+async function buildScheduleBlock(range: { label: string; from: string; to: string }, scope: Scope): Promise<string> {
+  const orders = await fetchScopedOrders({ dueFrom: range.from, dueTo: range.to }, scope)
+  const head = `### 일정 — ${range.label}${scope.isAdmin ? '' : ' (본인 배정)'} : 완료예정 기준 ${orders.length}건`
+  if (orders.length === 0) return `${head}\n- 해당 기간 오더 없음`
+  const [names, jobs] = await Promise.all([
+    testerNameMap(orders.map(o => o.assignee_tester_id)),
+    jobItemsForOrders(orders.map(o => o.id)),
+  ])
+  return [head, ...orders.map(o => formatOrderLine(o, names, jobs))].join('\n')
+}
+
+/** 품목 PCT 오더 + 시험 전 확인사항(특이사항) 블록 */
+async function buildProductPctBlock(p: ProductLite, scope: Scope): Promise<string> {
+  const orders = await fetchScopedOrders({ productCode: p.product_code }, scope)
+  // 비관리자가 이 품목에 배정이 없으면 특이사항·담당 정보를 노출하지 않는다.
+  const showNotes = scope.isAdmin || orders.length > 0
+  const lines: string[] = []
+
+  if (orders.length > 0) {
+    const [names, jobs] = await Promise.all([
+      testerNameMap(orders.map(o => o.assignee_tester_id)),
+      jobItemsForOrders(orders.map(o => o.id)),
+    ])
+    lines.push(`### QC 오더 — ${p.name}${scope.isAdmin ? '' : ' (본인 배정)'} (${orders.length}건)`)
+    for (const o of orders) lines.push(formatOrderLine(o, names, jobs))
+  }
+
+  if (showNotes) {
+    const notes = await fetchPretestNotes(p.id)
+    if (notes.length > 0) {
+      lines.push(`### 시험 전 확인사항(특이사항) — ${p.name} (${notes.length}건)`)
+      for (const n of notes) {
+        lines.push(`- ${n.content}`
+          + (n.remark ? ` | 특이사항: ${n.remark}` : '')
+          + (n.issue_lot ? ` | 이슈로트 ${n.issue_lot}` : '')
+          + (n.created_by_name ? ` | 작성 ${n.created_by_name}` : ''))
+      }
+    }
+  }
+
+  return lines.join('\n')
+}
+
+/** 시험자 PCT 오더 블록 */
+async function buildTesterOrdersBlock(t: TesterLite, scope: Scope): Promise<string> {
+  const orders = await fetchScopedOrders({ testerId: t.id }, scope)
+  if (orders.length === 0) return ''
+  const [names, jobs] = await Promise.all([
+    testerNameMap(orders.map(o => o.assignee_tester_id)),
+    jobItemsForOrders(orders.map(o => o.id)),
+  ])
+  return [`### ${t.name} 시험자 QC 오더 (${orders.length}건)`, ...orders.map(o => formatOrderLine(o, names, jobs))].join('\n')
+}
+
 // ─── 대화 이력 ────────────────────────────────────────────────────────────────
 
 /** 동일 conversationId(dify_conv_id) 의 직전 대화를 OpenAI message 포맷으로 가져옵니다. */
@@ -342,21 +588,21 @@ function transformStream(
 /**
  * OpenAI(gpt-4o-mini) 에 채팅 메시지를 전송하고 SSE 스트림을 반환합니다.
  */
-export async function sendChatMessage({ message, conversationId }: ChatRequest): Promise<Response> {
+export async function sendChatMessage({ message, conversationId, viewer }: ChatRequest): Promise<Response> {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) {
     throw new Error('OPENAI_API_KEY 환경변수가 설정되지 않았습니다. .env.local을 확인해주세요.')
   }
 
   const convId = conversationId && conversationId.trim() ? conversationId : randomUUID()
+  const scope = await resolveScope(viewer)
   const [history, dbContext] = await Promise.all([
     conversationId ? loadHistory(conversationId) : Promise.resolve([] as ChatMsg[]),
-    buildDbContext(message),
+    buildDbContext(message, scope),
   ])
 
-  const systemContent = dbContext
-    ? `${SYSTEM_PROMPT}\n\n${dbContext}`
-    : SYSTEM_PROMPT
+  const dateLine = `오늘 날짜는 ${kstToday()} (KST) 입니다. "오늘/내일/이번 주" 등 상대적 표현은 이 날짜를 기준으로 해석하세요.`
+  const systemContent = [SYSTEM_PROMPT, dateLine, dbContext].filter(Boolean).join('\n\n')
 
   const messages: ChatMsg[] = [
     { role: 'system', content: systemContent },

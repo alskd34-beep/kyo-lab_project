@@ -4,14 +4,21 @@
  */
 
 import { NextRequest } from 'next/server'
+import { requireAuth } from '@backend/lib/guard'
 import { sendChatMessage } from '@backend/services/chat'
 
 export const runtime = 'nodejs'
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAuth(req)
+  if (!auth.ok) return auth.response
   try {
     const { message, conversationId } = await req.json()
-    const difyRes = await sendChatMessage({ message, conversationId })
+    const difyRes = await sendChatMessage({
+      message,
+      conversationId,
+      viewer: { userSub: auth.payload.sub, role: auth.payload.role },
+    })
 
     return new Response(difyRes.body, {
       headers: {

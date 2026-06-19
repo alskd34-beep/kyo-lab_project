@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import {
-  Play, CheckCircle2, Circle, Loader2, AlertTriangle, Clock, XCircle, ShieldAlert,
+  Play, CheckCircle2, Circle, Loader2, AlertTriangle, Clock, XCircle, ShieldAlert, ClipboardList,
 } from "lucide-react"
 import { DateField } from "@frontend/components/ui/date-field"
 
@@ -26,8 +26,14 @@ interface EquipmentCheck {
   calibrationOk: boolean; calibrationDueDate: string | null
   available: boolean; blocked: boolean; warning: boolean; reason: string | null
 }
+/** 시험 전 확인사항 (product_pretest_notes) */
+interface PretestNote {
+  id: string; content: string; remark: string | null; issueLot: string | null
+  occurredAt: string | null; createdByName: string | null
+}
 interface ReadinessResult {
   ok: boolean; checks: EquipmentCheck[]; equipmentCodes: string[]
+  pretestNotes?: PretestNote[]
 }
 
 const STATUS_OPTIONS = ["진행중", "검토중", "완료", "지연"]
@@ -59,6 +65,7 @@ function ReadinessModal({
 }) {
   const blocked = result.checks.filter(c => c.blocked)
   const warnings = result.checks.filter(c => c.warning && !c.blocked)
+  const notes = result.pretestNotes ?? []
   const isBlocked = !result.ok && blocked.length > 0
 
   return (
@@ -70,17 +77,17 @@ function ReadinessModal({
               ? <XCircle className="text-red-500" size={20} />
               : <ShieldAlert className="text-amber-500" size={20} />}
             <h2 className={`text-sm font-bold ${isBlocked ? "text-red-800" : "text-amber-800"}`}>
-              {isBlocked ? "장비 검증 실패 — 시작 불가" : "장비 경고 — 확인 후 시작 가능"}
+              {isBlocked ? "장비 검증 실패 — 시작 불가" : "시작 전 확인 — 확인 후 시작 가능"}
             </h2>
           </div>
           <p className={`mt-1 text-xs ${isBlocked ? "text-red-700" : "text-amber-700"}`}>
             {isBlocked
               ? "아래 장비 문제를 해결한 후 다시 시도하세요."
-              : "경고 사항을 확인하고 계속 진행할 수 있습니다."}
+              : "장비 경고·시험 전 확인사항을 확인하고 계속 진행할 수 있습니다."}
           </p>
         </div>
 
-        <div className="max-h-64 overflow-y-auto px-5 py-3">
+        <div className="max-h-72 overflow-y-auto px-5 py-3">
           {blocked.length > 0 && (
             <ul className="flex flex-col gap-2">
               {blocked.map(c => (
@@ -107,6 +114,27 @@ function ReadinessModal({
               ))}
             </ul>
           )}
+          {notes.length > 0 && (
+            <div className={blocked.length > 0 || warnings.length > 0 ? "mt-3" : ""}>
+              <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                <ClipboardList size={12} /> 시험 전 확인사항 ({notes.length})
+              </p>
+              <ul className="flex flex-col gap-2">
+                {notes.map(n => (
+                  <li key={n.id} className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs">
+                    <p className="font-semibold text-sky-900">{n.content}</p>
+                    {n.remark && <p className="mt-0.5 text-sky-700">특이사항: {n.remark}</p>}
+                    {(n.issueLot || n.createdByName) && (
+                      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-sky-600">
+                        {n.issueLot && <span>이슈 로트 {n.issueLot}</span>}
+                        {n.createdByName && <span>작성 {n.createdByName}</span>}
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
@@ -123,7 +151,7 @@ function ReadinessModal({
               className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
               {confirming ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
-              경고 확인 후 시작
+              확인 후 시작
             </button>
           )}
         </div>
@@ -188,9 +216,10 @@ export default function MyTasksPage() {
 
       const hasBlocked = readiness.checks.some(c => c.blocked)
       const hasWarning = readiness.checks.some(c => c.warning && !c.blocked)
+      const hasPretestNotes = (readiness.pretestNotes?.length ?? 0) > 0
 
-      if (hasBlocked || hasWarning) {
-        // 모달 표시 (blocked이면 시작 불가, warning이면 확인 후 가능)
+      if (hasBlocked || hasWarning || hasPretestNotes) {
+        // 모달 표시 (blocked이면 시작 불가, warning·시험 전 확인사항이면 확인 후 가능)
         setReadinessModal({ orderId, result: readiness })
         setBusy(null)
         return
