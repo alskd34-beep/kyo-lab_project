@@ -4,7 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
 import {
   RefreshCw, Sparkles, History, AlertCircle, Pencil, X, Loader2, Database,
-  ChevronDown, ChevronRight, ChevronLeft, Lock, LockOpen, Search, CalendarDays, Users, ListChecks, Layers,
+  ChevronDown, ChevronRight, ChevronLeft, Lock, Search, CalendarDays, Users, ListChecks, Layers,
 } from "lucide-react"
 import { cn } from "@frontend/lib/utils"
 import { Button } from "@frontend/components/ui/button"
@@ -225,6 +225,7 @@ export default function OrdersPage() {
   const [assigneeTarget, setAssigneeTarget] = useState<{ id: string; name: string } | null>(null)
   const [showLog, setShowLog] = useState(false)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const [selected, setSelected] = useState<Set<string>>(new Set())
   const [families, setFamilies] = useState<{ id: string; name: string; codes: string[] }[]>([])
   const [famCollapsed, setFamCollapsed] = useState<Set<string>>(new Set())
 
@@ -268,21 +269,30 @@ export default function OrdersPage() {
     } finally { setBusy(null) }
   }
 
-  const toggleLock = async (r: OrderRow) => {
-    const lock = !r.locked
-    setBusy(`lock-${r.id}`)
+  // 선택된 오더를 일괄 확정/해제 — 새로고침 없이 로컬 상태만 갱신
+  const applyLock = async (lock: boolean) => {
+    const ids = Array.from(selected)
+    if (ids.length === 0) return
+    setBusy("lock")
     try {
-      const res = await fetch(`/api/pct-orders/${r.id}/lock`, {
-        method: "POST", credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lock }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error)
-      flash(lock ? "확정(잠금)되었습니다. 자동배정·시트변경에서 보호됩니다." : "잠금이 해제되었습니다.")
-      await load()
+      const results = await Promise.all(ids.map(async id => {
+        const res = await fetch(`/api/pct-orders/${id}/lock`, {
+          method: "POST", credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ lock }),
+        })
+        return { id, ok: res.ok }
+      }))
+      const okIds = new Set(results.filter(r => r.ok).map(r => r.id))
+      const failed = results.length - okIds.size
+      // 새로고침 없이 해당 행의 locked 상태만 변경
+      setRows(prev => prev.map(r => (okIds.has(r.id) ? { ...r, locked: lock } : r)))
+      setSelected(new Set())
+      flash(
+        `${okIds.size}건 ${lock ? "확정" : "확정 해제"}되었습니다.${failed > 0 ? ` (실패 ${failed}건)` : ""}`,
+      )
     } catch (e) {
-      flash(`확정/잠금 실패: ${e instanceof Error ? e.message : ""}`)
+      flash(`확정/해제 실패: ${e instanceof Error ? e.message : ""}`)
     } finally { setBusy(null) }
   }
 
@@ -466,7 +476,22 @@ export default function OrdersPage() {
   const renderOrderRow = (r: OrderRow, indented = false) => {
     const dueSoon = isDueSoon(r.dueDate, r.status)
     return (
-      <TableRow key={r.id} className={cn(dueSoon && "bg-orange-50 hover:bg-orange-100/70")}>
+      <TableRow key={r.id} className={cn(dueSoon && "bg-orange-50 hover:bg-orange-100/70", r.locked && "bg-amber-50/40", selected.has(r.id) && "bg-primary/5")}>
+        <TableCell className="px-3 py-2.5 text-center">
+          <input
+            type="checkbox"
+            className="cb-custom"
+            checked={selected.has(r.id)}
+            disabled={!isAdmin}
+            onChange={() => setSelected(prev => {
+              const next = new Set(prev)
+              next.has(r.id) ? next.delete(r.id) : next.add(r.id)
+              return next
+            })}
+            title="선택"
+            aria-label="선택"
+          />
+        </TableCell>
         <TableCell className="px-3 py-2.5 font-medium text-foreground">
           <div className={cn("flex items-center gap-1.5", indented && "pl-6")}>
             {indented && <span className="text-muted-foreground/60">└</span>}
@@ -515,17 +540,6 @@ export default function OrdersPage() {
             <Button variant="ghost" size="icon-sm" onClick={() => setHistoryTarget(r)} title="수정이력" className="text-muted-foreground">
               <History />
             </Button>
-            {isAdmin && (
-              <Button
-                variant="ghost" size="icon-sm"
-                onClick={() => toggleLock(r)}
-                disabled={busy === `lock-${r.id}`}
-                title={r.locked ? "잠금 해제" : "확정(잠금)"}
-                className={r.locked ? "text-amber-600" : "text-muted-foreground"}
-              >
-                {busy === `lock-${r.id}` ? <Loader2 className="animate-spin" /> : r.locked ? <LockOpen /> : <Lock />}
-              </Button>
-            )}
             {isAdmin && (
               <Button variant="ghost" size="icon-sm" onClick={() => setEditTarget(r)} title="수정" className="text-muted-foreground">
                 <Pencil />
@@ -708,6 +722,7 @@ export default function OrdersPage() {
                     <Table className="min-w-[920px]">
                       <TableHeader>
                         <TableRow className="hover:bg-transparent">
+                          <TableHead className="w-12 px-3 text-center text-muted-foreground">확정</TableHead>
                           <TableHead className="px-3 text-muted-foreground">품목명</TableHead>
                           <TableHead className="px-3 text-muted-foreground">품목코드</TableHead>
                           <TableHead className="px-3 text-muted-foreground">제조번호</TableHead>
@@ -729,7 +744,7 @@ export default function OrdersPage() {
                           return (
                             <Fragment key={item.familyId}>
                               <TableRow className="bg-primary/5 hover:bg-primary/10">
-                                <TableCell colSpan={12} className="px-3 py-2">
+                                <TableCell colSpan={13} className="px-3 py-2">
                                   <button onClick={() => toggleFamily(item.familyId)} className="flex items-center gap-2 text-left">
                                     {fc
                                       ? <ChevronRight className="size-4 text-muted-foreground" />
@@ -772,6 +787,25 @@ export default function OrdersPage() {
         />
       )}
       {showLog && <IngestLogModal onClose={() => setShowLog(false)} />}
+
+      {/* 선택 시 하단 미니 모달 — 확정/해제 */}
+      {selected.size > 0 && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-5 z-40 flex justify-center px-4">
+          <div className="pointer-events-auto flex items-center gap-2 rounded-xl border bg-card px-3 py-2 shadow-lg">
+            <span className="px-1 text-sm font-medium text-foreground tabular-nums">{selected.size}건 선택됨</span>
+            <span className="h-4 w-px bg-border" />
+            <Button size="default" onClick={() => applyLock(true)} disabled={busy === "lock"}>
+              {busy === "lock" ? <Loader2 className="animate-spin" /> : <Lock />}확정
+            </Button>
+            <Button size="default" variant="outline" onClick={() => applyLock(false)} disabled={busy === "lock"}>
+              확정 해제
+            </Button>
+            <Button size="icon" variant="ghost" onClick={() => setSelected(new Set())} title="선택 해제">
+              <X />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
