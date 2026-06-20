@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
+import { useLockBodyScroll } from "@frontend/hooks/use-lock-body-scroll"
 import {
   CalendarDays, Plus, Trash2, X, Loader2, Check, ChevronLeft, ChevronRight, CheckCircle2,
   Sparkles, Lightbulb, Ban, AlertTriangle, Users, FlaskConical,
@@ -390,10 +391,11 @@ export default function VacationPage() {
 
 // ─── 우측 슬라이드 패널 ──────────────────────────────────────────────────────────
 function RightDrawer({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  useLockBodyScroll()
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40" onClick={onClose}>
       <div
-        className="flex h-full w-full max-w-md flex-col overflow-y-auto bg-white shadow-xl"
+        className="flex h-full w-full max-w-md flex-col overflow-y-auto overscroll-contain bg-white shadow-xl"
         onClick={e => e.stopPropagation()}
       >
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-4 py-3">
@@ -649,6 +651,7 @@ function AddModal({
   onSaved: () => void
   onError: (m: string) => void
 }) {
+  useLockBodyScroll()
   const [userId, setUserId] = useState("")
   const [type, setType] = useState<ScheduleType>("ANNUAL")
   const [startDate, setStartDate] = useState(defaults.start)

@@ -2,8 +2,19 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
+import { useLockBodyScroll } from "@frontend/hooks/use-lock-body-scroll"
 import { ClipboardList, Plus, Pencil, Trash2, X, Loader2, AlertTriangle, AlertCircle } from "lucide-react"
 import { DateField } from "@frontend/components/ui/date-field"
+import { Button } from "@frontend/components/ui/button"
+import { Card } from "@frontend/components/ui/card"
+import { Badge } from "@frontend/components/ui/badge"
+import { Input } from "@frontend/components/ui/input"
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@frontend/components/ui/table"
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@frontend/components/ui/select"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -29,10 +40,10 @@ const STATUS_LABEL: Record<EquipmentStatus, string> = {
   out_of_service:  "사용 불가",
 }
 
-const STATUS_CLS: Record<EquipmentStatus, string> = {
-  active:         "bg-emerald-50 text-emerald-700 border-emerald-200",
-  calibrating:    "bg-amber-50 text-amber-700 border-amber-200",
-  out_of_service: "bg-red-50 text-red-700 border-red-200",
+const STATUS_DOT: Record<EquipmentStatus, string> = {
+  active:         "bg-emerald-500",
+  calibrating:    "bg-amber-500",
+  out_of_service: "bg-red-500",
 }
 
 // ─── 검교정 만료 판정 ─────────────────────────────────────────────────────────
@@ -49,7 +60,7 @@ function getCalibrationUrgency(dueDate: string | null): "expired" | "soon" | "ok
 }
 
 function CalibrationDueBadge({ dueDate }: { dueDate: string | null }) {
-  if (!dueDate) return <span className="text-slate-400 text-xs">미등록</span>
+  if (!dueDate) return <span className="text-muted-foreground text-xs">미등록</span>
   const urgency = getCalibrationUrgency(dueDate)
   if (urgency === "expired") {
     return (
@@ -65,7 +76,7 @@ function CalibrationDueBadge({ dueDate }: { dueDate: string | null }) {
       </span>
     )
   }
-  return <span className="text-xs text-slate-700">{dueDate}</span>
+  return <span className="text-xs text-foreground">{dueDate}</span>
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -118,25 +129,22 @@ export default function EquipmentMasterPage() {
   }
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-5 p-5">
+    <div className="flex flex-col gap-4 p-4 md:p-6">
       {/* 헤더 */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white">
-            <ClipboardList size={20} />
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <ClipboardList size={18} />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-slate-900">장비 마스터</h1>
-            <p className="text-xs text-slate-500">장비 등록·검교정 이력·가용성 관리</p>
+            <h1 className="text-xl font-semibold text-foreground">장비 마스터</h1>
+            <p className="text-sm text-muted-foreground">장비 등록·검교정 이력·가용성 관리</p>
           </div>
         </div>
         {isAdmin && (
-          <button
-            onClick={() => setShowAdd(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
-          >
-            <Plus size={16} /> 장비 등록
-          </button>
+          <Button size="lg" onClick={() => setShowAdd(true)}>
+            <Plus /> 장비 등록
+          </Button>
         )}
       </div>
 
@@ -144,7 +152,7 @@ export default function EquipmentMasterPage() {
       {msg && (
         <div className={`rounded-lg border px-4 py-2.5 text-sm ${
           msg.type === "error"
-            ? "border-red-200 bg-red-50 text-red-700"
+            ? "border-red-200 bg-red-50 text-red-600"
             : "border-blue-200 bg-blue-50 text-blue-700"
         }`}>
           {msg.text}
@@ -152,86 +160,91 @@ export default function EquipmentMasterPage() {
       )}
 
       {/* 테이블 */}
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <div className="border-b border-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700">
+      <Card className="gap-0 py-0 overflow-hidden">
+        <div className="border-b px-4 py-2.5 text-sm font-semibold text-foreground">
           장비 목록 ({rows.length})
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center gap-2 py-10 text-sm text-slate-400">
+          <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
             <Loader2 size={16} className="animate-spin" /> 불러오는 중…
           </div>
         ) : rows.length === 0 ? (
-          <div className="py-10 text-center text-sm text-slate-400">등록된 장비가 없습니다.</div>
+          <div className="py-10 text-center text-sm text-muted-foreground">등록된 장비가 없습니다.</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 bg-slate-50 text-xs font-semibold text-slate-500">
-                  <th className="px-4 py-2.5 text-left">코드</th>
-                  <th className="px-4 py-2.5 text-left">장비명</th>
-                  <th className="px-4 py-2.5 text-left">카테고리</th>
-                  <th className="px-4 py-2.5 text-left">상태</th>
-                  <th className="px-4 py-2.5 text-left">최근 검교정</th>
-                  <th className="px-4 py-2.5 text-left">차기 검교정</th>
-                  <th className="px-4 py-2.5 text-left">위치</th>
-                  {isAdmin && <th className="px-4 py-2.5 text-left">관리</th>}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="px-3 text-muted-foreground">코드</TableHead>
+                  <TableHead className="px-3 text-muted-foreground">장비명</TableHead>
+                  <TableHead className="px-3 text-muted-foreground">카테고리</TableHead>
+                  <TableHead className="px-3 text-muted-foreground">상태</TableHead>
+                  <TableHead className="px-3 text-muted-foreground">최근 검교정</TableHead>
+                  <TableHead className="px-3 text-muted-foreground">차기 검교정</TableHead>
+                  <TableHead className="px-3 text-muted-foreground">위치</TableHead>
+                  {isAdmin && <TableHead className="px-3 text-muted-foreground">관리</TableHead>}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {rows.map(row => {
                   const urgency = getCalibrationUrgency(row.calibrationDueDate)
                   const rowHighlight =
                     urgency === "expired" ? "bg-red-50/40" :
                     urgency === "soon"    ? "bg-amber-50/40" : ""
                   return (
-                    <tr key={row.id} className={`${rowHighlight} hover:bg-slate-50`}>
-                      <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700">{row.code}</td>
-                      <td className="px-4 py-3 font-medium text-slate-900">{row.name}</td>
-                      <td className="px-4 py-3 text-slate-500">{row.category ?? "—"}</td>
-                      <td className="px-4 py-3">
-                        <span className={`rounded-md border px-2 py-0.5 text-xs font-semibold ${STATUS_CLS[row.status]}`}>
+                    <TableRow key={row.id} className={rowHighlight}>
+                      <TableCell className="px-3 font-mono text-xs font-semibold text-foreground">{row.code}</TableCell>
+                      <TableCell className="px-3 font-medium text-foreground">{row.name}</TableCell>
+                      <TableCell className="px-3 text-muted-foreground">{row.category ?? "—"}</TableCell>
+                      <TableCell className="px-3">
+                        <Badge variant="outline" className="gap-1.5">
+                          <span className={`size-1.5 rounded-full ${STATUS_DOT[row.status]}`} />
                           {STATUS_LABEL[row.status]}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-slate-500">
-                        {row.calibrationDate ?? <span className="text-slate-300">—</span>}
-                      </td>
-                      <td className="px-4 py-3">
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="px-3 text-xs text-muted-foreground">
+                        {row.calibrationDate ?? <span className="text-muted-foreground/40">—</span>}
+                      </TableCell>
+                      <TableCell className="px-3">
                         <CalibrationDueBadge dueDate={row.calibrationDueDate} />
-                      </td>
-                      <td className="px-4 py-3 text-slate-500">{row.location ?? "—"}</td>
+                      </TableCell>
+                      <TableCell className="px-3 text-muted-foreground">{row.location ?? "—"}</TableCell>
                       {isAdmin && (
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-1.5">
-                            <button
+                        <TableCell className="px-3">
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
                               onClick={() => setEditTarget(row)}
-                              className="rounded-md p-1.5 text-slate-400 hover:bg-blue-50 hover:text-blue-600"
                               title="수정"
+                              className="text-muted-foreground"
                             >
-                              <Pencil size={14} />
-                            </button>
-                            <button
+                              <Pencil />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
                               onClick={() => void handleDelete(row)}
                               disabled={busy === row.id}
-                              className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
                               title="삭제"
+                              className="text-muted-foreground hover:text-destructive"
                             >
                               {busy === row.id
-                                ? <Loader2 size={14} className="animate-spin" />
-                                : <Trash2 size={14} />}
-                            </button>
+                                ? <Loader2 className="animate-spin" />
+                                : <Trash2 />}
+                            </Button>
                           </div>
-                        </td>
+                        </TableCell>
                       )}
-                    </tr>
+                    </TableRow>
                   )
                 })}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         )}
-      </div>
+      </Card>
 
       {/* 추가 모달 */}
       {showAdd && (
@@ -275,7 +288,10 @@ interface ModalProps {
   onError: (msg: string) => void
 }
 
+const inputCls = "h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+
 function EquipmentModal({ mode, initial, onClose, onSaved, onError }: ModalProps) {
+  useLockBodyScroll()
   const [code,               setCode]               = useState(initial?.code ?? "")
   const [name,               setName]               = useState(initial?.name ?? "")
   const [category,           setCategory]           = useState(initial?.category ?? "")
@@ -332,49 +348,49 @@ function EquipmentModal({ mode, initial, onClose, onSaved, onError }: ModalProps
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl"
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-xl border bg-card shadow-xl"
         onClick={e => e.stopPropagation()}
       >
         {/* 모달 헤더 */}
-        <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-base font-bold text-slate-900">
+        <div className="flex items-center justify-between border-b px-4 py-3">
+          <h2 className="text-sm font-bold text-foreground">
             {mode === "add" ? "장비 등록" : "장비 수정"}
           </h2>
           <button
             onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"
+            className="rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
           >
-            <X size={18} />
+            <X className="size-4" />
           </button>
         </div>
 
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 px-4 py-4">
           {/* 코드 / 장비명 */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-600">
+              <label className="mb-1 block text-xs font-semibold text-foreground">
                 장비코드 <span className="text-red-500">*</span>
               </label>
-              <input
+              <Input
                 value={code}
                 onChange={e => setCode(e.target.value)}
                 placeholder="예) HPLC-01"
-                className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                className="h-9"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-600">
+              <label className="mb-1 block text-xs font-semibold text-foreground">
                 장비명 <span className="text-red-500">*</span>
               </label>
-              <input
+              <Input
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="예) HPLC 분석장비 1호"
-                className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                className="h-9"
               />
             </div>
           </div>
@@ -382,25 +398,26 @@ function EquipmentModal({ mode, initial, onClose, onSaved, onError }: ModalProps
           {/* 카테고리 / 상태 */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-600">카테고리</label>
-              <input
+              <label className="mb-1 block text-xs font-semibold text-foreground">카테고리</label>
+              <Input
                 value={category}
                 onChange={e => setCategory(e.target.value)}
                 placeholder="예) 분석기기"
-                className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                className="h-9"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-600">상태</label>
-              <select
-                value={status}
-                onChange={e => setStatus(e.target.value as EquipmentStatus)}
-                className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-              >
-                <option value="active">사용 중</option>
-                <option value="calibrating">검교정 중</option>
-                <option value="out_of_service">사용 불가</option>
-              </select>
+              <label className="mb-1 block text-xs font-semibold text-foreground">상태</label>
+              <Select value={status} onValueChange={v => setStatus(v as EquipmentStatus)}>
+                <SelectTrigger className="!h-9 w-full px-3">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">사용 중</SelectItem>
+                  <SelectItem value="calibrating">검교정 중</SelectItem>
+                  <SelectItem value="out_of_service">사용 불가</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -420,44 +437,35 @@ function EquipmentModal({ mode, initial, onClose, onSaved, onError }: ModalProps
 
           {/* 위치 */}
           <div>
-            <label className="mb-1 block text-xs font-semibold text-slate-600">위치</label>
-            <input
+            <label className="mb-1 block text-xs font-semibold text-foreground">위치</label>
+            <Input
               value={location}
               onChange={e => setLocation(e.target.value)}
               placeholder="예) QC실 3번 랙"
-              className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              className="h-9"
             />
           </div>
 
           {/* 비고 */}
           <div>
-            <label className="mb-1 block text-xs font-semibold text-slate-600">비고</label>
+            <label className="mb-1 block text-xs font-semibold text-foreground">비고</label>
             <textarea
               value={note}
               onChange={e => setNote(e.target.value)}
               rows={2}
               placeholder="기타 메모"
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 resize-none"
+              className={`${inputCls} py-2 resize-none`}
             />
           </div>
         </div>
 
         {/* 버튼 */}
-        <div className="mt-5 flex justify-end gap-2">
-          <button
-            onClick={onClose}
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
-          >
-            취소
-          </button>
-          <button
-            onClick={() => void submit()}
-            disabled={saving}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-          >
-            {saving && <Loader2 size={15} className="animate-spin" />}
+        <div className="flex justify-end gap-2 border-t px-4 py-3">
+          <Button variant="outline" size="lg" onClick={onClose}>취소</Button>
+          <Button size="lg" onClick={() => void submit()} disabled={saving}>
+            {saving && <Loader2 className="animate-spin" />}
             {mode === "add" ? "등록" : "저장"}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

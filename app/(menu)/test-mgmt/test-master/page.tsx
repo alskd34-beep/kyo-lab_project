@@ -11,8 +11,10 @@ import {
   Trash2,
 } from "lucide-react"
 
+import { cn } from "@frontend/lib/utils"
 import { Badge } from "@frontend/components/ui/badge"
 import { Button } from "@frontend/components/ui/button"
+import { Card } from "@frontend/components/ui/card"
 import {
   Dialog,
   DialogContent,
@@ -22,6 +24,21 @@ import {
   DialogTitle,
 } from "@frontend/components/ui/dialog"
 import { Input } from "@frontend/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@frontend/components/ui/select"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@frontend/components/ui/table"
 
 const CATEGORIES = [
   "성상·포장",
@@ -35,14 +52,14 @@ const CATEGORIES = [
 
 type Category = (typeof CATEGORIES)[number]
 
-const CATEGORY_COLORS: Record<string, string> = {
-  "성상·포장": "border-fuchsia-300 bg-fuchsia-100 text-fuchsia-800",
-  이화학: "border-blue-300 bg-blue-100 text-blue-800",
-  함량시험: "border-emerald-300 bg-emerald-100 text-emerald-800",
-  확인시험: "border-cyan-300 bg-cyan-100 text-cyan-800",
-  기기분석: "border-amber-300 bg-amber-100 text-amber-800",
-  안전성: "border-rose-300 bg-rose-100 text-rose-800",
-  기타: "border-slate-300 bg-slate-100 text-slate-700",
+const CATEGORY_DOT: Record<string, string> = {
+  "성상·포장": "bg-fuchsia-500",
+  이화학: "bg-blue-500",
+  함량시험: "bg-emerald-500",
+  확인시험: "bg-cyan-500",
+  기기분석: "bg-amber-500",
+  안전성: "bg-red-500",
+  기타: "bg-muted-foreground",
 }
 
 interface TestItemRow {
@@ -67,6 +84,16 @@ const EMPTY_FORM: FormState = {
   category: "기타",
   estimatedHours: "",
   requiresDuo: false,
+}
+
+function CategoryBadge({ category }: { category: string }) {
+  const dot = CATEGORY_DOT[category] ?? CATEGORY_DOT["기타"]
+  return (
+    <Badge variant="outline" className="gap-1.5">
+      <span className={cn("size-1.5 rounded-full", dot)} />
+      {category || "기타"}
+    </Badge>
+  )
 }
 
 export default function TestMasterPage() {
@@ -278,175 +305,144 @@ export default function TestMasterPage() {
   const allTabs = ["전체", ...CATEGORIES] as const
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-4 bg-slate-200/70 p-3 md:p-5">
-      <div className="flex flex-col gap-2 rounded-lg border border-slate-300 bg-white px-3 py-3 shadow-sm md:flex-row md:items-center md:gap-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-700 text-white shadow-sm">
-            <ClipboardList size={18} />
+    <div className="flex min-w-0 flex-1 flex-col gap-4 p-4 md:p-6">
+      {/* KPI 카드 */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Card className="gap-1 px-4 py-4">
+          <span className="text-xs font-medium text-muted-foreground">전체 항목</span>
+          <span className="text-2xl font-semibold tabular-nums text-foreground">{rows.length}</span>
+          <span className="text-[11px] text-muted-foreground">
+            현재 표시{" "}
+            <span className="font-semibold text-foreground tabular-nums">{filtered.length}</span>건
+          </span>
+        </Card>
+        <Card className="gap-1 px-4 py-4">
+          <span className="text-xs font-medium text-muted-foreground">활성 항목</span>
+          <span className="text-2xl font-semibold tabular-nums text-emerald-600">{summary.active}</span>
+          <span className="text-[11px] text-muted-foreground">운영 중 항목</span>
+        </Card>
+        <Card className="gap-1 px-4 py-4">
+          <span className="text-xs font-medium text-muted-foreground">평균 예상시간</span>
+          <span className="text-2xl font-semibold tabular-nums text-amber-600">
+            {summary.avgHours.toFixed(1)}
+          </span>
+          <span className="text-[11px] text-muted-foreground">
+            2인시험{" "}
+            <span className="font-semibold text-foreground tabular-nums">{summary.duo}</span>건
+          </span>
+        </Card>
+      </div>
+
+      {/* 헤더 + 검색 + 추가 버튼 */}
+      <div className="flex flex-col gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <ClipboardList className="size-5 text-muted-foreground" />
+          <h1 className="text-xl font-semibold text-foreground">시험항목 마스터</h1>
+          <Badge variant="secondary" className="tabular-nums">{filtered.length}건</Badge>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          시험항목 분류와 예상시간, 2인시험 여부를 관리합니다.
+        </p>
+
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          {/* 탭 세그먼트 */}
+          <div className="inline-flex h-9 w-fit items-center gap-0.5 rounded-lg bg-muted p-0.5 text-muted-foreground flex-wrap">
+            {allTabs.map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setActiveTab(tab as typeof activeTab)}
+                className={cn(
+                  "h-8 rounded-md px-3 text-sm font-medium transition-colors inline-flex items-center gap-1",
+                  activeTab === tab ? "bg-card text-foreground shadow-sm" : "hover:text-foreground",
+                )}
+              >
+                {tab}
+                <Badge variant="secondary" className="tabular-nums text-[10px] px-1.5 py-0">
+                  {tabCounts[tab] ?? 0}
+                </Badge>
+              </button>
+            ))}
           </div>
-          <div className="min-w-0">
-            <h1 className="min-w-0 text-base font-bold text-slate-950 sm:text-lg">
-              시험항목 마스터
-            </h1>
-            <p className="text-xs font-medium text-slate-600">
-              시험항목 분류와 예상시간, 2인시험 여부를 관리합니다.
-            </p>
+
+          <div className="flex gap-2 sm:ml-auto">
+            <div className="relative w-full sm:w-56">
+              <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="시험항목명 검색..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="h-9 pl-9"
+              />
+            </div>
+            <Button onClick={openAddDialog} size="lg">
+              <Plus />
+              항목 추가
+            </Button>
           </div>
         </div>
-        <div className="hidden flex-1 md:block" />
-        <div className="relative w-full md:w-auto">
-          <Search
-            size={14}
-            className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-600"
-          />
-          <Input
-            placeholder="시험항목명 검색..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="h-9 w-full bg-slate-50 pl-9 md:w-56"
-          />
-        </div>
-        <Button
-          onClick={openAddDialog}
-          size="sm"
-          className="h-9 w-full bg-blue-700 text-white shadow-sm hover:bg-blue-800 md:w-auto"
-        >
-          <Plus size={15} className="mr-1" />
-          항목 추가
-        </Button>
       </div>
 
       {error && !dialogOpen && !deleteOpen && (
-        <div className="rounded-lg border border-red-300 bg-red-100 px-4 py-2 text-sm font-medium text-red-800">
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
           {error}
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div className="rounded-lg border border-l-4 border-slate-300 border-l-blue-700 bg-white px-4 py-3 shadow-sm">
-          <p className="mb-1.5 text-[11px] font-bold tracking-wide text-slate-600 uppercase">
-            전체 항목
-          </p>
-          <p className="text-3xl font-black text-slate-950">{rows.length}</p>
-          <p className="mt-0.5 text-[11px] font-medium text-slate-600">
-            현재 표시{" "}
-            <span className="font-bold text-blue-700">{filtered.length}</span>건
-          </p>
-        </div>
-        <div className="rounded-lg border border-l-4 border-slate-300 border-l-emerald-700 bg-white px-4 py-3 shadow-sm">
-          <p className="mb-1.5 text-[11px] font-bold tracking-wide text-slate-600 uppercase">
-            활성 항목
-          </p>
-          <p className="text-3xl font-black text-emerald-700">
-            {summary.active}
-          </p>
-          <p className="mt-0.5 text-[11px] font-medium text-slate-600">
-            운영 중 항목
-          </p>
-        </div>
-        <div className="rounded-lg border border-l-4 border-slate-300 border-l-amber-600 bg-white px-4 py-3 shadow-sm">
-          <p className="mb-1.5 text-[11px] font-bold tracking-wide text-slate-600 uppercase">
-            평균 예상시간
-          </p>
-          <p className="text-3xl font-black text-amber-700">
-            {summary.avgHours.toFixed(1)}
-          </p>
-          <p className="mt-0.5 text-[11px] font-medium text-slate-600">
-            2인시험{" "}
-            <span className="font-bold text-slate-950">{summary.duo}</span>건
-          </p>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-1">
-        {allTabs.map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab as typeof activeTab)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${
-              activeTab === tab
-                ? "bg-blue-700 text-white"
-                : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
-            }`}
-          >
-            {tab}
-            <span
-              className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] ${
-                activeTab === tab
-                  ? "bg-white/20 text-white"
-                  : "bg-slate-100 text-slate-500"
-              }`}
-            >
-              {tabCounts[tab] ?? 0}
-            </span>
-          </button>
-        ))}
-      </div>
-
+      {/* 모바일 카드 */}
       <div className="flex flex-col gap-2 md:hidden">
         {loading ? (
-          <div className="rounded-lg border border-slate-300 bg-white p-6 text-center text-sm font-medium text-slate-600">
+          <Card className="items-center py-6 text-center text-sm text-muted-foreground">
             불러오는 중...
-          </div>
+          </Card>
         ) : filtered.length === 0 ? (
-          <div className="rounded-lg border border-slate-300 bg-white p-6 text-center text-sm font-medium text-slate-600">
+          <Card className="items-center py-6 text-center text-sm text-muted-foreground">
             데이터가 없습니다.
-          </div>
+          </Card>
         ) : (
           filtered.map((row) => (
-            <div
-              key={row.id}
-              className="rounded-lg border border-slate-300 bg-white p-3 shadow-sm"
-            >
+            <Card key={row.id} className="gap-0 px-3 py-3">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <span
-                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold ${
-                        CATEGORY_COLORS[row.category] ?? CATEGORY_COLORS["기타"]
-                      }`}
-                    >
-                      {row.category || "기타"}
-                    </span>
-                    <Badge
-                      className={
-                        row.isActive
-                          ? "border-emerald-700 bg-emerald-700 text-[10px] font-bold text-white hover:bg-emerald-700"
-                          : "border-slate-600 bg-slate-600 text-[10px] font-bold text-white hover:bg-slate-600"
-                      }
-                    >
+                    <CategoryBadge category={row.category} />
+                    <Badge variant="outline" className={cn("gap-1.5", row.isActive ? "" : "text-muted-foreground")}>
+                      <span className={cn("size-1.5 rounded-full", row.isActive ? "bg-emerald-500" : "bg-muted-foreground")} />
                       {row.isActive ? "활성" : "비활성"}
                     </Badge>
                   </div>
-                  <div className="mt-1 text-sm font-bold break-words text-slate-950">
+                  <div className="mt-1 text-sm font-semibold break-words text-foreground">
                     {row.name}
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     onClick={() => openEditDialog(row)}
-                    className="rounded-md bg-blue-100 p-1.5 text-blue-700 transition-colors hover:bg-blue-700 hover:text-white"
                     title="수정"
                   >
-                    <Pencil size={14} />
-                  </button>
-                  <button
+                    <Pencil className="size-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     onClick={() => openDeleteDialog(row)}
-                    className="rounded-md bg-rose-100 p-1.5 text-rose-700 transition-colors hover:bg-rose-700 hover:text-white"
                     title="삭제"
+                    className="text-destructive hover:text-destructive"
                   >
-                    <Trash2 size={14} />
-                  </button>
+                    <Trash2 className="size-3.5" />
+                  </Button>
                 </div>
               </div>
 
-              <div className="mt-2 grid grid-cols-1 gap-x-2 gap-y-1 border-t border-slate-200 pt-2 text-[11px] font-medium text-slate-800 min-[420px]:grid-cols-2">
+              <div className="mt-2 grid grid-cols-1 gap-x-2 gap-y-1 border-t pt-2 text-[11px] text-muted-foreground min-[420px]:grid-cols-2">
                 <div>
-                  <span className="font-bold text-slate-600">예상시간:</span>{" "}
+                  <span className="font-medium text-foreground">예상시간:</span>{" "}
                   {row.estimatedHours != null ? `${row.estimatedHours}h` : "—"}
                 </div>
                 <div>
-                  <span className="font-bold text-slate-600">2인시험:</span>{" "}
+                  <span className="font-medium text-foreground">2인시험:</span>{" "}
                   {row.requiresDuo ? "필요" : "미사용"}
                 </div>
               </div>
@@ -454,171 +450,148 @@ export default function TestMasterPage() {
               <div className="mt-2 flex flex-wrap gap-1.5">
                 <button
                   onClick={() => void toggleDuo(row)}
-                  className={`rounded-full border px-2 py-0.5 text-[10px] font-bold transition-colors ${
+                  className={cn(
+                    "rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors",
                     row.requiresDuo
-                      ? "border-amber-300 bg-amber-600 text-white hover:bg-amber-700"
-                      : "border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200"
-                  }`}
+                      ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                      : "border-input bg-background text-muted-foreground hover:bg-muted/50",
+                  )}
                 >
                   {row.requiresDuo ? "2인시험 사용" : "2인시험 미사용"}
                 </button>
                 <button
                   onClick={() => void toggleActive(row)}
-                  className={`rounded-full border px-2 py-0.5 text-[10px] font-bold transition-colors ${
+                  className={cn(
+                    "rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors",
                     row.isActive
-                      ? "border-emerald-300 bg-emerald-700 text-white hover:bg-emerald-800"
-                      : "border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200"
-                  }`}
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                      : "border-input bg-background text-muted-foreground hover:bg-muted/50",
+                  )}
                 >
                   {row.isActive ? "활성 유지" : "활성 전환"}
                 </button>
               </div>
-            </div>
+            </Card>
           ))
         )}
       </div>
 
-      <div className="hidden overflow-x-auto rounded-lg border border-slate-300 bg-white shadow-md md:block">
-        <table className="w-full min-w-[640px] text-sm">
-          <thead>
-            <tr className="bg-slate-950 text-xs text-white">
-              <th className="sticky top-0 z-10 bg-slate-950 px-4 py-3 text-left font-bold">
-                시험항목명
-              </th>
-              <th className="sticky top-0 z-10 w-28 bg-slate-950 px-4 py-3 text-left font-bold">
-                대분류
-              </th>
-              <th className="sticky top-0 z-10 w-32 bg-slate-950 px-4 py-3 text-center font-bold">
-                예상시간(h)
-              </th>
-              <th className="sticky top-0 z-10 w-24 bg-slate-950 px-4 py-3 text-center font-bold">
-                2인시험
-              </th>
-              <th className="sticky top-0 z-10 w-20 bg-slate-950 px-4 py-3 text-center font-bold">
-                활성
-              </th>
-              <th className="sticky top-0 z-10 w-24 bg-slate-950 px-4 py-3 text-center font-bold">
-                액션
-              </th>
-            </tr>
-          </thead>
-          <tbody>
+      {/* 데스크톱 테이블 */}
+      <Card className="hidden gap-0 overflow-hidden py-0 md:block">
+        <Table className="min-w-[640px]">
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="px-3 text-muted-foreground">시험항목명</TableHead>
+              <TableHead className="w-28 px-3 text-muted-foreground">대분류</TableHead>
+              <TableHead className="w-32 px-3 text-center text-muted-foreground">예상시간(h)</TableHead>
+              <TableHead className="w-24 px-3 text-center text-muted-foreground">2인시험</TableHead>
+              <TableHead className="w-20 px-3 text-center text-muted-foreground">활성</TableHead>
+              <TableHead className="w-24 px-3 text-center text-muted-foreground">액션</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {loading ? (
-              <tr>
-                <td
-                  colSpan={6}
-                  className="py-16 text-center font-medium text-slate-600"
-                >
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={6} className="py-16 text-center text-sm text-muted-foreground">
                   불러오는 중...
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ) : filtered.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={6}
-                  className="py-16 text-center font-medium text-slate-600"
-                >
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={6} className="py-16 text-center text-sm text-muted-foreground">
                   데이터가 없습니다.
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ) : (
-              filtered.map((row, idx) => (
-                <tr
-                  key={row.id}
-                  className={`border-t border-slate-200 transition-colors hover:bg-blue-50 ${
-                    idx % 2 === 1 ? "bg-slate-100/80" : "bg-white"
-                  }`}
-                >
-                  <td className="px-4 py-2.5 font-semibold text-slate-950">
+              filtered.map((row) => (
+                <TableRow key={row.id}>
+                  <TableCell className="px-3 py-2.5 font-medium text-foreground">
                     {row.name}
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <span
-                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-bold ${
-                        CATEGORY_COLORS[row.category] ?? CATEGORY_COLORS["기타"]
-                      }`}
-                    >
-                      {row.category || "기타"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2.5 text-center text-xs font-bold text-slate-950 tabular-nums">
+                  </TableCell>
+                  <TableCell className="px-3 py-2.5">
+                    <CategoryBadge category={row.category} />
+                  </TableCell>
+                  <TableCell className="px-3 py-2.5 text-center text-xs tabular-nums text-muted-foreground">
                     {row.estimatedHours != null ? `${row.estimatedHours}` : "—"}
-                  </td>
-                  <td className="px-4 py-2.5 text-center">
+                  </TableCell>
+                  <TableCell className="px-3 py-2.5 text-center">
                     <button
                       onClick={() => void toggleDuo(row)}
-                      className={`rounded-full border px-2 py-0.5 text-[11px] font-bold transition-colors ${
+                      className={cn(
+                        "rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
                         row.requiresDuo
-                          ? "border-amber-300 bg-amber-600 text-white hover:bg-amber-700"
-                          : "border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200"
-                      }`}
+                          ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                          : "border-input bg-background text-muted-foreground hover:bg-muted/50",
+                      )}
                     >
                       {row.requiresDuo ? "사용" : "미사용"}
                     </button>
-                  </td>
-                  <td className="px-4 py-2.5 text-center">
+                  </TableCell>
+                  <TableCell className="px-3 py-2.5 text-center">
                     <button
                       onClick={() => void toggleActive(row)}
-                      className={`rounded-full border px-2 py-0.5 text-[11px] font-bold transition-colors ${
+                      className={cn(
+                        "rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
                         row.isActive
-                          ? "border-emerald-300 bg-emerald-700 text-white hover:bg-emerald-800"
-                          : "border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200"
-                      }`}
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                          : "border-input bg-background text-muted-foreground hover:bg-muted/50",
+                      )}
                     >
                       {row.isActive ? "활성" : "비활성"}
                     </button>
-                  </td>
-                  <td className="px-4 py-2.5 text-center">
+                  </TableCell>
+                  <TableCell className="px-3 py-2.5 text-center">
                     <div className="flex items-center justify-center gap-1">
-                      <button
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         onClick={() => openEditDialog(row)}
-                        className="rounded-md bg-blue-100 p-1.5 text-blue-700 transition-colors hover:bg-blue-700 hover:text-white"
                         title="수정"
                       >
-                        <Pencil size={14} />
-                      </button>
-                      <button
+                        <Pencil className="size-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         onClick={() => openDeleteDialog(row)}
-                        className="rounded-md bg-rose-100 p-1.5 text-rose-700 transition-colors hover:bg-rose-700 hover:text-white"
                         title="삭제"
+                        className="text-destructive hover:text-destructive"
                       >
-                        <Trash2 size={14} />
-                      </button>
+                        <Trash2 className="size-3.5" />
+                      </Button>
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))
             )}
-          </tbody>
-        </table>
-      </div>
+          </TableBody>
+        </Table>
+      </Card>
 
+      {/* 추가/수정 다이얼로그 */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-h-[90vh] w-[calc(100%-2rem)] gap-0 overflow-hidden border-slate-300 bg-slate-50 p-0 shadow-2xl sm:max-w-xl">
-          <DialogHeader className="border-b border-slate-200 bg-white px-4 py-4 pr-12 text-left sm:px-5">
-            <DialogTitle className="text-lg font-black text-slate-950">
+        <DialogContent className="max-h-[90vh] w-[calc(100%-2rem)] gap-0 overflow-hidden p-0 sm:max-w-xl">
+          <DialogHeader className="border-b px-4 py-4 pr-12 text-left sm:px-5">
+            <DialogTitle className="text-lg font-semibold text-foreground">
               {editTarget ? "시험항목 수정" : "시험항목 추가"}
             </DialogTitle>
-            <DialogDescription className="mt-1 text-xs font-medium text-slate-600">
+            <DialogDescription className="mt-1 text-xs text-muted-foreground">
               시험항목 기본 정보와 2인시험 여부를 관리합니다.
             </DialogDescription>
           </DialogHeader>
 
           <div className="max-h-[65dvh] overflow-y-auto px-4 py-4 sm:px-5">
             <div className="grid gap-4">
-              <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
-                <div className="mb-3 border-b border-slate-100 pb-3">
-                  <h3 className="text-sm font-black text-slate-950">
-                    기본 정보
-                  </h3>
+              <section className="rounded-lg border bg-card p-3 sm:p-4">
+                <div className="mb-3 border-b pb-3">
+                  <h3 className="text-sm font-semibold text-foreground">기본 정보</h3>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="flex flex-col gap-1.5 sm:col-span-2">
-                    <label className="text-xs font-bold tracking-wide text-slate-700">
-                      시험항목명 <span className="text-rose-600">*</span>
+                    <label className="text-xs font-medium text-muted-foreground">
+                      시험항목명 <span className="text-destructive">*</span>
                     </label>
                     <Input
-                      className="h-10 border-slate-300 bg-white text-slate-950 placeholder:text-slate-500 focus-visible:border-blue-600 focus-visible:ring-blue-200"
                       value={form.name}
                       onChange={(e) =>
                         setForm((prev) => ({ ...prev, name: e.target.value }))
@@ -627,34 +600,32 @@ export default function TestMasterPage() {
                     />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold tracking-wide text-slate-700">
-                      대분류
-                    </label>
-                    <select
+                    <label className="text-xs font-medium text-muted-foreground">대분류</label>
+                    <Select
                       value={form.category}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          category: e.target.value as Category,
-                        }))
+                      onValueChange={(value) =>
+                        setForm((prev) => ({ ...prev, category: value as Category }))
                       }
-                      className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-950 transition-[color,box-shadow] outline-none focus-visible:border-blue-600 focus-visible:ring-[3px] focus-visible:ring-blue-200"
                     >
-                      {CATEGORIES.map((category) => (
-                        <option key={category} value={category}>
-                          {category}
-                        </option>
-                      ))}
-                    </select>
+                      <SelectTrigger className="!h-9 px-3">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CATEGORIES.map((category) => (
+                          <SelectItem key={category} value={category}>
+                            {category}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold tracking-wide text-slate-700">
+                    <label className="text-xs font-medium text-muted-foreground">
                       예상시간 (h)
                     </label>
                     <Input
                       type="number"
                       min={0}
-                      className="h-10 border-slate-300 bg-white text-slate-950 placeholder:text-slate-500 focus-visible:border-blue-600 focus-visible:ring-blue-200"
                       value={form.estimatedHours}
                       onChange={(e) =>
                         setForm((prev) => ({
@@ -668,13 +639,11 @@ export default function TestMasterPage() {
                 </div>
               </section>
 
-              <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
-                <div className="mb-3 border-b border-slate-100 pb-3">
-                  <h3 className="text-sm font-black text-slate-950">
-                    시험 설정
-                  </h3>
+              <section className="rounded-lg border bg-card p-3 sm:p-4">
+                <div className="mb-3 border-b pb-3">
+                  <h3 className="text-sm font-semibold text-foreground">시험 설정</h3>
                 </div>
-                <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-medium text-slate-800">
+                <label className="flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium text-foreground">
                   <input
                     type="checkbox"
                     checked={form.requiresDuo}
@@ -691,46 +660,42 @@ export default function TestMasterPage() {
               </section>
 
               {error && (
-                <div className="rounded-lg border border-red-300 bg-red-100 px-4 py-2 text-sm font-medium text-red-800">
+                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
                   {error}
                 </div>
               )}
             </div>
           </div>
 
-          <DialogFooter className="border-t border-slate-200 bg-white px-4 py-4 sm:px-5">
+          <DialogFooter className="border-t px-4 py-4 sm:px-5">
             <Button
               variant="outline"
               onClick={() => setDialogOpen(false)}
               disabled={saving}
-              className="h-10 border-slate-300 text-slate-800 hover:bg-slate-100"
             >
               취소
             </Button>
-            <Button
-              onClick={handleSave}
-              disabled={saving}
-              className="h-10 bg-blue-700 px-5 font-bold text-white shadow-sm hover:bg-blue-800"
-            >
-              <Save size={15} className="mr-1.5" />
+            <Button onClick={handleSave} disabled={saving}>
+              <Save />
               {saving ? "저장 중..." : "저장"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* 삭제 확인 다이얼로그 */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent className="max-h-[90vh] w-[calc(100%-2rem)] gap-0 overflow-hidden border-slate-300 bg-white p-0 shadow-2xl sm:max-w-md">
-          <DialogHeader className="border-b border-slate-200 bg-rose-50 px-4 py-4 pr-12 text-left sm:px-5">
+        <DialogContent className="max-h-[90vh] w-[calc(100%-2rem)] gap-0 overflow-hidden p-0 sm:max-w-md">
+          <DialogHeader className="border-b px-4 py-4 pr-12 text-left sm:px-5">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rose-700 text-white shadow-sm">
-                <AlertTriangle size={20} />
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
+                <AlertTriangle className="size-4" />
               </div>
               <div className="min-w-0">
-                <DialogTitle className="text-lg font-black text-slate-950">
+                <DialogTitle className="text-lg font-semibold text-foreground">
                   시험항목 삭제
                 </DialogTitle>
-                <DialogDescription className="mt-1 text-xs font-medium text-rose-800">
+                <DialogDescription className="mt-0.5 text-xs text-muted-foreground">
                   삭제 후에는 목록에서 즉시 제거됩니다.
                 </DialogDescription>
               </div>
@@ -738,32 +703,31 @@ export default function TestMasterPage() {
           </DialogHeader>
 
           <div className="px-4 py-4 sm:px-5">
-            <div className="rounded-lg border border-rose-200 bg-rose-50/70 p-4">
-              <p className="text-sm font-bold text-slate-950">
+            <div className="rounded-lg border bg-muted/50 p-4">
+              <p className="text-sm font-semibold text-foreground">
                 {deleteTarget?.name}
               </p>
-              <p className="mt-2 text-sm font-medium text-slate-700">
+              <p className="mt-2 text-sm text-muted-foreground">
                 이 시험항목을 삭제하시겠습니까? 연결된 품목 시험 기준이 있으면
                 영향이 있을 수 있습니다.
               </p>
             </div>
           </div>
 
-          <DialogFooter className="border-t border-slate-200 bg-white px-4 py-4 sm:px-5">
+          <DialogFooter className="border-t px-4 py-4 sm:px-5">
             <Button
               variant="outline"
               onClick={() => setDeleteOpen(false)}
               disabled={saving}
-              className="h-10 border-slate-300 text-slate-800 hover:bg-slate-100"
             >
               취소
             </Button>
             <Button
+              variant="destructive"
               onClick={handleDelete}
               disabled={saving}
-              className="h-10 bg-rose-700 px-5 font-bold text-white shadow-sm hover:bg-rose-800"
             >
-              <Trash2 size={15} className="mr-1.5" />
+              <Trash2 />
               {saving ? "삭제 중..." : "삭제"}
             </Button>
           </DialogFooter>

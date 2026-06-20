@@ -11,8 +11,10 @@ import {
 } from "lucide-react"
 import type { DateRange } from "react-day-picker"
 
+import { cn } from "@frontend/lib/utils"
 import { Badge } from "@frontend/components/ui/badge"
 import { Button } from "@frontend/components/ui/button"
+import { Card } from "@frontend/components/ui/card"
 import { Calendar } from "@frontend/components/ui/calendar"
 import { Input } from "@frontend/components/ui/input"
 import {
@@ -20,6 +22,9 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@frontend/components/ui/popover"
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@frontend/components/ui/table"
 import type { BatchStatus, BatchSummary, DashboardStats } from "@shared/pqm"
 
 const DEMO_BATCHES: BatchSummary[] = [
@@ -168,27 +173,23 @@ const DEMO_STATS: DashboardStats = {
   overdueCount: 5,
 }
 
-const STATUS_CONFIG: Record<BatchStatus, { label: string; cls: string }> = {
-  pending: {
-    label: "대기중",
-    cls: "border-slate-300 bg-slate-100 text-slate-700",
-  },
-  in_progress: {
-    label: "진행중",
-    cls: "border-violet-300 bg-violet-700 text-white",
-  },
-  completed: {
-    label: "완료",
-    cls: "border-emerald-300 bg-emerald-700 text-white",
-  },
-  on_hold: {
-    label: "보류",
-    cls: "border-amber-300 bg-amber-600 text-white",
-  },
-  cancelled: {
-    label: "취소",
-    cls: "border-rose-300 bg-rose-700 text-white",
-  },
+// 상태 — outline 뱃지 + 컬러 도트 (베이스 디자인)
+const STATUS_META: Record<BatchStatus, { label: string; dot: string }> = {
+  pending:     { label: "대기중", dot: "bg-muted-foreground" },
+  in_progress: { label: "진행중", dot: "bg-violet-500" },
+  completed:   { label: "완료",   dot: "bg-emerald-500" },
+  on_hold:     { label: "보류",   dot: "bg-amber-500" },
+  cancelled:   { label: "취소",   dot: "bg-slate-300" },
+}
+
+function StatusBadge({ status }: { status: BatchStatus }) {
+  const meta = STATUS_META[status]
+  return (
+    <Badge variant="outline" className="gap-1.5">
+      <span className={cn("size-1.5 rounded-full", meta.dot)} />
+      {meta.label}
+    </Badge>
+  )
 }
 
 const STATUS_FILTERS = ["전체", "대기중", "진행중", "완료"] as const
@@ -209,34 +210,14 @@ function DDayCell({
   status: BatchStatus
 }) {
   if (status === "completed" || status === "cancelled" || dDayQc === null) {
-    return <span className="text-xs font-semibold text-slate-500">-</span>
+    return <span className="text-xs text-muted-foreground">-</span>
   }
-  if (dDayQc <= 0) {
-    return (
-      <span className="inline-flex items-center rounded-full border border-rose-300 bg-rose-700 px-2.5 py-0.5 text-[11px] font-bold text-white">
-        {dDayQc === 0 ? "D-Day" : `D+${Math.abs(dDayQc)}`}
-      </span>
-    )
-  }
-  if (dDayQc <= 3) {
-    return (
-      <span className="inline-flex items-center rounded-full border border-rose-300 bg-rose-700 px-2.5 py-0.5 text-[11px] font-bold text-white">
-        D-{dDayQc}
-      </span>
-    )
-  }
-  if (dDayQc <= 7) {
-    return (
-      <span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-600 px-2.5 py-0.5 text-[11px] font-bold text-white">
-        D-{dDayQc}
-      </span>
-    )
-  }
-  return (
-    <span className="inline-flex items-center rounded-full border border-slate-300 bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-700">
-      D-{dDayQc}
-    </span>
-  )
+  const cls =
+    dDayQc <= 3 ? "border-red-200 text-red-700"
+    : dDayQc <= 7 ? "border-amber-200 text-amber-700"
+    : "text-muted-foreground"
+  const label = dDayQc <= 0 ? (dDayQc === 0 ? "D-Day" : `D+${Math.abs(dDayQc)}`) : `D-${dDayQc}`
+  return <Badge variant="outline" className={cn("font-semibold", cls)}>{label}</Badge>
 }
 
 export default function ProdStatusPage() {
@@ -325,48 +306,12 @@ export default function ProdStatusPage() {
   }, [batches, usingDemo, searchValue, statusFilter])
 
   const kpiCards = [
-    {
-      label: "전체 배치",
-      value: stats.totalBatches,
-      accent: "border-l-blue-700",
-      text: "text-blue-700",
-      sub: "취소 제외 전체",
-    },
-    {
-      label: "대기중",
-      value: stats.pending,
-      accent: "border-l-slate-700",
-      text: "text-slate-950",
-      sub: "시험 대기",
-    },
-    {
-      label: "진행중",
-      value: stats.inProgress,
-      accent: "border-l-violet-700",
-      text: "text-violet-700",
-      sub: "시험 진행 중",
-    },
-    {
-      label: "QC 완료",
-      value: stats.completed,
-      accent: "border-l-emerald-700",
-      text: "text-emerald-700",
-      sub: "시험 완료",
-    },
-    {
-      label: "D-7 이내",
-      value: stats.dueSoon7,
-      accent: "border-l-amber-600",
-      text: "text-amber-700",
-      sub: "기한 임박",
-    },
-    {
-      label: "D-3 이내",
-      value: stats.dueSoon3,
-      accent: "border-l-rose-700",
-      text: "text-rose-700",
-      sub: "위험",
-    },
+    { label: "전체 배치", value: stats.totalBatches, valueCls: "text-foreground", sub: "취소 제외 전체" },
+    { label: "대기중", value: stats.pending, valueCls: "text-foreground", sub: "시험 대기" },
+    { label: "진행중", value: stats.inProgress, valueCls: "text-violet-600", sub: "시험 진행 중" },
+    { label: "QC 완료", value: stats.completed, valueCls: "text-emerald-600", sub: "시험 완료" },
+    { label: "D-7 이내", value: stats.dueSoon7, valueCls: "text-amber-600", sub: "기한 임박" },
+    { label: "D-3 이내", value: stats.dueSoon3, valueCls: "text-red-600", sub: "위험" },
   ]
 
   const selectedCount = selectedRows.size
@@ -389,347 +334,215 @@ export default function ProdStatusPage() {
   }
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-4 bg-slate-200/70 p-3 md:p-5">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
+    <div className="flex min-w-0 flex-1 flex-col gap-4 p-4 md:p-6">
+      {/* KPI */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {kpiCards.map((card) => (
-          <div
-            key={card.label}
-            className={`rounded-lg border border-l-4 border-slate-300 ${card.accent} bg-white px-4 py-3 shadow-sm transition-transform hover:-translate-y-0.5`}
-          >
-            <p className="mb-1.5 text-[11px] font-bold tracking-wide text-slate-600 uppercase">
-              {card.label}
-            </p>
-            <p className={`text-3xl font-black ${card.text}`}>{card.value}</p>
-            <p className="mt-0.5 text-[11px] font-medium text-slate-600">
-              {card.sub}
-            </p>
-          </div>
+          <Card key={card.label} className="gap-1 px-4 py-4">
+            <span className="text-xs font-medium text-muted-foreground">{card.label}</span>
+            <span className={cn("text-2xl font-semibold tabular-nums", card.valueCls)}>{card.value}</span>
+            <span className="text-[11px] text-muted-foreground">{card.sub}</span>
+          </Card>
         ))}
       </div>
 
-      <div className="rounded-lg border border-slate-300 bg-white shadow-md">
-        <div className="flex flex-col gap-3 border-b border-slate-200 px-3 py-3 md:px-4">
-          <div className="flex min-w-0 flex-wrap items-center gap-2 md:gap-3">
-            <h1 className="min-w-0 text-base font-bold text-slate-950 sm:text-lg">
-              생산시험 현황
-            </h1>
-            <Badge className="border-blue-700 bg-blue-700 text-xs font-bold text-white shadow-sm">
-              {filtered.length}건
-            </Badge>
-            {usingDemo && (
-              <Badge className="border-amber-300 bg-amber-100 text-xs font-bold text-amber-800 shadow-sm hover:bg-amber-100">
-                데모 모드
-              </Badge>
-            )}
-          </div>
-
-          <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
-            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    className="flex h-9 w-full items-center gap-1.5 rounded-lg border border-slate-300 bg-slate-50 px-3 text-sm text-slate-800 transition-colors hover:bg-slate-100 sm:w-auto"
-                  >
-                    <CalendarIcon size={14} className="text-slate-600" />
-                    <span className="tabular-nums">
-                      {dateRange?.from
-                        ? format(dateRange.from, "yyyy.MM.dd")
-                        : "시작일"}
-                    </span>
-                    <span className="text-slate-400">~</span>
-                    <span className="tabular-nums">
-                      {dateRange?.to
-                        ? format(dateRange.to, "yyyy.MM.dd")
-                        : "종료일"}
-                    </span>
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent align="start" className="w-auto p-0">
-                  <Calendar
-                    mode="range"
-                    selected={dateRange}
-                    onSelect={setDateRange}
-                    numberOfMonths={2}
-                    locale={ko}
-                    defaultMonth={dateRange?.from}
-                  />
-                </PopoverContent>
-              </Popover>
-
-              <div className="flex flex-wrap items-center gap-1">
-                {STATUS_FILTERS.map((filter) => (
-                  <button
-                    key={filter}
-                    type="button"
-                    onClick={() => setStatusFilter(filter)}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${
-                      statusFilter === filter
-                        ? "bg-blue-700 text-white"
-                        : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
-                    }`}
-                  >
-                    {filter}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-2 sm:flex-row xl:ml-auto">
-              <div className="relative w-full sm:w-72">
-                <Search
-                  size={14}
-                  className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-600"
-                />
-                <Input
-                  placeholder="품목명, 제조번호 검색..."
-                  value={searchValue}
-                  onChange={(e) => setSearchValue(e.target.value)}
-                  className="h-9 bg-slate-50 pl-9"
-                />
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-9 w-full border-emerald-300 bg-emerald-50 font-bold text-emerald-800 hover:bg-emerald-100 sm:w-auto"
-              >
-                <Download size={13} className="mr-1" />
-                Excel
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        <div className="hidden overflow-x-auto md:block">
-          <table className="w-full min-w-[860px] text-sm">
-            <thead>
-              <tr className="bg-slate-950 text-xs text-white">
-                <th className="sticky top-0 z-10 w-10 bg-slate-950 px-4 py-3 text-left">
-                  <input
-                    type="checkbox"
-                    checked={
-                      selectedRows.size === filtered.length &&
-                      filtered.length > 0
-                    }
-                    onChange={toggleAll}
-                    className="cb-custom"
-                  />
-                </th>
-                {[
-                  "품목코드",
-                  "품목명",
-                  "규격",
-                  "제조번호",
-                  "제형",
-                  "포장일",
-                  "기록서검토기한",
-                  "QC완료예정일",
-                  "D-Day",
-                  "상태",
-                ].map((header) => (
-                  <th
-                    key={header}
-                    className="sticky top-0 z-10 bg-slate-950 px-3 py-3 text-left font-bold"
-                  >
-                    {header}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
-                <tr>
-                  <td
-                    colSpan={10}
-                    className="py-16 text-center font-medium text-slate-600"
-                  >
-                    불러오는 중...
-                  </td>
-                </tr>
-              ) : filtered.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={10}
-                    className="py-16 text-center font-medium text-slate-600"
-                  >
-                    데이터가 없습니다.
-                  </td>
-                </tr>
-              ) : (
-                filtered.map((row, idx) => {
-                  const isSelected = selectedRows.has(row.id)
-                  const statusCfg = STATUS_CONFIG[row.status]
-                  return (
-                    <tr
-                      key={row.id}
-                      data-state={isSelected ? "selected" : undefined}
-                      onClick={() => toggleRow(row.id)}
-                      className={`cursor-pointer border-t border-slate-200 transition-colors ${
-                        isSelected
-                          ? "bg-blue-50"
-                          : idx % 2 === 1
-                            ? "bg-slate-100/80 hover:bg-blue-50"
-                            : "bg-white hover:bg-blue-50"
-                      }`}
-                    >
-                      <td className="px-4 py-2.5">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggleRow(row.id)}
-                          onClick={(e) => e.stopPropagation()}
-                          className="cb-custom"
-                        />
-                      </td>
-                      <td className="px-3 py-2.5 font-mono text-xs font-bold text-blue-800">
-                        {row.product_code}
-                      </td>
-                      <td className="px-3 py-2.5 text-sm font-semibold text-slate-950">
-                        {row.product_name}
-                      </td>
-                      <td className="px-3 py-2.5 text-xs font-medium text-slate-800">
-                        {row.spec}
-                      </td>
-                      <td className="px-3 py-2.5 font-mono text-xs font-semibold text-slate-800">
-                        {row.batch_no}
-                      </td>
-                      <td className="px-3 py-2.5 text-xs font-medium text-slate-800">
-                        {row.dosage_form}
-                      </td>
-                      <td className="px-3 py-2.5 font-mono text-xs font-medium text-slate-700">
-                        {row.packaging_date}
-                      </td>
-                      <td className="px-3 py-2.5 font-mono text-xs font-medium text-slate-700">
-                        {row.record_review_deadline}
-                      </td>
-                      <td className="px-3 py-2.5 font-mono text-xs font-medium text-slate-700">
-                        {row.qc_completion_deadline}
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <DDayCell dDayQc={row.dDayQc} status={row.status} />
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <span
-                          className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${statusCfg.cls}`}
-                        >
-                          {statusCfg.label}
-                        </span>
-                      </td>
-                    </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="flex flex-col gap-2 p-3 md:hidden">
-          {isLoading ? (
-            <div className="rounded-lg border border-slate-300 bg-white p-6 text-center text-sm font-medium text-slate-600">
-              불러오는 중...
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="rounded-lg border border-slate-300 bg-white p-6 text-center text-sm font-medium text-slate-600">
-              데이터가 없습니다.
-            </div>
-          ) : (
-            filtered.map((row) => {
-              const isSelected = selectedRows.has(row.id)
-              const statusCfg = STATUS_CONFIG[row.status]
-              return (
-                <div
-                  key={row.id}
-                  onClick={() => toggleRow(row.id)}
-                  className={`rounded-lg border p-3 shadow-sm transition-colors ${
-                    isSelected
-                      ? "border-blue-300 bg-blue-50"
-                      : "border-slate-300 bg-white"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggleRow(row.id)}
-                          onClick={(e) => e.stopPropagation()}
-                          className="cb-custom"
-                        />
-                        <span className="font-mono text-[11px] font-bold text-blue-800">
-                          {row.batch_no}
-                        </span>
-                        <span
-                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusCfg.cls}`}
-                        >
-                          {statusCfg.label}
-                        </span>
-                        <DDayCell dDayQc={row.dDayQc} status={row.status} />
-                      </div>
-                      <div className="mt-1 text-sm font-bold break-words text-slate-950">
-                        {row.product_name}
-                      </div>
-                      <div className="text-[11px] font-medium text-slate-700">
-                        <span className="font-mono font-bold text-slate-800">
-                          {row.product_code}
-                        </span>
-                        {" / "}
-                        {row.spec}
-                        {" / "}
-                        {row.dosage_form}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-2 grid grid-cols-1 gap-x-2 gap-y-1 border-t border-slate-200 pt-2 text-[11px] font-medium text-slate-800 min-[420px]:grid-cols-2">
-                    <div>
-                      <span className="font-bold text-slate-600">포장일:</span>{" "}
-                      <span className="font-mono">{row.packaging_date}</span>
-                    </div>
-                    <div>
-                      <span className="font-bold text-slate-600">QC완료:</span>{" "}
-                      <span className="font-mono">
-                        {row.qc_completion_deadline}
-                      </span>
-                    </div>
-                    <div className="min-[420px]:col-span-2">
-                      <span className="font-bold text-slate-600">
-                        기록서검토:
-                      </span>{" "}
-                      <span className="font-mono">
-                        {row.record_review_deadline}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )
-            })
+      {/* 헤더 + 필터 */}
+      <div className="flex flex-col gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <h1 className="text-xl font-semibold text-foreground">생산시험 현황</h1>
+          <Badge variant="secondary" className="tabular-nums">{filtered.length}건</Badge>
+          {usingDemo && (
+            <Badge variant="outline" className="border-amber-200 text-amber-700">데모 모드</Badge>
           )}
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white px-3 py-2.5 md:px-4">
-          <p className="text-xs font-medium text-slate-600">
-            {isLoading && (
-              <span className="mr-2 text-slate-500">로딩 중...</span>
-            )}
-            총{" "}
-            <span className="font-bold text-slate-950">{filtered.length}</span>
-            건
-            {selectedCount > 0 && (
-              <span className="ml-2 font-bold text-blue-700">
-                · {selectedCount}건 선택됨
-              </span>
-            )}
-            {stats.overdueCount > 0 && (
-              <span className="ml-2 inline-flex items-center gap-1 text-rose-700">
-                <TriangleAlert size={12} />
-                지연 {stats.overdueCount}건
-              </span>
-            )}
-          </p>
-          <span className="text-xs font-medium text-slate-500">
-            1 / 1 페이지
-          </span>
+        <div className="flex flex-col gap-2 xl:flex-row xl:items-center">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-input bg-background px-3 text-sm text-foreground shadow-xs transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+                >
+                  <CalendarIcon className="size-3.5 text-muted-foreground" />
+                  <span className="tabular-nums">
+                    {dateRange?.from ? format(dateRange.from, "yyyy.MM.dd") : "시작일"}
+                  </span>
+                  <span className="text-muted-foreground">~</span>
+                  <span className="tabular-nums">
+                    {dateRange?.to ? format(dateRange.to, "yyyy.MM.dd") : "종료일"}
+                  </span>
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-auto p-0">
+                <Calendar
+                  mode="range"
+                  selected={dateRange}
+                  onSelect={setDateRange}
+                  numberOfMonths={2}
+                  locale={ko}
+                  defaultMonth={dateRange?.from}
+                />
+              </PopoverContent>
+            </Popover>
+
+            {/* 상태 필터 — 세그먼트 */}
+            <div className="inline-flex h-9 w-fit items-center gap-0.5 rounded-lg bg-muted p-0.5 text-muted-foreground">
+              {STATUS_FILTERS.map((filter) => (
+                <button
+                  key={filter}
+                  type="button"
+                  onClick={() => setStatusFilter(filter)}
+                  className={cn(
+                    "h-8 rounded-md px-3 text-sm font-medium transition-colors",
+                    statusFilter === filter ? "bg-card text-foreground shadow-sm" : "hover:text-foreground",
+                  )}
+                >
+                  {filter}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2 sm:flex-row xl:ml-auto">
+            <div className="relative w-full sm:w-72">
+              <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="품목명, 제조번호 검색..."
+                value={searchValue}
+                onChange={(e) => setSearchValue(e.target.value)}
+                className="h-9 pl-9"
+              />
+            </div>
+            <Button size="lg" variant="outline" className="w-full sm:w-auto">
+              <Download />Excel
+            </Button>
+          </div>
         </div>
+      </div>
+
+      {/* 테이블 (데스크톱) */}
+      <Card className="hidden gap-0 overflow-hidden py-0 md:block">
+        <Table className="min-w-[860px]">
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="w-10 px-4">
+                <input
+                  type="checkbox"
+                  checked={selectedRows.size === filtered.length && filtered.length > 0}
+                  onChange={toggleAll}
+                  className="cb-custom"
+                />
+              </TableHead>
+              {[
+                "품목코드", "품목명", "규격", "제조번호", "제형",
+                "포장일", "기록서검토기한", "QC완료예정일", "D-Day", "상태",
+              ].map((header) => (
+                <TableHead key={header} className="px-3 text-muted-foreground">{header}</TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={11} className="py-16 text-center text-sm text-muted-foreground">불러오는 중...</TableCell>
+              </TableRow>
+            ) : filtered.length === 0 ? (
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={11} className="py-16 text-center text-sm text-muted-foreground">데이터가 없습니다.</TableCell>
+              </TableRow>
+            ) : (
+              filtered.map((row) => {
+                const isSelected = selectedRows.has(row.id)
+                return (
+                  <TableRow
+                    key={row.id}
+                    onClick={() => toggleRow(row.id)}
+                    className={cn("cursor-pointer", isSelected && "bg-primary/5")}
+                  >
+                    <TableCell className="px-4 py-2.5">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleRow(row.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="cb-custom"
+                      />
+                    </TableCell>
+                    <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{row.product_code}</TableCell>
+                    <TableCell className="px-3 py-2.5 font-medium text-foreground">{row.product_name}</TableCell>
+                    <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">{row.spec}</TableCell>
+                    <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{row.batch_no}</TableCell>
+                    <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">{row.dosage_form}</TableCell>
+                    <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{row.packaging_date}</TableCell>
+                    <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{row.record_review_deadline}</TableCell>
+                    <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{row.qc_completion_deadline}</TableCell>
+                    <TableCell className="px-3 py-2.5"><DDayCell dDayQc={row.dDayQc} status={row.status} /></TableCell>
+                    <TableCell className="px-3 py-2.5"><StatusBadge status={row.status} /></TableCell>
+                  </TableRow>
+                )
+              })
+            )}
+          </TableBody>
+        </Table>
+      </Card>
+
+      {/* 모바일 카드 */}
+      <div className="flex flex-col gap-2 md:hidden">
+        {isLoading ? (
+          <Card className="items-center py-6 text-center text-sm text-muted-foreground">불러오는 중...</Card>
+        ) : filtered.length === 0 ? (
+          <Card className="items-center py-6 text-center text-sm text-muted-foreground">데이터가 없습니다.</Card>
+        ) : (
+          filtered.map((row) => {
+            const isSelected = selectedRows.has(row.id)
+            return (
+              <Card
+                key={row.id}
+                onClick={() => toggleRow(row.id)}
+                className={cn("gap-0 px-3 py-3", isSelected && "border-primary/40 ring-1 ring-primary/20")}
+              >
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => toggleRow(row.id)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="cb-custom"
+                  />
+                  <span className="font-mono text-[11px] text-muted-foreground">{row.batch_no}</span>
+                  <StatusBadge status={row.status} />
+                  <DDayCell dDayQc={row.dDayQc} status={row.status} />
+                </div>
+                <div className="mt-1.5 text-sm font-semibold break-words text-foreground">{row.product_name}</div>
+                <div className="text-[11px] text-muted-foreground">
+                  <span className="font-mono">{row.product_code}</span>
+                  {" / "}{row.spec}{" / "}{row.dosage_form}
+                </div>
+                <div className="mt-2 grid grid-cols-1 gap-x-2 gap-y-1 border-t pt-2 text-[11px] text-muted-foreground min-[420px]:grid-cols-2">
+                  <div><span className="font-medium text-foreground">포장일:</span> <span className="font-mono">{row.packaging_date}</span></div>
+                  <div><span className="font-medium text-foreground">QC완료:</span> <span className="font-mono">{row.qc_completion_deadline}</span></div>
+                  <div className="min-[420px]:col-span-2"><span className="font-medium text-foreground">기록서검토:</span> <span className="font-mono">{row.record_review_deadline}</span></div>
+                </div>
+              </Card>
+            )
+          })
+        )}
+      </div>
+
+      {/* 푸터 요약 */}
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+        <p>
+          {isLoading && <span className="mr-2">로딩 중...</span>}
+          총 <span className="font-semibold text-foreground tabular-nums">{filtered.length}</span>건
+          {selectedCount > 0 && <span className="ml-2 font-medium text-primary">· {selectedCount}건 선택됨</span>}
+          {stats.overdueCount > 0 && (
+            <span className="ml-2 inline-flex items-center gap-1 text-red-700">
+              <TriangleAlert className="size-3" />지연 {stats.overdueCount}건
+            </span>
+          )}
+        </p>
+        <span>1 / 1 페이지</span>
       </div>
     </div>
   )

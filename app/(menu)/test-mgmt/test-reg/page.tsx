@@ -4,20 +4,30 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { addDays, format, parse, isValid } from "date-fns"
 import { Button } from "@frontend/components/ui/button"
+import { Badge } from "@frontend/components/ui/badge"
 import { Card, CardContent } from "@frontend/components/ui/card"
+import { Input } from "@frontend/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@frontend/components/ui/select"
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@frontend/components/ui/dialog"
-import { Calendar as CalendarIcon, Search, ChevronDown, X } from "lucide-react"
+import { Calendar as CalendarIcon, Search, X } from "lucide-react"
 import { Calendar as DateCalendar } from "@frontend/components/ui/calendar"
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@frontend/components/ui/popover"
+import { cn } from "@frontend/lib/utils"
 import type { ProductRow } from "@backend/services/products"
 import type { ProductTestItemRow } from "@backend/services/productTestItems"
 
@@ -82,10 +92,10 @@ function DateField({
 
   return (
     <div>
-      <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+      <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
         {label}
         {helper && (
-          <span className="ml-1 text-[10px] font-normal text-slate-400">
+          <span className="ml-1 text-[10px] font-normal text-muted-foreground/70">
             {helper}
           </span>
         )}
@@ -96,25 +106,28 @@ function DateField({
             type="button"
             variant="outline"
             disabled={disabled}
-            className="h-10 w-full justify-between rounded-lg border-slate-200 bg-white px-3 text-sm font-normal text-slate-700 shadow-none hover:bg-slate-50"
+            className="h-9 w-full justify-between px-3 text-sm font-normal shadow-none"
           >
             <span
-              className={`truncate ${value ? "text-slate-800" : "text-slate-400"}`}
+              className={cn(
+                "truncate",
+                value ? "text-foreground" : "text-muted-foreground"
+              )}
             >
               {value ? formatDateLabel(value) : placeholder}
             </span>
-            <CalendarIcon size={15} className="shrink-0 text-slate-400" />
+            <CalendarIcon className="size-3.5 shrink-0 text-muted-foreground" />
           </Button>
         </PopoverTrigger>
         <PopoverContent
           align="start"
           sideOffset={8}
-          className="w-[calc(100vw-1rem)] max-w-sm rounded-2xl border border-slate-100 bg-white p-3 shadow-2xl"
+          className="w-[calc(100vw-1rem)] max-w-sm rounded-2xl p-3"
         >
           <div className="flex items-start justify-between gap-3 px-1 pb-2">
             <div>
-              <p className="text-sm font-semibold text-slate-800">{label}</p>
-              <p className="text-[11px] text-slate-500">
+              <p className="text-sm font-semibold text-foreground">{label}</p>
+              <p className="text-[11px] text-muted-foreground">
                 {helper ?? "날짜를 선택하면 바로 반영됩니다."}
               </p>
             </div>
@@ -127,7 +140,7 @@ function DateField({
                 onChange(today)
                 setOpen(false)
               }}
-              className="h-8 px-2.5 text-xs text-slate-600"
+              className="h-8 px-2.5 text-xs"
             >
               오늘
             </Button>
@@ -139,7 +152,7 @@ function DateField({
               onChange(date ? format(date, "yyyy-MM-dd") : "")
               setOpen(false)
             }}
-            className="w-full border border-slate-100 shadow-none"
+            className="w-full shadow-none"
           />
         </PopoverContent>
       </Popover>
@@ -204,29 +217,29 @@ function ProductPickerDialog({
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="w-[calc(100%-2rem)] max-w-lg gap-0 overflow-hidden p-0 max-h-[90vh] overflow-y-auto">
-        <DialogHeader className="border-b border-slate-100 px-4 py-3">
-          <DialogTitle className="text-sm font-semibold text-slate-800">
+        <DialogHeader className="border-b px-4 py-3">
+          <DialogTitle className="text-sm font-semibold text-foreground">
             품목 검색
           </DialogTitle>
         </DialogHeader>
 
         {/* 검색 인풋 */}
-        <div className="flex items-center gap-2 border-b border-slate-100 px-3 py-2.5">
-          <Search size={14} className="shrink-0 text-slate-400" />
+        <div className="flex items-center gap-2 border-b px-3 py-2.5">
+          <Search className="size-3.5 shrink-0 text-muted-foreground" />
           <input
             ref={inputRef}
             type="text"
             placeholder="품목명 또는 품목코드 입력..."
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            className="flex-1 bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
+            className="flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
           />
           {keyword && (
             <button
               onClick={() => setKeyword("")}
-              className="text-slate-400 hover:text-slate-600"
+              className="text-muted-foreground hover:text-foreground"
             >
-              <X size={14} />
+              <X className="size-3.5" />
             </button>
           )}
         </div>
@@ -234,11 +247,11 @@ function ProductPickerDialog({
         {/* 목록 */}
         <div className="max-h-80 overflow-y-auto">
           {loading ? (
-            <div className="py-8 text-center text-sm text-slate-400">
+            <div className="py-8 text-center text-sm text-muted-foreground">
               로딩중...
             </div>
           ) : products.length === 0 ? (
-            <div className="py-8 text-center text-sm text-slate-400">
+            <div className="py-8 text-center text-sm text-muted-foreground">
               검색 결과가 없습니다.
             </div>
           ) : (
@@ -252,26 +265,22 @@ function ProductPickerDialog({
                     onSelect(p)
                     onClose()
                   }}
-                  className="flex w-full items-center gap-3 border-b border-slate-50 px-4 py-2.5 text-left transition-colors last:border-0 hover:bg-blue-50"
+                  className="flex w-full items-center gap-3 border-b px-4 py-2.5 text-left transition-colors last:border-0 hover:bg-muted/50"
                 >
-                  <span className="w-16 shrink-0 font-mono text-[11px] text-slate-400">
+                  <span className="w-16 shrink-0 font-mono text-[11px] text-muted-foreground">
                     {p.productCode}
                   </span>
-                  <span className="flex-1 text-sm text-slate-800">
+                  <span className="flex-1 text-sm text-foreground">
                     {p.name}
                   </span>
-                  <span
-                    className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                      hasItems
-                        ? "border border-blue-100 bg-blue-50 text-blue-600"
-                        : "border border-slate-200 bg-slate-50 text-slate-400"
-                    }`}
-                    title="등록된 시험항목 수"
+                  <Badge
+                    variant={hasItems ? "secondary" : "outline"}
+                    className="shrink-0 text-[10px]"
                   >
                     시험 {p.testItemCount ?? 0}건
-                  </span>
+                  </Badge>
                   {p.unit && (
-                    <span className="w-8 shrink-0 text-right text-[11px] text-slate-400">
+                    <span className="w-8 shrink-0 text-right text-[11px] text-muted-foreground">
                       {p.unit}
                     </span>
                   )}
@@ -281,8 +290,8 @@ function ProductPickerDialog({
           )}
         </div>
 
-        <div className="border-t border-slate-100 px-4 py-2 text-right">
-          <span className="text-[11px] text-slate-400">
+        <div className="border-t px-4 py-2 text-right">
+          <span className="text-[11px] text-muted-foreground">
             총 {products.length}건
           </span>
         </div>
@@ -383,7 +392,7 @@ function Autocomplete({
 
   return (
     <div ref={wrapRef} className="relative flex-1">
-      <div className="flex items-center overflow-hidden rounded-lg border border-slate-200 bg-white transition-all focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100">
+      <div className="flex h-9 items-center overflow-hidden rounded-lg border border-input bg-background transition-all focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50">
         <input
           ref={inputRef}
           type="text"
@@ -391,7 +400,7 @@ function Autocomplete({
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="품목코드 또는 품목명 입력"
-          className="flex-1 bg-transparent px-3 py-2 text-sm text-slate-800 outline-none placeholder:text-slate-400"
+          className="flex-1 bg-transparent px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground"
         />
         {value && (
           <button
@@ -402,9 +411,9 @@ function Autocomplete({
               setOpen(false)
               setActiveIdx(-1)
             }}
-            className="px-2 text-slate-400 hover:text-slate-600"
+            className="px-2 text-muted-foreground hover:text-foreground"
           >
-            <X size={13} />
+            <X className="size-3.5" />
           </button>
         )}
       </div>
@@ -413,7 +422,7 @@ function Autocomplete({
       {open && suggestions.length > 0 && (
         <div
           ref={listRef}
-          className="absolute top-full right-0 left-0 z-50 mt-1 max-h-64 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg"
+          className="absolute top-full right-0 left-0 z-50 mt-1 max-h-64 overflow-y-auto rounded-xl border bg-card shadow-lg"
         >
           {suggestions.map((p, idx) => (
             <button
@@ -426,15 +435,19 @@ function Autocomplete({
                 setOpen(false)
                 setActiveIdx(-1)
               }}
-              className={`flex w-full items-center gap-3 border-b border-slate-50 px-3 py-2 text-left transition-colors last:border-0 ${
-                idx === activeIdx ? "bg-blue-50" : "hover:bg-slate-50"
-              }`}
+              className={cn(
+                "flex w-full items-center gap-3 border-b px-3 py-2 text-left transition-colors last:border-0",
+                idx === activeIdx ? "bg-primary/5" : "hover:bg-muted/50"
+              )}
             >
-              <span className="w-14 shrink-0 font-mono text-[11px] text-slate-400">
+              <span className="w-14 shrink-0 font-mono text-[11px] text-muted-foreground">
                 {p.productCode}
               </span>
               <span
-                className={`flex-1 truncate text-sm ${idx === activeIdx ? "font-medium text-blue-700" : "text-slate-800"}`}
+                className={cn(
+                  "flex-1 truncate text-sm",
+                  idx === activeIdx ? "font-medium text-foreground" : "text-foreground"
+                )}
               >
                 {p.name}
               </span>
@@ -617,18 +630,19 @@ export default function TestRegPage() {
     productFound && productCode.trim() && batchNo.trim() && testItems.length > 0
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 p-3 md:p-5">
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 p-4 md:p-6">
+      {/* 헤더 */}
       <div>
-        <h1 className="text-base font-bold text-slate-800">시험등록</h1>
-        <p className="mt-0.5 text-xs text-slate-500">
+        <h1 className="text-xl font-semibold text-foreground">시험등록</h1>
+        <p className="mt-0.5 text-sm text-muted-foreground">
           생산배치를 시스템에 등록합니다.
         </p>
       </div>
 
       {/* 기본 정보 */}
-      <Card className="rounded-xl border border-slate-200 bg-white py-0 shadow-none">
-        <div className="border-b border-slate-100 px-5 py-3">
-          <span className="text-sm font-semibold text-slate-800">
+      <Card className="gap-0 overflow-hidden py-0">
+        <div className="border-b px-5 py-3">
+          <span className="text-sm font-semibold text-foreground">
             기본 정보
           </span>
         </div>
@@ -636,9 +650,9 @@ export default function TestRegPage() {
           <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2">
             {/* 품목 검색 */}
             <div className="md:col-span-2">
-              <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
                 품목 <span className="text-red-500">*</span>
-                <span className="ml-1.5 font-normal text-slate-400">
+                <span className="ml-1.5 font-normal">
                   — 코드·한글명 입력 또는 🔍로 목록 검색
                 </span>
               </label>
@@ -655,17 +669,18 @@ export default function TestRegPage() {
                     type="button"
                     onClick={() => setPickerOpen(true)}
                     variant="outline"
-                    className="h-9 w-9 shrink-0 rounded-lg border-slate-200 p-0 shadow-none hover:bg-slate-50"
+                    size="icon"
+                    className="h-9 w-9 shrink-0 shadow-none"
                     title="품목 목록에서 선택"
                   >
-                    <Search size={15} className="text-slate-500" />
+                    <Search className="size-3.5 text-muted-foreground" />
                   </Button>
                   {/* 직접 조회 버튼 */}
                   <Button
                     type="button"
                     onClick={lookupByText}
                     disabled={isLookingUp || !searchText.trim()}
-                    className="h-9 flex-1 shrink-0 gap-1.5 rounded-lg bg-blue-600 px-4 text-xs font-medium shadow-none hover:bg-blue-700 disabled:opacity-50 md:flex-none"
+                    className="h-9 flex-1 shrink-0 gap-1.5 px-4 text-xs font-medium shadow-none md:flex-none"
                   >
                     {isLookingUp ? "조회중..." : "조회"}
                   </Button>
@@ -678,105 +693,101 @@ export default function TestRegPage() {
 
             {/* 품목코드 / 품목명 (읽기 전용) */}
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
                 품목코드
               </label>
-              <input
+              <Input
                 readOnly
                 value={productCode}
                 placeholder="자동 입력"
-                className="w-full cursor-not-allowed rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 font-mono text-sm text-slate-700 outline-none placeholder:text-slate-400"
+                className="h-9 cursor-not-allowed bg-muted font-mono text-sm"
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
                 품목명
               </label>
-              <input
+              <Input
                 readOnly
                 value={productName}
                 placeholder="자동 입력"
-                className="w-full cursor-not-allowed rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none placeholder:text-slate-400"
+                className="h-9 cursor-not-allowed bg-muted text-sm"
               />
             </div>
 
             {/* 규격 */}
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
                 규격
               </label>
-              <input
+              <Input
                 type="text"
                 value={spec}
                 onChange={(e) => setSpec(e.target.value)}
                 placeholder="예: 10mL/병"
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 transition-all outline-none placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                className="h-9 text-sm"
               />
             </div>
 
             {/* 제조번호 */}
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
                 제조번호 <span className="text-red-500">*</span>
               </label>
-              <input
+              <Input
                 type="text"
                 value={batchNo}
                 onChange={(e) => setBatchNo(e.target.value)}
                 placeholder="예: 26002"
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 transition-all outline-none placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                className="h-9 text-sm"
               />
             </div>
 
             {/* 제형 */}
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
                 제형
               </label>
-              <div className="relative">
-                <select
-                  value={dosageForm}
-                  onChange={(e) => setDosageForm(e.target.value as DosageForm)}
-                  className="w-full appearance-none rounded-lg border border-slate-200 bg-white px-3 py-2 pr-8 text-sm text-slate-800 transition-all outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                >
-                  <option value="">선택</option>
+              <Select
+                value={dosageForm || "none"}
+                onValueChange={(v) =>
+                  setDosageForm(v === "none" ? "" : (v as DosageForm))
+                }
+              >
+                <SelectTrigger className="!h-9 px-3">
+                  <SelectValue placeholder="선택" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">선택</SelectItem>
                   {DOSAGE_FORMS.map((f) => (
-                    <option key={f} value={f}>
+                    <SelectItem key={f} value={f}>
                       {f}
-                    </option>
+                    </SelectItem>
                   ))}
-                </select>
-                <ChevronDown
-                  size={14}
-                  className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-slate-400"
-                />
-              </div>
+                </SelectContent>
+              </Select>
             </div>
 
             {/* 밸리데이션구분 */}
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
                 밸리데이션구분
               </label>
-              <div className="relative">
-                <select
-                  value={validationType}
-                  onChange={(e) =>
-                    setValidationType(e.target.value as ValidationType)
-                  }
-                  className="w-full appearance-none rounded-lg border border-slate-200 bg-white px-3 py-2 pr-8 text-sm text-slate-800 transition-all outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                >
+              <Select
+                value={validationType}
+                onValueChange={(v) => setValidationType(v as ValidationType)}
+              >
+                <SelectTrigger className="!h-9 px-3">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
                   {VALIDATION_TYPES.map((v) => (
-                    <option key={v} value={v}>
+                    <SelectItem key={v} value={v}>
                       {v}
-                    </option>
+                    </SelectItem>
                   ))}
-                </select>
-                <ChevronDown
-                  size={14}
-                  className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-slate-400"
-                />
-              </div>
+                </SelectContent>
+              </Select>
             </div>
 
             {/* 날짜 필드들 */}
@@ -809,37 +820,40 @@ export default function TestRegPage() {
 
       {/* 시험항목 */}
       {productFound && testItems.length > 0 && (
-        <Card className="rounded-xl border border-slate-200 bg-white py-0 shadow-none">
-          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+        <Card className="gap-0 overflow-hidden py-0">
+          <div className="flex items-center justify-between border-b px-5 py-3">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-slate-800">
+              <span className="text-sm font-semibold text-foreground">
                 시험항목
               </span>
-              <span className="inline-flex items-center rounded-full border border-blue-100 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-600">
+              <Badge variant="secondary" className="tabular-nums">
                 {testItems.filter((it) => it.checked).length}/{testItems.length}
-              </span>
+              </Badge>
             </div>
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => {
                 const all = testItems.every((it) => it.checked)
                 setTestItems((p) => p.map((it) => ({ ...it, checked: !all })))
               }}
-              className="text-xs font-medium text-blue-600 hover:text-blue-700"
+              className="h-7 px-2.5 text-xs text-muted-foreground hover:text-foreground"
             >
               {testItems.every((it) => it.checked) ? "전체 해제" : "전체 선택"}
-            </button>
+            </Button>
           </div>
           <CardContent className="px-5 py-4">
             <div className="flex flex-col gap-2">
               {testItems.map((item, idx) => (
                 <div
                   key={idx}
-                  className={`flex flex-col gap-2 rounded-lg border px-3.5 py-2.5 transition-colors sm:flex-row sm:items-center sm:gap-3 ${
+                  className={cn(
+                    "flex flex-col gap-2 rounded-lg border px-3.5 py-2.5 transition-colors sm:flex-row sm:items-center sm:gap-3",
                     item.checked
-                      ? "border-blue-100 bg-blue-50/40"
-                      : "border-slate-100 bg-slate-50/40"
-                  }`}
+                      ? "border-primary/20 bg-primary/5"
+                      : "border bg-muted/30"
+                  )}
                 >
                   <div className="flex min-w-0 flex-1 items-center gap-3">
                     <input
@@ -849,29 +863,34 @@ export default function TestRegPage() {
                       className="cb-custom shrink-0"
                     />
                     <span
-                      className={`flex-1 text-sm font-medium ${item.checked ? "text-slate-800" : "text-slate-400"}`}
+                      className={cn(
+                        "flex-1 text-sm font-medium",
+                        item.checked ? "text-foreground" : "text-muted-foreground"
+                      )}
                     >
                       {item.name}
                     </span>
                   </div>
-                  <div className="relative w-full pl-7 sm:w-36 sm:shrink-0 sm:pl-0">
-                    <select
-                      value={item.assignee}
-                      onChange={(e) => setItemAssignee(idx, e.target.value)}
+                  <div className="w-full pl-7 sm:w-36 sm:shrink-0 sm:pl-0">
+                    <Select
+                      value={item.assignee || "none"}
+                      onValueChange={(v) =>
+                        setItemAssignee(idx, v === "none" ? "" : v)
+                      }
                       disabled={!item.checked}
-                      className="w-full appearance-none rounded-md border border-slate-200 bg-white px-2.5 py-1.5 pr-7 text-xs text-slate-700 transition-all outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                      <option value="">시험자 미배정</option>
-                      {testerOptions.map((t) => (
-                        <option key={t.id} value={t.name}>
-                          {t.name} ({t.employeeNo})
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown
-                      size={12}
-                      className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-slate-400"
-                    />
+                      <SelectTrigger className="!h-8 px-2.5 text-xs">
+                        <SelectValue placeholder="시험자 미배정" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">시험자 미배정</SelectItem>
+                        {testerOptions.map((t) => (
+                          <SelectItem key={t.id} value={t.name}>
+                            {t.name} ({t.employeeNo})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               ))}
@@ -886,7 +905,7 @@ export default function TestRegPage() {
           type="button"
           variant="outline"
           onClick={() => router.back()}
-          className="h-9 w-full rounded-lg border-slate-200 px-5 text-sm text-slate-600 shadow-none hover:bg-slate-50 sm:w-auto"
+          className="h-9 w-full shadow-none sm:w-auto"
         >
           취소
         </Button>
@@ -894,7 +913,7 @@ export default function TestRegPage() {
           type="button"
           onClick={handleSave}
           disabled={!isFormValid || isSaving}
-          className="h-9 w-full rounded-lg bg-blue-600 px-6 text-sm font-medium shadow-none hover:bg-blue-700 disabled:opacity-50 sm:w-auto"
+          className="h-9 w-full shadow-none sm:w-auto"
         >
           {isSaving ? "저장중..." : "저장"}
         </Button>

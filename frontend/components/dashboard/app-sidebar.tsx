@@ -7,6 +7,7 @@ import {
   Settings, Calendar, ClipboardList, SlidersHorizontal, ChevronRight, ChevronsUpDown, LogOut,
 } from "lucide-react"
 
+import { cn } from "@frontend/lib/utils"
 import { useAuth } from "@frontend/lib/auth-context"
 import { Avatar, AvatarFallback, AvatarImage } from "@frontend/components/ui/avatar"
 import {
@@ -22,7 +23,7 @@ import {
 } from "@frontend/components/ui/sidebar"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-interface SubItem { id: string; label: string; adminOnly?: boolean }
+interface SubItem { id: string; label: string; adminOnly?: boolean; live?: boolean }
 interface NavItem {
   id: string
   icon: React.ComponentType<{ className?: string }>
@@ -44,25 +45,25 @@ const NAV_SECTIONS: NavSection[] = [
       {
         id: "schedule", icon: Calendar, label: "스케줄", defaultPath: "/schedule/pct",
         subItems: [
-          { id: "schedule-pct", label: "AI 스케줄" },
-          { id: "schedule-monthly", label: "월간 스케줄" },
-          { id: "schedule-orders", label: "오더 배정", adminOnly: true },
-          { id: "schedule-groups", label: "동시분석 그룹", adminOnly: true },
-          { id: "schedule-vacation", label: "휴가 캘린더" },
-          { id: "schedule-holidays", label: "공휴일 캘린더", adminOnly: true },
-          { id: "schedule-reassign", label: "재배정 이력", adminOnly: true },
-          { id: "schedule-dashboard", label: "관리자 대시보드", adminOnly: true },
+          { id: "schedule-pct", label: "AI 스케줄", live: true },
+          { id: "schedule-monthly", label: "월간 스케줄", live: true },
+          { id: "schedule-orders", label: "오더 배정", adminOnly: true, live: true },
+          { id: "schedule-groups", label: "동시분석 그룹", adminOnly: true, live: true },
+          { id: "schedule-vacation", label: "휴가 캘린더", live: true },
+          { id: "schedule-holidays", label: "공휴일 캘린더", adminOnly: true, live: true },
+          { id: "schedule-reassign", label: "재배정 이력", adminOnly: true, live: true },
+          { id: "schedule-dashboard", label: "관리자 대시보드", adminOnly: true, live: true },
         ],
       },
       { id: "my-tasks", icon: ClipboardList, label: "내 작업" },
       {
         id: "test-mgmt", icon: FlaskConical, label: "시험관리",
         subItems: [
-          { id: "prod-status", label: "제품시험현황" },
-          { id: "test-reg", label: "시험등록" },
+          { id: "prod-status", label: "제품시험현황", live: true },
+          { id: "test-reg", label: "시험등록", live: true },
           { id: "test-result", label: "결과입력" },
           { id: "test-cert", label: "성적서관리" },
-          { id: "testers", label: "시험자 관리" },
+          { id: "testers", label: "시험자 관리", live: true },
         ],
       },
       {
@@ -99,15 +100,15 @@ const NAV_SECTIONS: NavSection[] = [
         id: "insights", icon: BarChart2, label: "인사이트",
         subItems: [
           { id: "dash", label: "대시보드" },
-          { id: "stats", label: "시험자 운영평가", adminOnly: true },
+          { id: "stats", label: "시험자 운영평가", adminOnly: true, live: true },
           { id: "ins-report", label: "리포트" },
         ],
       },
       {
         id: "equipment", icon: Cpu, label: "장비관리",
         subItems: [
-          { id: "equip-master", label: "장비 마스터" },
-          { id: "equip-reservation", label: "장비 예약" },
+          { id: "equip-master", label: "장비 마스터", live: true },
+          { id: "equip-reservation", label: "장비 예약", live: true },
           { id: "equip-operation", label: "장비 가동 현황" },
           { id: "equip-backup", label: "장비 백업 현황" },
           { id: "equip-usage", label: "장비 사용현황" },
@@ -122,17 +123,17 @@ const NAV_SECTIONS: NavSection[] = [
       {
         id: "master-settings", icon: SlidersHorizontal, label: "기준 설정",
         subItems: [
-          { id: "products-master", label: "품목 마스터" },
-          { id: "test-master", label: "시험항목 마스터" },
-          { id: "test-items", label: "품목별 시험항목 관리" },
-          { id: "pretest-checklist", label: "시험 전 확인사항" },
-          { id: "concurrent-items", label: "동시분석 품목", adminOnly: true },
+          { id: "products-master", label: "품목 마스터", live: true },
+          { id: "test-master", label: "시험항목 마스터", live: true },
+          { id: "test-items", label: "품목별 시험항목 관리", live: true },
+          { id: "pretest-checklist", label: "시험 전 확인사항", live: true },
+          { id: "concurrent-items", label: "동시분석 품목", adminOnly: true, live: true },
         ],
       },
       {
         id: "settings", icon: Settings, label: "계정 설정",
         subItems: [
-          { id: "users", label: "사용자 관리", adminOnly: true },
+          { id: "users", label: "사용자 관리", adminOnly: true, live: true },
           { id: "roles", label: "권한 관리", adminOnly: true },
           { id: "sys-settings", label: "시스템 설정" },
         ],
@@ -264,15 +265,26 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                         {item.badge != null && <SidebarMenuBadge>{item.badge}</SidebarMenuBadge>}
                         <CollapsibleContent>
                           <SidebarMenuSub>
-                            {item.subItems.map(sub => (
-                              <SidebarMenuSubItem key={sub.id}>
-                                <SidebarMenuSubButton asChild isActive={subActive(sub.id)}>
-                                  <Link href={subHref(sub.id)}>
-                                    <span>{sub.label}</span>
-                                  </Link>
-                                </SidebarMenuSubButton>
-                              </SidebarMenuSubItem>
-                            ))}
+                            {item.subItems.map(sub => {
+                              const subIsActive = subActive(sub.id)
+                              return (
+                                <SidebarMenuSubItem key={sub.id}>
+                                  <SidebarMenuSubButton asChild isActive={subIsActive}>
+                                    <Link href={subHref(sub.id)}>
+                                      {/* 개발 완료 표시: 완료(live)=초록 점, 미완료=회색 점 */}
+                                      <span
+                                        title={sub.live ? "개발 완료" : "개발 예정"}
+                                        className={cn(
+                                          "size-1.5 shrink-0 rounded-full",
+                                          subIsActive ? "bg-sidebar-primary" : sub.live ? "bg-emerald-500" : "bg-muted-foreground/30",
+                                        )}
+                                      />
+                                      <span>{sub.label}</span>
+                                    </Link>
+                                  </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                              )
+                            })}
                           </SidebarMenuSub>
                         </CollapsibleContent>
                       </SidebarMenuItem>

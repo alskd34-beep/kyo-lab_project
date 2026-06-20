@@ -6,6 +6,7 @@ import {
   Plus, Pencil, Trash2, X, Loader2, Search, Wand2, Layers, AlertCircle,
 } from "lucide-react"
 import { cn } from "@frontend/lib/utils"
+import { useLockBodyScroll } from "@frontend/hooks/use-lock-body-scroll"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
 import { Badge } from "@frontend/components/ui/badge"
@@ -202,6 +203,7 @@ export default function ConcurrentItemsPage() {
 function FamilyModal({ family, onClose, onSaved }: {
   family: FamilyRow | null; onClose: () => void; onSaved: () => void
 }) {
+  useLockBodyScroll()
   const [name, setName] = useState(family?.name ?? "")
   const [note, setNote] = useState(family?.note ?? "")
   const [members, setMembers] = useState<FamilyMember[]>(family?.members ?? [])
@@ -256,7 +258,7 @@ function FamilyModal({ family, onClose, onSaved }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border bg-card shadow-xl" onClick={e => e.stopPropagation()}>
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-xl border bg-card shadow-xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b px-4 py-3">
           <h2 className="text-sm font-bold text-foreground">{family ? "동시분석 품목군 수정" : "새 동시분석 품목군"}</h2>
           <button onClick={onClose} className="rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><X className="size-4" /></button>

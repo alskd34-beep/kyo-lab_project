@@ -10,9 +10,11 @@ import {
   Search,
   Trash2,
 } from "lucide-react"
+import { cn } from "@frontend/lib/utils"
 
 import { Badge } from "@frontend/components/ui/badge"
 import { Button } from "@frontend/components/ui/button"
+import { Card } from "@frontend/components/ui/card"
 import {
   Dialog,
   DialogContent,
@@ -22,6 +24,14 @@ import {
   DialogTitle,
 } from "@frontend/components/ui/dialog"
 import { Input } from "@frontend/components/ui/input"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@frontend/components/ui/table"
 
 const CATEGORIES = [
   "성상·포장",
@@ -452,54 +462,47 @@ export default function TestItemsPage() {
   const hasSelection = !!selectedProduct
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-x-hidden bg-slate-200/70 p-3 md:p-5">
-      <div className="flex flex-col gap-2 rounded-lg border border-slate-300 bg-white px-3 py-3 shadow-sm md:flex-row md:items-center md:gap-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-x-hidden p-4 md:p-6">
+      {/* 페이지 헤더 */}
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-700 text-white shadow-sm">
-            <Link2 size={18} />
-          </div>
+          <Link2 className="size-5 shrink-0 text-muted-foreground" />
           <div className="min-w-0">
-            <h1 className="min-w-0 text-base font-bold text-slate-950 sm:text-lg">
+            <h1 className="text-xl font-semibold text-foreground">
               품목별 시험항목 관리
             </h1>
-            <p className="text-xs font-medium text-slate-600">
+            <p className="text-sm text-muted-foreground">
               품목 마스터와 시험항목 마스터를 연결하고 순서를 관리합니다.
             </p>
           </div>
         </div>
         <div className="hidden flex-1 md:block" />
         {hasSelection && (
-          <Button
-            onClick={openAddDialog}
-            size="sm"
-            className="h-9 w-full bg-blue-700 text-white shadow-sm hover:bg-blue-800 md:w-auto"
-          >
-            <Plus size={15} className="mr-1" />
+          <Button onClick={openAddDialog} size="lg">
+            <Plus />
             시험항목 추가
           </Button>
         )}
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-300 bg-red-100 px-4 py-2 text-sm font-medium text-red-800">
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive">
           {error}
         </div>
       )}
 
       <div className="grid min-h-0 grid-cols-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-        <aside className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-slate-300 bg-white shadow-md max-h-[40vh] lg:max-h-none">
-          <div className="border-b border-slate-200 px-4 py-3">
-            <p className="mb-2 text-sm font-bold text-slate-950">품목 선택</p>
+        {/* 품목 사이드바 */}
+        <Card className="flex min-h-0 flex-col gap-0 overflow-hidden py-0 max-h-[40vh] lg:max-h-none">
+          <div className="border-b px-4 py-3">
+            <p className="mb-2 text-sm font-medium text-foreground">품목 선택</p>
             <div className="relative">
-              <Search
-                size={13}
-                className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-600"
-              />
+              <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="품목명 / 코드 검색..."
                 value={productSearch}
                 onChange={(e) => setProductSearch(e.target.value)}
-                className="h-9 bg-slate-50 pl-9 text-sm"
+                className="h-9 pl-9"
               />
             </div>
           </div>
@@ -507,12 +510,12 @@ export default function TestItemsPage() {
           <div className="min-h-0 flex-1 overflow-y-auto">
             {filteredProducts.length === 0 ? (
               <div className="flex items-center justify-center py-10">
-                <p className="text-sm font-medium text-slate-600">
+                <p className="text-sm text-muted-foreground">
                   검색 결과가 없습니다.
                 </p>
               </div>
             ) : (
-              <ul className="divide-y divide-slate-100">
+              <ul className="divide-y">
                 {filteredProducts.map((product) => {
                   const isSelected = selectedProduct?.id === product.id
                   return (
@@ -520,34 +523,39 @@ export default function TestItemsPage() {
                       <button
                         type="button"
                         onClick={() => setSelectedProduct(product)}
-                        className={`w-full border-l-2 px-4 py-3 text-left transition-colors ${
+                        className={cn(
+                          "w-full border-l-2 px-4 py-3 text-left transition-colors",
                           isSelected
-                            ? "border-blue-700 bg-blue-50"
-                            : "border-transparent hover:bg-slate-50"
-                        }`}
+                            ? "border-primary bg-primary/5"
+                            : "border-transparent hover:bg-muted/50"
+                        )}
                       >
                         <div className="flex items-center gap-2">
                           <span
-                            className={`font-mono text-[10px] font-bold ${
-                              isSelected ? "text-blue-700" : "text-slate-500"
-                            }`}
+                            className={cn(
+                              "font-mono text-[10px] font-medium",
+                              isSelected ? "text-primary" : "text-muted-foreground"
+                            )}
                           >
                             {product.productCode}
                           </span>
                           {product.isActive ? (
-                            <Badge className="border-emerald-700 bg-emerald-700 text-[10px] font-bold text-white hover:bg-emerald-700">
+                            <Badge variant="outline" className="gap-1 text-[10px]">
+                              <span className="size-1.5 rounded-full bg-emerald-500" />
                               활성
                             </Badge>
                           ) : (
-                            <Badge className="border-slate-600 bg-slate-600 text-[10px] font-bold text-white hover:bg-slate-600">
+                            <Badge variant="outline" className="gap-1 text-[10px]">
+                              <span className="size-1.5 rounded-full bg-muted-foreground" />
                               비활성
                             </Badge>
                           )}
                         </div>
                         <p
-                          className={`mt-0.5 text-sm leading-snug font-medium ${
-                            isSelected ? "text-blue-800" : "text-slate-800"
-                          }`}
+                          className={cn(
+                            "mt-0.5 text-sm leading-snug font-medium",
+                            isSelected ? "text-foreground" : "text-foreground"
+                          )}
                         >
                           {product.name}
                         </p>
@@ -559,28 +567,29 @@ export default function TestItemsPage() {
             )}
           </div>
 
-          <div className="border-t border-slate-200 bg-slate-50 px-4 py-2.5">
-            <p className="text-xs font-medium text-slate-600">
+          <div className="border-t bg-muted/30 px-4 py-2.5">
+            <p className="text-xs text-muted-foreground">
               총{" "}
-              <span className="font-bold text-slate-950">
+              <span className="font-semibold text-foreground">
                 {filteredProducts.length}
               </span>
               개 품목
             </p>
           </div>
-        </aside>
+        </Card>
 
-        <section className="min-h-0 overflow-hidden rounded-lg border border-slate-300 bg-white shadow-md">
+        {/* 시험항목 패널 */}
+        <Card className="gap-0 overflow-hidden py-0">
           {!selectedProduct ? (
             <div className="flex min-h-[420px] items-center justify-center p-6 text-center">
               <div className="max-w-sm">
-                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-700 text-white shadow-sm">
-                  <PackagePlus size={22} />
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                  <PackagePlus className="size-6" />
                 </div>
-                <h2 className="mt-4 text-base font-black text-slate-950">
+                <h2 className="mt-4 text-base font-semibold text-foreground">
                   품목을 선택하세요
                 </h2>
-                <p className="mt-2 text-sm font-medium text-slate-600">
+                <p className="mt-2 text-sm text-muted-foreground">
                   좌측에서 품목을 선택하면 연결된 시험항목을 확인하고 추가하거나
                   정리할 수 있습니다.
                 </p>
@@ -588,37 +597,37 @@ export default function TestItemsPage() {
             </div>
           ) : (
             <div className="flex min-h-0 flex-1 flex-col">
-              <div className="border-b border-slate-200 px-4 py-4">
+              <div className="border-b px-4 py-4">
                 <div className="flex flex-col gap-3 md:flex-row md:items-center">
                   <div className="min-w-0 flex-1">
-                    <p className="font-mono text-[10px] font-bold text-blue-700">
+                    <p className="font-mono text-[10px] font-medium text-muted-foreground">
                       {selectedProduct.productCode}
                     </p>
-                    <h2 className="truncate text-base font-black text-slate-950">
+                    <h2 className="truncate text-base font-semibold text-foreground">
                       {selectedProduct.name}
                     </h2>
-                    <p className="mt-1 text-xs font-medium text-slate-600">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       {selectedProduct.packageSpec ?? "포장규격 미지정"}
                       {selectedProduct.unit ? ` · ${selectedProduct.unit}` : ""}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge className="border-blue-700 bg-blue-700 text-xs font-bold text-white hover:bg-blue-700">
-                      {summary.linked}건 연결
-                    </Badge>
-                    <Badge className="border-emerald-700 bg-emerald-700 text-xs font-bold text-white hover:bg-emerald-700">
+                    <Badge variant="secondary">{summary.linked}건 연결</Badge>
+                    <Badge variant="outline" className="gap-1">
+                      <span className="size-1.5 rounded-full bg-emerald-500" />
                       필수 {summary.mandatory}
                     </Badge>
-                    <Badge className="border-slate-600 bg-slate-600 text-xs font-bold text-white hover:bg-slate-600">
+                    <Badge variant="outline" className="gap-1">
+                      <span className="size-1.5 rounded-full bg-muted-foreground" />
                       선택 {summary.optional}
                     </Badge>
                     {selectedLinked.size > 0 && (
                       <Button
                         onClick={() => setBulkDeleteOpen(true)}
                         size="sm"
-                        className="h-9 bg-rose-700 text-white shadow-sm hover:bg-rose-800"
+                        variant="destructive"
                       >
-                        <Trash2 size={15} className="mr-1" />
+                        <Trash2 />
                         선택 삭제 ({selectedLinked.size})
                       </Button>
                     )}
@@ -626,17 +635,15 @@ export default function TestItemsPage() {
                       onClick={openCopyDialog}
                       size="sm"
                       variant="outline"
-                      className="h-9 border-slate-300 text-slate-800 shadow-sm hover:bg-slate-100"
                     >
-                      <Copy size={15} className="mr-1" />
+                      <Copy />
                       다른 품목에서 복사
                     </Button>
                     <Button
                       onClick={openAddDialog}
                       size="sm"
-                      className="h-9 bg-blue-700 text-white shadow-sm hover:bg-blue-800"
                     >
-                      <Plus size={15} className="mr-1" />
+                      <Plus />
                       항목 추가
                     </Button>
                   </div>
@@ -644,19 +651,20 @@ export default function TestItemsPage() {
               </div>
 
               <div className="min-h-0 flex-1 overflow-auto p-3 md:p-4">
+                {/* 모바일 카드 목록 */}
                 <div className="flex flex-col gap-2 md:hidden">
                   {linkedItems.length === 0 ? (
-                    <div className="rounded-lg border border-slate-300 bg-white p-6 text-center text-sm font-medium text-slate-600">
+                    <Card className="items-center py-6 text-center text-sm text-muted-foreground">
                       연결된 시험항목이 없습니다.
-                    </div>
+                    </Card>
                   ) : (
                     linkedItems
                       .slice()
                       .sort((a, b) => a.sequenceOrder - b.sequenceOrder)
                       .map((item, idx) => (
-                        <div
+                        <Card
                           key={item.testItemId}
-                          className="rounded-lg border border-slate-300 bg-white p-3 shadow-sm"
+                          className="gap-0 px-3 py-3"
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0 flex-1">
@@ -669,41 +677,46 @@ export default function TestItemsPage() {
                                     toggleSelectLinked(item.testItemId)
                                   }
                                 />
-                                <span className="text-[11px] font-bold text-slate-500">
+                                <span className="text-[11px] text-muted-foreground">
                                   {idx + 1}
                                 </span>
                                 {item.isMandatory ? (
-                                  <Badge className="border-rose-700 bg-rose-700 text-[10px] font-bold text-white hover:bg-rose-700">
+                                  <Badge variant="outline" className="gap-1 text-[10px]">
+                                    <span className="size-1.5 rounded-full bg-red-500" />
                                     필수
                                   </Badge>
                                 ) : (
-                                  <Badge className="border-slate-600 bg-slate-600 text-[10px] font-bold text-white hover:bg-slate-600">
+                                  <Badge variant="outline" className="gap-1 text-[10px]">
+                                    <span className="size-1.5 rounded-full bg-muted-foreground" />
                                     선택
                                   </Badge>
                                 )}
                               </div>
-                              <p className="mt-1 text-sm font-bold text-slate-950">
+                              <p className="mt-1 text-sm font-medium text-foreground">
                                 {item.testItemName}
                               </p>
                             </div>
-                            <button
+                            <Button
+                              size="icon"
+                              variant="ghost"
                               onClick={() => setUnlinkTarget(item)}
-                              className="rounded-md bg-rose-100 p-1.5 text-rose-700 transition-colors hover:bg-rose-700 hover:text-white"
                               title="연결 해제"
+                              className="size-8 text-muted-foreground hover:text-destructive"
                             >
-                              <Trash2 size={14} />
-                            </button>
+                              <Trash2 className="size-4" />
+                            </Button>
                           </div>
-                        </div>
+                        </Card>
                       ))
                   )}
                 </div>
 
-                <div className="hidden overflow-x-auto rounded-lg border border-slate-300 bg-white shadow-sm md:block">
-                  <table className="w-full min-w-[560px] text-sm">
-                    <thead>
-                      <tr className="bg-slate-950 text-xs text-white">
-                        <th className="sticky top-0 z-10 w-10 bg-slate-950 px-3 py-3 text-center font-bold">
+                {/* 데스크톱 테이블 */}
+                <Card className="hidden gap-0 overflow-hidden py-0 md:block">
+                  <Table className="min-w-[560px]">
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="w-10 px-3 text-muted-foreground">
                           <input
                             type="checkbox"
                             className="cb-custom"
@@ -714,103 +727,109 @@ export default function TestItemsPage() {
                             onChange={toggleSelectAllLinked}
                             title="전체 선택"
                           />
-                        </th>
-                        <th className="sticky top-0 z-10 w-16 bg-slate-950 px-4 py-3 text-center font-bold">
+                        </TableHead>
+                        <TableHead className="w-16 px-3 text-center text-muted-foreground">
                           순서
-                        </th>
-                        <th className="sticky top-0 z-10 bg-slate-950 px-4 py-3 text-left font-bold">
+                        </TableHead>
+                        <TableHead className="px-3 text-muted-foreground">
                           시험항목명
-                        </th>
-                        <th className="sticky top-0 z-10 w-24 bg-slate-950 px-4 py-3 text-center font-bold">
+                        </TableHead>
+                        <TableHead className="w-24 px-3 text-center text-muted-foreground">
                           필수여부
-                        </th>
-                        <th className="sticky top-0 z-10 w-20 bg-slate-950 px-4 py-3 text-center font-bold">
+                        </TableHead>
+                        <TableHead className="w-20 px-3 text-center text-muted-foreground">
                           삭제
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
                       {linkedItems.length === 0 ? (
-                        <tr>
-                          <td
+                        <TableRow className="hover:bg-transparent">
+                          <TableCell
                             colSpan={5}
-                            className="py-16 text-center text-sm font-medium text-slate-600"
+                            className="py-16 text-center text-sm text-muted-foreground"
                           >
                             연결된 시험항목이 없습니다. 우측 상단에서
                             추가하세요.
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       ) : (
                         linkedItems
                           .slice()
                           .sort((a, b) => a.sequenceOrder - b.sequenceOrder)
-                          .map((item, idx) => (
-                            <tr
-                              key={item.testItemId}
-                              className={`border-t border-slate-200 transition-colors hover:bg-blue-50 ${
-                                idx % 2 === 1 ? "bg-slate-100/80" : "bg-white"
-                              }`}
-                            >
-                              <td className="px-3 py-2.5 text-center">
-                                <input
-                                  type="checkbox"
-                                  className="cb-custom"
-                                  checked={selectedLinked.has(item.testItemId)}
-                                  onChange={() =>
-                                    toggleSelectLinked(item.testItemId)
-                                  }
-                                />
-                              </td>
-                              <td className="px-4 py-2.5 text-center text-xs font-bold text-slate-700">
-                                {idx + 1}
-                              </td>
-                              <td className="px-4 py-2.5 font-semibold text-slate-950">
-                                {item.testItemName}
-                              </td>
-                              <td className="px-4 py-2.5 text-center">
-                                {item.isMandatory ? (
-                                  <Badge className="border-rose-700 bg-rose-700 text-[10px] font-bold text-white hover:bg-rose-700">
-                                    필수
-                                  </Badge>
-                                ) : (
-                                  <Badge className="border-slate-600 bg-slate-600 text-[10px] font-bold text-white hover:bg-slate-600">
-                                    선택
-                                  </Badge>
-                                )}
-                              </td>
-                              <td className="px-4 py-2.5 text-center">
-                                <button
-                                  onClick={() => setUnlinkTarget(item)}
-                                  className="rounded-md bg-rose-100 p-1.5 text-rose-700 transition-colors hover:bg-rose-700 hover:text-white"
-                                  title="연결 해제"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </td>
-                            </tr>
-                          ))
+                          .map((item, idx) => {
+                            const isSelected = selectedLinked.has(item.testItemId)
+                            return (
+                              <TableRow
+                                key={item.testItemId}
+                                className={cn(isSelected && "bg-primary/5")}
+                              >
+                                <TableCell className="px-3 py-2.5">
+                                  <input
+                                    type="checkbox"
+                                    className="cb-custom"
+                                    checked={isSelected}
+                                    onChange={() =>
+                                      toggleSelectLinked(item.testItemId)
+                                    }
+                                  />
+                                </TableCell>
+                                <TableCell className="px-3 py-2.5 text-center text-xs text-muted-foreground">
+                                  {idx + 1}
+                                </TableCell>
+                                <TableCell className="px-3 py-2.5 font-medium text-foreground">
+                                  {item.testItemName}
+                                </TableCell>
+                                <TableCell className="px-3 py-2.5 text-center">
+                                  {item.isMandatory ? (
+                                    <Badge variant="outline" className="gap-1">
+                                      <span className="size-1.5 rounded-full bg-red-500" />
+                                      필수
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="outline" className="gap-1">
+                                      <span className="size-1.5 rounded-full bg-muted-foreground" />
+                                      선택
+                                    </Badge>
+                                  )}
+                                </TableCell>
+                                <TableCell className="px-3 py-2.5 text-center">
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={() => setUnlinkTarget(item)}
+                                    title="연결 해제"
+                                    className="size-8 text-muted-foreground hover:text-destructive"
+                                  >
+                                    <Trash2 className="size-4" />
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            )
+                          })
                       )}
-                    </tbody>
-                  </table>
-                </div>
+                    </TableBody>
+                  </Table>
+                </Card>
               </div>
             </div>
           )}
-        </section>
+        </Card>
       </div>
 
+      {/* 시험항목 추가 다이얼로그 */}
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden border-slate-300 bg-slate-50 p-0 shadow-2xl sm:max-w-2xl">
-          <DialogHeader className="border-b border-slate-200 bg-white px-4 py-4 pr-12 text-left sm:px-5">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden p-0 sm:max-w-2xl">
+          <DialogHeader className="border-b px-4 py-4 pr-12 text-left sm:px-5">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-700 text-white shadow-sm">
-                <PackagePlus size={20} />
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                <PackagePlus className="size-5" />
               </div>
               <div className="min-w-0">
-                <DialogTitle className="text-lg font-black text-slate-950">
+                <DialogTitle className="text-base font-semibold text-foreground">
                   시험항목 추가
                 </DialogTitle>
-                <DialogDescription className="mt-1 text-xs font-medium text-slate-600">
+                <DialogDescription className="mt-0.5 text-xs text-muted-foreground">
                   활성 시험항목 중 현재 품목에 연결할 항목을 선택합니다.
                 </DialogDescription>
               </div>
@@ -819,113 +838,109 @@ export default function TestItemsPage() {
 
           <div className="max-h-[65dvh] overflow-y-auto px-4 py-4 sm:px-5">
             <div className="grid gap-4">
-              <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
-                <div className="relative">
-                  <Search
-                    size={14}
-                    className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-600"
-                  />
-                  <Input
-                    type="text"
-                    placeholder="시험항목명 검색..."
-                    value={dialogSearch}
-                    onChange={(e) => setDialogSearch(e.target.value)}
-                    className="h-10 bg-slate-50 pl-9"
-                    autoFocus
-                  />
-                </div>
-              </section>
+              <div className="relative">
+                <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="시험항목명 검색..."
+                  value={dialogSearch}
+                  onChange={(e) => setDialogSearch(e.target.value)}
+                  className="pl-9"
+                  autoFocus
+                />
+              </div>
 
-              <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
-                <div className="flex flex-wrap gap-1">
-                  {dialogTabs.map((tab) => (
-                    <button
-                      key={tab}
-                      onClick={() => setDialogTab(tab as typeof dialogTab)}
-                      className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${
+              <div className="flex flex-wrap gap-1">
+                {dialogTabs.map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setDialogTab(tab as typeof dialogTab)}
+                    className={cn(
+                      "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                      dialogTab === tab
+                        ? "bg-primary text-primary-foreground"
+                        : "border bg-background text-foreground hover:bg-muted/50"
+                    )}
+                  >
+                    {tab}
+                    <span
+                      className={cn(
+                        "ml-1.5 rounded-full px-1.5 py-0.5 text-[10px]",
                         dialogTab === tab
-                          ? "bg-blue-700 text-white"
-                          : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
-                      }`}
-                    >
-                      {tab}
-                      <span
-                        className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] ${
-                          dialogTab === tab
-                            ? "bg-white/20 text-white"
-                            : "bg-slate-100 text-slate-500"
-                        }`}
-                      >
-                        {dialogTabCounts[tab] ?? 0}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-
-                {dialogFiltered.length > 0 && (
-                  <div className="mt-3 flex items-center justify-between text-xs font-medium text-slate-600">
-                    <span>
-                      {dialogFiltered.length}개 항목
-                      {selectedToAdd.size > 0 && (
-                        <span className="ml-1 font-bold text-blue-700">
-                          ({selectedToAdd.size}개 선택)
-                        </span>
+                          ? "bg-primary-foreground/20 text-primary-foreground"
+                          : "bg-muted text-muted-foreground"
                       )}
+                    >
+                      {dialogTabCounts[tab] ?? 0}
                     </span>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={selectAll}
-                        className="font-bold text-blue-700 hover:underline"
-                      >
-                        전체선택
-                      </button>
-                      <button
-                        onClick={deselectAll}
-                        className="font-bold text-slate-500 hover:underline"
-                      >
-                        전체해제
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </section>
+                  </button>
+                ))}
+              </div>
 
-              <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
-                <div className="max-h-72 overflow-y-auto rounded-lg border border-slate-200">
+              {dialogFiltered.length > 0 && (
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>
+                    {dialogFiltered.length}개 항목
+                    {selectedToAdd.size > 0 && (
+                      <span className="ml-1 font-medium text-primary">
+                        ({selectedToAdd.size}개 선택)
+                      </span>
+                    )}
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={selectAll}
+                      className="font-medium text-primary hover:underline"
+                    >
+                      전체선택
+                    </button>
+                    <button
+                      onClick={deselectAll}
+                      className="font-medium text-muted-foreground hover:underline"
+                    >
+                      전체해제
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <Card className="gap-0 overflow-hidden py-0">
+                <div className="max-h-72 overflow-y-auto">
                   {itemsLoading ? (
-                    <p className="py-8 text-center text-sm font-medium text-slate-600">
+                    <p className="py-8 text-center text-sm text-muted-foreground">
                       불러오는 중...
                     </p>
                   ) : dialogFiltered.length === 0 ? (
-                    <p className="py-8 text-center text-sm font-medium text-slate-600">
+                    <p className="py-8 text-center text-sm text-muted-foreground">
                       {availableToAdd.length === 0
                         ? "추가할 수 있는 시험항목이 없습니다."
                         : "검색 결과가 없습니다."}
                     </p>
                   ) : (
-                    <ul className="divide-y divide-slate-100">
+                    <ul className="divide-y">
                       {dialogFiltered.map((item) => (
                         <li key={item.id}>
-                          <label className="flex cursor-pointer items-center gap-3 px-4 py-2.5 hover:bg-slate-50">
+                          <label className="flex cursor-pointer items-center gap-3 px-4 py-2.5 hover:bg-muted/50">
                             <input
                               type="checkbox"
                               checked={selectedToAdd.has(item.id)}
                               onChange={() => toggleSelectAdd(item.id)}
                               className="cb-custom"
                             />
-                            <span className="flex-1 text-sm font-medium text-slate-800">
+                            <span className="flex-1 text-sm font-medium text-foreground">
                               {item.name}
                             </span>
                             <span
-                              className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${
+                              className={cn(
+                                "rounded-full border px-2 py-0.5 text-[10px] font-medium",
                                 CATEGORY_COLORS[item.category] ??
-                                CATEGORY_COLORS["기타"]
-                              }`}
+                                  CATEGORY_COLORS["기타"]
+                              )}
                             >
                               {item.category || "기타"}
                             </span>
                             {item.estimatedHours != null && (
-                              <span className="text-xs font-medium text-slate-500">
+                              <span className="text-xs text-muted-foreground">
                                 {item.estimatedHours}h
                               </span>
                             )}
@@ -935,48 +950,47 @@ export default function TestItemsPage() {
                     </ul>
                   )}
                 </div>
-              </section>
+              </Card>
             </div>
           </div>
 
-          <DialogFooter className="border-t border-slate-200 bg-white px-4 py-4 sm:px-5">
+          <DialogFooter className="border-t px-4 py-3 sm:px-5">
             <Button
               variant="outline"
               onClick={() => setAddDialogOpen(false)}
               disabled={addLoading}
-              className="h-10 border-slate-300 text-slate-800 hover:bg-slate-100"
             >
               취소
             </Button>
             <Button
               onClick={() => void handleAddItems()}
               disabled={addLoading || selectedToAdd.size === 0}
-              className="h-10 bg-blue-700 px-5 font-bold text-white shadow-sm hover:bg-blue-800"
             >
-              <Plus size={15} className="mr-1.5" />
+              <Plus />
               {addLoading ? "추가 중..." : `추가 (${selectedToAdd.size})`}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* 연결 해제 확인 다이얼로그 */}
       <Dialog
         open={!!unlinkTarget}
         onOpenChange={(open) => {
           if (!open && !unlinkLoading) setUnlinkTarget(null)
         }}
       >
-        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden border-slate-300 bg-white p-0 shadow-2xl sm:max-w-md">
-          <DialogHeader className="border-b border-slate-200 bg-rose-50 px-4 py-4 pr-12 text-left sm:px-5">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden p-0 sm:max-w-md">
+          <DialogHeader className="border-b px-4 py-4 pr-12 text-left sm:px-5">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rose-700 text-white shadow-sm">
-                <AlertTriangle size={20} />
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
+                <AlertTriangle className="size-5" />
               </div>
               <div className="min-w-0">
-                <DialogTitle className="text-lg font-black text-slate-950">
+                <DialogTitle className="text-base font-semibold text-foreground">
                   연결 해제
                 </DialogTitle>
-                <DialogDescription className="mt-1 text-xs font-medium text-rose-800">
+                <DialogDescription className="mt-0.5 text-xs text-muted-foreground">
                   이 품목에서 시험항목 연결을 제거합니다.
                 </DialogDescription>
               </div>
@@ -984,31 +998,30 @@ export default function TestItemsPage() {
           </DialogHeader>
 
           <div className="px-4 py-4 sm:px-5">
-            <div className="rounded-lg border border-rose-200 bg-rose-50/70 p-4">
-              <p className="text-sm font-bold text-slate-950">
+            <div className="rounded-lg border bg-muted/30 p-4">
+              <p className="text-sm font-medium text-foreground">
                 {unlinkTarget?.testItemName}
               </p>
-              <p className="mt-2 text-sm font-medium text-slate-700">
+              <p className="mt-2 text-sm text-muted-foreground">
                 {selectedProduct?.name}에서 이 시험항목 연결을 해제하시겠습니까?
               </p>
             </div>
           </div>
 
-          <DialogFooter className="border-t border-slate-200 bg-white px-4 py-4 sm:px-5">
+          <DialogFooter className="border-t px-4 py-3 sm:px-5">
             <Button
               variant="outline"
               onClick={() => setUnlinkTarget(null)}
               disabled={unlinkLoading}
-              className="h-10 border-slate-300 text-slate-800 hover:bg-slate-100"
             >
               취소
             </Button>
             <Button
+              variant="destructive"
               onClick={() => void confirmUnlink()}
               disabled={unlinkLoading}
-              className="h-10 bg-rose-700 px-5 font-bold text-white shadow-sm hover:bg-rose-800"
             >
-              <Trash2 size={15} className="mr-1.5" />
+              <Trash2 />
               {unlinkLoading ? "해제 중..." : "해제"}
             </Button>
           </DialogFooter>
@@ -1022,19 +1035,19 @@ export default function TestItemsPage() {
           if (!open && !copyLoading) setCopyDialogOpen(false)
         }}
       >
-        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden border-slate-300 bg-slate-50 p-0 shadow-2xl sm:max-w-2xl">
-          <DialogHeader className="border-b border-slate-200 bg-white px-4 py-4 pr-12 text-left sm:px-5">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden p-0 sm:max-w-2xl">
+          <DialogHeader className="border-b px-4 py-4 pr-12 text-left sm:px-5">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-700 text-white shadow-sm">
-                <Copy size={20} />
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                <Copy className="size-5" />
               </div>
               <div className="min-w-0">
-                <DialogTitle className="text-lg font-black text-slate-950">
+                <DialogTitle className="text-base font-semibold text-foreground">
                   다른 품목에서 시험항목 복사
                 </DialogTitle>
-                <DialogDescription className="mt-1 text-xs font-medium text-slate-600">
+                <DialogDescription className="mt-0.5 text-xs text-muted-foreground">
                   비슷한 품목을 선택하면 그 품목의 시험항목을{" "}
-                  <span className="font-bold text-blue-700">
+                  <span className="font-medium text-foreground">
                     {selectedProduct?.name}
                   </span>
                   에 복사합니다. (이미 연결된 항목은 자동 제외)
@@ -1045,64 +1058,64 @@ export default function TestItemsPage() {
 
           <div className="max-h-[65dvh] overflow-y-auto px-4 py-4 sm:px-5">
             <div className="grid gap-4">
-              <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
-                <p className="mb-2 text-sm font-bold text-slate-950">
+              <div>
+                <p className="mb-2 text-sm font-medium text-foreground">
                   1. 복사할 원본 품목 선택
                 </p>
                 <div className="relative">
-                  <Search
-                    size={14}
-                    className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-600"
-                  />
+                  <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     type="text"
                     placeholder="품목명 / 코드 검색..."
                     value={copySourceSearch}
                     onChange={(e) => setCopySourceSearch(e.target.value)}
-                    className="h-10 bg-slate-50 pl-9"
+                    className="pl-9"
                   />
                 </div>
-                <div className="mt-3 max-h-48 overflow-y-auto rounded-lg border border-slate-200">
-                  {copyFilteredProducts.length === 0 ? (
-                    <p className="py-8 text-center text-sm font-medium text-slate-600">
-                      검색 결과가 없습니다.
-                    </p>
-                  ) : (
-                    <ul className="divide-y divide-slate-100">
-                      {copyFilteredProducts.slice(0, 100).map((p) => (
-                        <li key={p.id}>
-                          <button
-                            onClick={() => void selectCopySource(p)}
-                            className={`flex w-full items-center gap-2 px-4 py-2.5 text-left hover:bg-blue-50 ${
-                              copySource?.id === p.id ? "bg-blue-100" : ""
-                            }`}
-                          >
-                            <span className="font-mono text-[10px] font-bold text-blue-700">
-                              {p.productCode}
-                            </span>
-                            <span className="flex-1 truncate text-sm font-medium text-slate-800">
-                              {p.name}
-                            </span>
-                            {copySource?.id === p.id && (
-                              <span className="text-xs font-bold text-blue-700">
-                                선택됨
+                <Card className="mt-3 gap-0 overflow-hidden py-0">
+                  <div className="max-h-48 overflow-y-auto">
+                    {copyFilteredProducts.length === 0 ? (
+                      <p className="py-8 text-center text-sm text-muted-foreground">
+                        검색 결과가 없습니다.
+                      </p>
+                    ) : (
+                      <ul className="divide-y">
+                        {copyFilteredProducts.slice(0, 100).map((p) => (
+                          <li key={p.id}>
+                            <button
+                              onClick={() => void selectCopySource(p)}
+                              className={cn(
+                                "flex w-full items-center gap-2 px-4 py-2.5 text-left hover:bg-muted/50",
+                                copySource?.id === p.id && "bg-primary/5"
+                              )}
+                            >
+                              <span className="font-mono text-[10px] font-medium text-muted-foreground">
+                                {p.productCode}
                               </span>
-                            )}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </section>
+                              <span className="flex-1 truncate text-sm font-medium text-foreground">
+                                {p.name}
+                              </span>
+                              {copySource?.id === p.id && (
+                                <span className="text-xs font-medium text-primary">
+                                  선택됨
+                                </span>
+                              )}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </Card>
+              </div>
 
               {copySource && (
-                <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+                <div>
                   <div className="mb-2 flex items-center justify-between">
-                    <p className="text-sm font-bold text-slate-950">
+                    <p className="text-sm font-medium text-foreground">
                       2. 복사할 시험항목
                       {copySelected.size > 0 && (
-                        <span className="ml-1 font-bold text-blue-700">
+                        <span className="ml-1 font-medium text-primary">
                           ({copySelected.size}개 선택)
                         </span>
                       )}
@@ -1118,83 +1131,84 @@ export default function TestItemsPage() {
                             )
                           )
                         }
-                        className="font-bold text-blue-700 hover:underline"
+                        className="font-medium text-primary hover:underline"
                       >
                         미연결 전체
                       </button>
                       <button
                         onClick={() => setCopySelected(new Set())}
-                        className="font-bold text-slate-500 hover:underline"
+                        className="font-medium text-muted-foreground hover:underline"
                       >
                         전체해제
                       </button>
                     </div>
                   </div>
-                  <div className="max-h-56 overflow-y-auto rounded-lg border border-slate-200">
-                    {copySourceItems.length === 0 ? (
-                      <p className="py-8 text-center text-sm font-medium text-slate-600">
-                        이 품목에는 연결된 시험항목이 없습니다.
-                      </p>
-                    ) : (
-                      <ul className="divide-y divide-slate-100">
-                        {copySourceItems
-                          .slice()
-                          .sort((a, b) => a.sequenceOrder - b.sequenceOrder)
-                          .map((r) => {
-                            const already = linkedIds.has(r.testItemId)
-                            return (
-                              <li key={r.testItemId}>
-                                <label
-                                  className={`flex items-center gap-3 px-4 py-2.5 ${
-                                    already
-                                      ? "opacity-50"
-                                      : "cursor-pointer hover:bg-slate-50"
-                                  }`}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    className="cb-custom"
-                                    disabled={already}
-                                    checked={copySelected.has(r.testItemId)}
-                                    onChange={() =>
-                                      toggleCopySelect(r.testItemId)
-                                    }
-                                  />
-                                  <span className="flex-1 text-sm font-medium text-slate-800">
-                                    {r.testItemName}
-                                  </span>
-                                  {already && (
-                                    <span className="text-[10px] font-bold text-slate-500">
-                                      이미 연결됨
+                  <Card className="gap-0 overflow-hidden py-0">
+                    <div className="max-h-56 overflow-y-auto">
+                      {copySourceItems.length === 0 ? (
+                        <p className="py-8 text-center text-sm text-muted-foreground">
+                          이 품목에는 연결된 시험항목이 없습니다.
+                        </p>
+                      ) : (
+                        <ul className="divide-y">
+                          {copySourceItems
+                            .slice()
+                            .sort((a, b) => a.sequenceOrder - b.sequenceOrder)
+                            .map((r) => {
+                              const already = linkedIds.has(r.testItemId)
+                              return (
+                                <li key={r.testItemId}>
+                                  <label
+                                    className={cn(
+                                      "flex items-center gap-3 px-4 py-2.5",
+                                      already
+                                        ? "opacity-50"
+                                        : "cursor-pointer hover:bg-muted/50"
+                                    )}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      className="cb-custom"
+                                      disabled={already}
+                                      checked={copySelected.has(r.testItemId)}
+                                      onChange={() =>
+                                        toggleCopySelect(r.testItemId)
+                                      }
+                                    />
+                                    <span className="flex-1 text-sm font-medium text-foreground">
+                                      {r.testItemName}
                                     </span>
-                                  )}
-                                </label>
-                              </li>
-                            )
-                          })}
-                      </ul>
-                    )}
-                  </div>
-                </section>
+                                    {already && (
+                                      <span className="text-[10px] text-muted-foreground">
+                                        이미 연결됨
+                                      </span>
+                                    )}
+                                  </label>
+                                </li>
+                              )
+                            })}
+                        </ul>
+                      )}
+                    </div>
+                  </Card>
+                </div>
               )}
             </div>
           </div>
 
-          <DialogFooter className="border-t border-slate-200 bg-white px-4 py-4 sm:px-5">
+          <DialogFooter className="border-t px-4 py-3 sm:px-5">
             <Button
               variant="outline"
               onClick={() => setCopyDialogOpen(false)}
               disabled={copyLoading}
-              className="h-10 border-slate-300 text-slate-800 hover:bg-slate-100"
             >
               취소
             </Button>
             <Button
               onClick={() => void handleCopy()}
               disabled={copyLoading || copySelected.size === 0}
-              className="h-10 bg-blue-700 px-5 font-bold text-white shadow-sm hover:bg-blue-800"
             >
-              <Copy size={15} className="mr-1.5" />
+              <Copy />
               {copyLoading ? "복사 중..." : `복사 (${copySelected.size})`}
             </Button>
           </DialogFooter>
@@ -1208,17 +1222,17 @@ export default function TestItemsPage() {
           if (!open && !bulkDeleteLoading) setBulkDeleteOpen(false)
         }}
       >
-        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden border-slate-300 bg-white p-0 shadow-2xl sm:max-w-md">
-          <DialogHeader className="border-b border-slate-200 bg-rose-50 px-4 py-4 pr-12 text-left sm:px-5">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden p-0 sm:max-w-md">
+          <DialogHeader className="border-b px-4 py-4 pr-12 text-left sm:px-5">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rose-700 text-white shadow-sm">
-                <AlertTriangle size={20} />
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
+                <AlertTriangle className="size-5" />
               </div>
               <div className="min-w-0">
-                <DialogTitle className="text-lg font-black text-slate-950">
+                <DialogTitle className="text-base font-semibold text-foreground">
                   선택 항목 일괄 삭제
                 </DialogTitle>
-                <DialogDescription className="mt-1 text-xs font-medium text-rose-800">
+                <DialogDescription className="mt-0.5 text-xs text-muted-foreground">
                   선택한 시험항목 연결을 한 번에 제거합니다.
                 </DialogDescription>
               </div>
@@ -1226,32 +1240,31 @@ export default function TestItemsPage() {
           </DialogHeader>
 
           <div className="px-4 py-4 sm:px-5">
-            <div className="rounded-lg border border-rose-200 bg-rose-50/70 p-4">
-              <p className="text-sm font-bold text-slate-950">
+            <div className="rounded-lg border bg-muted/30 p-4">
+              <p className="text-sm font-medium text-foreground">
                 {selectedLinked.size}개 시험항목
               </p>
-              <p className="mt-2 text-sm font-medium text-slate-700">
+              <p className="mt-2 text-sm text-muted-foreground">
                 {selectedProduct?.name}에서 선택한 {selectedLinked.size}개
                 시험항목 연결을 해제하시겠습니까?
               </p>
             </div>
           </div>
 
-          <DialogFooter className="border-t border-slate-200 bg-white px-4 py-4 sm:px-5">
+          <DialogFooter className="border-t px-4 py-3 sm:px-5">
             <Button
               variant="outline"
               onClick={() => setBulkDeleteOpen(false)}
               disabled={bulkDeleteLoading}
-              className="h-10 border-slate-300 text-slate-800 hover:bg-slate-100"
             >
               취소
             </Button>
             <Button
+              variant="destructive"
               onClick={() => void handleBulkDelete()}
               disabled={bulkDeleteLoading}
-              className="h-10 bg-rose-700 px-5 font-bold text-white shadow-sm hover:bg-rose-800"
             >
-              <Trash2 size={15} className="mr-1.5" />
+              <Trash2 />
               {bulkDeleteLoading ? "삭제 중..." : `삭제 (${selectedLinked.size})`}
             </Button>
           </DialogFooter>

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
+import { useLockBodyScroll } from "@frontend/hooks/use-lock-body-scroll"
 import { CalendarDays, Plus, Trash2, X, Loader2, ChevronLeft, ChevronRight } from "lucide-react"
 import { DateField } from "@frontend/components/ui/date-field"
 
@@ -186,6 +187,7 @@ function AddModal({
   onSaved: () => void
   onError: (m: string) => void
 }) {
+  useLockBodyScroll()
   const [date, setDate] = useState("")
   const [description, setDescription] = useState("")
   const [saving, setSaving] = useState(false)

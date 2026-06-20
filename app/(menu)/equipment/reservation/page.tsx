@@ -2,8 +2,16 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
+import { useLockBodyScroll } from "@frontend/hooks/use-lock-body-scroll"
 import { Wrench, Plus, Trash2, X, Loader2, CheckCircle2, Ban } from "lucide-react"
 import { DateField } from "@frontend/components/ui/date-field"
+import { cn } from "@frontend/lib/utils"
+import { Badge } from "@frontend/components/ui/badge"
+import { Button } from "@frontend/components/ui/button"
+import { Card } from "@frontend/components/ui/card"
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@frontend/components/ui/table"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 type ReservationStatus = "RESERVED" | "WAITING" | "CANCELLED" | "COMPLETED"
@@ -23,11 +31,11 @@ interface ReservationRow {
 const STATUS_LABEL: Record<ReservationStatus, string> = {
   RESERVED: "예약", WAITING: "대기", CANCELLED: "취소", COMPLETED: "완료",
 }
-const STATUS_CLS: Record<ReservationStatus, string> = {
-  RESERVED:  "bg-blue-50 text-blue-700 border-blue-200",
-  WAITING:   "bg-amber-50 text-amber-700 border-amber-200",
-  CANCELLED: "bg-slate-100 text-slate-500 border-slate-200",
-  COMPLETED: "bg-emerald-50 text-emerald-700 border-emerald-200",
+const STATUS_DOT: Record<ReservationStatus, string> = {
+  RESERVED:  "bg-emerald-500",
+  WAITING:   "bg-muted-foreground",
+  CANCELLED: "bg-red-500",
+  COMPLETED: "bg-blue-500",
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -102,114 +110,141 @@ export default function EquipmentReservationPage() {
   }
 
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-5 p-5">
+    <div className="flex flex-col gap-4 p-4 md:p-6">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white">
-            <Wrench size={20} />
+        <div>
+          <div className="flex items-center gap-2">
+            <Wrench className="size-4 text-muted-foreground" />
+            <h1 className="text-xl font-semibold text-foreground">장비 예약</h1>
+            <Badge variant="secondary" className="tabular-nums">{rows.length}건</Badge>
           </div>
-          <div>
-            <h1 className="text-lg font-bold text-slate-900">장비 예약</h1>
-            <p className="text-xs text-slate-500">선착순 예약. 기간이 겹치면 대기열에 등록됩니다.</p>
-          </div>
+          <p className="mt-0.5 text-sm text-muted-foreground">선착순 예약. 기간이 겹치면 대기열에 등록됩니다.</p>
         </div>
-        <button
-          onClick={() => setShowAdd(true)}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
-        >
-          <Plus size={16} /> 예약 등록
-        </button>
+        <Button size="lg" onClick={() => setShowAdd(true)}>
+          <Plus /> 예약 등록
+        </Button>
       </div>
 
       {msg && (
-        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm text-blue-700">{msg}</div>
+        <div className="rounded-lg border px-4 py-2.5 text-sm text-foreground">{msg}</div>
       )}
 
       {/* Filter */}
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-48">
-          <label className="mb-1 block text-xs font-medium text-slate-600">장비 필터</label>
+          <label className="mb-1 block text-xs font-medium text-muted-foreground">장비 필터</label>
           <input
             list="equipment-ids-filter"
             value={filterEquipment}
             onChange={e => setFilterEquipment(e.target.value)}
             placeholder="장비 선택 또는 입력"
-            className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
+            className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
           />
           <datalist id="equipment-ids-filter">
             {equipmentIds.map(id => <option key={id} value={id} />)}
           </datalist>
         </div>
         {filterEquipment && (
-          <button
+          <Button
+            variant="outline"
+            size="lg"
             onClick={() => setFilterEquipment("")}
-            className="h-10 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 hover:bg-slate-50"
           >
             전체
-          </button>
+          </Button>
         )}
       </div>
 
       {/* List */}
-      <div className="rounded-xl border border-slate-200 bg-white">
-        <div className="border-b border-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700">
-          예약 목록 ({rows.length})
+      <Card className="gap-0 overflow-hidden py-0">
+        <div className="border-b px-4 py-2.5 text-sm font-semibold text-foreground">
+          예약 목록
         </div>
-        {loading ? (
-          <div className="flex items-center justify-center gap-2 py-10 text-sm text-slate-400">
-            <Loader2 size={16} className="animate-spin" /> 불러오는 중…
-          </div>
-        ) : rows.length === 0 ? (
-          <div className="py-10 text-center text-sm text-slate-400">등록된 예약이 없습니다.</div>
-        ) : (
-          <div className="divide-y divide-slate-100">
-            {rows.map(r => {
-              const canModify = (isAdmin || r.userId === user?.id) && (r.status === "RESERVED" || r.status === "WAITING")
-              return (
-                <div key={r.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
-                  <span className={`rounded-md border px-2 py-0.5 text-xs font-semibold ${STATUS_CLS[r.status]}`}>
-                    {STATUS_LABEL[r.status]}
-                    {r.status === "WAITING" && r.waitOrder != null && ` #${r.waitOrder}`}
-                  </span>
-                  <span className="text-sm font-semibold text-slate-800">{r.equipmentId}</span>
-                  <span className="text-sm text-slate-500">{r.startDate} ~ {r.endDate}</span>
-                  <span className="text-xs text-slate-400">{r.userName ?? "이름없음"}</span>
-                  <div className="ml-auto flex items-center gap-2">
-                    {canModify && r.status === "RESERVED" && (
-                      <button
-                        onClick={() => void complete(r.id)}
-                        disabled={busy === r.id}
-                        className="inline-flex items-center gap-1 rounded-md border border-emerald-200 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
-                      >
-                        <CheckCircle2 size={13} /> 완료
-                      </button>
-                    )}
-                    {canModify && (
-                      <button
-                        onClick={() => void cancel(r.id)}
-                        disabled={busy === r.id}
-                        className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-amber-50 hover:text-amber-700"
-                      >
-                        <Ban size={13} /> 취소
-                      </button>
-                    )}
-                    {isAdmin && (
-                      <button
-                        onClick={() => void remove(r.id)}
-                        disabled={busy === r.id}
-                        className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
-                      >
-                        {busy === r.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                      </button>
-                    )}
+        <Table>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="px-3 text-muted-foreground">상태</TableHead>
+              <TableHead className="px-3 text-muted-foreground">장비</TableHead>
+              <TableHead className="px-3 text-muted-foreground">기간</TableHead>
+              <TableHead className="px-3 text-muted-foreground">예약자</TableHead>
+              <TableHead className="px-3 text-muted-foreground w-32" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading ? (
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={5} className="py-16 text-center text-sm text-muted-foreground">
+                  <div className="flex items-center justify-center gap-2">
+                    <Loader2 size={16} className="animate-spin" /> 불러오는 중…
                   </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
+                </TableCell>
+              </TableRow>
+            ) : rows.length === 0 ? (
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={5} className="py-16 text-center text-sm text-muted-foreground">
+                  등록된 예약이 없습니다.
+                </TableCell>
+              </TableRow>
+            ) : (
+              rows.map(r => {
+                const canModify = (isAdmin || r.userId === user?.id) && (r.status === "RESERVED" || r.status === "WAITING")
+                return (
+                  <TableRow key={r.id}>
+                    <TableCell className="px-3 py-2.5">
+                      <Badge variant="outline" className="gap-1.5">
+                        <span className={cn("size-1.5 rounded-full", STATUS_DOT[r.status])} />
+                        {STATUS_LABEL[r.status]}
+                        {r.status === "WAITING" && r.waitOrder != null && ` #${r.waitOrder}`}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="px-3 py-2.5 font-medium text-foreground">{r.equipmentId}</TableCell>
+                    <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{r.startDate} ~ {r.endDate}</TableCell>
+                    <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">{r.userName ?? "이름없음"}</TableCell>
+                    <TableCell className="px-3 py-2.5">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {canModify && r.status === "RESERVED" && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void complete(r.id)}
+                            disabled={busy === r.id}
+                            className="h-7 gap-1 px-2 text-xs text-emerald-700 border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+                          >
+                            <CheckCircle2 size={12} /> 완료
+                          </Button>
+                        )}
+                        {canModify && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void cancel(r.id)}
+                            disabled={busy === r.id}
+                            className="h-7 gap-1 px-2 text-xs"
+                          >
+                            <Ban size={12} /> 취소
+                          </Button>
+                        )}
+                        {isAdmin && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => void remove(r.id)}
+                            disabled={busy === r.id}
+                            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                          >
+                            {busy === r.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )
+              })
+            )}
+          </TableBody>
+        </Table>
+      </Card>
 
       {showAdd && (
         <AddModal
@@ -236,6 +271,7 @@ function AddModal({
   onSaved: (status: ReservationStatus) => void
   onError: (m: string) => void
 }) {
+  useLockBodyScroll()
   const [equipmentId, setEquipmentId] = useState("")
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
@@ -259,22 +295,24 @@ function AddModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="w-full max-w-md rounded-xl bg-card p-5 shadow-xl border" onClick={e => e.stopPropagation()}>
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-base font-bold text-slate-900">장비 예약 등록</h2>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+          <h2 className="text-base font-semibold text-foreground">장비 예약 등록</h2>
+          <Button variant="ghost" size="sm" onClick={onClose} className="h-7 w-7 p-0 text-muted-foreground">
+            <X size={16} />
+          </Button>
         </div>
 
         <div className="flex flex-col gap-3">
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600">장비</label>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">장비</label>
             <input
               list="equipment-ids-add"
               value={equipmentId}
               onChange={e => setEquipmentId(e.target.value)}
               placeholder="장비 선택 또는 입력"
-              className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
+              className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
             />
             <datalist id="equipment-ids-add">
               {equipmentIds.map(id => <option key={id} value={id} />)}
@@ -286,20 +324,20 @@ function AddModal({
             <DateField label="종료일" value={endDate} onChange={setEndDate} />
           </div>
 
-          <p className="text-[11px] text-slate-400">
+          <p className="text-[11px] text-muted-foreground">
             같은 장비에 기간이 겹치는 예약이 있으면 대기(WAITING)로 등록됩니다.
           </p>
         </div>
 
         <div className="mt-5 flex justify-end gap-2">
-          <button onClick={onClose} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">취소</button>
-          <button
+          <Button variant="outline" size="lg" onClick={onClose}>취소</Button>
+          <Button
+            size="lg"
             onClick={() => void submit()}
             disabled={saving}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
           >
             {saving && <Loader2 size={15} className="animate-spin" />} 등록
-          </button>
+          </Button>
         </div>
       </div>
     </div>

@@ -7,6 +7,8 @@ import {
   ChevronDown, ChevronRight, ChevronLeft, Lock, Search, CalendarDays, Users, ListChecks, Layers,
 } from "lucide-react"
 import { cn } from "@frontend/lib/utils"
+import { useLockBodyScroll } from "@frontend/hooks/use-lock-body-scroll"
+import { AssigneeDetailModal } from "@frontend/components/schedule/assignee-detail-modal"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
 import { Badge } from "@frontend/components/ui/badge"
@@ -793,9 +795,9 @@ export default function OrdersPage() {
         <HistoryModal order={historyTarget} onClose={() => setHistoryTarget(null)} />
       )}
       {assigneeTarget && (
-        <AssigneeOrdersModal
-          tester={assigneeTarget}
-          rows={scopedRows.filter(r => r.assigneeTesterId === assigneeTarget.id)}
+        <AssigneeDetailModal
+          testerId={assigneeTarget.id}
+          testerName={assigneeTarget.name}
           onClose={() => setAssigneeTarget(null)}
         />
       )}
@@ -830,87 +832,6 @@ function StatusBadge({ status }: { status: string }) {
       <span className={cn("size-1.5 rounded-full", STATUS_DOT[status] ?? "bg-slate-400")} />
       {status}
     </Badge>
-  )
-}
-
-// ─── 담당자별 현재 오더 모달 ──────────────────────────────────────────────────
-// 진행 중(완료·삭제 제외)을 먼저, 완료·기타는 아래에 별도 표시. 데이터는 화면과 동일 조건.
-const ACTIVE_STATUSES = new Set(["대기", "진행중", "검토중", "지연"])
-
-function AssigneeOrdersModal({ tester, rows, onClose }: {
-  tester: { id: string; name: string }; rows: OrderRow[]; onClose: () => void
-}) {
-  const active = rows.filter(r => ACTIVE_STATUSES.has(r.status))
-  const others = rows.filter(r => !ACTIVE_STATUSES.has(r.status))
-  const counts = rows.reduce<Record<string, number>>((acc, r) => {
-    acc[r.status] = (acc[r.status] ?? 0) + 1; return acc
-  }, {})
-  const urgentCount = active.filter(r => r.isUrgent).length
-
-  const renderRow = (r: OrderRow) => (
-    <li key={r.id} className="rounded-lg border bg-muted/30 px-3 py-2">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
-            <span className="truncate text-sm font-semibold text-foreground">{r.productName}</span>
-            {r.isUrgent && <Badge variant="outline" className="border-red-200 text-red-700">긴급</Badge>}
-            {r.locked && (
-              <Badge variant="outline" className="gap-0.5 border-amber-200 text-amber-700">
-                <Lock className="size-2.5" />확정
-              </Badge>
-            )}
-          </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
-            <span className="font-mono">제조 {r.batchNo || "-"}</span>
-            <span className="text-border">·</span>
-            <span>완료예정 {r.dueDate ?? "미정"}</span>
-            <span className="text-border">·</span>
-            <span>{r.method}</span>
-            {r.workdays != null && (
-              <>
-                <span className="text-border">·</span>
-                <span>공수 {r.workdays}일</span>
-              </>
-            )}
-          </div>
-        </div>
-        <StatusBadge status={r.status} />
-      </div>
-    </li>
-  )
-
-  return (
-    <Modal title={`${tester.name} 담당 오더`} onClose={onClose}>
-      <div className="mb-3 flex items-center gap-2">
-        <AssigneeAvatar name={tester.name} size="md" />
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Badge variant="secondary">진행 중 {active.length}건</Badge>
-          {urgentCount > 0 && <Badge variant="outline" className="border-red-200 text-red-700">긴급 {urgentCount}건</Badge>}
-          {STATUS_OPTIONS.filter(s => counts[s]).map(s => <StatusBadge key={s} status={s} />)}
-        </div>
-      </div>
-
-      {rows.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">현재 맡고 있는 오더가 없습니다.</p>
-      ) : (
-        <div className="flex max-h-[60vh] flex-col gap-4 overflow-y-auto pr-1">
-          <section>
-            <h3 className="mb-1.5 text-xs font-bold text-muted-foreground">진행 중 ({active.length})</h3>
-            {active.length === 0 ? (
-              <p className="py-3 text-center text-[13px] text-muted-foreground">진행 중인 오더가 없습니다.</p>
-            ) : (
-              <ul className="flex flex-col gap-1.5">{active.map(renderRow)}</ul>
-            )}
-          </section>
-          {others.length > 0 && (
-            <section>
-              <h3 className="mb-1.5 text-xs font-bold text-muted-foreground">완료·기타 ({others.length})</h3>
-              <ul className="flex flex-col gap-1.5">{others.map(renderRow)}</ul>
-            </section>
-          )}
-        </div>
-      )}
-    </Modal>
   )
 }
 
@@ -1191,9 +1112,10 @@ function Field({ label, full, children }: { label: string; full?: boolean; child
 }
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  useLockBodyScroll()
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border bg-card shadow-xl" onClick={e => e.stopPropagation()}>
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-xl border bg-card shadow-xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b px-4 py-3">
           <h2 className="text-sm font-bold text-foreground">{title}</h2>
           <button onClick={onClose} className="rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><X className="size-4" /></button>

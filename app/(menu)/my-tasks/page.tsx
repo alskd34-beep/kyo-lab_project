@@ -5,6 +5,7 @@ import {
   Play, CheckCircle2, Circle, Loader2, AlertTriangle, Clock, XCircle, ShieldAlert, ClipboardList,
 } from "lucide-react"
 import { DateField } from "@frontend/components/ui/date-field"
+import { useLockBodyScroll } from "@frontend/hooks/use-lock-body-scroll"
 
 interface JobItem {
   id: string; testItemName: string; sequenceOrder: number
@@ -63,6 +64,7 @@ function ReadinessModal({
   onCancel: () => void
   confirming: boolean
 }) {
+  useLockBodyScroll()
   const blocked = result.checks.filter(c => c.blocked)
   const warnings = result.checks.filter(c => c.warning && !c.blocked)
   const notes = result.pretestNotes ?? []
@@ -87,7 +89,7 @@ function ReadinessModal({
           </p>
         </div>
 
-        <div className="max-h-72 overflow-y-auto px-5 py-3">
+        <div className="max-h-72 overflow-y-auto overscroll-contain px-5 py-3">
           {blocked.length > 0 && (
             <ul className="flex flex-col gap-2">
               {blocked.map(c => (

@@ -13,8 +13,10 @@ import {
   Users,
 } from "lucide-react"
 
+import { cn } from "@frontend/lib/utils"
 import { Badge } from "@frontend/components/ui/badge"
 import { Button } from "@frontend/components/ui/button"
+import { Card } from "@frontend/components/ui/card"
 import {
   Dialog,
   DialogContent,
@@ -24,6 +26,14 @@ import {
   DialogTitle,
 } from "@frontend/components/ui/dialog"
 import { Input } from "@frontend/components/ui/input"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@frontend/components/ui/table"
 
 interface TesterRow {
   id: string
@@ -55,7 +65,7 @@ const LEVEL_STYLE: Record<ProficiencyLevel, string> = {
   O: "border-blue-300 bg-blue-700 text-white",
   Y: "border-emerald-300 bg-emerald-700 text-white",
   N: "border-rose-300 bg-rose-700 text-white",
-  X: "border-slate-300 bg-slate-100 text-slate-500",
+  X: "border bg-muted text-muted-foreground",
 }
 
 const LEVEL_LABEL: Record<ProficiencyLevel, string> = {
@@ -66,9 +76,6 @@ const LEVEL_LABEL: Record<ProficiencyLevel, string> = {
 }
 
 type TabId = "testers" | "capability"
-
-const dialogInputClass =
-  "h-10 border-slate-300 bg-white text-slate-950 placeholder:text-slate-500 focus-visible:border-blue-600 focus-visible:ring-blue-200"
 
 export default function TestersPage() {
   const [activeTab, setActiveTab] = useState<TabId>("testers")
@@ -340,356 +347,382 @@ export default function TestersPage() {
       )
     }
     return sortDir === "asc" ? (
-      <ChevronUp size={11} className="ml-1 text-blue-700" />
+      <ChevronUp size={11} className="ml-1 text-primary" />
     ) : (
-      <ChevronDown size={11} className="ml-1 text-blue-700" />
+      <ChevronDown size={11} className="ml-1 text-primary" />
     )
   }
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-4 bg-slate-200/70 p-3 md:p-5">
-      <div className="flex flex-col gap-2 rounded-lg border border-slate-300 bg-white px-3 py-3 shadow-sm md:flex-row md:items-center md:gap-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-700 text-white shadow-sm">
+    <div className="flex min-w-0 flex-1 flex-col gap-4 p-4 md:p-6">
+      {/* Header */}
+      <div className="flex flex-col gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2">
             {activeTab === "testers" ? (
-              <Users size={18} />
+              <Users className="size-5 text-muted-foreground" />
             ) : (
-              <Grid2x2 size={18} />
+              <Grid2x2 className="size-5 text-muted-foreground" />
             )}
-          </div>
-          <div className="min-w-0">
-            <h1 className="min-w-0 text-base font-bold text-slate-950 sm:text-lg">
+            <h1 className="text-xl font-semibold text-foreground">
               {activeTab === "testers" ? "시험자 관리" : "시험자 역량"}
             </h1>
-            <p className="text-xs font-medium text-slate-600">
-              {activeTab === "testers"
-                ? "시험자 정보와 활성 상태를 관리합니다."
-                : "활성 시험자의 역량 매트릭스를 관리합니다."}
-            </p>
           </div>
+          <p className="text-sm text-muted-foreground">
+            {activeTab === "testers"
+              ? "시험자 정보와 활성 상태를 관리합니다."
+              : "활성 시험자의 역량 매트릭스를 관리합니다."}
+          </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-1 md:ml-auto">
-          {[
-            { id: "testers", label: "시험자 관리" },
-            { id: "capability", label: "시험자 역량" },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as TabId)}
-              className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${
-                activeTab === tab.id
-                  ? "bg-blue-700 text-white"
-                  : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Tab switcher */}
+          <div className="inline-flex h-9 w-fit items-center gap-0.5 rounded-lg bg-muted p-0.5 text-muted-foreground">
+            {[
+              { id: "testers", label: "시험자 관리" },
+              { id: "capability", label: "시험자 역량" },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id as TabId)}
+                className={cn(
+                  "h-8 rounded-md px-3 text-sm font-medium transition-colors",
+                  activeTab === tab.id
+                    ? "bg-card text-foreground shadow-sm"
+                    : "hover:text-foreground"
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
 
-        {activeTab === "testers" && (
-          <Button
-            onClick={openAdd}
-            size="sm"
-            className="h-9 w-full bg-blue-700 text-white shadow-sm hover:bg-blue-800 md:w-auto"
-          >
-            <Plus size={15} className="mr-1" />
-            시험자 추가
-          </Button>
-        )}
+          {activeTab === "testers" && (
+            <Button onClick={openAdd} size="lg" className="ml-auto">
+              <Plus />
+              시험자 추가
+            </Button>
+          )}
+        </div>
       </div>
 
+      {/* KPI cards */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div className="rounded-lg border border-l-4 border-slate-300 border-l-blue-700 bg-white px-4 py-3 shadow-sm">
-          <p className="mb-1.5 text-[11px] font-bold tracking-wide text-slate-600 uppercase">
+        <Card className="gap-1 border-l-4 border-l-primary px-4 py-4">
+          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
             활성 시험자
-          </p>
-          <p className="text-3xl font-black text-slate-950">{summary.active}</p>
-          <p className="mt-0.5 text-[11px] font-medium text-slate-600">
-            전체{" "}
-            <span className="font-bold text-blue-700">{testers.length}</span>명
-            중
-          </p>
-        </div>
-        <div className="rounded-lg border border-l-4 border-slate-300 border-l-emerald-700 bg-white px-4 py-3 shadow-sm">
-          <p className="mb-1.5 text-[11px] font-bold tracking-wide text-slate-600 uppercase">
+          </span>
+          <span className="text-2xl font-semibold tabular-nums text-foreground">
+            {summary.active}
+          </span>
+          <span className="text-[11px] text-muted-foreground">
+            전체 <span className="font-semibold tabular-nums">{testers.length}</span>명 중
+          </span>
+        </Card>
+        <Card className="gap-1 border-l-4 border-l-emerald-500 px-4 py-4">
+          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
             단독 가능
-          </p>
-          <p className="text-3xl font-black text-emerald-700">{summary.solo}</p>
-          <p className="mt-0.5 text-[11px] font-medium text-slate-600">
-            활성 기준
-          </p>
-        </div>
-        <div className="rounded-lg border border-l-4 border-slate-300 border-l-amber-600 bg-white px-4 py-3 shadow-sm">
-          <p className="mb-1.5 text-[11px] font-bold tracking-wide text-slate-600 uppercase">
+          </span>
+          <span className="text-2xl font-semibold tabular-nums text-emerald-600">
+            {summary.solo}
+          </span>
+          <span className="text-[11px] text-muted-foreground">활성 기준</span>
+        </Card>
+        <Card className="gap-1 border-l-4 border-l-amber-500 px-4 py-4">
+          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
             2인 가능
-          </p>
-          <p className="text-3xl font-black text-amber-700">{summary.duo}</p>
-          <p className="mt-0.5 text-[11px] font-medium text-slate-600">
-            활성 기준
-          </p>
-        </div>
+          </span>
+          <span className="text-2xl font-semibold tabular-nums text-amber-600">
+            {summary.duo}
+          </span>
+          <span className="text-[11px] text-muted-foreground">활성 기준</span>
+        </Card>
       </div>
 
       {activeTab === "testers" && (
         <>
+          {/* Mobile cards */}
           <div className="flex flex-col gap-2 md:hidden">
             {loading ? (
-              <div className="rounded-lg border border-slate-300 bg-white p-6 text-center text-sm font-medium text-slate-600">
+              <Card className="items-center py-6 text-center text-sm text-muted-foreground">
                 불러오는 중...
-              </div>
+              </Card>
             ) : sortedTesters.length === 0 ? (
-              <div className="rounded-lg border border-slate-300 bg-white p-6 text-center text-sm font-medium text-slate-600">
+              <Card className="items-center py-6 text-center text-sm text-muted-foreground">
                 등록된 시험자가 없습니다.
-              </div>
+              </Card>
             ) : (
               sortedTesters.map((tester, idx) => (
-                <div
-                  key={tester.id}
-                  className="rounded-lg border border-slate-300 bg-white p-3 shadow-sm"
-                >
+                <Card key={tester.id} className="gap-0 px-3 py-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="text-[11px] font-bold text-slate-500">
+                        <span className="text-[11px] font-medium text-muted-foreground">
                           #{idx + 1}
                         </span>
-                        <span className="font-mono text-[11px] font-bold text-blue-800">
+                        <span className="font-mono text-[11px] font-semibold text-foreground">
                           {tester.employeeNo}
                         </span>
-                        <Badge
-                          className={
-                            tester.isActive
-                              ? "border-emerald-700 bg-emerald-700 text-[10px] font-bold text-white hover:bg-emerald-700"
-                              : "border-slate-600 bg-slate-600 text-[10px] font-bold text-white hover:bg-slate-600"
-                          }
-                        >
+                        <Badge variant="outline" className="gap-1.5 text-[10px]">
+                          <span
+                            className={cn(
+                              "size-1.5 rounded-full",
+                              tester.isActive ? "bg-emerald-500" : "bg-muted-foreground"
+                            )}
+                          />
                           {tester.isActive ? "활성" : "비활성"}
                         </Badge>
                       </div>
-                      <div className="mt-1 text-sm font-bold text-slate-950">
+                      <div className="mt-1 text-sm font-semibold text-foreground">
                         {tester.name}
                       </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
-                      <button
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
                         onClick={() => openEdit(tester)}
-                        className="rounded-md bg-blue-100 p-1.5 text-blue-700 transition-colors hover:bg-blue-700 hover:text-white"
                         title="수정"
                       >
-                        <Pencil size={14} />
-                      </button>
-                      <button
+                        <Pencil className="size-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
                         onClick={() => openDelete(tester)}
-                        className="rounded-md bg-rose-100 p-1.5 text-rose-700 transition-colors hover:bg-rose-700 hover:text-white"
                         title="삭제"
+                        className="text-destructive hover:text-destructive"
                       >
-                        <Trash2 size={14} />
-                      </button>
+                        <Trash2 className="size-3.5" />
+                      </Button>
                     </div>
                   </div>
 
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-slate-200 pt-2">
-                    <span
-                      className={
-                        tester.canSolo
-                          ? "inline-block rounded-full border border-emerald-300 bg-emerald-700 px-2 py-0.5 text-[10px] font-bold text-white"
-                          : "inline-block rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500"
-                      }
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t pt-2">
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "gap-1.5 text-[10px]",
+                        tester.canSolo ? "border-emerald-200 text-emerald-700" : ""
+                      )}
                     >
+                      <span
+                        className={cn(
+                          "size-1.5 rounded-full",
+                          tester.canSolo ? "bg-emerald-500" : "bg-muted-foreground"
+                        )}
+                      />
                       {tester.canSolo ? "단독 가능" : "단독 불가"}
-                    </span>
-                    <span
-                      className={
-                        tester.canDuo
-                          ? "inline-block rounded-full border border-amber-300 bg-amber-600 px-2 py-0.5 text-[10px] font-bold text-white"
-                          : "inline-block rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500"
-                      }
+                    </Badge>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "gap-1.5 text-[10px]",
+                        tester.canDuo ? "border-amber-200 text-amber-700" : ""
+                      )}
                     >
+                      <span
+                        className={cn(
+                          "size-1.5 rounded-full",
+                          tester.canDuo ? "bg-amber-500" : "bg-muted-foreground"
+                        )}
+                      />
                       {tester.canDuo ? "2인 가능" : "2인 불가"}
-                    </span>
+                    </Badge>
                     <button
                       onClick={() => void toggleActive(tester)}
-                      className="ml-auto rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-700 transition-colors hover:bg-slate-200"
+                      className="ml-auto rounded-md border border-input bg-background px-2 py-0.5 text-[10px] font-medium text-foreground transition-colors hover:bg-muted/50"
                     >
                       상태 전환
                     </button>
                   </div>
-                </div>
+                </Card>
               ))
             )}
           </div>
 
-          <div className="hidden overflow-x-auto rounded-lg border border-slate-300 bg-white shadow-md md:block">
+          {/* Desktop table */}
+          <Card className="hidden gap-0 overflow-hidden py-0 md:block">
             {loading ? (
-              <div className="p-16 text-center text-sm font-medium text-slate-600">
+              <div className="p-16 text-center text-sm text-muted-foreground">
                 불러오는 중...
               </div>
             ) : (
-              <table className="w-full min-w-[640px] text-sm">
-                <thead>
-                  <tr className="bg-slate-950 text-xs text-white">
-                    <th className="sticky top-0 z-10 w-14 bg-slate-950 px-4 py-3 text-left font-bold">
-                      순번
-                    </th>
-                    <th
-                      className="sticky top-0 z-10 w-28 cursor-pointer bg-slate-950 px-4 py-3 text-left font-bold"
+              <Table className="min-w-[640px]">
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="w-14 px-3 text-muted-foreground">순번</TableHead>
+                    <TableHead
+                      className="w-28 cursor-pointer px-3 text-muted-foreground"
                       onClick={() => toggleSort("employeeNo")}
                     >
                       <span className="flex items-center">
                         사번 <SortIcon field="employeeNo" />
                       </span>
-                    </th>
-                    <th
-                      className="sticky top-0 z-10 cursor-pointer bg-slate-950 px-4 py-3 text-left font-bold"
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer px-3 text-muted-foreground"
                       onClick={() => toggleSort("name")}
                     >
                       <span className="flex items-center">
                         이름 <SortIcon field="name" />
                       </span>
-                    </th>
-                    <th className="sticky top-0 z-10 w-24 bg-slate-950 px-4 py-3 text-center font-bold">
+                    </TableHead>
+                    <TableHead className="w-24 px-3 text-center text-muted-foreground">
                       단독시험
-                    </th>
-                    <th className="sticky top-0 z-10 w-24 bg-slate-950 px-4 py-3 text-center font-bold">
+                    </TableHead>
+                    <TableHead className="w-24 px-3 text-center text-muted-foreground">
                       2인시험
-                    </th>
-                    <th className="sticky top-0 z-10 w-20 bg-slate-950 px-4 py-3 text-center font-bold">
+                    </TableHead>
+                    <TableHead className="w-20 px-3 text-center text-muted-foreground">
                       상태
-                    </th>
-                    <th className="sticky top-0 z-10 w-24 bg-slate-950 px-4 py-3 text-center font-bold">
+                    </TableHead>
+                    <TableHead className="w-24 px-3 text-center text-muted-foreground">
                       관리
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {sortedTesters.map((tester, idx) => (
-                    <tr
-                      key={tester.id}
-                      className={`border-t border-slate-200 transition-colors hover:bg-blue-50 ${
-                        idx % 2 === 1 ? "bg-slate-100/80" : "bg-white"
-                      }`}
-                    >
-                      <td className="px-4 py-2.5 text-xs font-semibold text-slate-500">
+                    <TableRow key={tester.id}>
+                      <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">
                         {idx + 1}
-                      </td>
-                      <td className="px-4 py-2.5 font-mono text-xs font-bold text-blue-800">
+                      </TableCell>
+                      <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">
                         {tester.employeeNo}
-                      </td>
-                      <td className="px-4 py-2.5 font-semibold text-slate-950">
+                      </TableCell>
+                      <TableCell className="px-3 py-2.5 font-medium text-foreground">
                         {tester.name}
-                      </td>
-                      <td className="px-4 py-2.5 text-center">
-                        <span
-                          className={
-                            tester.canSolo
-                              ? "inline-block rounded-full border border-emerald-300 bg-emerald-700 px-2 py-0.5 text-[11px] font-bold text-white"
-                              : "inline-block rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500"
-                          }
+                      </TableCell>
+                      <TableCell className="px-3 py-2.5 text-center">
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "gap-1.5",
+                            tester.canSolo ? "border-emerald-200 text-emerald-700" : ""
+                          )}
                         >
+                          <span
+                            className={cn(
+                              "size-1.5 rounded-full",
+                              tester.canSolo ? "bg-emerald-500" : "bg-muted-foreground"
+                            )}
+                          />
                           {tester.canSolo ? "가능" : "불가"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5 text-center">
-                        <span
-                          className={
-                            tester.canDuo
-                              ? "inline-block rounded-full border border-amber-300 bg-amber-600 px-2 py-0.5 text-[11px] font-bold text-white"
-                              : "inline-block rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500"
-                          }
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="px-3 py-2.5 text-center">
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "gap-1.5",
+                            tester.canDuo ? "border-amber-200 text-amber-700" : ""
+                          )}
                         >
+                          <span
+                            className={cn(
+                              "size-1.5 rounded-full",
+                              tester.canDuo ? "bg-amber-500" : "bg-muted-foreground"
+                            )}
+                          />
                           {tester.canDuo ? "가능" : "불가"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5 text-center">
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="px-3 py-2.5 text-center">
                         <button
                           onClick={() => void toggleActive(tester)}
-                          className={
+                          className={cn(
+                            "rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors hover:bg-muted/50",
                             tester.isActive
-                              ? "inline-block rounded-full border border-emerald-300 bg-emerald-700 px-2 py-0.5 text-[11px] font-bold text-white transition-colors hover:bg-emerald-800"
-                              : "inline-block rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-700 transition-colors hover:bg-slate-200"
-                          }
+                              ? "border-emerald-200 text-emerald-700"
+                              : "border-input text-muted-foreground"
+                          )}
                         >
                           {tester.isActive ? "활성" : "비활성"}
                         </button>
-                      </td>
-                      <td className="px-4 py-2.5 text-center">
+                      </TableCell>
+                      <TableCell className="px-3 py-2.5 text-center">
                         <div className="flex items-center justify-center gap-1">
-                          <button
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
                             onClick={() => openEdit(tester)}
-                            className="rounded-md bg-blue-100 p-1.5 text-blue-700 transition-colors hover:bg-blue-700 hover:text-white"
                             title="수정"
                           >
-                            <Pencil size={14} />
-                          </button>
-                          <button
+                            <Pencil className="size-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
                             onClick={() => openDelete(tester)}
-                            className="rounded-md bg-rose-100 p-1.5 text-rose-700 transition-colors hover:bg-rose-700 hover:text-white"
                             title="삭제"
+                            className="text-destructive hover:text-destructive"
                           >
-                            <Trash2 size={14} />
-                          </button>
+                            <Trash2 className="size-3.5" />
+                          </Button>
                         </div>
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
                   {testers.length === 0 && (
-                    <tr>
-                      <td
+                    <TableRow className="hover:bg-transparent">
+                      <TableCell
                         colSpan={7}
-                        className="py-16 text-center text-sm font-medium text-slate-600"
+                        className="py-16 text-center text-sm text-muted-foreground"
                       >
                         등록된 시험자가 없습니다.
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   )}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             )}
-          </div>
+          </Card>
         </>
       )}
 
       {activeTab === "capability" && (
         <>
-          <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-600">
-            <span className="font-bold text-slate-700">범례</span>
+          {/* Legend */}
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">범례</span>
             {(["O", "Y", "N", "X"] as ProficiencyLevel[]).map((level) => (
               <span key={level} className="flex items-center gap-1">
                 <span
-                  className={`inline-flex h-5 w-8 items-center justify-center rounded border text-[11px] font-bold ${LEVEL_STYLE[level]}`}
+                  className={cn(
+                    "inline-flex h-5 w-8 items-center justify-center rounded border text-[11px] font-bold",
+                    LEVEL_STYLE[level]
+                  )}
                 >
                   {level}
                 </span>
                 <span>{LEVEL_LABEL[level]}</span>
               </span>
             ))}
-            <span className="text-slate-500">셀 클릭으로 순환 변경</span>
+            <span className="text-muted-foreground">셀 클릭으로 순환 변경</span>
           </div>
 
           {capLoading ? (
-            <div className="rounded-lg border border-slate-300 bg-white p-6 text-center text-sm font-medium text-slate-600">
+            <Card className="items-center py-6 text-center text-sm text-muted-foreground">
               불러오는 중...
-            </div>
+            </Card>
           ) : (
             <>
+              {/* Mobile capability cards */}
               <div className="flex flex-col gap-3 md:hidden">
                 {activeTesters.length === 0 ? (
-                  <div className="rounded-lg border border-slate-300 bg-white p-6 text-center text-sm font-medium text-slate-600">
+                  <Card className="items-center py-6 text-center text-sm text-muted-foreground">
                     활성 시험자가 없습니다.
-                  </div>
+                  </Card>
                 ) : (
                   activeTesters.map((tester) => (
-                    <div
-                      key={tester.id}
-                      className="rounded-lg border border-slate-300 bg-white p-3 shadow-sm"
-                    >
-                      <div className="mb-2 border-b border-slate-200 pb-2">
-                        <p className="text-sm font-bold text-slate-950">
+                    <Card key={tester.id} className="gap-0 px-3 py-3">
+                      <div className="mb-2 border-b pb-2">
+                        <p className="text-sm font-semibold text-foreground">
                           {tester.name}
                         </p>
-                        <p className="font-mono text-[11px] font-semibold text-blue-800">
+                        <p className="font-mono text-[11px] text-muted-foreground">
                           {tester.employeeNo}
                         </p>
                       </div>
@@ -701,21 +734,23 @@ export default function TestersPage() {
                           return (
                             <button
                               key={capability.id}
-                              onClick={() =>
-                                void cycleLevel(tester, capability)
-                              }
+                              onClick={() => void cycleLevel(tester, capability)}
                               disabled={isSaving}
-                              className={`flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-2.5 py-2 text-left transition-colors ${
+                              className={cn(
+                                "flex items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors",
                                 isSaving
                                   ? "cursor-wait opacity-50"
-                                  : "hover:border-blue-300 hover:bg-blue-50"
-                              }`}
+                                  : "hover:border-ring hover:bg-muted/50"
+                              )}
                             >
-                              <span className="flex-1 truncate text-[11px] font-medium text-slate-800">
+                              <span className="flex-1 truncate text-[11px] font-medium text-foreground">
                                 {capability.name}
                               </span>
                               <span
-                                className={`inline-flex h-6 w-8 shrink-0 items-center justify-center rounded border text-[10px] font-bold ${LEVEL_STYLE[level]}`}
+                                className={cn(
+                                  "inline-flex h-6 w-8 shrink-0 items-center justify-center rounded border text-[10px] font-bold",
+                                  LEVEL_STYLE[level]
+                                )}
                               >
                                 {level}
                               </span>
@@ -723,125 +758,109 @@ export default function TestersPage() {
                           )
                         })}
                       </div>
-                    </div>
+                    </Card>
                   ))
                 )}
               </div>
 
-              <div className="hidden overflow-x-auto rounded-lg border border-slate-300 bg-white shadow-md md:block">
-                <table className="min-w-[700px] border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-slate-950 text-white">
-                      <th className="sticky top-0 left-0 z-20 min-w-[100px] border-r border-slate-700 bg-slate-950 px-3 py-3 text-left font-bold">
+              {/* Desktop capability matrix table */}
+              <Card className="hidden gap-0 overflow-x-auto py-0 md:block">
+                <Table className="min-w-[700px] border-collapse text-xs">
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="sticky top-0 left-0 z-20 min-w-[100px] border-r px-3 text-muted-foreground">
                         이름
-                      </th>
-                      <th className="sticky top-0 left-[100px] z-20 w-24 border-r border-slate-700 bg-slate-950 px-3 py-3 text-center font-bold">
+                      </TableHead>
+                      <TableHead className="sticky top-0 left-[100px] z-20 w-24 border-r px-3 text-center text-muted-foreground">
                         사번
-                      </th>
+                      </TableHead>
                       {capabilities.map((capability) => (
-                        <th
+                        <TableHead
                           key={capability.id}
-                          className="sticky top-0 z-10 min-w-[68px] border-r border-slate-700 bg-slate-950 px-2 py-3 text-center font-bold"
+                          className="sticky top-0 z-10 min-w-[68px] border-r px-2 text-center text-muted-foreground"
                         >
                           {capability.name}
-                        </th>
+                        </TableHead>
                       ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activeTesters.map((tester, rowIndex) => (
-                      <tr
-                        key={tester.id}
-                        className={
-                          rowIndex % 2 === 0 ? "bg-white" : "bg-slate-100/80"
-                        }
-                      >
-                        <td
-                          className={`sticky left-0 z-10 border-r border-slate-200 px-3 py-2.5 font-semibold text-slate-950 ${
-                            rowIndex % 2 === 0 ? "bg-white" : "bg-slate-100"
-                          }`}
-                        >
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {activeTesters.map((tester) => (
+                      <TableRow key={tester.id}>
+                        <TableCell className="sticky left-0 z-10 border-r px-3 py-2.5 font-medium text-foreground bg-card">
                           {tester.name}
-                        </td>
-                        <td
-                          className={`sticky left-[100px] z-10 border-r border-slate-200 px-3 py-2.5 text-center font-mono text-slate-700 ${
-                            rowIndex % 2 === 0 ? "bg-white" : "bg-slate-100"
-                          }`}
-                        >
+                        </TableCell>
+                        <TableCell className="sticky left-[100px] z-10 border-r px-3 py-2.5 text-center font-mono text-muted-foreground bg-card">
                           {tester.employeeNo}
-                        </td>
+                        </TableCell>
                         {capabilities.map((capability) => {
                           const level = getLevel(tester.id, capability.id)
                           const key = `${tester.id}_${capability.id}`
                           const isSaving = savingCell === key
                           return (
-                            <td
+                            <TableCell
                               key={capability.id}
-                              className="border-r border-slate-200 p-1.5 text-center"
+                              className="border-r p-1.5 text-center"
                             >
                               <button
-                                onClick={() =>
-                                  void cycleLevel(tester, capability)
-                                }
+                                onClick={() => void cycleLevel(tester, capability)}
                                 disabled={isSaving}
-                                className={`inline-flex h-7 w-11 items-center justify-center rounded border text-[11px] font-bold transition-transform ${
-                                  isSaving
-                                    ? "cursor-wait opacity-50"
-                                    : "hover:scale-105"
-                                } ${LEVEL_STYLE[level]}`}
+                                className={cn(
+                                  "inline-flex h-7 w-11 items-center justify-center rounded border text-[11px] font-bold transition-transform",
+                                  isSaving ? "cursor-wait opacity-50" : "hover:scale-105",
+                                  LEVEL_STYLE[level]
+                                )}
                                 title={`${tester.name} / ${capability.name}: ${LEVEL_LABEL[level]}`}
                               >
                                 {level}
                               </button>
-                            </td>
+                            </TableCell>
                           )
                         })}
-                      </tr>
+                      </TableRow>
                     ))}
                     {activeTesters.length === 0 && (
-                      <tr>
-                        <td
+                      <TableRow className="hover:bg-transparent">
+                        <TableCell
                           colSpan={capabilities.length + 2}
-                          className="py-16 text-center text-sm font-medium text-slate-600"
+                          className="py-16 text-center text-sm text-muted-foreground"
                         >
                           활성 시험자가 없습니다.
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     )}
-                  </tbody>
-                </table>
-              </div>
+                  </TableBody>
+                </Table>
+              </Card>
             </>
           )}
         </>
       )}
 
+      {/* Add Dialog */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden border-slate-300 bg-slate-50 p-0 shadow-2xl sm:max-w-xl">
-          <DialogHeader className="border-b border-slate-200 bg-white px-4 py-4 pr-12 text-left sm:px-5">
-            <DialogTitle className="text-lg font-black text-slate-950">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden p-0 sm:max-w-xl">
+          <DialogHeader className="border-b px-4 py-4 pr-12 text-left sm:px-5">
+            <DialogTitle className="text-lg font-semibold text-foreground">
               시험자 추가
             </DialogTitle>
-            <DialogDescription className="mt-1 text-xs font-medium text-slate-600">
+            <DialogDescription className="mt-1 text-xs text-muted-foreground">
               시험자 기본 정보와 시험 가능 범위를 등록합니다.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="max-h-[65dvh] overflow-y-auto px-4 py-4 sm:px-5">
+          <div className="max-h-[65dvh] overflow-y-auto bg-muted/30 px-4 py-4 sm:px-5">
             <div className="grid gap-4">
-              <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
-                <div className="mb-3 border-b border-slate-100 pb-3">
-                  <h3 className="text-sm font-black text-slate-950">
-                    기본 정보
-                  </h3>
+              <section className="rounded-lg border bg-card p-3 shadow-sm sm:p-4">
+                <div className="mb-3 border-b pb-3">
+                  <h3 className="text-sm font-semibold text-foreground">기본 정보</h3>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold tracking-wide text-slate-700">
-                      사번 <span className="text-rose-600">*</span>
+                    <label className="text-xs font-medium tracking-wide text-foreground">
+                      사번 <span className="text-destructive">*</span>
                     </label>
                     <Input
-                      className={dialogInputClass}
                       placeholder="예: 16242"
                       value={form.employeeNo}
                       onChange={(e) =>
@@ -853,11 +872,10 @@ export default function TestersPage() {
                     />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold tracking-wide text-slate-700">
-                      이름 <span className="text-rose-600">*</span>
+                    <label className="text-xs font-medium tracking-wide text-foreground">
+                      이름 <span className="text-destructive">*</span>
                     </label>
                     <Input
-                      className={dialogInputClass}
                       placeholder="홍길동"
                       value={form.name}
                       onChange={(e) =>
@@ -868,14 +886,12 @@ export default function TestersPage() {
                 </div>
               </section>
 
-              <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
-                <div className="mb-3 border-b border-slate-100 pb-3">
-                  <h3 className="text-sm font-black text-slate-950">
-                    시험 가능 범위
-                  </h3>
+              <section className="rounded-lg border bg-card p-3 shadow-sm sm:p-4">
+                <div className="mb-3 border-b pb-3">
+                  <h3 className="text-sm font-semibold text-foreground">시험 가능 범위</h3>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-medium text-slate-800">
+                  <label className="flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium text-foreground">
                     <input
                       type="checkbox"
                       checked={form.canSolo}
@@ -889,7 +905,7 @@ export default function TestersPage() {
                     />
                     단독 시험 가능
                   </label>
-                  <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-medium text-slate-800">
+                  <label className="flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium text-foreground">
                     <input
                       type="checkbox"
                       checked={form.canDuo}
@@ -907,61 +923,55 @@ export default function TestersPage() {
               </section>
 
               {error && (
-                <div className="rounded-lg border border-red-300 bg-red-100 px-4 py-2 text-sm font-medium text-red-800">
+                <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive">
                   {error}
                 </div>
               )}
             </div>
           </div>
 
-          <DialogFooter className="border-t border-slate-200 bg-white px-4 py-4 sm:px-5">
+          <DialogFooter className="border-t bg-card px-4 py-4 sm:px-5">
             <Button
               variant="outline"
-              size="sm"
               onClick={() => setAddOpen(false)}
-              className="h-10 border-slate-300 text-slate-800 hover:bg-slate-100"
             >
               취소
             </Button>
             <Button
-              size="sm"
               onClick={() => void handleAdd()}
               disabled={saving}
-              className="h-10 bg-blue-700 px-5 font-bold text-white shadow-sm hover:bg-blue-800"
             >
-              <Save size={15} className="mr-1.5" />
+              <Save />
               {saving ? "저장 중..." : "추가"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* Edit Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden border-slate-300 bg-slate-50 p-0 shadow-2xl sm:max-w-xl">
-          <DialogHeader className="border-b border-slate-200 bg-white px-4 py-4 pr-12 text-left sm:px-5">
-            <DialogTitle className="text-lg font-black text-slate-950">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden p-0 sm:max-w-xl">
+          <DialogHeader className="border-b px-4 py-4 pr-12 text-left sm:px-5">
+            <DialogTitle className="text-lg font-semibold text-foreground">
               시험자 수정
             </DialogTitle>
-            <DialogDescription className="mt-1 text-xs font-medium text-slate-600">
+            <DialogDescription className="mt-1 text-xs text-muted-foreground">
               시험자 정보와 시험 가능 범위를 수정합니다.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="max-h-[65dvh] overflow-y-auto px-4 py-4 sm:px-5">
+          <div className="max-h-[65dvh] overflow-y-auto bg-muted/30 px-4 py-4 sm:px-5">
             <div className="grid gap-4">
-              <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
-                <div className="mb-3 border-b border-slate-100 pb-3">
-                  <h3 className="text-sm font-black text-slate-950">
-                    기본 정보
-                  </h3>
+              <section className="rounded-lg border bg-card p-3 shadow-sm sm:p-4">
+                <div className="mb-3 border-b pb-3">
+                  <h3 className="text-sm font-semibold text-foreground">기본 정보</h3>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold tracking-wide text-slate-700">
-                      사번 <span className="text-rose-600">*</span>
+                    <label className="text-xs font-medium tracking-wide text-foreground">
+                      사번 <span className="text-destructive">*</span>
                     </label>
                     <Input
-                      className={dialogInputClass}
                       value={form.employeeNo}
                       onChange={(e) =>
                         setForm((prev) => ({
@@ -972,11 +982,10 @@ export default function TestersPage() {
                     />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-bold tracking-wide text-slate-700">
-                      이름 <span className="text-rose-600">*</span>
+                    <label className="text-xs font-medium tracking-wide text-foreground">
+                      이름 <span className="text-destructive">*</span>
                     </label>
                     <Input
-                      className={dialogInputClass}
                       value={form.name}
                       onChange={(e) =>
                         setForm((prev) => ({ ...prev, name: e.target.value }))
@@ -986,14 +995,12 @@ export default function TestersPage() {
                 </div>
               </section>
 
-              <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
-                <div className="mb-3 border-b border-slate-100 pb-3">
-                  <h3 className="text-sm font-black text-slate-950">
-                    시험 가능 범위
-                  </h3>
+              <section className="rounded-lg border bg-card p-3 shadow-sm sm:p-4">
+                <div className="mb-3 border-b pb-3">
+                  <h3 className="text-sm font-semibold text-foreground">시험 가능 범위</h3>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-medium text-slate-800">
+                  <label className="flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium text-foreground">
                     <input
                       type="checkbox"
                       checked={form.canSolo}
@@ -1007,7 +1014,7 @@ export default function TestersPage() {
                     />
                     단독 시험 가능
                   </label>
-                  <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-medium text-slate-800">
+                  <label className="flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium text-foreground">
                     <input
                       type="checkbox"
                       checked={form.canDuo}
@@ -1025,47 +1032,44 @@ export default function TestersPage() {
               </section>
 
               {error && (
-                <div className="rounded-lg border border-red-300 bg-red-100 px-4 py-2 text-sm font-medium text-red-800">
+                <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive">
                   {error}
                 </div>
               )}
             </div>
           </div>
 
-          <DialogFooter className="border-t border-slate-200 bg-white px-4 py-4 sm:px-5">
+          <DialogFooter className="border-t bg-card px-4 py-4 sm:px-5">
             <Button
               variant="outline"
-              size="sm"
               onClick={() => setEditOpen(false)}
-              className="h-10 border-slate-300 text-slate-800 hover:bg-slate-100"
             >
               취소
             </Button>
             <Button
-              size="sm"
               onClick={() => void handleEdit()}
               disabled={saving}
-              className="h-10 bg-blue-700 px-5 font-bold text-white shadow-sm hover:bg-blue-800"
             >
-              <Save size={15} className="mr-1.5" />
+              <Save />
               {saving ? "저장 중..." : "저장"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* Delete Dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden border-slate-300 bg-white p-0 shadow-2xl sm:max-w-md">
-          <DialogHeader className="border-b border-slate-200 bg-rose-50 px-4 py-4 pr-12 text-left sm:px-5">
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden p-0 sm:max-w-md">
+          <DialogHeader className="border-b bg-destructive/5 px-4 py-4 pr-12 text-left sm:px-5">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rose-700 text-white shadow-sm">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-destructive text-destructive-foreground shadow-sm">
                 <AlertTriangle size={20} />
               </div>
               <div className="min-w-0">
-                <DialogTitle className="text-lg font-black text-slate-950">
+                <DialogTitle className="text-lg font-semibold text-foreground">
                   시험자 삭제
                 </DialogTitle>
-                <DialogDescription className="mt-1 text-xs font-medium text-rose-800">
+                <DialogDescription className="mt-1 text-xs text-destructive">
                   역량 데이터도 함께 삭제됩니다.
                 </DialogDescription>
               </div>
@@ -1073,35 +1077,32 @@ export default function TestersPage() {
           </DialogHeader>
 
           <div className="px-4 py-4 sm:px-5">
-            <div className="rounded-lg border border-rose-200 bg-rose-50/70 p-4">
-              <p className="text-sm font-bold text-slate-950">
+            <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-4">
+              <p className="text-sm font-semibold text-foreground">
                 {selected?.name}
               </p>
-              <p className="mt-1 font-mono text-xs font-semibold text-rose-800">
+              <p className="mt-1 font-mono text-xs text-destructive">
                 {selected?.employeeNo}
               </p>
-              <p className="mt-3 text-sm font-medium text-slate-700">
+              <p className="mt-3 text-sm text-muted-foreground">
                 이 시험자를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.
               </p>
             </div>
           </div>
 
-          <DialogFooter className="border-t border-slate-200 bg-white px-4 py-4 sm:px-5">
+          <DialogFooter className="border-t bg-card px-4 py-4 sm:px-5">
             <Button
               variant="outline"
-              size="sm"
               onClick={() => setDeleteOpen(false)}
-              className="h-10 border-slate-300 text-slate-800 hover:bg-slate-100"
             >
               취소
             </Button>
             <Button
-              size="sm"
+              variant="destructive"
               onClick={() => void handleDelete()}
               disabled={saving}
-              className="h-10 bg-rose-700 px-5 font-bold text-white shadow-sm hover:bg-rose-800"
             >
-              <Trash2 size={15} className="mr-1.5" />
+              <Trash2 />
               {saving ? "삭제 중..." : "삭제"}
             </Button>
           </DialogFooter>

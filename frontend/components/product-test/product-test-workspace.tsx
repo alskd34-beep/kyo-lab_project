@@ -13,8 +13,10 @@ import {
   Trash2,
 } from "lucide-react"
 
+import { cn } from "@frontend/lib/utils"
 import { Badge } from "@frontend/components/ui/badge"
 import { Button } from "@frontend/components/ui/button"
+import { Card } from "@frontend/components/ui/card"
 import {
   Dialog,
   DialogContent,
@@ -24,6 +26,21 @@ import {
   DialogTitle,
 } from "@frontend/components/ui/dialog"
 import { Input } from "@frontend/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@frontend/components/ui/select"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@frontend/components/ui/table"
 
 interface LookupOptionRow {
   id: string
@@ -81,66 +98,51 @@ const EMPTY_PRODUCT_FORM: ProductFormState = {
 }
 
 const DIFFICULTY_OPTIONS = [
-  { value: "", label: "—" },
   { value: "Low", label: "Low" },
   { value: "Medium", label: "Medium" },
   { value: "High", label: "High" },
 ]
+
+// sentinel value for "unset" selects — never matches a real id/value
+const NONE_SENTINEL = "__none__"
+
+const DIFF_DOT: Record<string, string> = {
+  High: "bg-red-500",
+  Medium: "bg-amber-500",
+  Low: "bg-emerald-500",
+}
+
+function DifficultyBadge({ difficulty }: { difficulty: string | null }) {
+  if (!difficulty) return <span className="text-xs text-muted-foreground">—</span>
+  return (
+    <Badge variant="outline" className="gap-1.5">
+      <span className={cn("size-1.5 rounded-full", DIFF_DOT[difficulty] ?? "bg-muted-foreground")} />
+      {difficulty}
+    </Badge>
+  )
+}
+
 export function ProductTestWorkspace() {
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-4 bg-white p-3 md:p-5">
-      <div className="rounded-3xl border border-slate-200 bg-gradient-to-br from-white via-blue-50/40 to-emerald-50/50 px-4 py-4 shadow-sm md:px-5 md:py-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="min-w-0 max-w-3xl">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700">
-                <Box size={13} />
-                품목 마스터
-              </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
-                <Gauge size={13} />
-                평균공수 통합
-              </span>
-            </div>
-            <h1 className="mt-3 text-[clamp(1.4rem,2vw,2.2rem)] font-black tracking-tight text-slate-950">
-              품목마스터와 평균공수를 하나의 흐름으로 관리합니다.
-            </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-              품목을 먼저 정리하고, 아래 공수 섹션에서 바로 연결하세요.
-              별도 메뉴를 없애고 한 화면에서 조회, 등록, 수정이 이어지도록 구성했습니다.
-            </p>
+    <div className="flex min-w-0 flex-1 flex-col gap-4 p-4 md:p-6">
+      {/* 페이지 헤더 */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-xl font-semibold text-foreground">품목 마스터</h1>
+            <Badge variant="outline" className="gap-1.5 text-muted-foreground">
+              <Box className="size-3.5" />
+              품목 마스터
+            </Badge>
+            <Badge variant="outline" className="gap-1.5 text-muted-foreground">
+              <Gauge className="size-3.5" />
+              평균공수 통합
+            </Badge>
           </div>
-
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:max-w-2xl">
-            <div className="rounded-2xl border border-blue-100 bg-white px-4 py-3 shadow-sm">
-              <p className="text-[10px] font-bold tracking-wide text-slate-500 uppercase">
-                핵심
-              </p>
-              <p className="mt-2 text-lg font-black text-blue-700">통합</p>
-              <p className="text-[11px] text-slate-500">별도 화면 제거</p>
-            </div>
-            <div className="rounded-2xl border border-emerald-100 bg-white px-4 py-3 shadow-sm">
-              <p className="text-[10px] font-bold tracking-wide text-slate-500 uppercase">
-                흐름
-              </p>
-              <p className="mt-2 text-lg font-black text-emerald-700">품목 → 공수</p>
-              <p className="text-[11px] text-slate-500">연결 중심</p>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-              <p className="text-[10px] font-bold tracking-wide text-slate-500 uppercase">
-                스타일
-              </p>
-              <p className="mt-2 text-lg font-black text-slate-900">화이트</p>
-              <p className="text-[11px] text-slate-500">깔끔한 배경</p>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-              <p className="text-[10px] font-bold tracking-wide text-slate-500 uppercase">
-                액션
-              </p>
-              <p className="mt-2 text-lg font-black text-slate-900">빠른 등록</p>
-              <p className="text-[11px] text-slate-500">아래 섹션 바로 이동</p>
-            </div>
-          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            품목을 먼저 정리하고, 아래 공수 섹션에서 바로 연결하세요.
+            별도 메뉴를 없애고 한 화면에서 조회, 등록, 수정이 이어지도록 구성했습니다.
+          </p>
         </div>
       </div>
 
@@ -225,8 +227,12 @@ function ProductsPanel() {
   }
 
   function f(key: keyof ProductFormState) {
-    return (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+    return (e: ChangeEvent<HTMLInputElement>) =>
       setForm((prev) => ({ ...prev, [key]: e.target.value }))
+  }
+
+  function setFormField(key: keyof ProductFormState, value: string) {
+    setForm((prev) => ({ ...prev, [key]: value }))
   }
 
   async function handleSave() {
@@ -299,18 +305,6 @@ function ProductsPanel() {
     }
   }
 
-  const diffColor: Record<string, string> = {
-    Low: "border-emerald-300 bg-emerald-600 text-white shadow-sm",
-    Medium: "border-amber-300 bg-amber-500 text-white shadow-sm",
-    High: "border-rose-300 bg-rose-600 text-white shadow-sm",
-  }
-
-  const inputClass =
-    "h-10 border-slate-300 bg-white text-slate-950 placeholder:text-slate-500 focus-visible:border-blue-600 focus-visible:ring-blue-200"
-  const selectClass =
-    "h-10 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-950 shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-blue-600 focus-visible:ring-[3px] focus-visible:ring-blue-200"
-  const labelClass = "text-xs font-bold tracking-wide text-slate-700"
-
   const summary = useMemo(() => {
     const total = rows.length
     const active = rows.filter((r) => r.isActive).length
@@ -341,702 +335,520 @@ function ProductsPanel() {
     return { total, active, byCat, byCls, byDiff }
   }, [rows])
 
+  const labelClass = "text-xs font-semibold text-foreground"
+
   return (
     <>
-      <div className="flex min-w-0 flex-1 flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-3 shadow-sm md:p-5">
-        <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm md:flex-row md:items-center md:gap-3">
-          <div className="flex min-w-0 flex-wrap items-center gap-2 md:gap-3">
-            <h2 className="min-w-0 text-base font-bold text-slate-950 sm:text-lg">
-              품목 마스터
-            </h2>
-            <Badge className="border-blue-700 bg-blue-700 text-xs text-white shadow-sm">
-              {filtered.length}건
-            </Badge>
-          </div>
-          <div className="hidden flex-1 md:block" />
-          <div className="relative w-full md:w-auto">
-            <Search
-              size={14}
-              className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-600"
-            />
+      {/* 툴바 */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <h2 className="text-base font-semibold text-foreground sm:text-lg">품목 마스터</h2>
+          <Badge variant="secondary" className="tabular-nums">{filtered.length}건</Badge>
+        </div>
+        <div className="flex flex-col gap-2 sm:ml-auto sm:flex-row sm:items-center">
+          <div className="relative w-full sm:w-64">
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="품목명 / 코드 / 약호 검색..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-9 w-full border-slate-300 bg-slate-50 pl-9 text-sm text-slate-950 placeholder:text-slate-500 focus-visible:border-blue-600 focus-visible:ring-blue-200 md:w-64"
+              className="h-9 pl-9"
             />
           </div>
-          <Button
-            onClick={openAdd}
-            size="sm"
-            className="h-9 w-full bg-blue-700 text-white shadow-sm hover:bg-blue-800 md:w-auto"
-          >
-            <Plus size={15} className="mr-1" />
+          <Button onClick={openAdd} size="lg">
+            <Plus />
             품목 추가
           </Button>
         </div>
+      </div>
 
-        {error && (
-          <div className="rounded-lg border border-red-300 bg-red-100 px-4 py-2 text-sm font-medium text-red-800">
-            {error}
-          </div>
-        )}
-
-        {!loading && rows.length > 0 && (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-lg border border-l-4 border-slate-300 border-l-blue-700 bg-white px-4 py-3 shadow-sm">
-              <p className="mb-1.5 text-[11px] font-bold tracking-wide text-slate-600 uppercase">
-                전체 품목
-              </p>
-              <p className="text-3xl font-black text-slate-950">
-                {summary.total}
-              </p>
-              <p className="mt-0.5 text-[11px] font-medium text-slate-600">
-                활성{" "}
-                <span className="font-bold text-emerald-700">
-                  {summary.active}
-                </span>
-                {" / "}
-                비활성{" "}
-                <span className="font-bold text-slate-700">
-                  {summary.total - summary.active}
-                </span>
-              </p>
-            </div>
-
-            <div className="rounded-lg border border-l-4 border-slate-300 border-l-cyan-700 bg-white px-4 py-3 shadow-sm">
-              <p className="mb-2 text-[11px] font-bold tracking-wide text-slate-600 uppercase">
-                품목구분
-              </p>
-              <div className="flex flex-col gap-1">
-                {Object.entries(summary.byCat)
-                  .sort((a, b) => b[1] - a[1])
-                  .slice(0, 5)
-                  .map(([name, cnt]) => (
-                    <div key={name} className="flex items-center gap-1.5">
-                      <div
-                        className="h-2 rounded-full bg-cyan-700"
-                        style={{
-                          width: `${Math.round((cnt / summary.total) * 100)}%`,
-                          minWidth: 4,
-                          maxWidth: "60%",
-                        }}
-                      />
-                      <span className="flex-1 truncate text-[11px] font-medium text-slate-700">
-                        {name}
-                      </span>
-                      <span className="shrink-0 text-[11px] font-bold text-slate-950">
-                        {cnt}
-                      </span>
-                    </div>
-                  ))}
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-l-4 border-slate-300 border-l-violet-700 bg-white px-4 py-3 shadow-sm">
-              <p className="mb-2 text-[11px] font-bold tracking-wide text-slate-600 uppercase">
-                전문분류
-              </p>
-              <div className="flex flex-col gap-1">
-                {Object.entries(summary.byCls)
-                  .sort((a, b) => b[1] - a[1])
-                  .slice(0, 5)
-                  .map(([name, cnt]) => (
-                    <div key={name} className="flex items-center gap-1.5">
-                      <div
-                        className="h-2 rounded-full bg-violet-700"
-                        style={{
-                          width: `${Math.round((cnt / summary.total) * 100)}%`,
-                          minWidth: 4,
-                          maxWidth: "60%",
-                        }}
-                      />
-                      <span className="flex-1 truncate text-[11px] font-medium text-slate-700">
-                        {name}
-                      </span>
-                      <span className="shrink-0 text-[11px] font-bold text-slate-950">
-                        {cnt}
-                      </span>
-                    </div>
-                  ))}
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-l-4 border-slate-300 border-l-rose-700 bg-white px-4 py-3 shadow-sm">
-              <p className="mb-2 text-[11px] font-bold tracking-wide text-slate-600 uppercase">
-                난이도
-              </p>
-              <div className="flex flex-col gap-1.5">
-                {[
-                  { key: "High", label: "High", color: "bg-rose-700" },
-                  { key: "Medium", label: "Medium", color: "bg-amber-600" },
-                  { key: "Low", label: "Low", color: "bg-emerald-700" },
-                  { key: "미설정", label: "미설정", color: "bg-slate-500" },
-                ].map(({ key, label, color }) => {
-                  const cnt = summary.byDiff[key] ?? 0
-                  if (!cnt) return null
-                  return (
-                    <div key={key} className="flex items-center gap-1.5">
-                      <div
-                        className={`h-2 rounded-full ${color}`}
-                        style={{
-                          width: `${Math.round((cnt / summary.total) * 100)}%`,
-                          minWidth: 4,
-                          maxWidth: "60%",
-                        }}
-                      />
-                      <span className="flex-1 text-[11px] font-medium text-slate-700">
-                        {label}
-                      </span>
-                      <span className="shrink-0 text-[11px] font-bold text-slate-950">
-                        {cnt}
-                      </span>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="hidden flex-1 overflow-auto rounded-lg border border-slate-300 bg-white shadow-md md:block">
-          <table className="w-full min-w-[880px] text-sm">
-            <thead>
-              <tr className="bg-slate-950 text-xs text-white">
-                <th className="sticky top-0 z-10 bg-slate-950 px-4 py-3 text-left font-bold">
-                  품목코드
-                </th>
-                <th className="sticky top-0 z-10 bg-slate-950 px-4 py-3 text-left font-bold">
-                  품목명
-                </th>
-                <th className="sticky top-0 z-10 w-20 bg-slate-950 px-4 py-3 text-left font-bold">
-                  약호
-                </th>
-                <th className="sticky top-0 z-10 w-24 bg-slate-950 px-4 py-3 text-left font-bold">
-                  품목구분
-                </th>
-                <th className="sticky top-0 z-10 w-28 bg-slate-950 px-4 py-3 text-left font-bold">
-                  전문분류
-                </th>
-                <th className="sticky top-0 z-10 w-20 bg-slate-950 px-4 py-3 text-center font-bold">
-                  난이도
-                </th>
-                <th className="sticky top-0 z-10 w-20 bg-slate-950 px-4 py-3 text-left font-bold">
-                  단위
-                </th>
-                <th className="sticky top-0 z-10 bg-slate-950 px-4 py-3 text-left font-bold">
-                  포장규격
-                </th>
-                <th className="sticky top-0 z-10 w-28 bg-slate-950 px-4 py-3 text-left font-bold">
-                  공수
-                </th>
-                <th className="sticky top-0 z-10 w-16 bg-slate-950 px-4 py-3 text-center font-bold">
-                  상태
-                </th>
-                <th className="sticky top-0 z-10 w-28 bg-slate-950 px-4 py-3 text-center font-bold">
-                  액션
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td
-                    colSpan={11}
-                    className="py-16 text-center font-medium text-slate-600"
-                  >
-                    불러오는 중...
-                  </td>
-                </tr>
-              ) : filtered.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={11}
-                    className="py-16 text-center font-medium text-slate-600"
-                  >
-                    데이터가 없습니다.
-                  </td>
-                </tr>
-              ) : (
-                filtered.map((row, idx) => (
-                  <tr
-                    key={row.id}
-                    className={`border-t border-slate-200 transition-colors hover:bg-blue-50 ${
-                      idx % 2 === 1 ? "bg-slate-100/80" : "bg-white"
-                    }`}
-                  >
-                    <td className="px-4 py-2.5 font-mono text-xs font-bold text-blue-800">
-                      {row.productCode}
-                    </td>
-                    <td className="px-4 py-2.5 font-semibold text-slate-950">
-                      {row.name}
-                      {row.nameAlt && (
-                        <span className="ml-1.5 text-xs font-medium text-slate-600">
-                          {row.nameAlt}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2.5 font-mono text-xs font-semibold text-slate-800">
-                      {row.abbreviation ?? "—"}
-                    </td>
-                    <td className="px-4 py-2.5 text-xs font-medium text-slate-800">
-                      {row.categoryName ?? "—"}
-                    </td>
-                    <td className="px-4 py-2.5 text-xs font-medium text-slate-800">
-                      {row.classificationName ?? "—"}
-                    </td>
-                    <td className="px-4 py-2.5 text-center">
-                      {row.difficulty ? (
-                        <span
-                          className={`inline-block rounded-full border px-2 py-0.5 text-[11px] font-bold ${diffColor[row.difficulty] ?? ""}`}
-                        >
-                          {row.difficulty}
-                        </span>
-                      ) : (
-                        <span className="font-semibold text-slate-500">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2.5 text-xs font-medium text-slate-800">
-                      {row.unit ?? "—"}
-                    </td>
-                    <td className="px-4 py-2.5 text-xs font-medium text-slate-800">
-                      {row.packageSpec ?? "—"}
-                    </td>
-                    <td className="px-4 py-2.5 text-xs font-bold text-slate-950">
-                      {row.avgWorkdays != null ? (
-                        <span>{row.avgWorkdays}일</span>
-                      ) : (
-                        <span className="text-slate-500">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2.5 text-center">
-                      {row.isActive ? (
-                        <Badge className="border-emerald-700 bg-emerald-700 text-[10px] font-bold text-white hover:bg-emerald-700">
-                          활성
-                        </Badge>
-                      ) : (
-                        <Badge className="border-slate-600 bg-slate-600 text-[10px] font-bold text-white hover:bg-slate-600">
-                          비활성
-                        </Badge>
-                      )}
-                    </td>
-                    <td className="px-4 py-2.5 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          onClick={() => openEdit(row)}
-                          className="rounded-md bg-blue-100 p-1.5 text-blue-700 transition-colors hover:bg-blue-700 hover:text-white"
-                          title="수정"
-                        >
-                          <Pencil size={14} />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(row)}
-                          className="rounded-md bg-rose-100 p-1.5 text-rose-700 transition-colors hover:bg-rose-700 hover:text-white"
-                          title="삭제"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700">
+          {error}
         </div>
+      )}
 
-        <div className="flex flex-col gap-2 md:hidden">
-          {loading ? (
-            <div className="rounded-lg border border-slate-300 bg-white p-6 text-center text-sm font-medium text-slate-600">
-              불러오는 중...
+      {/* KPI 카드 */}
+      {!loading && rows.length > 0 && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Card className="gap-1 px-4 py-4">
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">전체 품목</span>
+            <span className="text-2xl font-semibold tabular-nums text-foreground">{summary.total}</span>
+            <span className="text-[11px] text-muted-foreground">
+              활성 <span className="font-semibold text-emerald-600">{summary.active}</span>
+              {" / "}
+              비활성 <span className="font-semibold">{summary.total - summary.active}</span>
+            </span>
+          </Card>
+
+          <Card className="gap-1 px-4 py-4">
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">품목구분</span>
+            <div className="mt-1 flex flex-col gap-1">
+              {Object.entries(summary.byCat)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 4)
+                .map(([name, cnt]) => (
+                  <div key={name} className="flex items-center gap-1.5">
+                    <div
+                      className="h-1.5 rounded-full bg-primary"
+                      style={{ width: `${Math.round((cnt / summary.total) * 100)}%`, minWidth: 4, maxWidth: "55%" }}
+                    />
+                    <span className="flex-1 truncate text-[11px] text-muted-foreground">{name}</span>
+                    <span className="shrink-0 text-[11px] font-semibold tabular-nums text-foreground">{cnt}</span>
+                  </div>
+                ))}
             </div>
-          ) : filtered.length === 0 ? (
-            <div className="rounded-lg border border-slate-300 bg-white p-6 text-center text-sm font-medium text-slate-600">
-              데이터가 없습니다.
+          </Card>
+
+          <Card className="gap-1 px-4 py-4">
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">전문분류</span>
+            <div className="mt-1 flex flex-col gap-1">
+              {Object.entries(summary.byCls)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 4)
+                .map(([name, cnt]) => (
+                  <div key={name} className="flex items-center gap-1.5">
+                    <div
+                      className="h-1.5 rounded-full bg-violet-500"
+                      style={{ width: `${Math.round((cnt / summary.total) * 100)}%`, minWidth: 4, maxWidth: "55%" }}
+                    />
+                    <span className="flex-1 truncate text-[11px] text-muted-foreground">{name}</span>
+                    <span className="shrink-0 text-[11px] font-semibold tabular-nums text-foreground">{cnt}</span>
+                  </div>
+                ))}
             </div>
-          ) : (
-            filtered.map((row) => (
-              <div
-                key={row.id}
-                className="rounded-lg border border-slate-300 bg-white p-3 shadow-sm"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="font-mono text-[11px] font-bold text-blue-800">
-                        {row.productCode}
-                      </span>
-                      {row.isActive ? (
-                        <Badge className="border-emerald-700 bg-emerald-700 text-[10px] font-bold text-white hover:bg-emerald-700">
-                          활성
-                        </Badge>
-                      ) : (
-                        <Badge className="border-slate-600 bg-slate-600 text-[10px] font-bold text-white hover:bg-slate-600">
-                          비활성
-                        </Badge>
-                      )}
-                      {row.difficulty && (
-                        <span
-                          className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-bold ${diffColor[row.difficulty] ?? ""}`}
-                        >
-                          {row.difficulty}
-                        </span>
-                      )}
-                    </div>
-                    <div className="mt-1 text-sm font-bold break-words text-slate-950">
-                      {row.name}
-                      {row.nameAlt && (
-                        <span className="ml-1.5 text-xs font-medium text-slate-600">
-                          {row.nameAlt}
-                        </span>
-                      )}
-                    </div>
-                    {row.abbreviation && (
-                      <div className="font-mono text-[11px] font-semibold text-slate-700">
-                        약호: {row.abbreviation}
-                      </div>
+          </Card>
+
+          <Card className="gap-1 px-4 py-4">
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">난이도</span>
+            <div className="mt-1 flex flex-col gap-1.5">
+              {[
+                { key: "High", dot: "bg-red-500" },
+                { key: "Medium", dot: "bg-amber-500" },
+                { key: "Low", dot: "bg-emerald-500" },
+                { key: "미설정", dot: "bg-muted-foreground" },
+              ].map(({ key, dot }) => {
+                const cnt = summary.byDiff[key] ?? 0
+                if (!cnt) return null
+                return (
+                  <div key={key} className="flex items-center gap-1.5">
+                    <div
+                      className={cn("h-1.5 rounded-full", dot)}
+                      style={{ width: `${Math.round((cnt / summary.total) * 100)}%`, minWidth: 4, maxWidth: "55%" }}
+                    />
+                    <span className="flex-1 text-[11px] text-muted-foreground">{key}</span>
+                    <span className="shrink-0 text-[11px] font-semibold tabular-nums text-foreground">{cnt}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* 테이블 (데스크톱) */}
+      <Card className="hidden gap-0 overflow-hidden py-0 md:block">
+        <Table className="min-w-[880px]">
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              {["품목코드", "품목명", "약호", "품목구분", "전문분류", "난이도", "단위", "포장규격", "공수", "상태", "액션"].map((h) => (
+                <TableHead key={h} className="px-3 text-muted-foreground">{h}</TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading ? (
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={11} className="py-16 text-center text-sm text-muted-foreground">불러오는 중...</TableCell>
+              </TableRow>
+            ) : filtered.length === 0 ? (
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={11} className="py-16 text-center text-sm text-muted-foreground">데이터가 없습니다.</TableCell>
+              </TableRow>
+            ) : (
+              filtered.map((row) => (
+                <TableRow key={row.id}>
+                  <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{row.productCode}</TableCell>
+                  <TableCell className="px-3 py-2.5 font-medium text-foreground">
+                    {row.name}
+                    {row.nameAlt && (
+                      <span className="ml-1.5 text-xs text-muted-foreground">{row.nameAlt}</span>
                     )}
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1">
-                    <button
-                      onClick={() => openEdit(row)}
-                      className="rounded-md bg-blue-100 p-1.5 text-blue-700 transition-colors hover:bg-blue-700 hover:text-white"
-                      title="수정"
-                    >
-                      <Pencil size={14} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(row)}
-                      className="rounded-md bg-rose-100 p-1.5 text-rose-700 transition-colors hover:bg-rose-700 hover:text-white"
-                      title="삭제"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
-                <div className="mt-2 grid grid-cols-1 gap-x-2 gap-y-1 border-t border-slate-200 pt-2 text-[11px] font-medium text-slate-800 min-[420px]:grid-cols-2">
-                  <div>
-                    <span className="font-bold text-slate-600">품목구분:</span>{" "}
-                    {row.categoryName ?? "—"}
-                  </div>
-                  <div>
-                    <span className="font-bold text-slate-600">전문분류:</span>{" "}
-                    {row.classificationName ?? "—"}
-                  </div>
-                  <div>
-                    <span className="font-bold text-slate-600">단위:</span>{" "}
-                    {row.unit ?? "—"}
-                  </div>
-                  <div className="truncate">
-                    <span className="font-bold text-slate-600">포장:</span>{" "}
-                    {row.packageSpec ?? "—"}
-                  </div>
-                  <div>
-                    <span className="font-bold text-slate-600">공수:</span>{" "}
-                    {row.avgWorkdays != null ? `${row.avgWorkdays}일` : "—"}
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden border-slate-300 bg-slate-50 p-0 shadow-2xl sm:max-w-2xl">
-            <DialogHeader className="border-b border-slate-200 bg-white px-4 py-4 pr-12 text-left sm:px-5">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-700 text-white shadow-sm">
-                  <PackagePlus size={20} />
-                </div>
-                <div className="min-w-0">
-                  <DialogTitle className="text-lg font-black text-slate-950">
-                    {editTarget ? "품목 정보 수정" : "신규 품목 등록"}
-                  </DialogTitle>
-                  <DialogDescription className="mt-1 text-xs font-medium text-slate-600">
-                    시험 품목의 기본 정보와 분류 기준을 관리합니다.
-                  </DialogDescription>
-                </div>
-              </div>
-            </DialogHeader>
-
-            <div className="max-h-[65dvh] overflow-y-auto px-4 py-4 sm:px-5">
-              <div className="grid gap-4">
-                <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
-                  <div className="mb-3 flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
-                    <div>
-                      <h3 className="text-sm font-black text-slate-950">
-                        식별 정보
-                      </h3>
-                      <p className="mt-0.5 text-xs font-medium text-slate-500">
-                        코드와 품목명은 저장에 필요한 필수 항목입니다.
-                      </p>
-                    </div>
-                    {editTarget && (
-                      <Badge className="border-blue-700 bg-blue-700 text-[10px] font-bold text-white hover:bg-blue-700">
-                        수정 모드
+                  </TableCell>
+                  <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{row.abbreviation ?? "—"}</TableCell>
+                  <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">{row.categoryName ?? "—"}</TableCell>
+                  <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">{row.classificationName ?? "—"}</TableCell>
+                  <TableCell className="px-3 py-2.5">
+                    <DifficultyBadge difficulty={row.difficulty} />
+                  </TableCell>
+                  <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">{row.unit ?? "—"}</TableCell>
+                  <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">{row.packageSpec ?? "—"}</TableCell>
+                  <TableCell className="px-3 py-2.5 text-xs text-foreground">
+                    {row.avgWorkdays != null ? `${row.avgWorkdays}일` : <span className="text-muted-foreground">—</span>}
+                  </TableCell>
+                  <TableCell className="px-3 py-2.5">
+                    {row.isActive ? (
+                      <Badge variant="outline" className="gap-1.5">
+                        <span className="size-1.5 rounded-full bg-emerald-500" />활성
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="gap-1.5">
+                        <span className="size-1.5 rounded-full bg-muted-foreground" />비활성
                       </Badge>
                     )}
+                  </TableCell>
+                  <TableCell className="px-3 py-2.5">
+                    <div className="flex items-center gap-1">
+                      <Button variant="ghost" size="icon-sm" onClick={() => openEdit(row)} title="수정" className="text-muted-foreground">
+                        <Pencil />
+                      </Button>
+                      <Button variant="ghost" size="icon-sm" onClick={() => handleDelete(row)} title="삭제" className="text-muted-foreground hover:text-destructive">
+                        <Trash2 />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </Card>
+
+      {/* 모바일 카드 */}
+      <div className="flex flex-col gap-2 md:hidden">
+        {loading ? (
+          <Card className="items-center py-6 text-center text-sm text-muted-foreground">불러오는 중...</Card>
+        ) : filtered.length === 0 ? (
+          <Card className="items-center py-6 text-center text-sm text-muted-foreground">데이터가 없습니다.</Card>
+        ) : (
+          filtered.map((row) => (
+            <Card key={row.id} className="gap-0 px-3 py-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="font-mono text-[11px] text-muted-foreground">{row.productCode}</span>
+                    {row.isActive ? (
+                      <Badge variant="outline" className="gap-1.5">
+                        <span className="size-1.5 rounded-full bg-emerald-500" />활성
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="gap-1.5">
+                        <span className="size-1.5 rounded-full bg-muted-foreground" />비활성
+                      </Badge>
+                    )}
+                    <DifficultyBadge difficulty={row.difficulty} />
                   </div>
-
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div className="flex flex-col gap-1.5">
-                      <label className={labelClass}>
-                        품목코드 <span className="text-rose-600">*</span>
-                      </label>
-                      <Input
-                        className={inputClass}
-                        value={form.productCode}
-                        onChange={f("productCode")}
-                        placeholder="예) PR-001"
-                        disabled={!!editTarget}
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <label className={labelClass}>약호</label>
-                      <Input
-                        className={inputClass}
-                        value={form.abbreviation}
-                        onChange={f("abbreviation")}
-                        placeholder="예) ABC"
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1.5 sm:col-span-2">
-                      <label className={labelClass}>
-                        품목명 <span className="text-rose-600">*</span>
-                      </label>
-                      <Input
-                        className={inputClass}
-                        value={form.name}
-                        onChange={f("name")}
-                        placeholder="품목명을 입력하세요"
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1.5 sm:col-span-2">
-                      <label className={labelClass}>품목명2</label>
-                      <Input
-                        className={inputClass}
-                        value={form.nameAlt}
-                        onChange={f("nameAlt")}
-                        placeholder="품목명2 (선택)"
-                      />
-                    </div>
+                  <div className="mt-1 text-sm font-semibold break-words text-foreground">
+                    {row.name}
+                    {row.nameAlt && (
+                      <span className="ml-1.5 text-xs font-normal text-muted-foreground">{row.nameAlt}</span>
+                    )}
                   </div>
-                </section>
-
-                <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
-                  <div className="mb-3 border-b border-slate-100 pb-3">
-                    <h3 className="text-sm font-black text-slate-950">
-                      분류 및 시험 속성
-                    </h3>
-                    <p className="mt-0.5 text-xs font-medium text-slate-500">
-                      품목구분, 전문분류, 난이도 기준을 선택합니다.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div className="flex flex-col gap-1.5">
-                      <label className={labelClass}>품목구분</label>
-                      <select
-                        value={form.categoryId}
-                        onChange={f("categoryId")}
-                        className={selectClass}
-                      >
-                        <option value="">—</option>
-                        {categories.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <label className={labelClass}>전문분류</label>
-                      <select
-                        value={form.classificationId}
-                        onChange={f("classificationId")}
-                        className={selectClass}
-                      >
-                        <option value="">—</option>
-                        {classifications.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <label className={labelClass}>난이도</label>
-                      <select
-                        value={form.difficulty}
-                        onChange={f("difficulty")}
-                        className={selectClass}
-                      >
-                        {DIFFICULTY_OPTIONS.map((o) => (
-                          <option key={o.value} value={o.value}>
-                            {o.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <label className={labelClass}>단위</label>
-                      <Input
-                        className={inputClass}
-                        value={form.unit}
-                        onChange={f("unit")}
-                        placeholder="예) mg"
-                      />
-                    </div>
-                  </div>
-                </section>
-
-                <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
-                  <div className="mb-3 border-b border-slate-100 pb-3">
-                    <h3 className="text-sm font-black text-slate-950">
-                      제품 상세
-                    </h3>
-                    <p className="mt-0.5 text-xs font-medium text-slate-500">
-                      제품 구분과 포장규격을 입력합니다.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div className="flex flex-col gap-1.5">
-                      <label className={labelClass}>구분</label>
-                      <Input
-                        className={inputClass}
-                        value={form.productType}
-                        onChange={f("productType")}
-                        placeholder="예) 완제품"
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <label className={labelClass}>포장규격</label>
-                      <Input
-                        className={inputClass}
-                        value={form.packageSpec}
-                        onChange={f("packageSpec")}
-                        placeholder="예) 100정/병"
-                      />
-                    </div>
-                  </div>
-                </section>
-
-                <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
-                  <div className="mb-3 border-b border-slate-100 pb-3">
-                    <h3 className="text-sm font-black text-slate-950">
-                      공수 정보
-                    </h3>
-                    <p className="mt-0.5 text-xs font-medium text-slate-500">
-                      품목과 함께 대표 평균공수를 저장합니다.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div className="flex flex-col gap-1.5 sm:col-span-2">
-                      <label className={labelClass}>
-                        공수(일) <span className="text-rose-600">*</span>
-                      </label>
-                      <Input
-                        className={inputClass}
-                        type="number"
-                        min={0}
-                        step={1}
-                        value={form.avgWorkdays}
-                        onChange={f("avgWorkdays")}
-                        placeholder="예) 3"
-                      />
-                    </div>
-                  </div>
-                </section>
-              </div>
-            </div>
-
-            <DialogFooter className="border-t border-slate-200 bg-white px-4 py-4 sm:px-5">
-              <Button
-                variant="outline"
-                onClick={() => setDialogOpen(false)}
-                disabled={saving}
-                className="h-10 w-full border-slate-300 text-slate-800 hover:bg-slate-100 sm:w-auto"
-              >
-                취소
-              </Button>
-              <Button
-                onClick={handleSave}
-                disabled={
-                  saving ||
-                  !form.productCode.trim() ||
-                  !form.name.trim() ||
-                  !form.avgWorkdays.trim()
-                }
-                className="h-10 w-full bg-blue-700 px-5 font-bold text-white shadow-sm hover:bg-blue-800 sm:w-auto"
-              >
-                <Save size={15} className="mr-1.5" />
-                {saving ? "저장 중..." : "저장"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <Dialog
-          open={!!deleteTarget}
-          onOpenChange={(open) => {
-            if (!open && !deleting) setDeleteTarget(null)
-          }}
-        >
-          <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden border-slate-300 bg-white p-0 shadow-2xl sm:max-w-md">
-            <DialogHeader className="border-b border-slate-200 bg-rose-50 px-4 py-4 pr-12 text-left sm:px-5">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rose-700 text-white shadow-sm">
-                  <AlertTriangle size={20} />
+                  {row.abbreviation && (
+                    <div className="font-mono text-[11px] text-muted-foreground">약호: {row.abbreviation}</div>
+                  )}
                 </div>
-                <div className="min-w-0">
-                  <DialogTitle className="text-lg font-black text-slate-950">
-                    품목 삭제 확인
-                  </DialogTitle>
-                  <DialogDescription className="mt-1 text-xs font-medium text-rose-800">
-                    삭제 후에는 목록에서 즉시 제거됩니다.
-                  </DialogDescription>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button variant="ghost" size="icon-sm" onClick={() => openEdit(row)} title="수정" className="text-muted-foreground">
+                    <Pencil />
+                  </Button>
+                  <Button variant="ghost" size="icon-sm" onClick={() => handleDelete(row)} title="삭제" className="text-muted-foreground hover:text-destructive">
+                    <Trash2 />
+                  </Button>
                 </div>
               </div>
-            </DialogHeader>
-
-            <div className="px-4 py-4 sm:px-5">
-              <div className="rounded-lg border border-rose-200 bg-rose-50/70 p-4">
-                <p className="text-sm font-bold text-slate-950">
-                  {deleteTarget?.name}
-                </p>
-                <p className="mt-1 font-mono text-xs font-semibold text-rose-800">
-                  {deleteTarget?.productCode}
-                </p>
-                <p className="mt-3 text-sm font-medium text-slate-700">
-                  이 품목을 삭제하시겠습니까? 연결된 시험 기준이 있는 경우
-                  API에서 삭제를 거부할 수 있습니다.
-                </p>
+              <div className="mt-2 grid grid-cols-1 gap-x-2 gap-y-1 border-t pt-2 text-[11px] text-muted-foreground min-[420px]:grid-cols-2">
+                <div><span className="font-medium text-foreground">품목구분:</span> {row.categoryName ?? "—"}</div>
+                <div><span className="font-medium text-foreground">전문분류:</span> {row.classificationName ?? "—"}</div>
+                <div><span className="font-medium text-foreground">단위:</span> {row.unit ?? "—"}</div>
+                <div className="truncate"><span className="font-medium text-foreground">포장:</span> {row.packageSpec ?? "—"}</div>
+                <div><span className="font-medium text-foreground">공수:</span> {row.avgWorkdays != null ? `${row.avgWorkdays}일` : "—"}</div>
               </div>
-            </div>
-
-            <DialogFooter className="border-t border-slate-200 bg-white px-4 py-4 sm:px-5">
-              <Button
-                variant="outline"
-                onClick={() => setDeleteTarget(null)}
-                disabled={deleting}
-                className="h-10 w-full border-slate-300 text-slate-800 hover:bg-slate-100 sm:w-auto"
-              >
-                취소
-              </Button>
-              <Button
-                onClick={confirmDelete}
-                disabled={deleting}
-                className="h-10 w-full bg-rose-700 px-5 font-bold text-white shadow-sm hover:bg-rose-800 sm:w-auto"
-              >
-                <Trash2 size={15} className="mr-1.5" />
-                {deleting ? "삭제 중..." : "삭제"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            </Card>
+          ))
+        )}
       </div>
+
+      {/* 등록/수정 다이얼로그 */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden p-0 sm:max-w-2xl">
+          <DialogHeader className="border-b px-4 py-4 pr-12 text-left sm:px-5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                <PackagePlus size={20} />
+              </div>
+              <div className="min-w-0">
+                <DialogTitle className="text-lg font-semibold text-foreground">
+                  {editTarget ? "품목 정보 수정" : "신규 품목 등록"}
+                </DialogTitle>
+                <DialogDescription className="mt-0.5 text-xs text-muted-foreground">
+                  시험 품목의 기본 정보와 분류 기준을 관리합니다.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="max-h-[65dvh] overflow-y-auto px-4 py-4 sm:px-5">
+            <div className="grid gap-4">
+              {/* 식별 정보 */}
+              <section className="rounded-lg border bg-card p-3 sm:p-4">
+                <div className="mb-3 border-b pb-3">
+                  <h3 className="text-sm font-semibold text-foreground">식별 정보</h3>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    코드와 품목명은 저장에 필요한 필수 항목입니다.
+                  </p>
+                </div>
+                {editTarget && (
+                  <div className="mb-3">
+                    <Badge variant="secondary">수정 모드</Badge>
+                  </div>
+                )}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <label className={labelClass}>
+                      품목코드 <span className="text-destructive">*</span>
+                    </label>
+                    <Input
+                      value={form.productCode}
+                      onChange={f("productCode")}
+                      placeholder="예) PR-001"
+                      disabled={!!editTarget}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className={labelClass}>약호</label>
+                    <Input
+                      value={form.abbreviation}
+                      onChange={f("abbreviation")}
+                      placeholder="예) ABC"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5 sm:col-span-2">
+                    <label className={labelClass}>
+                      품목명 <span className="text-destructive">*</span>
+                    </label>
+                    <Input
+                      value={form.name}
+                      onChange={f("name")}
+                      placeholder="품목명을 입력하세요"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5 sm:col-span-2">
+                    <label className={labelClass}>품목명2</label>
+                    <Input
+                      value={form.nameAlt}
+                      onChange={f("nameAlt")}
+                      placeholder="품목명2 (선택)"
+                    />
+                  </div>
+                </div>
+              </section>
+
+              {/* 분류 및 시험 속성 */}
+              <section className="rounded-lg border bg-card p-3 sm:p-4">
+                <div className="mb-3 border-b pb-3">
+                  <h3 className="text-sm font-semibold text-foreground">분류 및 시험 속성</h3>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    품목구분, 전문분류, 난이도 기준을 선택합니다.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <label className={labelClass}>품목구분</label>
+                    <Select
+                      value={form.categoryId || NONE_SENTINEL}
+                      onValueChange={(v) => setFormField("categoryId", v === NONE_SENTINEL ? "" : v)}
+                    >
+                      <SelectTrigger className="!h-9 px-3">
+                        <SelectValue placeholder="—" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NONE_SENTINEL}>—</SelectItem>
+                        {categories.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className={labelClass}>전문분류</label>
+                    <Select
+                      value={form.classificationId || NONE_SENTINEL}
+                      onValueChange={(v) => setFormField("classificationId", v === NONE_SENTINEL ? "" : v)}
+                    >
+                      <SelectTrigger className="!h-9 px-3">
+                        <SelectValue placeholder="—" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NONE_SENTINEL}>—</SelectItem>
+                        {classifications.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className={labelClass}>난이도</label>
+                    <Select
+                      value={form.difficulty || NONE_SENTINEL}
+                      onValueChange={(v) => setFormField("difficulty", v === NONE_SENTINEL ? "" : v)}
+                    >
+                      <SelectTrigger className="!h-9 px-3">
+                        <SelectValue placeholder="—" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NONE_SENTINEL}>—</SelectItem>
+                        {DIFFICULTY_OPTIONS.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className={labelClass}>단위</label>
+                    <Input
+                      value={form.unit}
+                      onChange={f("unit")}
+                      placeholder="예) mg"
+                    />
+                  </div>
+                </div>
+              </section>
+
+              {/* 제품 상세 */}
+              <section className="rounded-lg border bg-card p-3 sm:p-4">
+                <div className="mb-3 border-b pb-3">
+                  <h3 className="text-sm font-semibold text-foreground">제품 상세</h3>
+                  <p className="mt-0.5 text-xs text-muted-foreground">제품 구분과 포장규격을 입력합니다.</p>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <label className={labelClass}>구분</label>
+                    <Input
+                      value={form.productType}
+                      onChange={f("productType")}
+                      placeholder="예) 완제품"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className={labelClass}>포장규격</label>
+                    <Input
+                      value={form.packageSpec}
+                      onChange={f("packageSpec")}
+                      placeholder="예) 100정/병"
+                    />
+                  </div>
+                </div>
+              </section>
+
+              {/* 공수 정보 */}
+              <section className="rounded-lg border bg-card p-3 sm:p-4">
+                <div className="mb-3 border-b pb-3">
+                  <h3 className="text-sm font-semibold text-foreground">공수 정보</h3>
+                  <p className="mt-0.5 text-xs text-muted-foreground">품목과 함께 대표 평균공수를 저장합니다.</p>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5 sm:col-span-2">
+                    <label className={labelClass}>
+                      공수(일) <span className="text-destructive">*</span>
+                    </label>
+                    <Input
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={form.avgWorkdays}
+                      onChange={f("avgWorkdays")}
+                      placeholder="예) 3"
+                    />
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+
+          <DialogFooter className="border-t px-4 py-4 sm:px-5">
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={() => setDialogOpen(false)}
+              disabled={saving}
+              className="w-full sm:w-auto"
+            >
+              취소
+            </Button>
+            <Button
+              size="lg"
+              onClick={handleSave}
+              disabled={
+                saving ||
+                !form.productCode.trim() ||
+                !form.name.trim() ||
+                !form.avgWorkdays.trim()
+              }
+              className="w-full sm:w-auto"
+            >
+              <Save size={15} />
+              {saving ? "저장 중..." : "저장"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 삭제 확인 다이얼로그 */}
+      <Dialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open && !deleting) setDeleteTarget(null)
+        }}
+      >
+        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden p-0 sm:max-w-md">
+          <DialogHeader className="border-b px-4 py-4 pr-12 text-left sm:px-5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-destructive text-destructive-foreground">
+                <AlertTriangle size={20} />
+              </div>
+              <div className="min-w-0">
+                <DialogTitle className="text-lg font-semibold text-foreground">품목 삭제 확인</DialogTitle>
+                <DialogDescription className="mt-0.5 text-xs text-muted-foreground">
+                  삭제 후에는 목록에서 즉시 제거됩니다.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="px-4 py-4 sm:px-5">
+            <div className="rounded-lg border border-red-200 bg-red-50/70 p-4">
+              <p className="text-sm font-semibold text-foreground">{deleteTarget?.name}</p>
+              <p className="mt-1 font-mono text-xs text-muted-foreground">{deleteTarget?.productCode}</p>
+              <p className="mt-3 text-sm text-muted-foreground">
+                이 품목을 삭제하시겠습니까? 연결된 시험 기준이 있는 경우 API에서 삭제를 거부할 수 있습니다.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="border-t px-4 py-4 sm:px-5">
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={() => setDeleteTarget(null)}
+              disabled={deleting}
+              className="w-full sm:w-auto"
+            >
+              취소
+            </Button>
+            <Button
+              variant="destructive"
+              size="lg"
+              onClick={confirmDelete}
+              disabled={deleting}
+              className="w-full sm:w-auto"
+            >
+              <Trash2 size={15} />
+              {deleting ? "삭제 중..." : "삭제"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
