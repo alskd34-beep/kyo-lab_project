@@ -190,12 +190,15 @@ export interface IngestLogRow {
   id: string
   runAt: string
   orderKey: string
+  batchNo: string
+  productCode: string
+  productName: string | null
   changeType: string
   status: string | null
   fileId: string | null
 }
 
-/** 가져온(적재) 이력 — 최신순 */
+/** 가져온(적재) 이력 — 최신순 (품목명은 pct_orders에서 보강) */
 export async function listIngestLog(limit = 100): Promise<IngestLogRow[]> {
   const { data, error } = await supabaseAdmin
     .from('pct_ingest_log')
@@ -203,14 +206,36 @@ export async function listIngestLog(limit = 100): Promise<IngestLogRow[]> {
     .order('run_at', { ascending: false })
     .limit(limit)
   if (error) throw error
-  return (data ?? []).map(r => ({
-    id: r.id as string,
-    runAt: r.run_at as string,
-    orderKey: r.order_key as string,
-    changeType: r.change_type as string,
-    status: (r.status as string) ?? null,
-    fileId: (r.file_id as string) ?? null,
-  }))
+  const rows = data ?? []
+
+  // order_key(batch|code) → 품목명 보강 (한 번에 조회)
+  const codes = Array.from(new Set(rows.map(r => String(r.order_key).split('|')[1]).filter(Boolean)))
+  const nameByCode = new Map<string, string>()
+  if (codes.length > 0) {
+    const { data: prods } = await supabaseAdmin
+      .from('pct_orders')
+      .select('product_code, product_name')
+      .in('product_code', codes)
+    for (const p of prods ?? []) {
+      nameByCode.set(String(p.product_code), p.product_name as string)
+    }
+  }
+
+  return rows.map(r => {
+    const orderKey = r.order_key as string
+    const [batchNo, productCode] = orderKey.split('|')
+    return {
+      id: r.id as string,
+      runAt: r.run_at as string,
+      orderKey,
+      batchNo: batchNo ?? '',
+      productCode: productCode ?? '',
+      productName: nameByCode.get(productCode ?? '') ?? null,
+      changeType: r.change_type as string,
+      status: (r.status as string) ?? null,
+      fileId: (r.file_id as string) ?? null,
+    }
+  })
 }
 
 export async function listEdits(orderId: string): Promise<OrderEditRow[]> {

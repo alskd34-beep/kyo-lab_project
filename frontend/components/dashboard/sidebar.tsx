@@ -161,6 +161,7 @@ const NAV_SECTIONS: NavSection[] = [
           { id: "test-master", label: "시험항목 마스터", live: true },
           { id: "test-items", label: "품목별 시험항목 관리", live: true },
           { id: "pretest-checklist", label: "시험 전 확인사항", live: true },
+          { id: "concurrent-items", label: "동시분석 품목", live: true, adminOnly: true },
         ],
       },
       {
@@ -210,6 +211,7 @@ const PATH_MAP: Record<string, string> = {
   "test-master": "/test-mgmt/test-master",
   "test-items": "/test-mgmt/test-items",
   "pretest-checklist": "/test-mgmt/pretest-checklist",
+  "concurrent-items": "/settings/concurrent-items",
   // 안정성시험
   "stab-status": "/stability/stab-status",
   "stab-plan": "/stability/stab-plan",

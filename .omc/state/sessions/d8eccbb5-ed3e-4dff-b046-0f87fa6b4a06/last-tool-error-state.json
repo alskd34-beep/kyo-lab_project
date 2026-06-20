@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"cd /Users/huus/workspace/kyo-project/kyo-project\\necho \\\"=== source refs to direct DB conn env names ===\\\"\\ngrep -rhoE \\\"process\\\\.env\\\\.[A-Z_]+\\\" backend app 2>/dev/null | sort -u | grep ...",
+  "error": "Exit code 1\n=== source refs to direct DB conn env names ===\nprocess.env.NEXT_PUBLIC_SUPABASE_ANON_KEY\nprocess.env.NEXT_PUBLIC_SUPABASE_URL\nprocess.env.SUPABASE_SERVICE_ROLE_KEY\n=== which env var NAMES exist in .env files (names only, no values) ===\n.env.local: ANTHROPIC_API_KEY\n.env.local: DIFY_API_KEY\n.env.local: DIFY_API_URL\n.env.local: JWT_ACCESS_SECRET\n.env.local: JWT_REFRESH_SECRET\n.env.local: NEXT_PUBLIC_SUPABASE_ANON_KEY\n.env.local: NEXT_PUBLIC_SUPABASE_URL\n.env.local: OPENAI_API_KEY\n.env...",
+  "timestamp": "2026-06-20T10:26:41.169Z",
+  "retry_count": 1
+}

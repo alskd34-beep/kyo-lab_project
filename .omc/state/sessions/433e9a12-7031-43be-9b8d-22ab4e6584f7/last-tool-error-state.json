@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"rtk ls app/\\\\(menu\\\\)/schedule/ && echo \\\"---MIGRATION---\\\" && rtk find . -path ./node_modules -prune -o -name '*0012*' -print 2>/dev/null && echo \\\"---TSCONFIG paths---\\\" && rtk grep -A6 ...",
+  "error": "Exit code 1\nmonthly/\norders/\npct/\nvacation/\nweekly/\nweekly-plan/\n---MIGRATION---",
+  "timestamp": "2026-06-14T09:05:50.206Z",
+  "retry_count": 1
+}

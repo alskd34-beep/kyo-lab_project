@@ -145,7 +145,6 @@ export function ProductTestWorkspace() {
       </div>
 
       <ProductsPanel />
-      <ManhoursPanel />
     </div>
   )
 }
@@ -1039,50 +1038,5 @@ function ProductsPanel() {
         </Dialog>
       </div>
     </>
-  )
-}
-
-function ManhoursPanel() {
-  return (
-    <div className="rounded-3xl border border-slate-200 bg-white px-4 py-4 shadow-sm md:px-5 md:py-5">
-      <div className="flex flex-col gap-3 rounded-2xl border border-emerald-100 bg-gradient-to-br from-white via-emerald-50/30 to-blue-50/40 px-4 py-4 md:flex-row md:items-center md:justify-between">
-        <div className="max-w-3xl">
-          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
-            <Gauge size={13} />
-            공수 통합 완료
-          </div>
-          <h3 className="mt-3 text-lg font-black tracking-tight text-slate-950">
-            평균공수는 품목 마스터에 합쳐졌습니다.
-          </h3>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            이제 공수는 위의 품목 목록 `공수` 컬럼과 등록/수정 다이얼로그에서
-            함께 관리합니다. 별도의 공수 목록은 유지하지 않습니다.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:min-w-[360px]">
-          <div className="rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm">
-            <p className="text-[10px] font-bold tracking-wide text-slate-500 uppercase">
-              위치
-            </p>
-            <p className="mt-2 text-sm font-black text-blue-700">품목 목록</p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm">
-            <p className="text-[10px] font-bold tracking-wide text-slate-500 uppercase">
-              입력
-            </p>
-            <p className="mt-2 text-sm font-black text-emerald-700">
-              등록 / 수정
-            </p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm col-span-2 sm:col-span-1">
-            <p className="text-[10px] font-bold tracking-wide text-slate-500 uppercase">
-              상태
-            </p>
-            <p className="mt-2 text-sm font-black text-slate-900">통합 운영</p>
-          </div>
-        </div>
-      </div>
-    </div>
   )
 }

@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "entries": {
+    "79a93d4a2f8f50b95f852280616242fee1855dc99a3c75211917f55e72e95fae": {
+      "last_emitted_at_ms": 1781428360195,
+      "message": "Use parallel execution for independent tasks. Use run_in_background for long operations (npm install, builds, tests)."
+    },
+    "445ed27a3872b681d98190bae61ccb84954e1bc4e140df5370be958dee776b3a": {
+      "last_emitted_at_ms": 1781428302645,
+      "message": "Verify changes work after editing. Test functionality before marking complete."
+    },
+    "466399dafa2d20f60587180bad0a07358eb7f2bce724df0ff682f038ad33f5ad": {
+      "last_emitted_at_ms": 1781428261269,
+      "message": "Read multiple files in parallel when possible for faster analysis."
+    },
+    "4f7a67fba0a8473e9883d9e8dffbb2d72e00a4a1eeb4fa80cb14213b167dc90f": {
+      "last_emitted_at_ms": 1781428244365,
+      "message": "Mark todos in_progress BEFORE starting, completed IMMEDIATELY after finishing."
+    },
+    "6d135359140dfc611858d588641b9e98ff5e373fcd878d034698007d5e9594de": {
+      "last_emitted_at_ms": 1781427998865,
+      "message": "Spawning agent: general-purpose (inherit) | Task: 배정 규칙 모듈 구현"
+    },
+    "a294fbebde96e158667d9829ca14b0bd20bcdf10c8f804516f7ad8f4993d0bb7": {
+      "last_emitted_at_ms": 1781427976056,
+      "message": "Spawning agent: general-purpose (inherit) | Task: 관리자 QC 대시보드 구현"
+    },
+    "eafb5dff42699745a883f2a29eac004f2ea1f9520495d2e147733a9bdf0a407a": {
+      "last_emitted_at_ms": 1781427960330,
+      "message": "Spawning agent: general-purpose (inherit) | Task: 동시분석 그룹 구현"
+    },
+    "26998f7af27f707616a8b0ae2ca2c27ddda92beb96e9dbabc64d60dcab3d6d19": {
+      "last_emitted_at_ms": 1781427937062,
+      "message": "Spawning agent: general-purpose (inherit) | Task: 재배정 이력 기능 구현"
+    },
+    "61aca626e159ab65dfb508d876cf759370ae4133eafda89bb060308c1a0a6419": {
+      "last_emitted_at_ms": 1781427919452,
+      "message": "Spawning agent: general-purpose (inherit) | Task: 장비 예약 기능 구현"
+    },
+    "c532c1471b7c7226af2c273832d89383e045f5f41fd5f91d8f46c0ab53f3042d": {
+      "last_emitted_at_ms": 1781427223414,
+      "message": "Spawning agent: general-purpose (inherit) [BACKGROUND] | Task: QC 스케줄 문서 작성"
+    }
+  },
+  "updated_at": "2026-06-14T09:12:40.195Z"
+}

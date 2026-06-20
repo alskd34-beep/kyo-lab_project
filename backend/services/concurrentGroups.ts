@@ -135,8 +135,15 @@ function sameGroup(a: OrderForGrouping, b: OrderForGrouping): boolean {
 /**
  * union-find(disjoint set)로 모든 오더 쌍을 평가해 그룹을 구성한다.
  * 단일 멤버 그룹도 반환에 포함된다(저장 측에서 필요 시 필터 가능).
+ *
+ * @param familyByCode 품목코드 → 동시분석 품목군 id (기준설정 마스터).
+ *   같은 품목군의 오더는 무조건 같은 그룹으로 강제 병합한다(마스터 우선).
+ *   마스터에 없는 품목은 기존 유사도 규칙(sameGroup)으로 보완 병합한다.
  */
-export function buildGroupsFromOrders(orders: OrderForGrouping[]): BuiltGroup[] {
+export function buildGroupsFromOrders(
+  orders: OrderForGrouping[],
+  familyByCode?: Map<string, string>,
+): BuiltGroup[] {
   const n = orders.length
   const parent = Array.from({ length: n }, (_, i) => i)
 
@@ -152,6 +159,19 @@ export function buildGroupsFromOrders(orders: OrderForGrouping[]): BuiltGroup[] 
     if (rx !== ry) parent[Math.max(rx, ry)] = Math.min(rx, ry)
   }
 
+  // [마스터 우선] 동일 품목군(family)에 속한 오더끼리 먼저 강제 병합
+  if (familyByCode && familyByCode.size > 0) {
+    const firstIdxByFamily = new Map<string, number>()
+    for (let i = 0; i < n; i++) {
+      const fam = familyByCode.get(orders[i].productCode)
+      if (!fam) continue
+      const prev = firstIdxByFamily.get(fam)
+      if (prev == null) firstIdxByFamily.set(fam, i)
+      else union(prev, i)
+    }
+  }
+
+  // [규칙 보완] 마스터로 묶이지 않은 나머지는 유사도 규칙으로 병합
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
       if (sameGroup(orders[i], orders[j])) union(i, j)
@@ -185,6 +205,27 @@ export function buildGroupsFromOrders(orders: OrderForGrouping[]): BuiltGroup[] 
     groups.push({ groupKey: `grp-${minId.slice(0, 8)}`, testStartDate, items })
   }
   return groups
+}
+
+/**
+ * 동시분석 품목군(기준설정 마스터) 품목코드 → family id 매핑.
+ * 테이블 미적용(0020 미실행) 환경에서도 안전하게 빈 맵을 반환한다.
+ * (concurrentProductFamilies 서비스와의 순환 import 를 피하려고 직접 조회)
+ */
+async function loadFamilyByCodeRaw(): Promise<Map<string, string>> {
+  const m = new Map<string, string>()
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('concurrent_product_family_members')
+      .select('family_id, product_code')
+    if (error) return m
+    for (const r of (data ?? []) as Record<string, unknown>[]) {
+      m.set(r.product_code as string, r.family_id as string)
+    }
+  } catch {
+    /* 테이블 없음 등 — 무시하고 빈 맵 */
+  }
+  return m
 }
 
 // ─── 조회 ────────────────────────────────────────────────────────────────────
@@ -280,7 +321,9 @@ export async function rebuildGroups(): Promise<{ created: number; kept: number }
       dueDate:       (o.due_date as string) ?? null,
     }))
 
-  const built = buildGroupsFromOrders(candidates)
+  // [마스터 우선] 동시분석 품목군(기준설정) → 품목코드 매핑 로드
+  const familyByCode = await loadFamilyByCodeRaw()
+  const built = buildGroupsFromOrders(candidates, familyByCode)
   let created = 0
 
   for (const g of built) {

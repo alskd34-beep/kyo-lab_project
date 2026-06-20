@@ -31,6 +31,7 @@ import {
   type EngineWorkload,
 } from '@backend/services/scheduleEngine'
 import { buildGroupsFromOrders, type OrderForGrouping } from '@backend/services/concurrentGroups'
+import { loadFamilyByCode } from '@backend/services/concurrentProductFamilies'
 
 export interface AssignResult {
   mode: 'codex' | 'rule'
@@ -77,7 +78,7 @@ async function loadTargetOrders(orderIds?: string[]): Promise<OrderForAssign[]> 
  *
  * @returns reps 대표 오더 목록, memberToRep 멤버 orderId → 대표 오더
  */
-function groupOrders(orders: OrderForAssign[]): {
+function groupOrders(orders: OrderForAssign[], familyByCode?: Map<string, string>): {
   reps: OrderForAssign[]
   memberToRep: Map<string, OrderForAssign>
 } {
@@ -89,7 +90,7 @@ function groupOrders(orders: OrderForAssign[]): {
     packagingDate: o.packaging_date,
     dueDate: o.due_date,
   }))
-  const built = buildGroupsFromOrders(forGrouping)
+  const built = buildGroupsFromOrders(forGrouping, familyByCode)
   const orderById = new Map(orders.map(o => [o.id, o]))
   const reps: OrderForAssign[] = []
   const memberToRep = new Map<string, OrderForAssign>()
@@ -418,9 +419,10 @@ export async function autoAssign(orderIds?: string[]): Promise<AssignResult> {
   const orders = await loadTargetOrders(orderIds)
   if (orders.length === 0) return { mode: 'rule', assigned: 0, unassigned: 0, details: [] }
 
-  // [동시분석] 동일 품목코드/유사 품목명을 한 그룹으로 묶고 대표만 배정 대상으로 삼는다.
+  // [동시분석] 동일 품목군(기준설정 마스터)/유사 품목명을 한 그룹으로 묶고 대표만 배정 대상으로 삼는다.
   // 엔진/LLM 에는 reps 만 태워 공수를 그룹당 1회 계산하고, 배정 결과를 멤버 전체에 전파한다.
-  const { reps, memberToRep } = groupOrders(orders)
+  const familyByCode = await loadFamilyByCode().catch(() => new Map<string, string>())
+  const { reps, memberToRep } = groupOrders(orders, familyByCode)
 
   // 휴가/출장 중인 시험자 제외 (요구사항: 휴가 기간 중인 시험자는 자동 배정 대상 제외)
   const { from, to } = leaveWindow(orders)
