@@ -444,7 +444,9 @@ export default function OrdersPage() {
         const arr = famRows.get(fam.id) ?? []; arr.push(r); famRows.set(fam.id, arr)
       }
     }
-    const items: RowItem[] = []
+    // 그룹(동시분석 묶음) 먼저, 그 다음 개별 행 순으로 정렬
+    const familyItems: RowItem[] = []
+    const singleItems: RowItem[] = []
     const emitted = new Set<string>()
     for (const r of rows) {
       const fam = familyByCode.get(r.productCode)
@@ -452,12 +454,12 @@ export default function OrdersPage() {
       if (fam && group && group.length >= 2) {
         if (emitted.has(fam.id)) continue
         emitted.add(fam.id)
-        items.push({ type: "family", familyId: `${groupKey}::${fam.id}`, familyName: fam.name, rows: group })
+        familyItems.push({ type: "family", familyId: `${groupKey}::${fam.id}`, familyName: fam.name, rows: group })
       } else {
-        items.push({ type: "single", row: r })
+        singleItems.push({ type: "single", row: r })
       }
     }
-    return items
+    return [...familyItems, ...singleItems]
   }
 
   // 단일 오더 행 렌더 (트리 들여쓰기 옵션)
