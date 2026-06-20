@@ -454,9 +454,15 @@ export default function OrdersPage() {
         const arr = famRows.get(fam.id) ?? []; arr.push(r); famRows.set(fam.id, arr)
       }
     }
-    // 그룹(동시분석 묶음) 먼저, 그 다음 개별 행 순으로 정렬
-    const familyItems: RowItem[] = []
-    const singleItems: RowItem[] = []
+    // 한국어(ㄱㄴㄷ) 정렬 헬퍼 — 미배정(빈 담당자)은 맨 뒤로
+    const byKo = (a: string, b: string) => a.localeCompare(b, "ko")
+    const asgKey = (s: string | null) => s || "￿"
+    // 묶음 내부 행은 품목명 ㄱㄴㄷ 정렬
+    for (const arr of famRows.values()) arr.sort((a, b) => byKo(a.productName, b.productName))
+
+    // 묶음(블록)과 개별 행을 한 목록으로 모으고, 1순위 담당자 → 2순위 품목명으로 정렬
+    type Sortable = { item: RowItem; assignee: string; name: string }
+    const items: Sortable[] = []
     const emitted = new Set<string>()
     for (const r of rows) {
       const fam = familyByCode.get(r.productCode)
@@ -464,12 +470,19 @@ export default function OrdersPage() {
       if (fam && group && group.length >= 2) {
         if (emitted.has(fam.id)) continue
         emitted.add(fam.id)
-        familyItems.push({ type: "family", familyId: `${groupKey}::${fam.id}`, familyName: fam.name, rows: group })
+        // 묶음은 보통 한 담당자에게 배정됨 → 대표 담당자 기준 정렬
+        const repAssignee = group.find(x => x.assigneeName)?.assigneeName ?? null
+        items.push({
+          item: { type: "family", familyId: `${groupKey}::${fam.id}`, familyName: fam.name, rows: group },
+          assignee: asgKey(repAssignee),
+          name: group[0].productName,
+        })
       } else {
-        singleItems.push({ type: "single", row: r })
+        items.push({ item: { type: "single", row: r }, assignee: asgKey(r.assigneeName), name: r.productName })
       }
     }
-    return [...familyItems, ...singleItems]
+    items.sort((a, b) => byKo(a.assignee, b.assignee) || byKo(a.name, b.name))
+    return items.map(x => x.item)
   }
 
   // 단일 오더 행 렌더 (트리 들여쓰기 옵션)
