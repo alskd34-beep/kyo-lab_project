@@ -3,7 +3,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
 import {
-  RefreshCw, Sparkles, History, AlertCircle, Pencil, X, Loader2, Database,
+  RefreshCw, Sparkles, History, AlertCircle, X, Loader2, Database,
   ChevronDown, ChevronRight, ChevronLeft, Lock, Search, CalendarDays, Users, ListChecks, Layers,
 } from "lucide-react"
 import { cn } from "@frontend/lib/utils"
@@ -491,8 +491,17 @@ export default function OrdersPage() {
   const renderOrderRow = (r: OrderRow, indented = false) => {
     const dueSoon = isDueSoon(r.dueDate, r.status)
     return (
-      <TableRow key={r.id} className={cn(dueSoon && "bg-orange-50 hover:bg-orange-100/70", r.locked && "bg-amber-50/40", selected.has(r.id) && "bg-primary/5")}>
-        <TableCell className="px-3 py-2.5 text-center">
+      <TableRow
+        key={r.id}
+        onClick={isAdmin ? () => setEditTarget(r) : undefined}
+        className={cn(
+          isAdmin && "cursor-pointer",
+          dueSoon && "bg-orange-50 hover:bg-orange-100/70",
+          r.locked && "bg-amber-50/40",
+          selected.has(r.id) && "bg-primary/5",
+        )}
+      >
+        <TableCell className="px-3 py-2.5 text-center" onClick={e => e.stopPropagation()}>
           <input
             type="checkbox"
             className="cb-custom"
@@ -552,14 +561,13 @@ export default function OrdersPage() {
         </TableCell>
         <TableCell className="px-3 py-2.5">
           <div className="flex items-center justify-end gap-1">
-            <Button variant="ghost" size="icon-sm" onClick={() => setHistoryTarget(r)} title="수정이력" className="text-muted-foreground">
+            <Button
+              variant="ghost" size="icon-sm"
+              onClick={(e) => { e.stopPropagation(); setHistoryTarget(r) }}
+              title="수정이력" className="text-muted-foreground"
+            >
               <History />
             </Button>
-            {isAdmin && (
-              <Button variant="ghost" size="icon-sm" onClick={() => setEditTarget(r)} title="수정" className="text-muted-foreground">
-                <Pencil />
-              </Button>
-            )}
           </div>
         </TableCell>
       </TableRow>
@@ -879,7 +887,7 @@ function EditModal({ order, testers, onClose, onSaved }: {
   }
 
   return (
-    <Modal title={`오더 수정 — ${order.productName}`} onClose={onClose}>
+    <SlideOver title={`오더 수정 — ${order.productName}`} onClose={onClose}>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="포장일"><input type="date" value={form.packagingDate} onChange={e => setForm({ ...form, packagingDate: e.target.value })} className={inputCls} /></Field>
         <Field label="완료예정일"><input type="date" value={form.dueDate} onChange={e => setForm({ ...form, dueDate: e.target.value })} className={inputCls} /></Field>
@@ -935,7 +943,7 @@ function EditModal({ order, testers, onClose, onSaved }: {
           {saving && <Loader2 className="animate-spin" />}저장
         </Button>
       </div>
-    </Modal>
+    </SlideOver>
   )
 }
 
@@ -1121,6 +1129,25 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
           <button onClick={onClose} className="rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><X className="size-4" /></button>
         </div>
         <div className="px-4 py-4">{children}</div>
+      </div>
+    </div>
+  )
+}
+
+// ─── 우측 슬라이드오버(드로어) — 수정 모달용 ─────────────────────────────────────
+function SlideOver({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  useLockBodyScroll()
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40" onClick={onClose}>
+      <div
+        className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col border-l bg-card shadow-xl duration-300 animate-in slide-in-from-right"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b px-4 py-3">
+          <h2 className="text-sm font-bold text-foreground">{title}</h2>
+          <button onClick={onClose} className="rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><X className="size-4" /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4">{children}</div>
       </div>
     </div>
   )

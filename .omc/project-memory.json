@@ -42,7 +42,7 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "rtk npm run build 2>&1 | tail -25",
+    "buildCommand": "cd /Users/huus/workspace/kyo-project/kyo-project; rtk tsc --noEmit 2>&1 | grep \"assignee-detail\" || echo \"assignee-detail: OK\"",
     "testCommand": null,
     "lintCommand": "npm run lint",
     "devCommand": "npm run dev",
@@ -220,14 +220,44 @@
   "hotPaths": [
     {
       "path": "app/(menu)/schedule/orders/page.tsx",
-      "accessCount": 81,
-      "lastAccessed": 1781952469019,
+      "accessCount": 110,
+      "lastAccessed": 1781965808409,
+      "type": "file"
+    },
+    {
+      "path": "frontend/components/dashboard/app-sidebar.tsx",
+      "accessCount": 9,
+      "lastAccessed": 1781952764041,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/product-test/prod-status/page.tsx",
+      "accessCount": 9,
+      "lastAccessed": 1781954638277,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/settings/concurrent-items/page.tsx",
+      "accessCount": 9,
+      "lastAccessed": 1781954645158,
       "type": "file"
     },
     {
       "path": "frontend/components/product-test/product-test-workspace.tsx",
+      "accessCount": 8,
+      "lastAccessed": 1781954750604,
+      "type": "file"
+    },
+    {
+      "path": "frontend/components/schedule/assignee-detail-modal.tsx",
+      "accessCount": 7,
+      "lastAccessed": 1781965277413,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/equipment/master/page.tsx",
       "accessCount": 6,
-      "lastAccessed": 1781950031641,
+      "lastAccessed": 1781954678869,
       "type": "file"
     },
     {
@@ -249,6 +279,30 @@
       "type": "file"
     },
     {
+      "path": "app/(menu)/schedule/holidays/page.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1781953919326,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/schedule/vacation/page.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1781953946878,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/my-tasks/page.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1781953988607,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/equipment/reservation/page.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1781954671286,
+      "type": "file"
+    },
+    {
       "path": "backend/services/pctAssign.ts",
       "accessCount": 4,
       "lastAccessed": 1781949304303,
@@ -262,8 +316,8 @@
     },
     {
       "path": "frontend/components/dashboard/sidebar.tsx",
-      "accessCount": 3,
-      "lastAccessed": 1781949164590,
+      "accessCount": 4,
+      "lastAccessed": 1781952688104,
       "type": "file"
     },
     {
@@ -279,27 +333,45 @@
       "type": "file"
     },
     {
-      "path": "frontend/components/dashboard/app-sidebar.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1781949968701,
-      "type": "file"
-    },
-    {
       "path": "app/(menu)/layout.tsx",
       "accessCount": 2,
       "lastAccessed": 1781949989258,
       "type": "file"
     },
     {
-      "path": "app/(menu)/settings/concurrent-items/page.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1781950362431,
-      "type": "file"
-    },
-    {
       "path": "backend/services/concurrentProductFamilies.ts",
       "accessCount": 2,
       "lastAccessed": 1781950369875,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/test-mgmt/pretest-checklist/page.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1781954656054,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/test-mgmt/test-master/page.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1781954665502,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/test-mgmt/test-reg/page.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1781954666150,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/test-mgmt/testers/page.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1781954692952,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/test-mgmt/test-items/page.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1781954724322,
       "type": "file"
     },
     {
@@ -378,6 +450,18 @@
       "path": "supabase/migrations/0008_seed_tester_users.sql",
       "accessCount": 1,
       "lastAccessed": 1781950550232,
+      "type": "file"
+    },
+    {
+      "path": "frontend/hooks/use-lock-body-scroll.ts",
+      "accessCount": 1,
+      "lastAccessed": 1781953812081,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/product-test/products/page.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1781954627090,
       "type": "file"
     }
   ],

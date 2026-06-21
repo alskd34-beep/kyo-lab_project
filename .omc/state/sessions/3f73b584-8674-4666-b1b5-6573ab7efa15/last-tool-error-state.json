@@ -1,7 +1,7 @@
 {
   "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"cd /Users/huus/workspace/kyo-project/kyo-project; rtk grep -n \\\"<select\\\\|</select>\\\\|setStatusFilter\\\\|setYear\\\\|className={selectCls}\\\\|className={inputCls}\\\" \\\"app/(menu)/schedule/order...",
-  "error": "Exit code 2\nrg: regex parse error:\n    (?:<select|</select>|setStatusFilter|setYear|className={selectCls}|className={inputCls})\n                                                            ^\nerror: repetition quantifier expects a valid decimal\n0 matches for '<select\\|</select>\\|setStatusFilter\\|setYear\\|className={selectCls}\\|className={inputCls}'",
-  "timestamp": "2026-06-20T10:09:29.097Z",
+  "tool_input_preview": "{\"command\":\"cd /Users/huus/workspace/kyo-project/kyo-project; rtk grep -nF \\\"setEditTarget(r)\\\" \\\"app/(menu)/schedule/orders/page.tsx\\\"; echo \\\"---TableRow in renderOrderRow---\\\"; rtk grep -nF \\\"key={...",
+  "error": "Exit code 1\n(eval):1: unmatched \"",
+  "timestamp": "2026-06-20T14:28:19.283Z",
   "retry_count": 1
 }

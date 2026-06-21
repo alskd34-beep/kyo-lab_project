@@ -182,9 +182,9 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
   const toggle = (k: string) => setCollapsed(p => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); return n })
 
   return (
-    <div className="fixed inset-0 z-50 flex bg-slate-900/40 p-3 md:p-5" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex bg-slate-900/50 p-3 md:p-6" onClick={onClose}>
       <div
-        className="mx-auto flex h-full w-full max-w-[1400px] overflow-hidden rounded-2xl bg-slate-50 shadow-2xl ring-1 ring-slate-200"
+        className="flex h-full w-full overflow-hidden rounded-2xl bg-slate-50 shadow-2xl ring-1 ring-slate-200"
         onClick={e => e.stopPropagation()}
       >
         {/* ── 좌측: 배정 현황 ─────────────────────────────────────────────── */}
@@ -247,7 +247,7 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
                             <th className="px-3 py-2">품목명</th><th className="px-3 py-2">품목코드</th><th className="px-3 py-2">제조번호</th>
                             <th className="px-3 py-2">제형</th><th className="px-3 py-2">포장일</th><th className="px-3 py-2">완료예정</th>
                             <th className="px-3 py-2">긴급</th><th className="px-3 py-2">진행방법</th><th className="px-3 py-2">공수</th>
-                            <th className="px-3 py-2">담당자</th><th className="px-3 py-2">상태</th>
+                            <th className="px-3 py-2">상태</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -264,11 +264,6 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
                               </td>
                               <td className="px-3 py-2.5">{r.method}</td>
                               <td className="px-3 py-2.5">{r.workdays != null ? `${r.workdays}일` : "-"}</td>
-                              <td className="px-3 py-2.5">
-                                <span className="inline-flex items-center gap-1.5 font-medium text-slate-800">
-                                  <Avatar name={r.assigneeName ?? testerName} className="size-5 text-[12px] rounded-md" />{r.assigneeName ?? testerName}
-                                </span>
-                              </td>
                               <td className="px-3 py-2.5"><StatusBadge status={r.status} /></td>
                             </tr>
                           ))}
