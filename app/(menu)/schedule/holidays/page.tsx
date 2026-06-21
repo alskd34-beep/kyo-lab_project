@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
 import { useLockBodyScroll } from "@frontend/hooks/use-lock-body-scroll"
-import { CalendarDays, Plus, Trash2, X, Loader2, ChevronLeft, ChevronRight } from "lucide-react"
+import { CalendarDays, Plus, Trash2, X, Loader2, ChevronLeft, ChevronRight, Download } from "lucide-react"
 import { DateField } from "@frontend/components/ui/date-field"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface HolidayRow {
   date: string
   description: string
+  source?: "api" | "manual"
   createdAt?: string
 }
 
@@ -23,6 +24,7 @@ export default function HolidaysPage() {
   const [rows, setRows] = useState<HolidayRow[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
+  const [importing, setImporting] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [msgType, setMsgType] = useState<"ok" | "err">("ok")
   const [showAdd, setShowAdd] = useState(false)
@@ -70,6 +72,30 @@ export default function HolidaysPage() {
     }
   }
 
+  // 현재 보고 있는 연도를 공휴일 API 로 수집해 반영(수동 우선 보존, idempotent)
+  const importFromApi = async () => {
+    setImporting(true)
+    try {
+      const res = await fetch("/api/holidays/import", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ year }),
+      })
+      const d = await res.json()
+      if (!res.ok) {
+        flash(d.error ?? "불러오기 실패", "err")
+        return
+      }
+      flash(`${year}년 공휴일 ${d.imported}건 반영${d.skippedManual ? ` · 수동 ${d.skippedManual}건 보존` : ""}`)
+      await load()
+    } catch {
+      flash("불러오기 중 오류가 발생했습니다.", "err")
+    } finally {
+      setImporting(false)
+    }
+  }
+
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-5 p-5">
       {/* Header */}
@@ -84,12 +110,23 @@ export default function HolidaysPage() {
           </div>
         </div>
         {isAdmin && (
-          <button
-            onClick={() => setShowAdd(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
-          >
-            <Plus size={16} /> 공휴일 추가
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => void importFromApi()}
+              disabled={importing}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3.5 py-2 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-100 disabled:opacity-60"
+              title="data.go.kr 공휴일 API 에서 해당 연도를 불러와 반영합니다(수동 등록은 보존)."
+            >
+              {importing ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+              {year}년 API로 불러오기
+            </button>
+            <button
+              onClick={() => setShowAdd(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+            >
+              <Plus size={16} /> 공휴일 추가
+            </button>
+          </div>
         )}
       </div>
 
@@ -142,6 +179,15 @@ export default function HolidaysPage() {
                   {r.date}
                 </span>
                 <span className="flex-1 text-sm text-slate-600">{r.description || "—"}</span>
+                <span
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                    r.source === "api"
+                      ? "bg-blue-50 text-blue-700"
+                      : "bg-slate-100 text-slate-500"
+                  }`}
+                >
+                  {r.source === "api" ? "API" : "수동"}
+                </span>
                 {isAdmin && (
                   <button
                     onClick={() => void remove(r.date)}

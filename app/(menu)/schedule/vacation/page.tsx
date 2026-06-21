@@ -107,6 +107,7 @@ function layoutWeek(weekDays: Date[], rows: ScheduleRow[]): Seg[][] {
 
 const DAY_NUM_H = 26
 const LANE_H = 22
+const HOLIDAY_H = 16 // 공휴일 라벨 줄 높이(공휴일이 있는 주에만 가산)
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function VacationPage() {
@@ -124,6 +125,8 @@ export default function VacationPage() {
   const [addDefaults, setAddDefaults] = useState<{ start: string; end: string } | null>(null)
   const [detail, setDetail] = useState<ScheduleRow | null>(null)
   const [rangeCheck, setRangeCheck] = useState(false)
+  // 공휴일(읽기 전용): 날짜(yyyy-MM-dd) → 명칭. public_holidays 를 기존 API 로만 읽는다.
+  const [holidays, setHolidays] = useState<Record<string, string>>({})
 
   const flash = (m: string) => { setMsg(m); setTimeout(() => setMsg(null), 3500) }
 
@@ -147,6 +150,32 @@ export default function VacationPage() {
       .then(d => setUsers((d.users ?? []).map((u: UserOption) => ({ id: u.id, displayName: u.displayName, username: u.username }))))
       .catch(() => {})
   }, [isAdmin])
+
+  // 공휴일 조회(읽기 전용): 현재 표시 범위(그리드)에 걸치는 연도를 기존 API 로 가져와 병합.
+  // 월 뷰가 연도 경계를 걸칠 수 있으므로 단일 연도로 가정하지 않는다(예: 12월~다음해 1월).
+  useEffect(() => {
+    const { from, to } = monthRange(year, month)
+    const years = Array.from(new Set([from.slice(0, 4), to.slice(0, 4)])).map(Number)
+    let alive = true
+    void Promise.all(
+      years.map(y =>
+        fetch(`/api/holidays?year=${y}`, { credentials: "include" })
+          .then(r => (r.ok ? r.json() : { rows: [] }))
+          .catch(() => ({ rows: [] })),
+      ),
+    ).then(results => {
+      if (!alive) return
+      const map: Record<string, string> = {}
+      for (const res of results) {
+        for (const h of (res.rows ?? []) as { date: string; description: string }[]) {
+          // 실제 표시 범위만 보관(api/manual 구분 없이 전부)
+          if (h.date >= from && h.date <= to) map[h.date] = h.description || "공휴일"
+        }
+      }
+      setHolidays(map)
+    })
+    return () => { alive = false }
+  }, [year, month])
 
   const cells = useMemo(() => buildCalendar(year, month), [year, month])
   const weeks = useMemo(() => Array.from({ length: 6 }, (_, w) => cells.slice(w * 7, w * 7 + 7)), [cells])
@@ -234,6 +263,9 @@ export default function VacationPage() {
               <span className={`h-2.5 w-2.5 rounded-sm ${TYPE_BAR[t].split(" ")[0]}`} /> {TYPE_LABEL[t]}
             </span>
           ))}
+          <span className="inline-flex items-center gap-1.5 text-rose-600">
+            <span className="h-2.5 w-2.5 rounded-sm bg-rose-500" /> 공휴일
+          </span>
         </div>
       </div>
 
@@ -253,7 +285,9 @@ export default function VacationPage() {
           <div className="divide-y divide-slate-100">
             {weeks.map((week, wi) => {
               const lanes = layoutWeek(week, rows)
-              const height = DAY_NUM_H + Math.max(lanes.length, 1) * LANE_H + 6
+              const weekHasHoliday = week.some(d => holidays[iso(d)])
+              const dayBlockH = DAY_NUM_H + (weekHasHoliday ? HOLIDAY_H : 0)
+              const height = dayBlockH + Math.max(lanes.length, 1) * LANE_H + 6
               return (
                 <div key={wi} className="relative" style={{ height }}>
                   {/* 배경 날짜 칸 — 클릭 시 빠른 등록 */}
@@ -279,13 +313,23 @@ export default function VacationPage() {
                     {week.map((d, di) => {
                       const inMonth = d.getUTCMonth() === month
                       const isToday = iso(d) === todayIso
+                      const holidayName = holidays[iso(d)]
                       return (
                         <div key={di} className="px-1.5 pt-1">
                           <span className={`inline-flex h-5 min-w-5 items-center justify-center px-1 text-[11px] font-semibold ${
                             isToday ? "rounded-full bg-blue-600 text-white"
+                            : holidayName ? "text-rose-600"
                             : inMonth ? (di === 0 ? "text-red-500" : di === 6 ? "text-blue-500" : "text-slate-600")
                             : "text-slate-300"
                           }`}>{d.getUTCDate()}</span>
+                          {holidayName && (
+                            <div
+                              title={holidayName}
+                              className={`mt-0.5 truncate text-[10px] font-semibold leading-tight ${inMonth ? "text-rose-600" : "text-rose-300"}`}
+                            >
+                              {holidayName}
+                            </div>
+                          )}
                         </div>
                       )
                     })}
