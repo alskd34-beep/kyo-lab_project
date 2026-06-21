@@ -1,10 +1,10 @@
 "use client"
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react"
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
 import {
   RefreshCw, Sparkles, History, AlertCircle, X, Loader2, Database,
-  ChevronDown, ChevronRight, ChevronLeft, Lock, Search, CalendarDays, Users, ListChecks, Layers,
+  ChevronDown, ChevronRight, ChevronLeft, Lock, LockOpen, Search, CalendarDays, Users, ListChecks, Layers,
 } from "lucide-react"
 import { cn } from "@frontend/lib/utils"
 import { useLockBodyScroll } from "@frontend/hooks/use-lock-body-scroll"
@@ -46,7 +46,7 @@ interface OrderRow {
 interface Tester { id: string; name: string }
 interface EditRow {
   id: string; field: string; oldValue: string | null; newValue: string | null
-  reason: string; editedAt: string
+  reason: string; editedAt: string; editedBy: string | null; editedByName: string | null
 }
 
 // 화면에 렌더링할 그룹(주차/담당자/상태 공통 형태)
@@ -125,7 +125,7 @@ function AssigneeAvatar({ name, size = "sm" }: { name: string; size?: "sm" | "md
       aria-hidden
       className={cn(
         "inline-flex shrink-0 items-center justify-center rounded-md bg-muted ring-1 ring-border",
-        size === "sm" ? "size-5 text-[12px]" : "size-7 text-[16px]",
+        size === "sm" ? "size-7 text-[16px]" : "size-9 text-[22px]",
       )}
     >
       {avatarEmoji(name)}
@@ -227,7 +227,9 @@ export default function OrdersPage() {
   const [assigneeTarget, setAssigneeTarget] = useState<{ id: string; name: string } | null>(null)
   const [showLog, setShowLog] = useState(false)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const collapseInited = useRef(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkTester, setBulkTester] = useState("")
   const [families, setFamilies] = useState<{ id: string; name: string; codes: string[] }[]>([])
   const [famCollapsed, setFamCollapsed] = useState<Set<string>>(new Set())
 
@@ -298,6 +300,39 @@ export default function OrdersPage() {
     } finally { setBusy(null) }
   }
 
+  // 선택된 오더에 담당자 일괄 배정 — 확정(LOCK)된 건은 제외(확정 해제된 것만 변경 가능)
+  const applyAssign = async () => {
+    if (!bulkTester) return
+    const realId = bulkTester === "none" ? null : bulkTester
+    const ids = Array.from(selected).filter(id => {
+      const r = rows.find(x => x.id === id)
+      return r && !r.locked
+    })
+    if (ids.length === 0) { flash("확정 해제된 오더만 담당자 변경이 가능합니다."); return }
+    setBusy("assign-bulk")
+    try {
+      const results = await Promise.all(ids.map(async id => {
+        const res = await fetch("/api/pct-orders", {
+          method: "PATCH", credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, patch: { assigneeTesterId: realId }, reason: "일괄 담당자 배정" }),
+        })
+        return { id, ok: res.ok }
+      }))
+      const okIds = new Set(results.filter(r => r.ok).map(r => r.id))
+      const failed = results.length - okIds.size
+      const name = realId ? (testers.find(t => t.id === realId)?.name ?? "") : "미배정"
+      setRows(prev => prev.map(r => okIds.has(r.id)
+        ? { ...r, assigneeTesterId: realId, assigneeName: realId ? name : null }
+        : r))
+      setSelected(new Set())
+      setBulkTester("")
+      flash(`${okIds.size}건 담당자 '${name}' 배정 완료${failed > 0 ? ` (실패 ${failed}건)` : ""}`)
+    } catch (e) {
+      flash(`담당자 배정 실패: ${e instanceof Error ? e.message : ""}`)
+    } finally { setBusy(null) }
+  }
+
   const runAutoAssign = async () => {
     setBusy("assign")
     try {
@@ -352,6 +387,15 @@ export default function OrdersPage() {
     })
     return sorted.map(([key, val]) => ({ key, ...val, isThisWeek: key === tw }))
   }, [filteredRows])
+
+  // 최초 1회: 이번주만 펼치고 나머지 주차는 접어 둔다.
+  useEffect(() => {
+    if (collapseInited.current || weekGroups.length === 0) return
+    const next = new Set<string>()
+    for (const g of weekGroups) if (!g.isThisWeek) next.add(g.key)
+    setCollapsed(next)
+    collapseInited.current = true
+  }, [weekGroups])
 
   // 연단위 보기용 연도 목록 (최신부터)
   const years = useMemo(() => {
@@ -462,9 +506,10 @@ export default function OrdersPage() {
     // 묶음 내부 행은 품목명 ㄱㄴㄷ 정렬
     for (const arr of famRows.values()) arr.sort((a, b) => byKo(a.productName, b.productName))
 
-    // 묶음(블록)과 개별 행을 한 목록으로 모으고, 1순위 담당자 → 2순위 품목명으로 정렬
+    // 묶음(그룹)을 위에, 개별 행을 그 다음에. 각 구간 내부는 담당자 → 품목명 순.
     type Sortable = { item: RowItem; assignee: string; name: string }
-    const items: Sortable[] = []
+    const familyItems: Sortable[] = []
+    const singleItems: Sortable[] = []
     const emitted = new Set<string>()
     for (const r of rows) {
       const fam = familyByCode.get(r.productCode)
@@ -474,17 +519,19 @@ export default function OrdersPage() {
         emitted.add(fam.id)
         // 묶음은 보통 한 담당자에게 배정됨 → 대표 담당자 기준 정렬
         const repAssignee = group.find(x => x.assigneeName)?.assigneeName ?? null
-        items.push({
+        familyItems.push({
           item: { type: "family", familyId: `${groupKey}::${fam.id}`, familyName: fam.name, rows: group },
           assignee: asgKey(repAssignee),
           name: group[0].productName,
         })
       } else {
-        items.push({ item: { type: "single", row: r }, assignee: asgKey(r.assigneeName), name: r.productName })
+        singleItems.push({ item: { type: "single", row: r }, assignee: asgKey(r.assigneeName), name: r.productName })
       }
     }
-    items.sort((a, b) => byKo(a.assignee, b.assignee) || byKo(a.name, b.name))
-    return items.map(x => x.item)
+    const byAssigneeThenName = (a: Sortable, b: Sortable) => byKo(a.assignee, b.assignee) || byKo(a.name, b.name)
+    familyItems.sort(byAssigneeThenName)
+    singleItems.sort(byAssigneeThenName)
+    return [...familyItems, ...singleItems].map(x => x.item)
   }
 
   // 단일 오더 행 렌더 (트리 들여쓰기 옵션)
@@ -800,7 +847,7 @@ export default function OrdersPage() {
         />
       )}
       {historyTarget && (
-        <HistoryModal order={historyTarget} onClose={() => setHistoryTarget(null)} />
+        <HistoryModal order={historyTarget} testers={testers} onClose={() => setHistoryTarget(null)} />
       )}
       {assigneeTarget && (
         <AssigneeDetailModal
@@ -811,24 +858,54 @@ export default function OrdersPage() {
       )}
       {showLog && <IngestLogModal onClose={() => setShowLog(false)} />}
 
-      {/* 선택 시 하단 미니 모달 — 확정/해제 */}
-      {selected.size > 0 && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-5 z-40 flex justify-center px-4">
-          <div className="pointer-events-auto flex items-center gap-2 rounded-xl border bg-card px-3 py-2 shadow-lg">
-            <span className="px-1 text-sm font-medium text-foreground tabular-nums">{selected.size}건 선택됨</span>
-            <span className="h-4 w-px bg-border" />
-            <Button size="default" onClick={() => applyLock(true)} disabled={busy === "lock"}>
-              {busy === "lock" ? <Loader2 className="animate-spin" /> : <Lock />}확정
-            </Button>
-            <Button size="default" variant="outline" onClick={() => applyLock(false)} disabled={busy === "lock"}>
-              확정 해제
-            </Button>
-            <Button size="icon" variant="ghost" onClick={() => setSelected(new Set())} title="선택 해제">
-              <X />
-            </Button>
+      {/* 선택 시 하단 미니 모달 — 담당자 배정 / 확정·해제 */}
+      {selected.size > 0 && (() => {
+        const lockedCount = Array.from(selected).filter(id => rows.find(r => r.id === id)?.locked).length
+        const unlockedCount = selected.size - lockedCount
+        return (
+          <div className="pointer-events-none fixed inset-x-0 bottom-5 z-40 flex justify-center px-4">
+            <div className="pointer-events-auto flex w-full max-w-3xl flex-wrap items-center gap-3 rounded-xl border bg-card px-4 py-2.5 shadow-lg">
+              <div className="flex flex-col leading-tight">
+                <span className="text-sm font-semibold text-foreground tabular-nums">{selected.size}건 선택됨</span>
+                <span className="text-[11px] text-muted-foreground tabular-nums">확정 {lockedCount} · 미확정 {unlockedCount}</span>
+              </div>
+
+              <span className="h-8 w-px bg-border" />
+
+              {/* 담당자 일괄 배정 — 확정 해제된(미확정) 건만 */}
+              <div className="flex items-center gap-1.5">
+                <Select value={bulkTester} onValueChange={setBulkTester}>
+                  <SelectTrigger className="h-9 w-40"><SelectValue placeholder="담당자 선택" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">미배정</SelectItem>
+                    {testers.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Button
+                  size="default"
+                  onClick={applyAssign}
+                  disabled={busy !== null || !bulkTester || unlockedCount === 0}
+                  title={unlockedCount === 0 ? "확정 해제된 오더만 담당자 배정이 가능합니다" : undefined}
+                >
+                  {busy === "assign-bulk" ? <Loader2 className="animate-spin" /> : <Users />}배정
+                </Button>
+              </div>
+
+              <span className="h-8 w-px bg-border" />
+
+              <Button size="default" onClick={() => applyLock(true)} disabled={busy !== null}>
+                {busy === "lock" ? <Loader2 className="animate-spin" /> : <Lock />}확정
+              </Button>
+              <Button size="default" variant="outline" onClick={() => applyLock(false)} disabled={busy !== null}>
+                <LockOpen />확정 해제
+              </Button>
+              <Button size="icon" variant="ghost" onClick={() => { setSelected(new Set()); setBulkTester("") }} title="선택 해제" className="ml-auto">
+                <X />
+              </Button>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }
@@ -948,7 +1025,15 @@ function EditModal({ order, testers, onClose, onSaved }: {
 }
 
 // ─── 수정이력 모달 ────────────────────────────────────────────────────────────
-function HistoryModal({ order, onClose }: { order: OrderRow; onClose: () => void }) {
+// 수정이력 값 보기 좋게 변환 (담당자 id→이름, 긴급 boolean→라벨)
+function fmtEditValue(field: string, v: string | null, testers: Tester[]): string {
+  if (v == null || v === "") return field === "assigneeTesterId" ? "미배정" : "(없음)"
+  if (field === "assigneeTesterId") return testers.find(t => t.id === v)?.name ?? v
+  if (field === "isUrgent") return v === "true" ? "긴급" : "일반"
+  return v
+}
+
+function HistoryModal({ order, testers, onClose }: { order: OrderRow; testers: Tester[]; onClose: () => void }) {
   const [rows, setRows] = useState<EditRow[]>([])
   const [loading, setLoading] = useState(true)
   useEffect(() => {
@@ -961,26 +1046,61 @@ function HistoryModal({ order, onClose }: { order: OrderRow; onClose: () => void
     })()
   }, [order.id])
 
+  // 한 번의 저장(동일 시각·사유·작성자)으로 발생한 필드 변경들을 하나의 이력 카드로 묶는다.
+  const sessions = useMemo(() => {
+    const m = new Map<string, { key: string; editedAt: string; reason: string; editorName: string | null; edits: EditRow[] }>()
+    for (const e of rows) {
+      const key = `${e.editedAt}|${e.reason}|${e.editedBy ?? ""}`
+      if (!m.has(key)) m.set(key, { key, editedAt: e.editedAt, reason: e.reason, editorName: e.editedByName, edits: [] })
+      m.get(key)!.edits.push(e)
+    }
+    return Array.from(m.values())
+  }, [rows])
+
   return (
     <Modal title={`수정이력 — ${order.productName}`} onClose={onClose}>
       {loading ? (
         <p className="py-6 text-center text-sm text-muted-foreground">불러오는 중…</p>
-      ) : rows.length === 0 ? (
+      ) : sessions.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted-foreground">수정 이력이 없습니다.</p>
       ) : (
-        <ul className="flex max-h-[50vh] flex-col gap-2 overflow-y-auto">
-          {rows.map(e => (
-            <li key={e.id} className="rounded-lg border bg-muted/40 px-3 py-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-foreground">{FIELD_LABEL[e.field] ?? e.field}</span>
-                <span className="text-[11px] text-muted-foreground">{new Date(e.editedAt).toLocaleString("ko-KR")}</span>
+        <ul className="flex max-h-[60vh] flex-col gap-2.5 overflow-y-auto">
+          {sessions.map((s, i) => (
+            <li key={s.key} className="rounded-lg border bg-muted/40 px-3 py-2.5">
+              {/* 헤더: 작성자 · 시각 · 변경 필드 수 */}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-flex items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-[11px] font-semibold text-primary">
+                    {sessions.length - i}회차
+                  </span>
+                  <span className="text-sm font-semibold text-foreground">{s.editorName ?? "시스템/미상"}</span>
+                  <Badge variant="secondary" className="text-[10px]">{s.edits.length}개 변경</Badge>
+                </div>
+                <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
+                  {new Date(s.editedAt).toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" })}
+                </span>
               </div>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                <span className="text-muted-foreground line-through">{e.oldValue ?? "(없음)"}</span>
-                {" → "}
-                <span className="font-medium text-foreground">{e.newValue ?? "(없음)"}</span>
+
+              {/* 필드별 변경 내역 */}
+              <div className="mt-2 flex flex-col gap-1.5">
+                {s.edits.map(e => (
+                  <div key={e.id} className="grid grid-cols-[auto_1fr] items-baseline gap-2 text-xs">
+                    <span className="rounded bg-card px-1.5 py-0.5 font-medium text-muted-foreground ring-1 ring-border">
+                      {FIELD_LABEL[e.field] ?? e.field}
+                    </span>
+                    <span className="text-muted-foreground">
+                      <span className="text-muted-foreground line-through">{fmtEditValue(e.field, e.oldValue, testers)}</span>
+                      <span className="mx-1 text-muted-foreground/60">→</span>
+                      <span className="font-semibold text-foreground">{fmtEditValue(e.field, e.newValue, testers)}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* 사유 */}
+              <p className="mt-2 border-t border-border/60 pt-1.5 text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">사유</span> · {s.reason}
               </p>
-              <p className="mt-1 text-xs text-muted-foreground">사유: {e.reason}</p>
             </li>
           ))}
         </ul>

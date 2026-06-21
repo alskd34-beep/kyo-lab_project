@@ -132,32 +132,34 @@ export default function HomePage() {
       return json as { row: TableauSummary }
     })
 
+    // 두 요청을 모두 await(처리)해야 abort 시 tableauPromise 가 미처리 거부로
+    // 남지 않는다. 중도 early-return 금지 — 상태 갱신만 abort 여부로 가드한다.
     try {
       const [statsData, batchData] = await dashboardPromise
-      if (signal?.aborted) return
-      setStats(statsData)
-      setUpcoming(batchData.rows.length > 0 ? batchData.rows : DEMO_UPCOMING)
-      setUsingDemo(false)
+      if (!signal?.aborted) {
+        setStats(statsData)
+        setUpcoming(batchData.rows.length > 0 ? batchData.rows : DEMO_UPCOMING)
+        setUsingDemo(false)
+      }
     } catch {
-      if (signal?.aborted) return
-      setUsingDemo(true)
+      if (!signal?.aborted) setUsingDemo(true)
     } finally {
-      if (signal?.aborted) return
-      setIsLoading(false)
+      if (!signal?.aborted) setIsLoading(false)
     }
 
     try {
       const data = await tableauPromise
-      if (signal?.aborted) return
-      setTableau(data.row)
-      setTableauError(null)
+      if (!signal?.aborted) {
+        setTableau(data.row)
+        setTableauError(null)
+      }
     } catch (err) {
-      if (signal?.aborted) return
-      setTableau(null)
-      setTableauError(err instanceof Error ? err.message : 'Tableau 연동 오류')
+      if (!signal?.aborted) {
+        setTableau(null)
+        setTableauError(err instanceof Error ? err.message : 'Tableau 연동 오류')
+      }
     } finally {
-      if (signal?.aborted) return
-      setIsTableauLoading(false)
+      if (!signal?.aborted) setIsTableauLoading(false)
     }
   }, [])
 

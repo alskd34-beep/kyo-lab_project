@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
 import {
-  Plus, Pencil, Trash2, X, Loader2, Search, Wand2, Layers, AlertCircle,
+  Plus, Pencil, Trash2, X, Loader2, Search, Sparkles, Layers, AlertCircle,
 } from "lucide-react"
 import { cn } from "@frontend/lib/utils"
 import { useLockBodyScroll } from "@frontend/hooks/use-lock-body-scroll"
@@ -45,16 +45,20 @@ export default function ConcurrentItemsPage() {
 
   useEffect(() => { void load() }, [load])
 
-  const runSeed = async () => {
-    setBusy("seed")
+
+  // LLM(Codex)으로 기존 군을 모두 지우고 재그룹핑
+  const runSeedLLM = async () => {
+    if (!confirm("기존 동시분석 품목군을 모두 삭제하고 LLM으로 다시 그룹핑합니다. 진행할까요?")) return
+    setBusy("seed-llm")
     try {
-      const res = await fetch("/api/concurrent-product-families?seed=1", { method: "POST", credentials: "include" })
+      const res = await fetch("/api/concurrent-product-families?seed=llm", { method: "POST", credentials: "include" })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      flash(`현재 데이터에서 자동 생성 완료 — 품목군 ${data.created}개 · 묶인 품목 ${data.grouped}건`)
+      const via = data.mode === "llm" ? "LLM" : "규칙엔진(LLM 미사용)"
+      flash(`재그룹핑 완료(${via}) — 품목군 ${data.created}개 · 묶인 품목 ${data.grouped}건`)
       await load()
     } catch (e) {
-      flash(`자동 생성 실패: ${e instanceof Error ? e.message : ""}`)
+      flash(`재그룹핑 실패: ${e instanceof Error ? e.message : ""}`)
     } finally { setBusy(null) }
   }
 
@@ -93,9 +97,9 @@ export default function ConcurrentItemsPage() {
         </div>
         {isAdmin && (
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" size="lg" onClick={runSeed} disabled={busy !== null}>
-              {busy === "seed" ? <Loader2 className="animate-spin" /> : <Wand2 />}
-              현재 데이터로 자동 생성
+            <Button variant="outline" size="lg" onClick={runSeedLLM} disabled={busy !== null}>
+              {busy === "seed-llm" ? <Loader2 className="animate-spin" /> : <Sparkles />}
+              AI로 그룹핑
             </Button>
             <Button size="lg" onClick={() => setEditTarget("new")} disabled={busy !== null}>
               <Plus />새 품목군

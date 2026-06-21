@@ -183,6 +183,7 @@ export interface OrderEditRow {
   newValue: string | null
   reason: string
   editedBy: string | null
+  editedByName: string | null
   editedAt: string
 }
 
@@ -245,13 +246,29 @@ export async function listEdits(orderId: string): Promise<OrderEditRow[]> {
     .eq('order_id', orderId)
     .order('edited_at', { ascending: false })
   if (error) throw error
-  return (data ?? []).map(e => ({
+  const rows = data ?? []
+
+  // 작성자 id → 표시명 보강
+  const editorIds = Array.from(new Set(rows.map(e => e.edited_by as string).filter(Boolean)))
+  const nameById = new Map<string, string>()
+  if (editorIds.length > 0) {
+    const { data: users } = await supabaseAdmin
+      .from('users')
+      .select('id, display_name, username')
+      .in('id', editorIds)
+    for (const u of users ?? []) {
+      nameById.set(u.id as string, (u.display_name as string) || (u.username as string) || '')
+    }
+  }
+
+  return rows.map(e => ({
     id: e.id as string,
     field: e.field as string,
     oldValue: (e.old_value as string) ?? null,
     newValue: (e.new_value as string) ?? null,
     reason: e.reason as string,
     editedBy: (e.edited_by as string) ?? null,
+    editedByName: e.edited_by ? (nameById.get(e.edited_by as string) ?? null) : null,
     editedAt: e.edited_at as string,
   }))
 }

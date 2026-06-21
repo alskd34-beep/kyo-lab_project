@@ -7,7 +7,7 @@
 
 import { NextRequest } from 'next/server'
 import { requireAuth, requireAdmin } from '@backend/lib/guard'
-import { listFamilies, createFamily, seedFromProducts } from '@backend/services/concurrentProductFamilies'
+import { listFamilies, createFamily, seedFromProducts, seedFromProductsLLM } from '@backend/services/concurrentProductFamilies'
 
 export const runtime = 'nodejs'
 
@@ -44,8 +44,15 @@ export async function POST(req: NextRequest) {
   const auth = await requireAdmin(req)
   if (!auth.ok) return auth.response
   try {
-    if (req.nextUrl.searchParams.get('seed') === '1') {
-      const result = await seedFromProducts()
+    const seed = req.nextUrl.searchParams.get('seed')
+    if (seed === 'llm') {
+      // LLM(Codex)으로 재그룹핑 — 기존 군 전체 삭제 후 재생성
+      const result = await seedFromProductsLLM(true)
+      return Response.json(result)
+    }
+    if (seed === '1') {
+      const reset = req.nextUrl.searchParams.get('reset') === '1'
+      const result = await seedFromProducts(reset)
       return Response.json(result)
     }
     const body = await req.json() as { name?: string; note?: string | null; codes?: string[] }
