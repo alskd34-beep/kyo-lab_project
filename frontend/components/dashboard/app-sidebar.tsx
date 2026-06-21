@@ -58,7 +58,8 @@ const NAV_SECTIONS: NavSection[] = [
       {
         id: "test-mgmt", icon: FlaskConical, label: "시험관리",
         subItems: [
-          { id: "prod-status", label: "제품시험현황", live: true },
+          { id: "prod-status", label: "작업 현황", live: true },
+          { id: "test-status", label: "시험현황", live: true },
           { id: "test-result", label: "결과입력" },
           { id: "test-cert", label: "성적서관리" },
           { id: "testers", label: "시험자 관리", live: true },
@@ -152,6 +153,7 @@ const PATH_MAP: Record<string, string> = {
   "schedule-dashboard": "/schedule/dashboard",
   "my-tasks": "/my-tasks",
   "prod-status": "/product-test/prod-status",
+  "test-status": "/test-mgmt/test-status",
   "test-result": "/test-mgmt/test-result",
   "test-cert": "/test-mgmt/test-cert",
   testers: "/test-mgmt/testers",
