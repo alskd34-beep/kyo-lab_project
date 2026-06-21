@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react'
 import { Button } from '@frontend/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@frontend/components/ui/card'
+import { Skeleton } from '@frontend/components/ui/skeleton'
 import {
   Table,
   TableBody,
@@ -21,6 +22,9 @@ import {
   CheckCircle2,
   User,
   Send,
+  ChevronDown,
+  ChevronUp,
+  ChevronsUpDown,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -85,7 +89,15 @@ const TXT_TERTIARY  = 'text-slate-600 dark:text-slate-300'
 const TXT_MUTED     = 'text-slate-500 dark:text-slate-400'
 const BORDER        = 'border-slate-200 dark:border-slate-700'
 const CARD_BG       = 'bg-white dark:bg-slate-900'
-const TH_CLS        = 'text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300'
+const TH_CLS        = 'px-3 text-muted-foreground'
+
+// ─── SortIcon ─────────────────────────────────────────────────────────────────
+function SortIcon({ field, sortField, sortDir }: { field: string; sortField: string | null; sortDir: 'asc' | 'desc' }) {
+  if (sortField !== field) return <ChevronsUpDown size={12} className="ml-1 inline-block opacity-40" />
+  return sortDir === 'asc'
+    ? <ChevronUp size={12} className="ml-1 inline-block" />
+    : <ChevronDown size={12} className="ml-1 inline-block" />
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function SchedulerPage() {
@@ -154,6 +166,34 @@ export default function SchedulerPage() {
   const unassigned = result?.data?.unassigned ?? []
   const meta       = result?.meta
 
+  // ── 검토자 큐 정렬 ──────────────────────────────────────────────────────────
+  type ReviewSortField = 'tester_name' | 'product_name' | 'batch_no'
+  const [reviewSortField, setReviewSortField] = useState<ReviewSortField | null>(null)
+  const [reviewSortDir,   setReviewSortDir]   = useState<'asc' | 'desc'>('asc')
+
+  const toggleReviewSort = (field: ReviewSortField) => {
+    if (reviewSortField === field) {
+      setReviewSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setReviewSortField(field)
+      setReviewSortDir('asc')
+    }
+  }
+
+  // ── 미배정 정렬 ─────────────────────────────────────────────────────────────
+  type UnassignedSortField = 'product_name' | 'batch_no'
+  const [unassignedSortField, setUnassignedSortField] = useState<UnassignedSortField | null>(null)
+  const [unassignedSortDir,   setUnassignedSortDir]   = useState<'asc' | 'desc'>('asc')
+
+  const toggleUnassignedSort = (field: UnassignedSortField) => {
+    if (unassignedSortField === field) {
+      setUnassignedSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setUnassignedSortField(field)
+      setUnassignedSortDir('asc')
+    }
+  }
+
   // 시험자별로 그룹화
   const groupedByTester = useMemo(() => {
     const map = new Map<string, { name: string; tester_id: number; items: { item: ScheduleItem; key: string }[] }>()
@@ -174,6 +214,26 @@ export default function SchedulerPage() {
     })
     return list
   }, [schedule, submitted])
+
+  const sortedReviewQueue = useMemo(() => {
+    if (!reviewSortField) return reviewQueue
+    return [...reviewQueue].sort((a, b) => {
+      const aVal = a.item[reviewSortField] ?? ''
+      const bVal = b.item[reviewSortField] ?? ''
+      const cmp = String(aVal).localeCompare(String(bVal), 'ko')
+      return reviewSortDir === 'asc' ? cmp : -cmp
+    })
+  }, [reviewQueue, reviewSortField, reviewSortDir])
+
+  const sortedUnassigned = useMemo(() => {
+    if (!unassignedSortField) return unassigned
+    return [...unassigned].sort((a, b) => {
+      const aVal = a[unassignedSortField] ?? ''
+      const bVal = b[unassignedSortField] ?? ''
+      const cmp = String(aVal).localeCompare(String(bVal), 'ko')
+      return unassignedSortDir === 'asc' ? cmp : -cmp
+    })
+  }, [unassigned, unassignedSortField, unassignedSortDir])
 
   return (
     <div className="p-6">
@@ -260,10 +320,26 @@ export default function SchedulerPage() {
         {/* ── 로딩 ───────────────────────────────────────────────────────── */}
         {loading && (
           <Card className={`${BORDER} ${CARD_BG}`}>
-            <CardContent className="flex flex-col items-center justify-center gap-2 py-12">
-              <Loader2 size={28} className="animate-spin text-blue-500" />
-              <p className={`text-sm font-medium ${TXT_SECONDARY}`}>AI가 스케줄을 분석 중입니다...</p>
-              <p className={`text-xs ${TXT_MUTED}`}>시험자 역량 · 장비 · 공수 · 휴가를 종합 검토합니다.</p>
+            <CardContent className="py-5 space-y-3">
+              {/* 요약 카드 행 */}
+              <div className="grid grid-cols-4 gap-3">
+                {[...Array(4)].map((_, i) => (
+                  <Skeleton key={i} className="h-[68px] w-full rounded-xl" />
+                ))}
+              </div>
+              {/* 칸반 보드 헤더 */}
+              <Skeleton className="h-6 w-48 rounded-md" />
+              {/* 칸반 컬럼 3개 */}
+              <div className="flex gap-3">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="flex w-72 shrink-0 flex-col gap-2">
+                    <Skeleton className="h-10 w-full rounded-xl" />
+                    <Skeleton className="h-24 w-full rounded-xl" />
+                    <Skeleton className="h-20 w-full rounded-xl" />
+                    <Skeleton className="h-16 w-full rounded-xl" />
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
         )}
@@ -511,40 +587,46 @@ export default function SchedulerPage() {
                     </span>
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="px-0 pb-0">
+                <CardContent className="gap-0 overflow-hidden py-0">
                   <Table>
                     <TableHeader>
-                      <TableRow className="bg-violet-50 dark:bg-violet-950/30 hover:bg-violet-50 dark:hover:bg-violet-950/30">
-                        <TableHead className={TH_CLS}>시험자</TableHead>
-                        <TableHead className={TH_CLS}>품목명</TableHead>
-                        <TableHead className={TH_CLS}>제조번호</TableHead>
+                      <TableRow className="bg-violet-50 dark:bg-violet-950/30 hover:bg-transparent">
+                        <TableHead className={`${TH_CLS} cursor-pointer select-none`} onClick={() => toggleReviewSort('tester_name')}>
+                          시험자<SortIcon field="tester_name" sortField={reviewSortField} sortDir={reviewSortDir} />
+                        </TableHead>
+                        <TableHead className={`${TH_CLS} cursor-pointer select-none`} onClick={() => toggleReviewSort('product_name')}>
+                          품목명<SortIcon field="product_name" sortField={reviewSortField} sortDir={reviewSortDir} />
+                        </TableHead>
+                        <TableHead className={`${TH_CLS} cursor-pointer select-none`} onClick={() => toggleReviewSort('batch_no')}>
+                          제조번호<SortIcon field="batch_no" sortField={reviewSortField} sortDir={reviewSortDir} />
+                        </TableHead>
                         <TableHead className={TH_CLS}>완료 항목</TableHead>
                         <TableHead className={`${TH_CLS} text-center`}>긴급</TableHead>
                         <TableHead className={`${TH_CLS} text-center`}>액션</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {reviewQueue.map(({ item, key }) => (
+                      {sortedReviewQueue.map(({ item, key }) => (
                         <TableRow key={key} className="text-sm hover:bg-violet-50/50 dark:hover:bg-violet-950/20">
-                          <TableCell className={`font-semibold ${TXT_PRIMARY}`}>
+                          <TableCell className="px-3 py-2.5 font-medium text-foreground">
                             <div className="flex items-center gap-2">
                               <User size={12} className={TXT_MUTED} />
                               {item.tester_name}
                             </div>
                           </TableCell>
-                          <TableCell className={TXT_SECONDARY}>{item.product_name}</TableCell>
-                          <TableCell className={`font-mono text-xs ${TXT_TERTIARY}`}>{item.batch_no}</TableCell>
-                          <TableCell className={`text-xs ${TXT_TERTIARY}`}>
+                          <TableCell className="px-3 py-2.5 font-medium text-foreground">{item.product_name}</TableCell>
+                          <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{item.batch_no}</TableCell>
+                          <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">
                             {item.test_items?.join(', ')}
                           </TableCell>
-                          <TableCell className="text-center">
+                          <TableCell className="px-3 py-2.5 text-center">
                             {item.is_urgent && (
                               <span className="inline-flex items-center gap-1 rounded-full border border-red-300 bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700 dark:border-red-800 dark:bg-red-900/50 dark:text-red-300">
                                 긴급
                               </span>
                             )}
                           </TableCell>
-                          <TableCell className="text-center">
+                          <TableCell className="px-3 py-2.5 text-center">
                             <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-700 dark:bg-violet-900/50 dark:text-violet-300">
                               <Loader2 size={10} className="animate-spin" />
                               검토 대기
@@ -568,24 +650,28 @@ export default function SchedulerPage() {
                     <span className={`text-xs font-normal ${TXT_MUTED}`}>({unassigned.length}건)</span>
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="px-0 pb-0">
+                <CardContent className="gap-0 overflow-hidden py-0">
                   <Table>
                     <TableHeader>
-                      <TableRow className="bg-amber-100/70 dark:bg-amber-950/40 hover:bg-amber-100/70 dark:hover:bg-amber-950/40">
-                        <TableHead className={TH_CLS}>품목명</TableHead>
-                        <TableHead className={TH_CLS}>제조번호</TableHead>
+                      <TableRow className="bg-amber-100/70 dark:bg-amber-950/40 hover:bg-transparent">
+                        <TableHead className={`${TH_CLS} cursor-pointer select-none`} onClick={() => toggleUnassignedSort('product_name')}>
+                          품목명<SortIcon field="product_name" sortField={unassignedSortField} sortDir={unassignedSortDir} />
+                        </TableHead>
+                        <TableHead className={`${TH_CLS} cursor-pointer select-none`} onClick={() => toggleUnassignedSort('batch_no')}>
+                          제조번호<SortIcon field="batch_no" sortField={unassignedSortField} sortDir={unassignedSortDir} />
+                        </TableHead>
                         <TableHead className={TH_CLS}>사유</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {unassigned.map((item, idx) => (
+                      {sortedUnassigned.map((item, idx) => (
                         <TableRow
                           key={`${item.batch_no}-${idx}`}
                           className="text-sm hover:bg-amber-50 dark:hover:bg-amber-950/20"
                         >
-                          <TableCell className={`font-semibold ${TXT_PRIMARY}`}>{item.product_name}</TableCell>
-                          <TableCell className={`font-mono text-xs ${TXT_TERTIARY}`}>{item.batch_no}</TableCell>
-                          <TableCell className="text-xs text-amber-700 dark:text-amber-300">{item.reason}</TableCell>
+                          <TableCell className="px-3 py-2.5 font-medium text-foreground">{item.product_name}</TableCell>
+                          <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{item.batch_no}</TableCell>
+                          <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">{item.reason}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

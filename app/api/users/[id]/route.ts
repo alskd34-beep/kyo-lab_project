@@ -20,7 +20,8 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx) {
     }
     return Response.json({ user })
   } catch (err) {
-    const msg = err instanceof Error ? err.message : '서버 오류'
+    console.error('[PATCH /api/users] error:', err)
+    const msg = err instanceof Error ? err.message : (err as { message?: string })?.message ?? '서버 오류'
     return Response.json({ error: msg }, { status: 500 })
   }
 }

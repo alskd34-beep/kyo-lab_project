@@ -1,0 +1,35 @@
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - img [ref=e6]
+      - paragraph [ref=e8]: 광동제약
+      - heading "QC 시험 관리 시스템" [level=1] [ref=e9]
+    - generic [ref=e10]:
+      - generic [ref=e11]:
+        - generic [ref=e12]: 아이디
+        - generic [ref=e13]:
+          - img [ref=e14]
+          - textbox "아이디" [active] [ref=e17]:
+            - /placeholder: kyo-admin
+            - text: kyo-admin
+      - generic [ref=e18]:
+        - generic [ref=e19]: 비밀번호
+        - generic [ref=e20]:
+          - img [ref=e21]
+          - textbox "비밀번호" [ref=e24]:
+            - /placeholder: ••••••••
+            - text: kyo-admin
+          - button "비밀번호 보기" [ref=e25] [cursor=pointer]:
+            - img [ref=e26]
+      - generic [ref=e29]:
+        - generic [ref=e30] [cursor=pointer]:
+          - checkbox "아이디 저장" [ref=e31]
+          - generic [ref=e32]: 아이디 저장
+        - generic [ref=e33] [cursor=pointer]:
+          - checkbox "자동 로그인" [ref=e34]
+          - generic [ref=e35]: 자동 로그인
+      - button "로그인" [ref=e36] [cursor=pointer]
+    - paragraph [ref=e37]: "기본 관리자 계정: kyo-admin / kyo-admin"
+  - button "Open Next.js Dev Tools" [ref=e43] [cursor=pointer]:
+    - img [ref=e44]
+  - alert [ref=e47]

@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1781946961308,
+  "lastScanned": 1782033859108,
   "projectRoot": "/Users/huus/workspace/kyo-project/kyo-project",
   "techStack": {
     "languages": [
@@ -42,7 +42,7 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "cd /Users/huus/workspace/kyo-project/kyo-project; rtk tsc --noEmit 2>&1 | grep \"assignee-detail\" || echo \"assignee-detail: OK\"",
+    "buildCommand": "cd /Users/huus/workspace/kyo-project/kyo-project; rtk tsc --noEmit 2>&1 | grep -E \"qcJobs|error TS\" | head -20; echo \"exit: done\"",
     "testCommand": null,
     "lintCommand": "npm run lint",
     "devCommand": "npm run dev",
@@ -81,7 +81,7 @@
       "path": "app",
       "purpose": "Application code",
       "fileCount": 5,
-      "lastAccessed": 1781946961276,
+      "lastAccessed": 1782033859097,
       "keyFiles": [
         "AGENTS.md",
         "favicon.ico",
@@ -94,7 +94,7 @@
       "path": "backend",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1781946961276,
+      "lastAccessed": 1782033859097,
       "keyFiles": [
         "AGENTS.md"
       ]
@@ -103,7 +103,7 @@
       "path": "docs",
       "purpose": "Documentation",
       "fileCount": 2,
-      "lastAccessed": 1781946961287,
+      "lastAccessed": 1782033859103,
       "keyFiles": [
         "ARCHITECTURE.md",
         "qc-schedule-status.md"
@@ -113,7 +113,7 @@
       "path": "frontend",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1781946961288,
+      "lastAccessed": 1782033859103,
       "keyFiles": [
         "AGENTS.md"
       ]
@@ -122,14 +122,14 @@
       "path": "public",
       "purpose": "Public files",
       "fileCount": 1,
-      "lastAccessed": 1781946961288,
+      "lastAccessed": 1782033859103,
       "keyFiles": []
     },
     "scripts": {
       "path": "scripts",
       "purpose": "Build/utility scripts",
       "fileCount": 4,
-      "lastAccessed": 1781946961288,
+      "lastAccessed": 1782033859103,
       "keyFiles": [
         "bulk_add_jeonhangmok.ts",
         "manhours_minus_one.mjs",
@@ -141,7 +141,7 @@
       "path": "supabase",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1781946961289,
+      "lastAccessed": 1782033859103,
       "keyFiles": [
         "README.md"
       ]
@@ -150,7 +150,7 @@
       "path": "types",
       "purpose": "Type definitions",
       "fileCount": 2,
-      "lastAccessed": 1781946961289,
+      "lastAccessed": 1782033859103,
       "keyFiles": [
         "pqm.ts",
         "qc.ts"
@@ -160,7 +160,7 @@
       "path": "app/api",
       "purpose": "API routes",
       "fileCount": 1,
-      "lastAccessed": 1781946961294,
+      "lastAccessed": 1782033859103,
       "keyFiles": [
         "AGENTS.md"
       ]
@@ -169,7 +169,7 @@
       "path": "backend/lib",
       "purpose": "Library code",
       "fileCount": 8,
-      "lastAccessed": 1781946961296,
+      "lastAccessed": 1782033859104,
       "keyFiles": [
         "auth-cookies.ts",
         "auth.ts",
@@ -179,8 +179,8 @@
     "backend/services": {
       "path": "backend/services",
       "purpose": "Business logic services",
-      "fileCount": 28,
-      "lastAccessed": 1781946961298,
+      "fileCount": 29,
+      "lastAccessed": 1782033859104,
       "keyFiles": [
         "assignRules.ts",
         "batches.ts",
@@ -191,14 +191,14 @@
       "path": "frontend/components",
       "purpose": "UI components",
       "fileCount": 0,
-      "lastAccessed": 1781946961302,
+      "lastAccessed": 1782033859104,
       "keyFiles": []
     },
     "frontend/lib": {
       "path": "frontend/lib",
       "purpose": "Library code",
       "fileCount": 4,
-      "lastAccessed": 1781946961302,
+      "lastAccessed": 1782033859104,
       "keyFiles": [
         "auth-context.tsx",
         "pct-schedule-bridge.ts",
@@ -208,8 +208,8 @@
     "supabase/migrations": {
       "path": "supabase/migrations",
       "purpose": "Database migrations",
-      "fileCount": 19,
-      "lastAccessed": 1781946961303,
+      "fileCount": 23,
+      "lastAccessed": 1782033859105,
       "keyFiles": [
         "0001_init_qc_schema.sql",
         "0002_seed_qc_demo.sql",
@@ -219,255 +219,243 @@
   },
   "hotPaths": [
     {
-      "path": "app/(menu)/schedule/orders/page.tsx",
-      "accessCount": 130,
-      "lastAccessed": 1782021889025,
+      "path": ".claude/commands/design-standard.md",
+      "accessCount": 31,
+      "lastAccessed": 1782042601718,
       "type": "file"
     },
     {
-      "path": "app/(menu)/settings/concurrent-items/page.tsx",
-      "accessCount": 20,
-      "lastAccessed": 1782022918055,
+      "path": "app/(menu)/settings/users/page.tsx",
+      "accessCount": 23,
+      "lastAccessed": 1782040439863,
       "type": "file"
     },
     {
-      "path": "backend/services/concurrentProductFamilies.ts",
-      "accessCount": 13,
-      "lastAccessed": 1782023236488,
+      "path": "app/(menu)/insights/stats/page.tsx",
+      "accessCount": 21,
+      "lastAccessed": 1782040561547,
       "type": "file"
     },
     {
-      "path": "frontend/components/dashboard/app-sidebar.tsx",
-      "accessCount": 9,
-      "lastAccessed": 1781952764041,
-      "type": "file"
-    },
-    {
-      "path": "app/(menu)/product-test/prod-status/page.tsx",
-      "accessCount": 9,
-      "lastAccessed": 1781954638277,
-      "type": "file"
-    },
-    {
-      "path": "frontend/components/product-test/product-test-workspace.tsx",
-      "accessCount": 8,
-      "lastAccessed": 1781954750604,
-      "type": "file"
-    },
-    {
-      "path": "frontend/components/schedule/assignee-detail-modal.tsx",
-      "accessCount": 7,
-      "lastAccessed": 1781965277413,
-      "type": "file"
-    },
-    {
-      "path": "app/api/concurrent-product-families/route.ts",
-      "accessCount": 7,
-      "lastAccessed": 1782022693748,
-      "type": "file"
-    },
-    {
-      "path": "app/(menu)/equipment/master/page.tsx",
-      "accessCount": 6,
-      "lastAccessed": 1781954678869,
-      "type": "file"
-    },
-    {
-      "path": "frontend/components/ui/sidebar.tsx",
-      "accessCount": 5,
-      "lastAccessed": 1781950118918,
-      "type": "file"
-    },
-    {
-      "path": "backend/services/concurrentGroups.ts",
-      "accessCount": 5,
-      "lastAccessed": 1781950520537,
-      "type": "file"
-    },
-    {
-      "path": "app/api/zdebugseed/route.ts",
-      "accessCount": 5,
-      "lastAccessed": 1781951226147,
-      "type": "file"
-    },
-    {
-      "path": "app/(menu)/schedule/holidays/page.tsx",
-      "accessCount": 5,
-      "lastAccessed": 1781953919326,
-      "type": "file"
-    },
-    {
-      "path": "app/(menu)/schedule/vacation/page.tsx",
-      "accessCount": 5,
-      "lastAccessed": 1781953946878,
-      "type": "file"
-    },
-    {
-      "path": "app/(menu)/my-tasks/page.tsx",
-      "accessCount": 5,
-      "lastAccessed": 1781953988607,
-      "type": "file"
-    },
-    {
-      "path": "app/(menu)/equipment/reservation/page.tsx",
-      "accessCount": 5,
-      "lastAccessed": 1781954671286,
-      "type": "file"
-    },
-    {
-      "path": "backend/services/pctOrders.ts",
-      "accessCount": 5,
-      "lastAccessed": 1782021378659,
-      "type": "file"
-    },
-    {
-      "path": "backend/services/pctAssign.ts",
-      "accessCount": 4,
-      "lastAccessed": 1781949304303,
-      "type": "file"
-    },
-    {
-      "path": "frontend/components/dashboard/sidebar.tsx",
-      "accessCount": 4,
-      "lastAccessed": 1781952688104,
-      "type": "file"
-    },
-    {
-      "path": "supabase/migrations/0020_concurrent_product_families.sql",
-      "accessCount": 3,
-      "lastAccessed": 1781950939308,
-      "type": "file"
-    },
-    {
-      "path": "app/(menu)/layout.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1781949989258,
-      "type": "file"
-    },
-    {
-      "path": "app/(menu)/test-mgmt/pretest-checklist/page.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1781954656054,
-      "type": "file"
-    },
-    {
-      "path": "app/(menu)/test-mgmt/test-master/page.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1781954665502,
-      "type": "file"
-    },
-    {
-      "path": "app/(menu)/test-mgmt/test-reg/page.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1781954666150,
+      "path": "app/(menu)/schedule/weekly/page.tsx",
+      "accessCount": 19,
+      "lastAccessed": 1782042599858,
       "type": "file"
     },
     {
       "path": "app/(menu)/test-mgmt/testers/page.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1781954692952,
+      "accessCount": 18,
+      "lastAccessed": 1782040466030,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/test-mgmt/test-status/page.tsx",
+      "accessCount": 16,
+      "lastAccessed": 1782038423845,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/stability/stab-status/page.tsx",
+      "accessCount": 15,
+      "lastAccessed": 1782040485131,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/page.tsx",
+      "accessCount": 14,
+      "lastAccessed": 1782038438241,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/schedule/reassignments/page.tsx",
+      "accessCount": 14,
+      "lastAccessed": 1782040472279,
       "type": "file"
     },
     {
       "path": "app/(menu)/test-mgmt/test-items/page.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1781954724322,
+      "accessCount": 13,
+      "lastAccessed": 1782040436179,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/equipment/master/page.tsx",
+      "accessCount": 13,
+      "lastAccessed": 1782040484847,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/schedule/orders/page.tsx",
+      "accessCount": 13,
+      "lastAccessed": 1782040498740,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/schedule/weekly-plan/page.tsx",
+      "accessCount": 13,
+      "lastAccessed": 1782042605795,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/product-test/prod-status/page.tsx",
+      "accessCount": 13,
+      "lastAccessed": 1782049020016,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/test-mgmt/test-master/page.tsx",
+      "accessCount": 12,
+      "lastAccessed": 1782040444935,
+      "type": "file"
+    },
+    {
+      "path": "backend/services/users.ts",
+      "accessCount": 12,
+      "lastAccessed": 1782042742308,
       "type": "file"
     },
     {
       "path": "app/(menu)/home/page.tsx",
+      "accessCount": 11,
+      "lastAccessed": 1782038392827,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/equipment/reservation/page.tsx",
+      "accessCount": 9,
+      "lastAccessed": 1782040436688,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/schedule/pct/page.tsx",
+      "accessCount": 9,
+      "lastAccessed": 1782042682707,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/test-mgmt/pretest-checklist/page.tsx",
+      "accessCount": 7,
+      "lastAccessed": 1782038389848,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/schedule/monthly/page.tsx",
+      "accessCount": 7,
+      "lastAccessed": 1782042635856,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/schedule/vacation/page.tsx",
+      "accessCount": 4,
+      "lastAccessed": 1782040538246,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/my-tasks/page.tsx",
+      "accessCount": 4,
+      "lastAccessed": 1782042692089,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/schedule/groups/page.tsx",
+      "accessCount": 4,
+      "lastAccessed": 1782047420330,
+      "type": "file"
+    },
+    {
+      "path": "supabase/migrations/0023_role_tester.sql",
+      "accessCount": 3,
+      "lastAccessed": 1782037897240,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/settings/concurrent-items/page.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1782040501133,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/schedule/holidays/page.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1782040509066,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/schedule/dashboard/page.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1782040545419,
+      "type": "file"
+    },
+    {
+      "path": "app/api/users/[id]/route.ts",
       "accessCount": 2,
-      "lastAccessed": 1782007930668,
+      "lastAccessed": 1782034259628,
       "type": "file"
     },
     {
-      "path": "DESIGN_GUIDE.md",
-      "accessCount": 1,
-      "lastAccessed": 1781947679710,
+      "path": "frontend/components/product-test/product-test-workspace.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1782040837122,
       "type": "file"
     },
     {
-      "path": "app/globals.css",
-      "accessCount": 1,
-      "lastAccessed": 1781947680102,
+      "path": "backend/services/qcJobs.ts",
+      "accessCount": 2,
+      "lastAccessed": 1782042946988,
       "type": "file"
     },
     {
-      "path": "components.json",
+      "path": "frontend/lib/weekly-planner.ts",
       "accessCount": 1,
-      "lastAccessed": 1781947680582,
+      "lastAccessed": 1782037708880,
       "type": "file"
     },
     {
-      "path": "app/api/pct-ingest-log/route.ts",
+      "path": "scripts/migrate.ts",
       "accessCount": 1,
-      "lastAccessed": 1781948003511,
+      "lastAccessed": 1782037913993,
       "type": "file"
     },
     {
-      "path": "backend/services/pctIngest.ts",
+      "path": "app/api/zdebugrole/route.ts",
       "accessCount": 1,
-      "lastAccessed": 1781948003955,
-      "type": "file"
-    },
-    {
-      "path": "supabase/migrations/0013_concurrent_groups.sql",
-      "accessCount": 1,
-      "lastAccessed": 1781948811413,
-      "type": "file"
-    },
-    {
-      "path": "app/api/concurrent-groups/route.ts",
-      "accessCount": 1,
-      "lastAccessed": 1781948892528,
-      "type": "file"
-    },
-    {
-      "path": "app/api/concurrent-groups/[id]/route.ts",
-      "accessCount": 1,
-      "lastAccessed": 1781948892893,
-      "type": "file"
-    },
-    {
-      "path": "supabase/migrations/0019_product_pretest_notes.sql",
-      "accessCount": 1,
-      "lastAccessed": 1781949055449,
-      "type": "file"
-    },
-    {
-      "path": "app/api/concurrent-product-families/[id]/route.ts",
-      "accessCount": 1,
-      "lastAccessed": 1781949143943,
-      "type": "file"
-    },
-    {
-      "path": "app/layout.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1781949819613,
-      "type": "file"
-    },
-    {
-      "path": "frontend/components/providers/theme-provider.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1781949830955,
-      "type": "file"
-    },
-    {
-      "path": "supabase/migrations/0008_seed_tester_users.sql",
-      "accessCount": 1,
-      "lastAccessed": 1781950550232,
-      "type": "file"
-    },
-    {
-      "path": "frontend/hooks/use-lock-body-scroll.ts",
-      "accessCount": 1,
-      "lastAccessed": 1781953812081,
+      "lastAccessed": 1782037951718,
       "type": "file"
     },
     {
       "path": "app/(menu)/product-test/products/page.tsx",
       "accessCount": 1,
-      "lastAccessed": 1781954627090,
+      "lastAccessed": 1782040689388,
+      "type": "file"
+    },
+    {
+      "path": "app/api/qc-jobs/route.ts",
+      "accessCount": 1,
+      "lastAccessed": 1782042713983,
+      "type": "file"
+    },
+    {
+      "path": "backend/services/testers.ts",
+      "accessCount": 1,
+      "lastAccessed": 1782042734982,
+      "type": "file"
+    },
+    {
+      "path": "backend/lib/supabase.ts",
+      "accessCount": 1,
+      "lastAccessed": 1782042763048,
+      "type": "file"
+    },
+    {
+      "path": "app/api/auth/me/route.ts",
+      "accessCount": 1,
+      "lastAccessed": 1782042779036,
+      "type": "file"
+    },
+    {
+      "path": "backend/services/qcDashboard.ts",
+      "accessCount": 1,
+      "lastAccessed": 1782049044403,
       "type": "file"
     }
   ],

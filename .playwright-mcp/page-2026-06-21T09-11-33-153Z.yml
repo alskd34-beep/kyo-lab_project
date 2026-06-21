@@ -1,0 +1,434 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e48]:
+    - generic [ref=e51]:
+      - list [ref=e53]:
+        - listitem [ref=e54]:
+          - link "KD QC 관리 Quality Control" [ref=e55] [cursor=pointer]:
+            - /url: /home
+            - generic [ref=e56]: KD
+            - generic [ref=e57]:
+              - generic [ref=e58]: QC 관리
+              - generic [ref=e59]: Quality Control
+      - generic [ref=e60]:
+        - generic [ref=e61]:
+          - generic [ref=e62]: 메뉴
+          - list [ref=e64]:
+            - listitem [ref=e65]:
+              - link "홈" [ref=e66] [cursor=pointer]:
+                - /url: /home
+                - img [ref=e67]
+                - generic [ref=e70]: 홈
+            - listitem [ref=e71]:
+              - button "스케줄" [ref=e72] [cursor=pointer]:
+                - img [ref=e73]
+                - generic [ref=e75]: 스케줄
+                - img [ref=e76]
+            - listitem [ref=e78]:
+              - link "내 작업" [ref=e79] [cursor=pointer]:
+                - /url: /my-tasks
+                - img [ref=e80]
+                - generic [ref=e83]: 내 작업
+            - listitem [ref=e84]:
+              - button "시험관리" [ref=e85] [cursor=pointer]:
+                - img [ref=e86]
+                - generic [ref=e88]: 시험관리
+                - img [ref=e89]
+            - listitem [ref=e91]:
+              - button "안정성시험" [ref=e92] [cursor=pointer]:
+                - img [ref=e93]
+                - generic [ref=e96]: 안정성시험
+                - img [ref=e97]
+        - generic [ref=e99]:
+          - generic [ref=e100]: 관리
+          - list [ref=e102]:
+            - listitem [ref=e103]:
+              - button "일탈관리" [ref=e104] [cursor=pointer]:
+                - img [ref=e105]
+                - generic [ref=e107]: 일탈관리
+                - img [ref=e108]
+              - generic: "3"
+            - listitem [ref=e110]:
+              - button "인사이트" [ref=e111] [cursor=pointer]:
+                - img [ref=e112]
+                - generic [ref=e113]: 인사이트
+                - img [ref=e114]
+            - listitem [ref=e116]:
+              - button "장비관리" [ref=e117] [cursor=pointer]:
+                - img [ref=e118]
+                - generic [ref=e121]: 장비관리
+                - img [ref=e122]
+        - generic [ref=e124]:
+          - generic [ref=e125]: 설정
+          - list [ref=e127]:
+            - listitem [ref=e128]:
+              - button "기준 설정" [ref=e129] [cursor=pointer]:
+                - img [ref=e130]
+                - generic [ref=e131]: 기준 설정
+                - img [ref=e132]
+            - listitem [ref=e134]:
+              - button "계정 설정" [expanded] [ref=e135] [cursor=pointer]:
+                - img [ref=e136]
+                - generic [ref=e139]: 계정 설정
+                - img [ref=e140]
+              - list [ref=e143]:
+                - listitem [ref=e144]:
+                  - link "개발 완료 사용자 관리" [ref=e145] [cursor=pointer]:
+                    - /url: /settings/users
+                    - generic "개발 완료" [ref=e146]
+                    - generic [ref=e147]: 사용자 관리
+                - listitem [ref=e148]:
+                  - link "개발 예정 권한 관리" [ref=e149] [cursor=pointer]:
+                    - /url: /settings/roles
+                    - generic "개발 예정" [ref=e150]
+                    - generic [ref=e151]: 권한 관리
+                - listitem [ref=e152]:
+                  - link "개발 예정 시스템 설정" [ref=e153] [cursor=pointer]:
+                    - /url: /settings/sys-settings
+                    - generic "개발 예정" [ref=e154]
+                    - generic [ref=e155]: 시스템 설정
+      - list [ref=e157]:
+        - listitem [ref=e158]:
+          - button "관 관리자 관리자" [ref=e159] [cursor=pointer]:
+            - generic [ref=e161]: 관
+            - generic [ref=e162]:
+              - generic [ref=e163]: 관리자
+              - generic [ref=e164]: 관리자
+            - img [ref=e165]
+    - main [ref=e168]:
+      - generic [ref=e170]:
+        - button "Toggle Sidebar" [ref=e172] [cursor=pointer]:
+          - img
+          - generic [ref=e173]: Toggle Sidebar
+        - button "알림" [ref=e176] [cursor=pointer]:
+          - img [ref=e177]
+      - generic [ref=e181]:
+        - generic [ref=e182]:
+          - generic [ref=e183]:
+            - heading "사용자 관리" [level=1] [ref=e184]
+            - paragraph [ref=e185]: 총 16명
+          - button "사용자 추가" [ref=e186] [cursor=pointer]:
+            - img [ref=e187]
+            - text: 사용자 추가
+        - table [ref=e191]:
+          - rowgroup [ref=e192]:
+            - row "고객번호 사용자 사번(아이디) 역할 상태 연결 시험자 마지막 로그인" [ref=e193]:
+              - columnheader "고객번호" [ref=e194]
+              - columnheader "사용자" [ref=e195]
+              - columnheader "사번(아이디)" [ref=e196]
+              - columnheader "역할" [ref=e197]
+              - columnheader "상태" [ref=e198]
+              - columnheader "연결 시험자" [ref=e199]
+              - columnheader "마지막 로그인" [ref=e200]
+              - columnheader [ref=e201]
+          - rowgroup [ref=e202]:
+            - row "01013 김기호 16218 시험자 활성 김기호 2026. 6. 21. 오전 8:38:38 수정 삭제" [ref=e203]:
+              - cell "01013" [ref=e204]
+              - cell "김기호" [ref=e205]:
+                - generic [ref=e206]:
+                  - generic [ref=e207]: 🐇
+                  - generic [ref=e208]: 김기호
+              - cell "16218" [ref=e209]
+              - cell "시험자" [ref=e210]
+              - cell "활성" [ref=e211]
+              - cell "김기호" [ref=e212]
+              - cell "2026. 6. 21. 오전 8:38:38" [ref=e213]
+              - cell "수정 삭제" [ref=e214]:
+                - button "수정" [ref=e215] [cursor=pointer]:
+                  - img [ref=e216]
+                  - text: 수정
+                - button "삭제" [ref=e219] [cursor=pointer]:
+                  - img [ref=e220]
+                  - text: 삭제
+            - row "01010 지건희 16185 시험자 활성 지건희 - 수정 삭제" [ref=e223]:
+              - cell "01010" [ref=e224]
+              - cell "지건희" [ref=e225]:
+                - generic [ref=e226]:
+                  - generic [ref=e227]: 🐯
+                  - generic [ref=e228]: 지건희
+              - cell "16185" [ref=e229]
+              - cell "시험자" [ref=e230]
+              - cell "활성" [ref=e231]
+              - cell "지건희" [ref=e232]
+              - cell "-" [ref=e233]
+              - cell "수정 삭제" [ref=e234]:
+                - button "수정" [ref=e235] [cursor=pointer]:
+                  - img [ref=e236]
+                  - text: 수정
+                - button "삭제" [ref=e239] [cursor=pointer]:
+                  - img [ref=e240]
+                  - text: 삭제
+            - row "01004 장재훈 16167 시험자 활성 장재훈 - 수정 삭제" [ref=e243]:
+              - cell "01004" [ref=e244]
+              - cell "장재훈" [ref=e245]:
+                - generic [ref=e246]:
+                  - generic [ref=e247]: 🐆
+                  - generic [ref=e248]: 장재훈
+              - cell "16167" [ref=e249]
+              - cell "시험자" [ref=e250]
+              - cell "활성" [ref=e251]
+              - cell "장재훈" [ref=e252]
+              - cell "-" [ref=e253]
+              - cell "수정 삭제" [ref=e254]:
+                - button "수정" [ref=e255] [cursor=pointer]:
+                  - img [ref=e256]
+                  - text: 수정
+                - button "삭제" [ref=e259] [cursor=pointer]:
+                  - img [ref=e260]
+                  - text: 삭제
+            - row "01011 김태훈 16242 시험자 활성 김태훈 2026. 6. 7. 오후 6:25:02 수정 삭제" [ref=e263]:
+              - cell "01011" [ref=e264]
+              - cell "김태훈" [ref=e265]:
+                - generic [ref=e266]:
+                  - generic [ref=e267]: 🐐
+                  - generic [ref=e268]: 김태훈
+              - cell "16242" [ref=e269]
+              - cell "시험자" [ref=e270]
+              - cell "활성" [ref=e271]
+              - cell "김태훈" [ref=e272]
+              - cell "2026. 6. 7. 오후 6:25:02" [ref=e273]
+              - cell "수정 삭제" [ref=e274]:
+                - button "수정" [ref=e275] [cursor=pointer]:
+                  - img [ref=e276]
+                  - text: 수정
+                - button "삭제" [ref=e279] [cursor=pointer]:
+                  - img [ref=e280]
+                  - text: 삭제
+            - row "01014 이영남 20028 시험자 활성 이영남 - 수정 삭제" [ref=e283]:
+              - cell "01014" [ref=e284]
+              - cell "이영남" [ref=e285]:
+                - generic [ref=e286]:
+                  - generic [ref=e287]: 🐖
+                  - generic [ref=e288]: 이영남
+              - cell "20028" [ref=e289]
+              - cell "시험자" [ref=e290]
+              - cell "활성" [ref=e291]
+              - cell "이영남" [ref=e292]
+              - cell "-" [ref=e293]
+              - cell "수정 삭제" [ref=e294]:
+                - button "수정" [ref=e295] [cursor=pointer]:
+                  - img [ref=e296]
+                  - text: 수정
+                - button "삭제" [ref=e299] [cursor=pointer]:
+                  - img [ref=e300]
+                  - text: 삭제
+            - row "01002 박성호 17013 시험자 활성 박성호 - 수정 삭제" [ref=e303]:
+              - cell "01002" [ref=e304]
+              - cell "박성호" [ref=e305]:
+                - generic [ref=e306]:
+                  - generic [ref=e307]: 🐷
+                  - generic [ref=e308]: 박성호
+              - cell "17013" [ref=e309]
+              - cell "시험자" [ref=e310]
+              - cell "활성" [ref=e311]
+              - cell "박성호" [ref=e312]
+              - cell "-" [ref=e313]
+              - cell "수정 삭제" [ref=e314]:
+                - button "수정" [ref=e315] [cursor=pointer]:
+                  - img [ref=e316]
+                  - text: 수정
+                - button "삭제" [ref=e319] [cursor=pointer]:
+                  - img [ref=e320]
+                  - text: 삭제
+            - row "01007 권택균 21083 시험자 활성 권택균 - 수정 삭제" [ref=e323]:
+              - cell "01007" [ref=e324]
+              - cell "권택균" [ref=e325]:
+                - generic [ref=e326]:
+                  - generic [ref=e327]: 🐅
+                  - generic [ref=e328]: 권택균
+              - cell "21083" [ref=e329]
+              - cell "시험자" [ref=e330]
+              - cell "활성" [ref=e331]
+              - cell "권택균" [ref=e332]
+              - cell "-" [ref=e333]
+              - cell "수정 삭제" [ref=e334]:
+                - button "수정" [ref=e335] [cursor=pointer]:
+                  - img [ref=e336]
+                  - text: 수정
+                - button "삭제" [ref=e339] [cursor=pointer]:
+                  - img [ref=e340]
+                  - text: 삭제
+            - row "01012 박윤진 23018 시험자 활성 박윤진 - 수정 삭제" [ref=e343]:
+              - cell "01012" [ref=e344]
+              - cell "박윤진" [ref=e345]:
+                - generic [ref=e346]:
+                  - generic [ref=e347]: 🦦
+                  - generic [ref=e348]: 박윤진
+              - cell "23018" [ref=e349]
+              - cell "시험자" [ref=e350]
+              - cell "활성" [ref=e351]
+              - cell "박윤진" [ref=e352]
+              - cell "-" [ref=e353]
+              - cell "수정 삭제" [ref=e354]:
+                - button "수정" [ref=e355] [cursor=pointer]:
+                  - img [ref=e356]
+                  - text: 수정
+                - button "삭제" [ref=e359] [cursor=pointer]:
+                  - img [ref=e360]
+                  - text: 삭제
+            - row "01006 강지윤 24084 시험자 활성 강지윤 - 수정 삭제" [ref=e363]:
+              - cell "01006" [ref=e364]
+              - cell "강지윤" [ref=e365]:
+                - generic [ref=e366]:
+                  - generic [ref=e367]: 🐈
+                  - generic [ref=e368]: 강지윤
+              - cell "24084" [ref=e369]
+              - cell "시험자" [ref=e370]
+              - cell "활성" [ref=e371]
+              - cell "강지윤" [ref=e372]
+              - cell "-" [ref=e373]
+              - cell "수정 삭제" [ref=e374]:
+                - button "수정" [ref=e375] [cursor=pointer]:
+                  - img [ref=e376]
+                  - text: 수정
+                - button "삭제" [ref=e379] [cursor=pointer]:
+                  - img [ref=e380]
+                  - text: 삭제
+            - row "01008 김정호 26055 시험자 활성 김정호 - 수정 삭제" [ref=e383]:
+              - cell "01008" [ref=e384]
+              - cell "김정호" [ref=e385]:
+                - generic [ref=e386]:
+                  - generic [ref=e387]: 🐷
+                  - generic [ref=e388]: 김정호
+              - cell "26055" [ref=e389]
+              - cell "시험자" [ref=e390]
+              - cell "활성" [ref=e391]
+              - cell "김정호" [ref=e392]
+              - cell "-" [ref=e393]
+              - cell "수정 삭제" [ref=e394]:
+                - button "수정" [ref=e395] [cursor=pointer]:
+                  - img [ref=e396]
+                  - text: 수정
+                - button "삭제" [ref=e399] [cursor=pointer]:
+                  - img [ref=e400]
+                  - text: 삭제
+            - row "01005 이원재 23040 시험자 활성 이원재 - 수정 삭제" [ref=e403]:
+              - cell "01005" [ref=e404]
+              - cell "이원재" [ref=e405]:
+                - generic [ref=e406]:
+                  - generic [ref=e407]: 🐐
+                  - generic [ref=e408]: 이원재
+              - cell "23040" [ref=e409]
+              - cell "시험자" [ref=e410]
+              - cell "활성" [ref=e411]
+              - cell "이원재" [ref=e412]
+              - cell "-" [ref=e413]
+              - cell "수정 삭제" [ref=e414]:
+                - button "수정" [ref=e415] [cursor=pointer]:
+                  - img [ref=e416]
+                  - text: 수정
+                - button "삭제" [ref=e419] [cursor=pointer]:
+                  - img [ref=e420]
+                  - text: 삭제
+            - row "01015 안성은 20052 시험자 활성 안성은 - 수정 삭제" [ref=e423]:
+              - cell "01015" [ref=e424]
+              - cell "안성은" [ref=e425]:
+                - generic [ref=e426]:
+                  - generic [ref=e427]: 🐴
+                  - generic [ref=e428]: 안성은
+              - cell "20052" [ref=e429]
+              - cell "시험자" [ref=e430]
+              - cell "활성" [ref=e431]
+              - cell "안성은" [ref=e432]
+              - cell "-" [ref=e433]
+              - cell "수정 삭제" [ref=e434]:
+                - button "수정" [ref=e435] [cursor=pointer]:
+                  - img [ref=e436]
+                  - text: 수정
+                - button "삭제" [ref=e439] [cursor=pointer]:
+                  - img [ref=e440]
+                  - text: 삭제
+            - row "01001 김태환 21084 시험자 활성 김태환 - 수정 삭제" [ref=e443]:
+              - cell "01001" [ref=e444]
+              - cell "김태환" [ref=e445]:
+                - generic [ref=e446]:
+                  - generic [ref=e447]: 🐆
+                  - generic [ref=e448]: 김태환
+              - cell "21084" [ref=e449]
+              - cell "시험자" [ref=e450]
+              - cell "활성" [ref=e451]
+              - cell "김태환" [ref=e452]
+              - cell "-" [ref=e453]
+              - cell "수정 삭제" [ref=e454]:
+                - button "수정" [ref=e455] [cursor=pointer]:
+                  - img [ref=e456]
+                  - text: 수정
+                - button "삭제" [ref=e459] [cursor=pointer]:
+                  - img [ref=e460]
+                  - text: 삭제
+            - row "01009 정예찬 26046 시험자 활성 정예찬 - 수정 삭제" [ref=e463]:
+              - cell "01009" [ref=e464]
+              - cell "정예찬" [ref=e465]:
+                - generic [ref=e466]:
+                  - generic [ref=e467]: 🐘
+                  - generic [ref=e468]: 정예찬
+              - cell "26046" [ref=e469]
+              - cell "시험자" [ref=e470]
+              - cell "활성" [ref=e471]
+              - cell "정예찬" [ref=e472]
+              - cell "-" [ref=e473]
+              - cell "수정 삭제" [ref=e474]:
+                - button "수정" [ref=e475] [cursor=pointer]:
+                  - img [ref=e476]
+                  - text: 수정
+                - button "삭제" [ref=e479] [cursor=pointer]:
+                  - img [ref=e480]
+                  - text: 삭제
+            - row "01003 임수민 20106 시험자 활성 임수민 - 수정 삭제" [ref=e483]:
+              - cell "01003" [ref=e484]
+              - cell "임수민" [ref=e485]:
+                - generic [ref=e486]:
+                  - generic [ref=e487]: 🐯
+                  - generic [ref=e488]: 임수민
+              - cell "20106" [ref=e489]
+              - cell "시험자" [ref=e490]
+              - cell "활성" [ref=e491]
+              - cell "임수민" [ref=e492]
+              - cell "-" [ref=e493]
+              - cell "수정 삭제" [ref=e494]:
+                - button "수정" [ref=e495] [cursor=pointer]:
+                  - img [ref=e496]
+                  - text: 수정
+                - button "삭제" [ref=e499] [cursor=pointer]:
+                  - img [ref=e500]
+                  - text: 삭제
+            - row "01000 관리자 kyo-admin 관리자 활성 미연결 2026. 6. 21. 오후 6:11:32 수정" [ref=e503]:
+              - cell "01000" [ref=e504]
+              - cell "관리자" [ref=e505]:
+                - generic [ref=e506]:
+                  - generic [ref=e507]: 🐹
+                  - generic [ref=e508]: 관리자
+              - cell "kyo-admin" [ref=e509]
+              - cell "관리자" [ref=e510]
+              - cell "활성" [ref=e511]
+              - cell "미연결" [ref=e512]
+              - cell "2026. 6. 21. 오후 6:11:32" [ref=e513]
+              - cell "수정" [ref=e514]:
+                - button "수정" [ref=e515] [cursor=pointer]:
+                  - img [ref=e516]
+                  - text: 수정
+    - button "KD QC 어시스턴트" [ref=e519] [cursor=pointer]:
+      - img [ref=e520]
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - img
+          - generic:
+            - paragraph: KD QC 어시스턴트
+            - paragraph: AI 기반 QC 도우미
+        - generic:
+          - button "대화 초기화":
+            - img
+          - button:
+            - img
+      - generic:
+        - generic: 6월 21일 (일)
+      - generic:
+        - generic:
+          - textbox "질문을 입력하세요..."
+          - button [disabled]:
+            - img
+        - paragraph: AI가 생성한 답변은 부정확할 수 있습니다
+  - button "Open Next.js Dev Tools" [ref=e43] [cursor=pointer]:
+    - img [ref=e44]
+  - alert [ref=e47]

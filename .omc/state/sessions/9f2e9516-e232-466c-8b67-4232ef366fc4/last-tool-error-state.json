@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"cd /Users/huus/workspace/kyo-project/kyo-project; echo \\\"=== api routes ===\\\"; find app/api -name route.ts | sort; echo \\\"=== backend services ===\\\"; rtk ls backend/services; echo \\\"=== sh...",
+  "error": "Exit code 1\n=== api routes ===\napp/api/auth/change-password/route.ts\napp/api/auth/login/route.ts\napp/api/auth/logout/route.ts\napp/api/auth/me/route.ts\napp/api/auth/refresh/route.ts\napp/api/batches/[id]/route.ts\napp/api/batches/route.ts\napp/api/chat/history/route.ts\napp/api/chat/route.ts\napp/api/concurrent-groups/[id]/route.ts\napp/api/concurrent-groups/route.ts\napp/api/concurrent-product-families/[id]/route.ts\napp/api/concurrent-product-families/route.ts\napp/api/cron/ingest-pct/route.ts\napp/api/d...",
+  "timestamp": "2026-06-21T13:37:16.359Z",
+  "retry_count": 1
+}

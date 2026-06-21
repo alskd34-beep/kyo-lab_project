@@ -1,8 +1,11 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
-import { RefreshCw, Loader2, Search, History, ShieldAlert } from "lucide-react"
+import { RefreshCw, Loader2, Search, History, ShieldAlert, ChevronDown, ChevronUp } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@frontend/components/ui/select'
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@frontend/components/ui/table'
+import { Skeleton } from "@frontend/components/ui/skeleton"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 interface ReassignmentRow {
@@ -37,6 +40,37 @@ export default function ReassignmentsPage() {
   const [afterUser, setAfterUser] = useState("")
   const [productName, setProductName] = useState("")
   const [productInput, setProductInput] = useState("")
+
+  type SortField = "changedAt" | "productName" | "beforeUserName" | "afterUserName" | "changedByName"
+  const [sortField, setSortField] = useState<SortField>("changedAt")
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
+
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir(d => d === "asc" ? "desc" : "asc")
+    } else {
+      setSortField(field)
+      setSortDir("asc")
+    }
+  }
+
+  const sortedRows = useMemo(() => {
+    return [...rows].sort((a, b) => {
+      const aVal = a[sortField] ?? ""
+      const bVal = b[sortField] ?? ""
+      const cmp = sortField === "changedAt"
+        ? aVal.localeCompare(bVal)
+        : aVal.localeCompare(bVal, "ko")
+      return sortDir === "asc" ? cmp : -cmp
+    })
+  }, [rows, sortField, sortDir])
+
+  function SortIcon({ field }: { field: SortField }) {
+    if (sortField !== field) return <ChevronDown size={12} className="text-slate-300 shrink-0" />
+    return sortDir === "asc"
+      ? <ChevronUp size={12} className="text-blue-500 shrink-0" />
+      : <ChevronDown size={12} className="text-blue-500 shrink-0" />
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -108,13 +142,15 @@ export default function ReassignmentsPage() {
 
       {/* 필터 */}
       <div className="flex flex-wrap items-center gap-2">
-        <select
-          value={afterUser} onChange={e => setAfterUser(e.target.value)}
-          className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus-visible:border-blue-600 focus-visible:ring-2 focus-visible:ring-blue-200 focus-visible:outline-none"
-        >
-          <option value="">전체 시험자(변경 후)</option>
-          {testers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
+        <Select value={afterUser || 'all'} onValueChange={v => setAfterUser(v === 'all' ? '' : v)}>
+          <SelectTrigger className="h-9 px-3 w-auto min-w-[160px]">
+            <SelectValue placeholder="전체 시험자(변경 후)" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">전체 시험자(변경 후)</SelectItem>
+            {testers.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
         <div className="flex items-center gap-1.5">
           <input
             value={productInput}
@@ -143,46 +179,79 @@ export default function ReassignmentsPage() {
 
       {/* 이력 테이블 */}
       {loading ? (
-        <div className="rounded-xl border border-slate-200 bg-white px-3 py-10 text-center text-slate-400 shadow-sm">불러오는 중…</div>
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm py-0">
+          <div className="overflow-x-auto">
+            <Table className="w-full min-w-[760px] text-sm">
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="px-3 py-2 text-muted-foreground">변경일시</TableHead>
+                  <TableHead className="px-3 py-2 text-muted-foreground">품목</TableHead>
+                  <TableHead className="px-3 py-2 text-muted-foreground">변경전 → 변경후</TableHead>
+                  <TableHead className="px-3 py-2 text-muted-foreground">사유</TableHead>
+                  <TableHead className="px-3 py-2 text-muted-foreground">변경자</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <TableRow key={i} className="border-b border-slate-100 last:border-0">
+                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-32" /></TableCell>
+                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-28" /></TableCell>
+                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-40" /></TableCell>
+                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-24" /></TableCell>
+                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-16" /></TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
       ) : rows.length === 0 ? (
         <div className="rounded-xl border border-slate-200 bg-white px-3 py-10 text-center text-slate-400 shadow-sm">
           재배정 이력이 없습니다.
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm gap-0 overflow-hidden py-0">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  <th className="px-3 py-2">변경일시</th>
-                  <th className="px-3 py-2">품목</th>
-                  <th className="px-3 py-2">변경전 → 변경후</th>
-                  <th className="px-3 py-2">사유</th>
-                  <th className="px-3 py-2">변경자</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map(r => (
-                  <tr key={r.id} className="border-b border-slate-100 last:border-0 text-slate-700 hover:bg-slate-50">
-                    <td className="px-3 py-2.5 whitespace-nowrap text-xs text-slate-500">
+            <Table className="w-full min-w-[760px] text-sm">
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="px-3 py-2 cursor-pointer select-none text-muted-foreground" onClick={() => toggleSort("changedAt")}>
+                    <span className="inline-flex items-center gap-1">변경일시<SortIcon field="changedAt" /></span>
+                  </TableHead>
+                  <TableHead className="px-3 py-2 cursor-pointer select-none text-muted-foreground" onClick={() => toggleSort("productName")}>
+                    <span className="inline-flex items-center gap-1">품목<SortIcon field="productName" /></span>
+                  </TableHead>
+                  <TableHead className="px-3 py-2 cursor-pointer select-none text-muted-foreground" onClick={() => toggleSort("afterUserName")}>
+                    <span className="inline-flex items-center gap-1">변경전 → 변경후<SortIcon field="afterUserName" /></span>
+                  </TableHead>
+                  <TableHead className="px-3 py-2 text-muted-foreground">사유</TableHead>
+                  <TableHead className="px-3 py-2 cursor-pointer select-none text-muted-foreground" onClick={() => toggleSort("changedByName")}>
+                    <span className="inline-flex items-center gap-1">변경자<SortIcon field="changedByName" /></span>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sortedRows.map(r => (
+                  <TableRow key={r.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                    <TableCell className="px-3 py-2.5 whitespace-nowrap text-xs text-muted-foreground">
                       {new Date(r.changedAt).toLocaleString("ko-KR")}
-                    </td>
-                    <td className="px-3 py-2.5 font-medium text-slate-900">{r.productName ?? "-"}</td>
-                    <td className="px-3 py-2.5">
+                    </TableCell>
+                    <TableCell className="px-3 py-2.5 font-medium text-foreground">{r.productName ?? "-"}</TableCell>
+                    <TableCell className="px-3 py-2.5">
                       <span className="inline-flex items-center gap-1.5">
-                        <span className="text-slate-400 line-through">{r.beforeUserName ?? "미배정"}</span>
-                        <span className="text-slate-400">→</span>
+                        <span className="text-xs text-muted-foreground line-through">{r.beforeUserName ?? "미배정"}</span>
+                        <span className="text-xs text-muted-foreground">→</span>
                         <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
                           {r.afterUserName ?? "미배정"}
                         </span>
                       </span>
-                    </td>
-                    <td className="px-3 py-2.5 text-slate-600">{r.reason ?? <span className="text-slate-400">-</span>}</td>
-                    <td className="px-3 py-2.5 text-slate-600">{r.changedByName ?? <span className="text-slate-400">-</span>}</td>
-                  </tr>
+                    </TableCell>
+                    <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">{r.reason ?? <span className="text-muted-foreground">-</span>}</TableCell>
+                    <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">{r.changedByName ?? <span className="text-muted-foreground">-</span>}</TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         </div>
       )}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import type { StatusKey, TestRow, KpiItem } from '@shared/qc'
 import { Button } from '@frontend/components/ui/button'
 import { Card, CardContent } from '@frontend/components/ui/card'
@@ -31,6 +31,8 @@ import {
   Pin,
   PinOff,
   X,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react'
 
 // ─── Static Data ──────────────────────────────────────────────────────────────
@@ -79,6 +81,8 @@ export default function QCDashboard() {
   const [selectedRows, setSelectedRows]   = useState<Set<number>>(new Set())
   const [searchValue, setSearchValue]     = useState('')
   const [dateRange, setDateRange]         = useState<DateRange | undefined>(undefined)
+  const [sortField, setSortField]         = useState<keyof TestRow | null>(null)
+  const [sortDir, setSortDir]             = useState<'asc' | 'desc'>('asc')
 
   useEffect(() => {
     // 서버·클라이언트 타임존 차이로 인한 하이드레이션 불일치를 피하려 마운트 후(클라이언트)에만 기본 기간 설정
@@ -155,6 +159,32 @@ export default function QCDashboard() {
           row.manager.includes(searchValue),
       )
     : tableData
+
+  const toggleSort = (field: keyof TestRow) => {
+    if (sortField === field) {
+      setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortField(field)
+      setSortDir('asc')
+    }
+  }
+
+  const SortIcon = ({ field }: { field: keyof TestRow }) => {
+    if (sortField !== field) return <ChevronDown size={11} className="text-slate-300 ml-0.5 inline" />
+    return sortDir === 'asc'
+      ? <ChevronUp size={11} className="text-blue-500 ml-0.5 inline" />
+      : <ChevronDown size={11} className="text-blue-500 ml-0.5 inline" />
+  }
+
+  const sortedData = useMemo(() => {
+    if (!sortField) return filtered
+    return [...filtered].sort((a, b) => {
+      const av = String(a[sortField] ?? '')
+      const bv = String(b[sortField] ?? '')
+      const cmp = av.localeCompare(bv, 'ko')
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+  }, [filtered, sortField, sortDir])
 
   const closeTab = (tab: string) => {
     setClosedTabs(prev => {
@@ -283,7 +313,7 @@ export default function QCDashboard() {
 
           {/* ── Table section ────────────────────────────────────────────── */}
           <div className="flex-1 p-3 md:p-5">
-            <Card className="border border-slate-200 shadow-none rounded-xl bg-white py-0 overflow-hidden">
+            <Card className="border border-slate-200 shadow-none rounded-xl bg-white gap-0 overflow-hidden py-0">
 
               {/* Toolbar */}
               <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-4 py-2.5">
@@ -348,8 +378,8 @@ export default function QCDashboard() {
               <div className="overflow-x-auto">
               <Table className="min-w-[640px]">
                 <TableHeader>
-                  <TableRow className="bg-slate-50/80 hover:bg-slate-50/80 border-slate-100">
-                    <TableHead className="w-10 px-4">
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="w-10 px-3">
                       <input
                         type="checkbox"
                         checked={selectedRows.size === tableData.length && tableData.length > 0}
@@ -357,15 +387,30 @@ export default function QCDashboard() {
                         className="cb-custom"
                       />
                     </TableHead>
-                    {['구분','유형','제품명','시험번호','시험항목','수탁사','담당자','접수일','완료예정일','진행상태'].map(h => (
-                      <TableHead key={h} className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide px-3">
-                        {h}
+                    {([
+                      ['구분',     'category'   ],
+                      ['유형',     'type'       ],
+                      ['제품명',   'product'    ],
+                      ['시험번호', 'testNo'     ],
+                      ['시험항목', 'items'      ],
+                      ['수탁사',   'contractor' ],
+                      ['담당자',   'manager'    ],
+                      ['접수일',   'receiveDate'],
+                      ['완료예정일','dueDate'   ],
+                      ['진행상태', 'status'     ],
+                    ] as [string, keyof TestRow][]).map(([label, field]) => (
+                      <TableHead
+                        key={field}
+                        onClick={() => toggleSort(field)}
+                        className="px-3 text-muted-foreground cursor-pointer select-none hover:text-foreground"
+                      >
+                        {label}<SortIcon field={field} />
                       </TableHead>
                     ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filtered.map(row => {
+                  {sortedData.map(row => {
                     const status = STATUS_CONFIG[row.status]
                     const isSelected = selectedRows.has(row.id)
                     return (
@@ -377,7 +422,7 @@ export default function QCDashboard() {
                           isSelected ? 'bg-blue-50/60' : 'hover:bg-slate-50/70'
                         }`}
                       >
-                        <TableCell className="px-4">
+                        <TableCell className="px-3 py-2.5">
                           <input
                             type="checkbox"
                             checked={isSelected}
@@ -386,35 +431,35 @@ export default function QCDashboard() {
                             className="cb-custom"
                           />
                         </TableCell>
-                        <TableCell className="px-3">
+                        <TableCell className="px-3 py-2.5">
                           <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium ${
                             row.category === '완제품' ? 'bg-slate-100 text-slate-600' : 'bg-sky-50 text-sky-700'
                           }`}>
                             {row.category}
                           </span>
                         </TableCell>
-                        <TableCell className="px-3 text-xs text-slate-600">{row.type}</TableCell>
-                        <TableCell className="px-3">
-                          <span className="text-sm font-medium text-slate-800">{row.product}</span>
+                        <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">{row.type}</TableCell>
+                        <TableCell className="px-3 py-2.5">
+                          <span className="font-medium text-foreground">{row.product}</span>
                         </TableCell>
-                        <TableCell className="px-3">
-                          <span className="font-mono text-xs text-slate-500">{row.testNo}</span>
+                        <TableCell className="px-3 py-2.5">
+                          <span className="font-mono text-xs text-muted-foreground">{row.testNo}</span>
                         </TableCell>
-                        <TableCell className="px-3 text-xs text-slate-600">{row.items}</TableCell>
-                        <TableCell className="px-3 text-xs text-slate-600">{row.contractor}</TableCell>
-                        <TableCell className="px-3">
+                        <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">{row.items}</TableCell>
+                        <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">{row.contractor}</TableCell>
+                        <TableCell className="px-3 py-2.5">
                           <div className="flex items-center gap-1.5">
                             <Avatar className="h-6 w-6 shrink-0">
                               <AvatarFallback className={`text-[10px] font-bold text-white ${AVATAR_COLORS[row.managerInit] ?? 'bg-slate-400'}`}>
                                 {row.managerInit}
                               </AvatarFallback>
                             </Avatar>
-                            <span className="text-xs text-slate-700">{row.manager}</span>
+                            <span className="text-xs text-muted-foreground">{row.manager}</span>
                           </div>
                         </TableCell>
-                        <TableCell className="px-3 font-mono text-xs text-slate-500">{row.receiveDate}</TableCell>
-                        <TableCell className="px-3 font-mono text-xs text-slate-500">{row.dueDate}</TableCell>
-                        <TableCell className="px-3">
+                        <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{row.receiveDate}</TableCell>
+                        <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{row.dueDate}</TableCell>
+                        <TableCell className="px-3 py-2.5">
                           <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${status.cls}`}>
                             {status.label}
                           </span>

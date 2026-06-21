@@ -309,7 +309,14 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                   </Avatar>
                   <div className="grid flex-1 text-left text-sm leading-tight">
                     <span className="truncate font-medium">{name}</span>
-                    <span className="truncate text-xs text-muted-foreground">{isAdmin ? "관리자" : "시험자"}</span>
+                    <span className="truncate text-xs text-muted-foreground">
+                      {isAdmin ? "관리자" : "시험자"}
+                      {user?.customerNo != null && (
+                        <span className="ml-1.5 font-mono text-[10px] opacity-70">
+                          #{String(user.customerNo).padStart(5, '0')}
+                        </span>
+                      )}
+                    </span>
                   </div>
                   <ChevronsUpDown className="ml-auto size-4" />
                 </SidebarMenuButton>

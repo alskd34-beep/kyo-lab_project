@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react"
 import {
   AlertTriangle,
+  ChevronDown,
+  ChevronUp,
   Copy,
   Link2,
   PackagePlus,
@@ -15,6 +17,7 @@ import { cn } from "@frontend/lib/utils"
 import { Badge } from "@frontend/components/ui/badge"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
+import { Skeleton } from "@frontend/components/ui/skeleton"
 import {
   Dialog,
   DialogContent,
@@ -107,6 +110,9 @@ export default function TestItemsPage() {
   const [selectedLinked, setSelectedLinked] = useState<Set<string>>(new Set())
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false)
+  // 테이블 정렬
+  const [sortField, setSortField] = useState<"sequenceOrder" | "testItemName" | "isMandatory">("sequenceOrder")
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
   // 다른 품목에서 시험항목 복사
   const [copyDialogOpen, setCopyDialogOpen] = useState(false)
   const [copySourceSearch, setCopySourceSearch] = useState("")
@@ -252,6 +258,42 @@ export default function TestItemsPage() {
           p.productCode.toLowerCase().includes(q)
       )
   }, [products, copySourceSearch, selectedProduct])
+
+  const sortedLinkedItems = useMemo(() => {
+    const items = linkedItems.slice()
+    items.sort((a, b) => {
+      let cmp = 0
+      if (sortField === "sequenceOrder") {
+        cmp = a.sequenceOrder - b.sequenceOrder
+      } else if (sortField === "testItemName") {
+        cmp = a.testItemName.localeCompare(b.testItemName, "ko")
+      } else if (sortField === "isMandatory") {
+        // 필수(true) 먼저
+        cmp = (b.isMandatory ? 1 : 0) - (a.isMandatory ? 1 : 0)
+      }
+      return sortDir === "asc" ? cmp : -cmp
+    })
+    return items
+  }, [linkedItems, sortField, sortDir])
+
+  function toggleSort(field: typeof sortField) {
+    if (sortField === field) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"))
+    } else {
+      setSortField(field)
+      setSortDir("asc")
+    }
+  }
+
+  function SortIcon({ field }: { field: typeof sortField }) {
+    if (sortField !== field)
+      return <ChevronDown className="ml-1 inline size-3 opacity-30" />
+    return sortDir === "asc" ? (
+      <ChevronUp className="ml-1 inline size-3" />
+    ) : (
+      <ChevronDown className="ml-1 inline size-3" />
+    )
+  }
 
   function openAddDialog() {
     setSelectedToAdd(new Set())
@@ -658,9 +700,7 @@ export default function TestItemsPage() {
                       연결된 시험항목이 없습니다.
                     </Card>
                   ) : (
-                    linkedItems
-                      .slice()
-                      .sort((a, b) => a.sequenceOrder - b.sequenceOrder)
+                    sortedLinkedItems
                       .map((item, idx) => (
                         <Card
                           key={item.testItemId}
@@ -728,14 +768,23 @@ export default function TestItemsPage() {
                             title="전체 선택"
                           />
                         </TableHead>
-                        <TableHead className="w-16 px-3 text-center text-muted-foreground">
-                          순서
+                        <TableHead
+                          className="w-16 cursor-pointer select-none px-3 text-center text-muted-foreground"
+                          onClick={() => toggleSort("sequenceOrder")}
+                        >
+                          순서<SortIcon field="sequenceOrder" />
                         </TableHead>
-                        <TableHead className="px-3 text-muted-foreground">
-                          시험항목명
+                        <TableHead
+                          className="cursor-pointer select-none px-3 text-muted-foreground"
+                          onClick={() => toggleSort("testItemName")}
+                        >
+                          시험항목명<SortIcon field="testItemName" />
                         </TableHead>
-                        <TableHead className="w-24 px-3 text-center text-muted-foreground">
-                          필수여부
+                        <TableHead
+                          className="w-24 cursor-pointer select-none px-3 text-center text-muted-foreground"
+                          onClick={() => toggleSort("isMandatory")}
+                        >
+                          필수여부<SortIcon field="isMandatory" />
                         </TableHead>
                         <TableHead className="w-20 px-3 text-center text-muted-foreground">
                           삭제
@@ -754,9 +803,7 @@ export default function TestItemsPage() {
                           </TableCell>
                         </TableRow>
                       ) : (
-                        linkedItems
-                          .slice()
-                          .sort((a, b) => a.sequenceOrder - b.sequenceOrder)
+                        sortedLinkedItems
                           .map((item, idx) => {
                             const isSelected = selectedLinked.has(item.testItemId)
                             return (
@@ -907,9 +954,15 @@ export default function TestItemsPage() {
               <Card className="gap-0 overflow-hidden py-0">
                 <div className="max-h-72 overflow-y-auto">
                   {itemsLoading ? (
-                    <p className="py-8 text-center text-sm text-muted-foreground">
-                      불러오는 중...
-                    </p>
+                    <ul className="divide-y">
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <li key={i} className="flex items-center gap-3 px-4 py-2.5">
+                          <Skeleton className="h-4 w-4 rounded" />
+                          <Skeleton className="h-4 flex-1" />
+                          <Skeleton className="h-4 w-14 rounded-full" />
+                        </li>
+                      ))}
+                    </ul>
                   ) : dialogFiltered.length === 0 ? (
                     <p className="py-8 text-center text-sm text-muted-foreground">
                       {availableToAdd.length === 0

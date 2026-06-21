@@ -1,14 +1,15 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
 import { useLockBodyScroll } from "@frontend/hooks/use-lock-body-scroll"
-import { ClipboardList, Plus, Pencil, Trash2, X, Loader2, AlertTriangle, AlertCircle } from "lucide-react"
+import { ClipboardList, Plus, Pencil, Trash2, X, Loader2, AlertTriangle, AlertCircle, ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react"
 import { DateField } from "@frontend/components/ui/date-field"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
 import { Badge } from "@frontend/components/ui/badge"
 import { Input } from "@frontend/components/ui/input"
+import { Skeleton } from "@frontend/components/ui/skeleton"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@frontend/components/ui/table"
@@ -79,6 +80,18 @@ function CalibrationDueBadge({ dueDate }: { dueDate: string | null }) {
   return <span className="text-xs text-foreground">{dueDate}</span>
 }
 
+// ─── Sort ─────────────────────────────────────────────────────────────────────
+
+type SortField = "code" | "name" | "category" | "status" | "calibrationDate" | "calibrationDueDate" | "location"
+type SortDir = "asc" | "desc"
+
+function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: SortField | null; sortDir: SortDir }) {
+  if (sortField !== field) return <ChevronsUpDown size={13} className="ml-1 opacity-40" />
+  return sortDir === "asc"
+    ? <ChevronUp size={13} className="ml-1" />
+    : <ChevronDown size={13} className="ml-1" />
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function EquipmentMasterPage() {
@@ -90,8 +103,32 @@ export default function EquipmentMasterPage() {
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ text: string; type: "info" | "error" } | null>(null)
 
+  const [sortField, setSortField] = useState<SortField | null>(null)
+  const [sortDir, setSortDir] = useState<SortDir>("asc")
+
   const [editTarget, setEditTarget] = useState<EquipmentMasterRow | null>(null)
   const [showAdd, setShowAdd] = useState(false)
+
+  const toggleSort = (field: SortField) => {
+    setSortField(prev => {
+      if (prev === field) {
+        setSortDir(d => d === "asc" ? "desc" : "asc")
+        return field
+      }
+      setSortDir("asc")
+      return field
+    })
+  }
+
+  const sortedRows = useMemo(() => {
+    if (!sortField) return rows
+    return [...rows].sort((a, b) => {
+      const av = a[sortField] ?? ""
+      const bv = b[sortField] ?? ""
+      const cmp = av.localeCompare(bv, "ko")
+      return sortDir === "asc" ? cmp : -cmp
+    })
+  }, [rows, sortField, sortDir])
 
   const flash = (text: string, type: "info" | "error" = "info") => {
     setMsg({ text, type })
@@ -165,53 +202,76 @@ export default function EquipmentMasterPage() {
           장비 목록 ({rows.length})
         </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
-            <Loader2 size={16} className="animate-spin" /> 불러오는 중…
-          </div>
-        ) : rows.length === 0 ? (
+        {rows.length === 0 && !loading ? (
           <div className="py-10 text-center text-sm text-muted-foreground">등록된 장비가 없습니다.</div>
         ) : (
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="px-3 text-muted-foreground">코드</TableHead>
-                  <TableHead className="px-3 text-muted-foreground">장비명</TableHead>
-                  <TableHead className="px-3 text-muted-foreground">카테고리</TableHead>
-                  <TableHead className="px-3 text-muted-foreground">상태</TableHead>
-                  <TableHead className="px-3 text-muted-foreground">최근 검교정</TableHead>
-                  <TableHead className="px-3 text-muted-foreground">차기 검교정</TableHead>
-                  <TableHead className="px-3 text-muted-foreground">위치</TableHead>
+                  <TableHead className="px-3 text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("code")}>
+                    <span className="inline-flex items-center">코드<SortIcon field="code" sortField={sortField} sortDir={sortDir} /></span>
+                  </TableHead>
+                  <TableHead className="px-3 text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("name")}>
+                    <span className="inline-flex items-center">장비명<SortIcon field="name" sortField={sortField} sortDir={sortDir} /></span>
+                  </TableHead>
+                  <TableHead className="px-3 text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("category")}>
+                    <span className="inline-flex items-center">카테고리<SortIcon field="category" sortField={sortField} sortDir={sortDir} /></span>
+                  </TableHead>
+                  <TableHead className="px-3 text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("status")}>
+                    <span className="inline-flex items-center">상태<SortIcon field="status" sortField={sortField} sortDir={sortDir} /></span>
+                  </TableHead>
+                  <TableHead className="px-3 text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("calibrationDate")}>
+                    <span className="inline-flex items-center">최근 검교정<SortIcon field="calibrationDate" sortField={sortField} sortDir={sortDir} /></span>
+                  </TableHead>
+                  <TableHead className="px-3 text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("calibrationDueDate")}>
+                    <span className="inline-flex items-center">차기 검교정<SortIcon field="calibrationDueDate" sortField={sortField} sortDir={sortDir} /></span>
+                  </TableHead>
+                  <TableHead className="px-3 text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("location")}>
+                    <span className="inline-flex items-center">위치<SortIcon field="location" sortField={sortField} sortDir={sortDir} /></span>
+                  </TableHead>
                   {isAdmin && <TableHead className="px-3 text-muted-foreground">관리</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map(row => {
+                {loading
+                  ? Array.from({ length: 6 }).map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-16" /></TableCell>
+                        <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-32" /></TableCell>
+                        <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20" /></TableCell>
+                        <TableCell className="px-3 py-2.5"><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
+                        <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-24" /></TableCell>
+                        <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-24" /></TableCell>
+                        <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20" /></TableCell>
+                        {isAdmin && <TableCell className="px-3 py-2.5"><Skeleton className="h-6 w-14" /></TableCell>}
+                      </TableRow>
+                    ))
+                  : sortedRows.map(row => {
                   const urgency = getCalibrationUrgency(row.calibrationDueDate)
                   const rowHighlight =
                     urgency === "expired" ? "bg-red-50/40" :
                     urgency === "soon"    ? "bg-amber-50/40" : ""
                   return (
                     <TableRow key={row.id} className={rowHighlight}>
-                      <TableCell className="px-3 font-mono text-xs font-semibold text-foreground">{row.code}</TableCell>
-                      <TableCell className="px-3 font-medium text-foreground">{row.name}</TableCell>
-                      <TableCell className="px-3 text-muted-foreground">{row.category ?? "—"}</TableCell>
-                      <TableCell className="px-3">
+                      <TableCell className="px-3 py-2.5 font-mono text-xs font-semibold text-foreground">{row.code}</TableCell>
+                      <TableCell className="px-3 py-2.5 font-medium text-foreground">{row.name}</TableCell>
+                      <TableCell className="px-3 py-2.5 text-muted-foreground">{row.category ?? "—"}</TableCell>
+                      <TableCell className="px-3 py-2.5">
                         <Badge variant="outline" className="gap-1.5">
                           <span className={`size-1.5 rounded-full ${STATUS_DOT[row.status]}`} />
                           {STATUS_LABEL[row.status]}
                         </Badge>
                       </TableCell>
-                      <TableCell className="px-3 text-xs text-muted-foreground">
+                      <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">
                         {row.calibrationDate ?? <span className="text-muted-foreground/40">—</span>}
                       </TableCell>
-                      <TableCell className="px-3">
+                      <TableCell className="px-3 py-2.5">
                         <CalibrationDueBadge dueDate={row.calibrationDueDate} />
                       </TableCell>
-                      <TableCell className="px-3 text-muted-foreground">{row.location ?? "—"}</TableCell>
+                      <TableCell className="px-3 py-2.5 text-muted-foreground">{row.location ?? "—"}</TableCell>
                       {isAdmin && (
-                        <TableCell className="px-3">
+                        <TableCell className="px-3 py-2.5">
                           <div className="flex items-center gap-1">
                             <Button
                               variant="ghost"

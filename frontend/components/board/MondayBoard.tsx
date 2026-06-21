@@ -12,6 +12,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@frontend/components/ui/select'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface BoardRow {
@@ -274,17 +275,25 @@ function EditableCell({ col, value, onChange }: EditableCellProps) {
 
   if (isSelect) {
     return (
-      <select
-        ref={el => { inputRef.current = el }}
-        value={draft}
-        onChange={e => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') cancel() }}
-        className="w-full rounded border border-blue-300 dark:border-blue-700 bg-white dark:bg-slate-800 px-1.5 py-0.5 text-xs text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900/40"
+      <Select
+        value={draft || 'none'}
+        onValueChange={v => {
+          const next = v === 'none' ? '' : v
+          setDraft(next)
+          // 선택 즉시 커밋 (Radix Select는 onBlur가 없음)
+          setEditing(false)
+          if (next !== value) onChange(next)
+        }}
+        onOpenChange={open => { if (!open) setEditing(false) }}
       >
-        <option value="">—</option>
-        {col.options!.map(o => <option key={o} value={o}>{o}</option>)}
-      </select>
+        <SelectTrigger className="h-7 w-full px-2 text-xs border-blue-300 dark:border-blue-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900/40">
+          <SelectValue placeholder="—" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="none">—</SelectItem>
+          {col.options!.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+        </SelectContent>
+      </Select>
     )
   }
 

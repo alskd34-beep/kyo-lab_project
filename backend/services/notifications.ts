@@ -100,7 +100,7 @@ async function dispatch(channel: string, input: CreateNotificationInput): Promis
  */
 export async function listForUser(
   userId: string,
-  role: 'admin' | 'user',
+  role: 'admin' | 'tester',
   opts: { unreadOnly?: boolean; limit?: number } = {},
 ): Promise<NotificationRow[]> {
   let query = supabaseAdmin
@@ -122,7 +122,7 @@ export async function listForUser(
 }
 
 /** 읽음 처리 (단건 또는 전체) */
-export async function markRead(userId: string, role: 'admin' | 'user', id?: string): Promise<void> {
+export async function markRead(userId: string, role: 'admin' | 'tester', id?: string): Promise<void> {
   let query = supabaseAdmin.from('notifications').update({ is_read: true })
   if (id) {
     query = query.eq('id', id)

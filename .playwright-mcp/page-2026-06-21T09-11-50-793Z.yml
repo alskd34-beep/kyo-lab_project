@@ -1,0 +1,488 @@
+- generic:
+  - generic:
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - list:
+              - listitem:
+                - link:
+                  - /url: /home
+                  - generic: KD
+                  - generic:
+                    - generic: QC 관리
+                    - generic: Quality Control
+          - generic:
+            - generic:
+              - generic: 메뉴
+              - generic:
+                - list:
+                  - listitem:
+                    - link:
+                      - /url: /home
+                      - img
+                      - generic: 홈
+                  - listitem:
+                    - button:
+                      - img
+                      - generic: 스케줄
+                      - img
+                  - listitem:
+                    - link:
+                      - /url: /my-tasks
+                      - img
+                      - generic: 내 작업
+                  - listitem:
+                    - button:
+                      - img
+                      - generic: 시험관리
+                      - img
+                  - listitem:
+                    - button:
+                      - img
+                      - generic: 안정성시험
+                      - img
+            - generic:
+              - generic: 관리
+              - generic:
+                - list:
+                  - listitem:
+                    - button:
+                      - img
+                      - generic: 일탈관리
+                      - img
+                    - generic: "3"
+                  - listitem:
+                    - button:
+                      - img
+                      - generic: 인사이트
+                      - img
+                  - listitem:
+                    - button:
+                      - img
+                      - generic: 장비관리
+                      - img
+            - generic:
+              - generic: 설정
+              - generic:
+                - list:
+                  - listitem:
+                    - button:
+                      - img
+                      - generic: 기준 설정
+                      - img
+                  - listitem:
+                    - button [expanded]:
+                      - img
+                      - generic: 계정 설정
+                      - img
+                    - generic:
+                      - list:
+                        - listitem:
+                          - link:
+                            - /url: /settings/users
+                            - generic: 사용자 관리
+                        - listitem:
+                          - link:
+                            - /url: /settings/roles
+                            - generic: 권한 관리
+                        - listitem:
+                          - link:
+                            - /url: /settings/sys-settings
+                            - generic: 시스템 설정
+          - generic:
+            - list:
+              - listitem:
+                - button:
+                  - generic:
+                    - generic: 관
+                  - generic:
+                    - generic: 관리자
+                    - generic: 관리자
+                  - img
+    - main:
+      - generic:
+        - generic:
+          - generic:
+            - button:
+              - img
+              - generic: Toggle Sidebar
+          - generic:
+            - generic:
+              - button:
+                - img
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - heading [level=1]: 사용자 관리
+              - paragraph: 총 16명
+            - button:
+              - img
+              - text: 사용자 추가
+          - generic:
+            - table:
+              - rowgroup:
+                - row:
+                  - columnheader: 고객번호
+                  - columnheader: 사용자
+                  - columnheader: 사번(아이디)
+                  - columnheader: 역할
+                  - columnheader: 상태
+                  - columnheader: 연결 시험자
+                  - columnheader: 마지막 로그인
+                  - columnheader
+              - rowgroup:
+                - row:
+                  - cell: "01013"
+                  - cell:
+                    - generic:
+                      - generic: 🐇
+                      - generic: 김기호
+                  - cell: "16218"
+                  - cell: 시험자
+                  - cell: 활성
+                  - cell: 김기호
+                  - cell: 2026. 6. 21. 오전 8:38:38
+                  - cell:
+                    - button:
+                      - img
+                      - text: 수정
+                    - button:
+                      - img
+                      - text: 삭제
+                - row:
+                  - cell: "01010"
+                  - cell:
+                    - generic:
+                      - generic: 🐯
+                      - generic: 지건희
+                  - cell: "16185"
+                  - cell: 시험자
+                  - cell: 활성
+                  - cell: 지건희
+                  - cell: "-"
+                  - cell:
+                    - button:
+                      - img
+                      - text: 수정
+                    - button:
+                      - img
+                      - text: 삭제
+                - row:
+                  - cell: "01004"
+                  - cell:
+                    - generic:
+                      - generic: 🐆
+                      - generic: 장재훈
+                  - cell: "16167"
+                  - cell: 시험자
+                  - cell: 활성
+                  - cell: 장재훈
+                  - cell: "-"
+                  - cell:
+                    - button:
+                      - img
+                      - text: 수정
+                    - button:
+                      - img
+                      - text: 삭제
+                - row:
+                  - cell: "01011"
+                  - cell:
+                    - generic:
+                      - generic: 🐐
+                      - generic: 김태훈
+                  - cell: "16242"
+                  - cell: 시험자
+                  - cell: 활성
+                  - cell: 김태훈
+                  - cell: 2026. 6. 7. 오후 6:25:02
+                  - cell:
+                    - button:
+                      - img
+                      - text: 수정
+                    - button:
+                      - img
+                      - text: 삭제
+                - row:
+                  - cell: "01014"
+                  - cell:
+                    - generic:
+                      - generic: 🐖
+                      - generic: 이영남
+                  - cell: "20028"
+                  - cell: 시험자
+                  - cell: 활성
+                  - cell: 이영남
+                  - cell: "-"
+                  - cell:
+                    - button:
+                      - img
+                      - text: 수정
+                    - button:
+                      - img
+                      - text: 삭제
+                - row:
+                  - cell: "01002"
+                  - cell:
+                    - generic:
+                      - generic: 🐷
+                      - generic: 박성호
+                  - cell: "17013"
+                  - cell: 시험자
+                  - cell: 활성
+                  - cell: 박성호
+                  - cell: "-"
+                  - cell:
+                    - button:
+                      - img
+                      - text: 수정
+                    - button:
+                      - img
+                      - text: 삭제
+                - row:
+                  - cell: "01007"
+                  - cell:
+                    - generic:
+                      - generic: 🐅
+                      - generic: 권택균
+                  - cell: "21083"
+                  - cell: 시험자
+                  - cell: 활성
+                  - cell: 권택균
+                  - cell: "-"
+                  - cell:
+                    - button:
+                      - img
+                      - text: 수정
+                    - button:
+                      - img
+                      - text: 삭제
+                - row:
+                  - cell: "01012"
+                  - cell:
+                    - generic:
+                      - generic: 🦦
+                      - generic: 박윤진
+                  - cell: "23018"
+                  - cell: 시험자
+                  - cell: 활성
+                  - cell: 박윤진
+                  - cell: "-"
+                  - cell:
+                    - button:
+                      - img
+                      - text: 수정
+                    - button:
+                      - img
+                      - text: 삭제
+                - row:
+                  - cell: "01006"
+                  - cell:
+                    - generic:
+                      - generic: 🐈
+                      - generic: 강지윤
+                  - cell: "24084"
+                  - cell: 시험자
+                  - cell: 활성
+                  - cell: 강지윤
+                  - cell: "-"
+                  - cell:
+                    - button:
+                      - img
+                      - text: 수정
+                    - button:
+                      - img
+                      - text: 삭제
+                - row:
+                  - cell: "01008"
+                  - cell:
+                    - generic:
+                      - generic: 🐷
+                      - generic: 김정호
+                  - cell: "26055"
+                  - cell: 시험자
+                  - cell: 활성
+                  - cell: 김정호
+                  - cell: "-"
+                  - cell:
+                    - button:
+                      - img
+                      - text: 수정
+                    - button:
+                      - img
+                      - text: 삭제
+                - row:
+                  - cell: "01005"
+                  - cell:
+                    - generic:
+                      - generic: 🐐
+                      - generic: 이원재
+                  - cell: "23040"
+                  - cell: 시험자
+                  - cell: 활성
+                  - cell: 이원재
+                  - cell: "-"
+                  - cell:
+                    - button:
+                      - img
+                      - text: 수정
+                    - button:
+                      - img
+                      - text: 삭제
+                - row:
+                  - cell: "01015"
+                  - cell:
+                    - generic:
+                      - generic: 🐴
+                      - generic: 안성은
+                  - cell: "20052"
+                  - cell: 시험자
+                  - cell: 활성
+                  - cell: 안성은
+                  - cell: "-"
+                  - cell:
+                    - button:
+                      - img
+                      - text: 수정
+                    - button:
+                      - img
+                      - text: 삭제
+                - row:
+                  - cell: "01001"
+                  - cell:
+                    - generic:
+                      - generic: 🐆
+                      - generic: 김태환
+                  - cell: "21084"
+                  - cell: 시험자
+                  - cell: 활성
+                  - cell: 김태환
+                  - cell: "-"
+                  - cell:
+                    - button:
+                      - img
+                      - text: 수정
+                    - button:
+                      - img
+                      - text: 삭제
+                - row:
+                  - cell: "01009"
+                  - cell:
+                    - generic:
+                      - generic: 🐘
+                      - generic: 정예찬
+                  - cell: "26046"
+                  - cell: 시험자
+                  - cell: 활성
+                  - cell: 정예찬
+                  - cell: "-"
+                  - cell:
+                    - button:
+                      - img
+                      - text: 수정
+                    - button:
+                      - img
+                      - text: 삭제
+                - row:
+                  - cell: "01003"
+                  - cell:
+                    - generic:
+                      - generic: 🐯
+                      - generic: 임수민
+                  - cell: "20106"
+                  - cell: 시험자
+                  - cell: 활성
+                  - cell: 임수민
+                  - cell: "-"
+                  - cell:
+                    - button:
+                      - img
+                      - text: 수정
+                    - button:
+                      - img
+                      - text: 삭제
+                - row:
+                  - cell: "01000"
+                  - cell:
+                    - generic:
+                      - generic: 🐹
+                      - generic: 관리자
+                  - cell: kyo-admin
+                  - cell: 관리자
+                  - cell: 활성
+                  - cell: 미연결
+                  - cell: 2026. 6. 21. 오후 6:11:32
+                  - cell:
+                    - button:
+                      - img
+                      - text: 수정
+    - button:
+      - img
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - img
+          - generic:
+            - paragraph: KD QC 어시스턴트
+            - paragraph: AI 기반 QC 도우미
+        - generic:
+          - button:
+            - img
+          - button:
+            - img
+      - generic:
+        - generic: 6월 21일 (일)
+      - generic:
+        - generic:
+          - textbox:
+            - /placeholder: 질문을 입력하세요...
+          - button [disabled]:
+            - img
+        - paragraph: AI가 생성한 답변은 부정확할 수 있습니다
+  - button "Open Next.js Dev Tools" [ref=e43] [cursor=pointer]:
+    - img [ref=e44]
+  - alert
+  - dialog "사용자 수정" [ref=e526]:
+    - generic [ref=e527]:
+      - heading "사용자 수정" [level=2] [ref=e528]
+      - paragraph [ref=e529]:
+        - text: 16218 계정 정보를 수정합니다.
+        - generic [ref=e530]: 고객번호 01013
+    - generic [ref=e531]:
+      - generic [ref=e532]:
+        - generic [ref=e533]: 🐇
+        - generic [ref=e534] [cursor=pointer]:
+          - img [ref=e535]
+          - text: 사진 업로드
+          - button "사진 업로드" [active] [ref=e538]
+        - button "사진 제거" [ref=e539] [cursor=pointer]:
+          - img [ref=e540]
+          - text: 사진 제거
+      - generic [ref=e544]:
+        - generic [ref=e545]:
+          - text: 이름
+          - textbox "이름" [ref=e546]: 김기호
+        - generic [ref=e547]:
+          - text: 역할
+          - combobox "역할" [ref=e548] [cursor=pointer]:
+            - img
+        - generic [ref=e549]:
+          - text: 상태
+          - combobox "상태" [ref=e550] [cursor=pointer]:
+            - generic: 활성
+            - img
+        - generic [ref=e551]:
+          - text: 새 비밀번호
+          - textbox "새 비밀번호" [ref=e552]:
+            - /placeholder: 변경할 때만 입력
+    - generic [ref=e553]:
+      - button "취소" [ref=e554] [cursor=pointer]
+      - button "저장" [ref=e555] [cursor=pointer]:
+        - img [ref=e556]
+        - text: 저장
+    - button "Close" [ref=e560] [cursor=pointer]:
+      - img [ref=e561]
+      - generic [ref=e564]: Close

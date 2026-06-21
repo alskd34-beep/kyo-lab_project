@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
 import { Layers, RefreshCw, Lock, Unlock, Loader2, CalendarClock } from "lucide-react"
+import { Skeleton } from "@frontend/components/ui/skeleton"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 interface GroupItem {
@@ -115,7 +116,30 @@ export default function GroupsPage() {
 
       {/* 그룹 카드 목록 */}
       {loading ? (
-        <div className="rounded-xl border border-slate-200 bg-white px-3 py-10 text-center text-slate-400 shadow-sm">불러오는 중…</div>
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-3">
+                <Skeleton className="h-8 w-1.5 shrink-0 rounded-full" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-36" />
+                  <Skeleton className="h-3 w-24" />
+                </div>
+                <Skeleton className="h-8 w-16 rounded-lg" />
+              </div>
+              <ul className="divide-y divide-slate-100">
+                {Array.from({ length: 3 }).map((_, j) => (
+                  <li key={j} className="flex items-center gap-3 px-4 py-2.5">
+                    <Skeleton className="h-4 flex-1" />
+                    <Skeleton className="h-4 w-16" />
+                    <Skeleton className="h-4 w-14" />
+                    <Skeleton className="h-4 w-20" />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
       ) : rows.length === 0 ? (
         <div className="rounded-xl border border-slate-200 bg-white px-3 py-10 text-center text-slate-400 shadow-sm">
           생성된 그룹이 없습니다. {isAdmin && "\"그룹 재생성\"으로 묶어보세요."}

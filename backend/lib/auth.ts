@@ -18,7 +18,7 @@ const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET ?? 'dev-refresh-secret-cha
 export const ACCESS_TTL_SEC  = 60 * 15            // 15분
 export const REFRESH_TTL_SEC = 60 * 60 * 24 * 7   // 7일
 
-export type UserRole = 'admin' | 'user'
+export type UserRole = 'admin' | 'tester'
 
 export interface AccessPayload extends JWTPayload {
   sub:      string         // user id

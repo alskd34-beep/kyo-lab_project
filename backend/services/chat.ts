@@ -1,18 +1,16 @@
 /**
- * [BACKEND] Chat 서비스 - OpenAI Chat Completions API 연동
+ * [BACKEND] Chat 서비스 - Codex CLI 연동
  *
- * 모델: gpt-4o-mini 고정
- * 스트림: SSE 출력 포맷은 기존 Dify 호환 형식으로 래핑하여
- *         프런트엔드 파서를 그대로 재사용합니다.
+ * 서버에 설치된 `codex exec`를 실행해 답변을 생성하고,
+ * 프런트엔드는 기존 Dify 호환 SSE 포맷을 그대로 재사용합니다.
  *           data: {"event":"message","answer":"...","conversation_id":"..."}\n\n
  *           data: [DONE]\n\n
  */
 
 import { randomUUID } from 'crypto'
 import { supabase, supabaseAdmin } from '@backend/lib/supabase'
+import { runCodexText } from '@backend/lib/codexCli'
 
-const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions'
-const OPENAI_MODEL   = 'gpt-4o-mini'
 const SYSTEM_PROMPT  = `당신은 광동제약 KD QC(품질관리) 어시스턴트입니다.
 사용자 질문에 대해 답할 때, [DB 컨텍스트] 블록이 제공된다면 반드시 그 안의 사실만을 근거로 답하세요.
 DB 컨텍스트에 없는 사실을 지어내지 말고, 정보가 부족하면 "DB에 해당 정보가 없습니다." 라고 답합니다.
@@ -20,7 +18,7 @@ DB 컨텍스트에 없는 사실을 지어내지 말고, 정보가 부족하면 
 const HISTORY_LIMIT  = 10
 const ACTIVE_STATUSES = ['pending', 'in_progress', 'on_hold']
 
-type Role = 'admin' | 'user'
+type Role = 'admin' | 'tester'
 
 /** 요청자 신원 (권한 스코프 산정용) */
 export interface ChatViewer {
@@ -39,6 +37,7 @@ interface ChatRequest {
   /** 기존 호환성을 위해 이름은 conversationId(=dify_conv_id로 매핑) 유지 */
   conversationId?: string
   viewer: ChatViewer
+  signal?: AbortSignal
 }
 
 interface ChatMsg {
@@ -499,7 +498,7 @@ async function buildTesterOrdersBlock(t: TesterLite, scope: Scope): Promise<stri
 
 // ─── 대화 이력 ────────────────────────────────────────────────────────────────
 
-/** 동일 conversationId(dify_conv_id) 의 직전 대화를 OpenAI message 포맷으로 가져옵니다. */
+/** 동일 conversationId(dify_conv_id) 의 직전 대화를 assistant/user 포맷으로 가져옵니다. */
 async function loadHistory(difyConvId: string): Promise<ChatMsg[]> {
   try {
     const conv = await supabase
@@ -527,107 +526,80 @@ async function loadHistory(difyConvId: string): Promise<ChatMsg[]> {
   }
 }
 
-/** OpenAI 스트림(JSON delta) → Dify 호환 SSE 변환 */
-function transformStream(
-  upstream: ReadableStream<Uint8Array>,
-  conversationId: string,
-): ReadableStream<Uint8Array> {
-  const decoder = new TextDecoder()
-  const encoder = new TextEncoder()
-  let buffer = ''
+function chunkText(text: string, size = 120): string[] {
+  const normalized = text.replace(/\r\n/g, '\n').trim()
+  if (!normalized) return []
+  const chunks: string[] = []
+  for (let i = 0; i < normalized.length; i += size) {
+    chunks.push(normalized.slice(i, i + size))
+  }
+  return chunks
+}
 
+function codexPrompt(message: string, history: ChatMsg[], dbContext: string): string {
+  const historyBlock = history.length > 0
+    ? [
+        '대화 이력:',
+        ...history.map(m => `${m.role === 'assistant' ? '어시스턴트' : '사용자'}: ${m.content}`),
+      ].join('\n')
+    : '대화 이력: 없음'
+
+  return [
+    SYSTEM_PROMPT,
+    `오늘 날짜는 ${kstToday()} (KST) 입니다. "오늘/내일/이번 주" 등 상대적 표현은 이 날짜를 기준으로 해석하세요.`,
+    dbContext || '[DB 컨텍스트] 없음',
+    historyBlock,
+    '현재 사용자 질문:',
+    message,
+    '',
+    '응답 규칙:',
+    '- 한국어로만 답변하세요.',
+    '- DB 컨텍스트가 있으면 그 사실만 사용하세요.',
+    '- 정보가 부족하면 "DB에 해당 정보가 없습니다."라고 답하세요.',
+    '- 최종 답변만 출력하세요. 사전 설명이나 메타 코멘트는 쓰지 마세요.',
+  ].join('\n\n')
+}
+
+function createCliStream(
+  conversationId: string,
+  producer: () => Promise<string>,
+): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder()
   return new ReadableStream<Uint8Array>({
     async start(controller) {
-      // 첫 이벤트: conversation_id 통지
       controller.enqueue(encoder.encode(
         `data: ${JSON.stringify({ event: 'message', answer: '', conversation_id: conversationId })}\n\n`,
       ))
 
-      const reader = upstream.getReader()
       try {
-        while (true) {
-          const { value, done } = await reader.read()
-          if (done) break
-          buffer += decoder.decode(value, { stream: true })
-          const lines = buffer.split('\n')
-          buffer = lines.pop() ?? ''
-
-          for (const line of lines) {
-            const trimmed = line.trim()
-            if (!trimmed.startsWith('data:')) continue
-            const data = trimmed.slice(5).trim()
-            if (!data || data === '[DONE]') continue
-
-            try {
-              const parsed = JSON.parse(data) as {
-                choices?: { delta?: { content?: string } }[]
-              }
-              const delta = parsed.choices?.[0]?.delta?.content
-              if (delta) {
-                controller.enqueue(encoder.encode(
-                  `data: ${JSON.stringify({ event: 'message', answer: delta, conversation_id: conversationId })}\n\n`,
-                ))
-              }
-            } catch {
-              // JSON 파싱 실패 라인은 무시
-            }
-          }
+        const answer = await producer()
+        const chunks = chunkText(answer)
+        for (const chunk of chunks) {
+          controller.enqueue(encoder.encode(
+            `data: ${JSON.stringify({ event: 'message', answer: chunk, conversation_id: conversationId })}\n\n`,
+          ))
         }
-
         controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+        controller.close()
       } catch (err) {
         controller.error(err)
-        return
-      } finally {
-        controller.close()
       }
     },
   })
 }
 
 /**
- * OpenAI(gpt-4o-mini) 에 채팅 메시지를 전송하고 SSE 스트림을 반환합니다.
+ * Codex CLI 에 채팅 메시지를 전송하고 SSE 스트림을 반환합니다.
  */
-export async function sendChatMessage({ message, conversationId, viewer }: ChatRequest): Promise<Response> {
-  const apiKey = process.env.OPENAI_API_KEY
-  if (!apiKey) {
-    throw new Error('OPENAI_API_KEY 환경변수가 설정되지 않았습니다. .env.local을 확인해주세요.')
-  }
-
+export async function sendChatMessage({ message, conversationId, viewer, signal }: ChatRequest): Promise<Response> {
   const convId = conversationId && conversationId.trim() ? conversationId : randomUUID()
   const scope = await resolveScope(viewer)
   const [history, dbContext] = await Promise.all([
     conversationId ? loadHistory(conversationId) : Promise.resolve([] as ChatMsg[]),
     buildDbContext(message, scope),
   ])
+  const prompt = codexPrompt(message, history, dbContext)
+  const stream = createCliStream(convId, () => runCodexText(prompt, { signal }))
 
-  const dateLine = `오늘 날짜는 ${kstToday()} (KST) 입니다. "오늘/내일/이번 주" 등 상대적 표현은 이 날짜를 기준으로 해석하세요.`
-  const systemContent = [SYSTEM_PROMPT, dateLine, dbContext].filter(Boolean).join('\n\n')
-
-  const messages: ChatMsg[] = [
-    { role: 'system', content: systemContent },
-    ...history,
-    { role: 'user', content: message },
-  ]
-
-  const res = await fetch(OPENAI_API_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model:    OPENAI_MODEL,
-      messages,
-      stream:   true,
-    }),
-  })
-
-  if (!res.ok || !res.body) {
-    const errText = await res.text().catch(() => '')
-    throw new Error(`OpenAI API 호출 실패: ${res.status} ${errText}`)
-  }
-
-  const transformed = transformStream(res.body, convId)
-  return new Response(transformed)
+  return new Response(stream)
 }

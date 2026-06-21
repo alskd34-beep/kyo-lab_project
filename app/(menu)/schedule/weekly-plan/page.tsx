@@ -27,7 +27,18 @@ import {
   FlaskConical,
   Beaker,
   Info,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react'
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from '@frontend/components/ui/table'
+import { Skeleton } from '@frontend/components/ui/skeleton'
 import {
   planWeekly,
   type PctItem,
@@ -186,6 +197,35 @@ export default function WeeklyPlanPage() {
       return next
     })
 
+  // ─── 미배정 테이블 정렬 ──────────────────────────────────────────────────────
+  type UnassignedField = 'productName' | 'productCode' | 'batchNo' | 'reason'
+  const [sortField, setSortField] = useState<UnassignedField>('productName')
+  const [sortDir,   setSortDir]   = useState<'asc' | 'desc'>('asc')
+
+  const toggleSort = (field: UnassignedField) => {
+    if (sortField === field) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDir('asc')
+    }
+  }
+
+  const sortedUnassigned = useMemo(() => {
+    if (!result) return []
+    return [...result.unassigned].sort((a, b) => {
+      const cmp = a[sortField].localeCompare(b[sortField], 'ko')
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+  }, [result, sortField, sortDir])
+
+  const SortIcon = ({ field }: { field: UnassignedField }) => {
+    if (sortField !== field) return <ChevronDown size={12} className="ml-1 opacity-30" />
+    return sortDir === 'asc'
+      ? <ChevronUp size={12} className="ml-1 text-blue-600 dark:text-blue-400" />
+      : <ChevronDown size={12} className="ml-1 text-blue-600 dark:text-blue-400" />
+  }
+
   return (
     <div className="p-6">
       <div className="mx-auto max-w-[1800px] space-y-5">
@@ -280,9 +320,23 @@ export default function WeeklyPlanPage() {
         {/* 로딩 */}
         {loading && (
           <Card className={`${BORDER} ${CARD_BG}`}>
-            <CardContent className="flex flex-col items-center justify-center gap-2 py-12">
-              <Loader2 size={28} className="animate-spin text-blue-500" />
-              <p className={`text-sm font-medium ${TXT_SECONDARY}`}>PCT · 마스터 · 안정성 시트를 분석하여 자동 배정 중...</p>
+            <CardContent className="space-y-3 py-6">
+              <Skeleton className="h-8 w-1/3" />
+              <div className="flex gap-3">
+                {[...Array(5)].map((_, i) => (
+                  <Skeleton key={i} className="h-20 flex-1" />
+                ))}
+              </div>
+              <div className="flex gap-3 pt-2">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="flex w-72 shrink-0 flex-col gap-2">
+                    <Skeleton className="h-9 w-full" />
+                    <Skeleton className="h-24 w-full" />
+                    <Skeleton className="h-24 w-full" />
+                    <Skeleton className="h-16 w-full" />
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
         )}
@@ -477,7 +531,7 @@ export default function WeeklyPlanPage() {
 
             {/* 미배정 */}
             {result.unassigned.length > 0 && (
-              <Card className="border-amber-300 dark:border-amber-900 bg-white dark:bg-slate-900">
+              <Card className="border-amber-300 dark:border-amber-900 bg-white dark:bg-slate-900 gap-0 overflow-hidden py-0">
                 <CardHeader>
                   <CardTitle className={`flex items-center gap-2 text-base ${TXT_PRIMARY}`}>
                     <AlertTriangle size={16} className="text-amber-600 dark:text-amber-400" />
@@ -485,26 +539,34 @@ export default function WeeklyPlanPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-amber-100 dark:border-amber-900 text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        <th className="px-3 py-2 text-left">품목명</th>
-                        <th className="px-3 py-2 text-left">코드</th>
-                        <th className="px-3 py-2 text-left">제조번호</th>
-                        <th className="px-3 py-2 text-left">사유</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {result.unassigned.map((u, i) => (
-                        <tr key={i} className="border-b border-amber-50 dark:border-amber-950">
-                          <td className={`px-3 py-2 font-semibold ${TXT_PRIMARY}`}>{u.productName}</td>
-                          <td className={`px-3 py-2 font-mono text-xs ${TXT_TERTIARY}`}>{u.productCode}</td>
-                          <td className={`px-3 py-2 font-mono text-xs ${TXT_TERTIARY}`}>{u.batchNo}</td>
-                          <td className="px-3 py-2 text-xs text-amber-700 dark:text-amber-300">{u.reason}</td>
-                        </tr>
+                  <Table className="w-full text-sm">
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent border-b border-amber-100 dark:border-amber-900">
+                        <TableHead className="cursor-pointer select-none px-3 text-left text-muted-foreground" onClick={() => toggleSort('productName')}>
+                          <span className="inline-flex items-center">품목명<SortIcon field="productName" /></span>
+                        </TableHead>
+                        <TableHead className="cursor-pointer select-none px-3 text-left text-muted-foreground" onClick={() => toggleSort('productCode')}>
+                          <span className="inline-flex items-center">코드<SortIcon field="productCode" /></span>
+                        </TableHead>
+                        <TableHead className="cursor-pointer select-none px-3 text-left text-muted-foreground" onClick={() => toggleSort('batchNo')}>
+                          <span className="inline-flex items-center">제조번호<SortIcon field="batchNo" /></span>
+                        </TableHead>
+                        <TableHead className="cursor-pointer select-none px-3 text-left text-muted-foreground" onClick={() => toggleSort('reason')}>
+                          <span className="inline-flex items-center">사유<SortIcon field="reason" /></span>
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sortedUnassigned.map((u, i) => (
+                        <TableRow key={i} className="border-b border-amber-50 dark:border-amber-950">
+                          <TableCell className="px-3 py-2.5 font-medium text-foreground">{u.productName}</TableCell>
+                          <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{u.productCode}</TableCell>
+                          <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{u.batchNo}</TableCell>
+                          <TableCell className="px-3 py-2.5 text-xs text-amber-700 dark:text-amber-300">{u.reason}</TableCell>
+                        </TableRow>
                       ))}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </CardContent>
               </Card>
             )}

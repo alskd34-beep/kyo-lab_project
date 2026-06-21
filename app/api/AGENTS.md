@@ -21,7 +21,7 @@ Next.js App Router route handlers (`route.ts`), one folder per resource. These a
 | `schedules/`, `schedules/monthly/` | Scheduling data |
 | `qc-scheduler/` | QC scheduling computation |
 | `dashboard/` | Aggregated dashboard/KPI data |
-| `chat/`, `chat/history/` | AI chatbot — SSE streaming proxy to OpenAI; history persistence |
+| `chat/`, `chat/history/` | AI chatbot — SSE streaming proxy to Codex CLI-backed assistant; history persistence |
 | `google-sheet/master/`, `.../stability/` | Google Sheet import/sync endpoints |
 
 ## For AI Agents
@@ -50,7 +50,7 @@ Next.js App Router route handlers (`route.ts`), one folder per resource. These a
   ```
   Middleware lets API requests through (no redirect); the route guard is the real protection. `auth/*` routes are public by design.
 - **Response contract**: success → `{ rows }` | `{ row }` | `{ ok: true }`; failure → `{ error: <Korean message> }` with appropriate status (400 validation, 401/403 auth, 500 server, 503 missing-env). Keep error messages in Korean.
-- The chat route returns a raw `text/event-stream` (SSE) `Response`, not JSON — it pipes `sendChatMessage()`'s stream body straight through.
+- The chat route returns a raw `text/event-stream` (SSE) `Response`, not JSON — it pipes `sendChatMessage()`'s stream body straight through. The chat service now shells out to `codex exec` and streams the final answer in the legacy Dify-compatible event format.
 
 ### Testing Requirements
 - `npm run dev`; exercise endpoints from the UI or `curl` with the `kd_access` cookie. `npm run typecheck`.

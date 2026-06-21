@@ -6,6 +6,8 @@ import {
   ArrowUpRight,
   CalendarClock,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Clock3,
   DatabaseZap,
   FlaskConical,
@@ -14,6 +16,7 @@ import {
   Sheet,
   Sparkles,
 } from 'lucide-react'
+import { Skeleton } from '@frontend/components/ui/skeleton'
 import { Badge } from '@frontend/components/ui/badge'
 import { Button } from '@frontend/components/ui/button'
 import { Card, CardContent } from '@frontend/components/ui/card'
@@ -141,6 +144,19 @@ function formatSyncTime(date: Date | null): string {
   })
 }
 
+type SortField = keyof Pick<
+  StabilitySheetRow,
+  'productCode' | 'productName' | 'testType' | 'batchNo' | 'manufacturedAt' | 'expiryDate' | 'reason' | 'period' | 'requestedAt' | 'requestNo' | 'status'
+>
+type SortDir = 'asc' | 'desc'
+
+function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: SortField | null; sortDir: SortDir }) {
+  if (sortField !== field) return <ChevronDown size={12} className="ml-0.5 opacity-30" />
+  return sortDir === 'asc'
+    ? <ChevronUp size={12} className="ml-0.5 text-foreground" />
+    : <ChevronDown size={12} className="ml-0.5 text-foreground" />
+}
+
 export default function StabStatusPage() {
   const [rows, setRows] = useState<StabilitySheetRow[]>([])
   const [query, setQuery] = useState('')
@@ -148,6 +164,17 @@ export default function StabStatusPage() {
   const [error, setError] = useState<string | null>(null)
   const [syncedAt, setSyncedAt] = useState<Date | null>(null)
   const [changeState, setChangeState] = useState<ChangeState>('unchanged')
+  const [sortField, setSortField] = useState<SortField | null>(null)
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
+
+  function toggleSort(field: SortField) {
+    if (sortField === field) {
+      setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortField(field)
+      setSortDir('asc')
+    }
+  }
 
   const loadSheet = async () => {
     setLoading(true)
@@ -196,6 +223,16 @@ export default function StabStatusPage() {
       ].some(value => value.toLowerCase().includes(q)),
     )
   }, [query, rows])
+
+  const sortedRows = useMemo(() => {
+    if (!sortField) return filteredRows
+    return [...filteredRows].sort((a, b) => {
+      const aVal = a[sortField] ?? ''
+      const bVal = b[sortField] ?? ''
+      const cmp = aVal.localeCompare(bVal, 'ko')
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+  }, [filteredRows, sortField, sortDir])
 
   const stats = useMemo(() => {
     const active = rows.filter(isScheduleCandidate).length
@@ -290,7 +327,7 @@ export default function StabStatusPage() {
         </Card>
       </div>
 
-      <Card className="min-h-0 rounded-xl border-slate-200 bg-white py-0 shadow-none">
+      <Card className="min-h-0 gap-0 overflow-hidden rounded-xl border-slate-200 bg-white py-0 shadow-none">
         <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-slate-800">시트 반영 목록</span>
@@ -317,65 +354,98 @@ export default function StabStatusPage() {
         ) : (
           <Table>
             <TableHeader>
-              <TableRow className="bg-slate-50/80">
-                <TableHead className="px-4 text-[11px] text-slate-500">품목코드</TableHead>
-                <TableHead className="min-w-[220px] text-[11px] text-slate-500">품목</TableHead>
-                <TableHead className="text-[11px] text-slate-500">시험종류</TableHead>
-                <TableHead className="text-[11px] text-slate-500">제조번호</TableHead>
-                <TableHead className="text-[11px] text-slate-500">제조일자</TableHead>
-                <TableHead className="text-[11px] text-slate-500">사용기한</TableHead>
-                <TableHead className="min-w-[160px] text-[11px] text-slate-500">실시사유</TableHead>
-                <TableHead className="min-w-[150px] text-[11px] text-slate-500">기간</TableHead>
-                <TableHead className="text-[11px] text-slate-500">의뢰일자</TableHead>
-                <TableHead className="text-[11px] text-slate-500">의뢰번호</TableHead>
-                <TableHead className="text-[11px] text-slate-500">시험상태</TableHead>
-                <TableHead className="text-[11px] text-slate-500">스케줄</TableHead>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort('productCode')}>
+                  <span className="flex items-center">품목코드<SortIcon field="productCode" sortField={sortField} sortDir={sortDir} /></span>
+                </TableHead>
+                <TableHead className="min-w-[220px] cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort('productName')}>
+                  <span className="flex items-center">품목<SortIcon field="productName" sortField={sortField} sortDir={sortDir} /></span>
+                </TableHead>
+                <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort('testType')}>
+                  <span className="flex items-center">시험종류<SortIcon field="testType" sortField={sortField} sortDir={sortDir} /></span>
+                </TableHead>
+                <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort('batchNo')}>
+                  <span className="flex items-center">제조번호<SortIcon field="batchNo" sortField={sortField} sortDir={sortDir} /></span>
+                </TableHead>
+                <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort('manufacturedAt')}>
+                  <span className="flex items-center">제조일자<SortIcon field="manufacturedAt" sortField={sortField} sortDir={sortDir} /></span>
+                </TableHead>
+                <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort('expiryDate')}>
+                  <span className="flex items-center">사용기한<SortIcon field="expiryDate" sortField={sortField} sortDir={sortDir} /></span>
+                </TableHead>
+                <TableHead className="min-w-[160px] cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort('reason')}>
+                  <span className="flex items-center">실시사유<SortIcon field="reason" sortField={sortField} sortDir={sortDir} /></span>
+                </TableHead>
+                <TableHead className="min-w-[150px] cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort('period')}>
+                  <span className="flex items-center">기간<SortIcon field="period" sortField={sortField} sortDir={sortDir} /></span>
+                </TableHead>
+                <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort('requestedAt')}>
+                  <span className="flex items-center">의뢰일자<SortIcon field="requestedAt" sortField={sortField} sortDir={sortDir} /></span>
+                </TableHead>
+                <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort('requestNo')}>
+                  <span className="flex items-center">의뢰번호<SortIcon field="requestNo" sortField={sortField} sortDir={sortDir} /></span>
+                </TableHead>
+                <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort('status')}>
+                  <span className="flex items-center">시험상태<SortIcon field="status" sortField={sortField} sortDir={sortDir} /></span>
+                </TableHead>
+                <TableHead className="px-3 text-muted-foreground">스케줄</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow>
-                  <TableCell colSpan={12} className="h-32 text-center text-sm text-slate-500">
-                    안정성 시트를 불러오는 중입니다.
-                  </TableCell>
-                </TableRow>
+                Array.from({ length: 6 }).map((_, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-16" /></TableCell>
+                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-40" /></TableCell>
+                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-16 rounded-full" /></TableCell>
+                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20" /></TableCell>
+                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20" /></TableCell>
+                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20" /></TableCell>
+                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-28" /></TableCell>
+                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-32" /></TableCell>
+                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20" /></TableCell>
+                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20" /></TableCell>
+                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-14 rounded-full" /></TableCell>
+                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20 rounded-full" /></TableCell>
+                  </TableRow>
+                ))
               ) : filteredRows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={12} className="h-32 text-center text-sm text-slate-500">
+                  <TableCell colSpan={12} className="h-32 text-center text-sm text-muted-foreground">
                     표시할 안정성 품목이 없습니다.
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredRows.map(row => (
-                  <TableRow key={row.id} className="hover:bg-slate-50/70">
-                    <TableCell className="px-4 font-mono text-xs font-semibold text-slate-700">
+                sortedRows.map(row => (
+                  <TableRow key={row.id}>
+                    <TableCell className="px-3 py-2.5 font-mono text-xs font-medium text-foreground">
                       {row.productCode || '-'}
                     </TableCell>
-                    <TableCell>
-                      <div className="max-w-[280px] truncate text-xs font-semibold text-slate-800">
+                    <TableCell className="px-3 py-2.5">
+                      <div className="max-w-[280px] truncate font-medium text-foreground">
                         {row.productName || '-'}
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="px-3 py-2.5">
                       <Badge className="border-violet-200 bg-violet-50 text-violet-700" variant="outline">
                         {row.testType || '미분류'}
                       </Badge>
                     </TableCell>
-                    <TableCell className="font-mono text-xs text-slate-600">{row.batchNo || '-'}</TableCell>
-                    <TableCell className="font-mono text-xs text-slate-600">{row.manufacturedAt || '-'}</TableCell>
-                    <TableCell className="font-mono text-xs text-slate-600">{row.expiryDate || '-'}</TableCell>
-                    <TableCell>
-                      <span className="block max-w-[220px] truncate text-xs text-slate-600">{row.reason || '-'}</span>
+                    <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{row.batchNo || '-'}</TableCell>
+                    <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{row.manufacturedAt || '-'}</TableCell>
+                    <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{row.expiryDate || '-'}</TableCell>
+                    <TableCell className="px-3 py-2.5">
+                      <span className="block max-w-[220px] truncate text-xs text-muted-foreground">{row.reason || '-'}</span>
                     </TableCell>
-                    <TableCell className="font-mono text-xs text-slate-600">{row.period || '-'}</TableCell>
-                    <TableCell className="font-mono text-xs text-slate-600">{row.requestedAt || '-'}</TableCell>
-                    <TableCell className="font-mono text-xs text-slate-600">{row.requestNo || '-'}</TableCell>
-                    <TableCell>
+                    <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{row.period || '-'}</TableCell>
+                    <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{row.requestedAt || '-'}</TableCell>
+                    <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{row.requestNo || '-'}</TableCell>
+                    <TableCell className="px-3 py-2.5">
                       <Badge className={getStatusClass(row.status)} variant="outline">
                         {row.status}
                       </Badge>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="px-3 py-2.5">
                       {isScheduleCandidate(row) ? (
                         <Badge className="border-blue-200 bg-blue-50 text-blue-700" variant="outline">
                           동시분석 후보

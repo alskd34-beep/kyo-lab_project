@@ -5,10 +5,13 @@ import { format, subMonths } from "date-fns"
 import { ko } from "date-fns/locale"
 import {
   Calendar as CalendarIcon,
+  ChevronDown,
+  ChevronUp,
   Download,
   Search,
   TriangleAlert,
 } from "lucide-react"
+import { Skeleton } from "@frontend/components/ui/skeleton"
 import type { DateRange } from "react-day-picker"
 
 import { cn } from "@frontend/lib/utils"
@@ -220,6 +223,27 @@ function DDayCell({
   return <Badge variant="outline" className={cn("font-semibold", cls)}>{label}</Badge>
 }
 
+type SortField =
+  | "product_code"
+  | "product_name"
+  | "spec"
+  | "batch_no"
+  | "dosage_form"
+  | "packaging_date"
+  | "record_review_deadline"
+  | "qc_completion_deadline"
+  | "dDayQc"
+  | "status"
+
+type SortDir = "asc" | "desc"
+
+function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: SortField | null; sortDir: SortDir }) {
+  if (sortField !== field) return <ChevronDown className="ml-0.5 size-3 opacity-30" />
+  return sortDir === "asc"
+    ? <ChevronUp className="ml-0.5 size-3 opacity-80" />
+    : <ChevronDown className="ml-0.5 size-3 opacity-80" />
+}
+
 export default function ProdStatusPage() {
   const [batches, setBatches] = useState<BatchSummary[]>(DEMO_BATCHES)
   const [stats, setStats] = useState<DashboardStats>(DEMO_STATS)
@@ -228,6 +252,8 @@ export default function ProdStatusPage() {
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set())
   const [searchValue, setSearchValue] = useState("")
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("전체")
+  const [sortField, setSortField] = useState<SortField | null>(null)
+  const [sortDir, setSortDir] = useState<SortDir>("asc")
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
     const today = new Date()
     return { from: subMonths(today, 1), to: today }
@@ -304,6 +330,34 @@ export default function ProdStatusPage() {
     }
     return rows
   }, [batches, usingDemo, searchValue, statusFilter])
+
+  const toggleSort = (field: SortField) => {
+    setSortField((prev) => {
+      if (prev === field) {
+        setSortDir((d) => (d === "asc" ? "desc" : "asc"))
+        return field
+      }
+      setSortDir("asc")
+      return field
+    })
+  }
+
+  const sortedData = useMemo(() => {
+    if (!sortField) return filtered
+    return [...filtered].sort((a, b) => {
+      let cmp = 0
+      if (sortField === "dDayQc") {
+        const av = a.dDayQc ?? Infinity
+        const bv = b.dDayQc ?? Infinity
+        cmp = av - bv
+      } else {
+        const av = String(a[sortField] ?? "")
+        const bv = String(b[sortField] ?? "")
+        cmp = av.localeCompare(bv, "ko")
+      }
+      return sortDir === "asc" ? cmp : -cmp
+    })
+  }, [filtered, sortField, sortDir])
 
   const kpiCards = [
     { label: "전체 배치", value: stats.totalBatches, valueCls: "text-foreground", sub: "취소 제외 전체" },
@@ -434,25 +488,56 @@ export default function ProdStatusPage() {
                   className="cb-custom"
                 />
               </TableHead>
-              {[
-                "품목코드", "품목명", "규격", "제조번호", "제형",
-                "포장일", "기록서검토기한", "QC완료예정일", "D-Day", "상태",
-              ].map((header) => (
-                <TableHead key={header} className="px-3 text-muted-foreground">{header}</TableHead>
+              {(
+                [
+                  { label: "품목코드", field: "product_code" },
+                  { label: "품목명", field: "product_name" },
+                  { label: "규격", field: "spec" },
+                  { label: "제조번호", field: "batch_no" },
+                  { label: "제형", field: "dosage_form" },
+                  { label: "포장일", field: "packaging_date" },
+                  { label: "기록서검토기한", field: "record_review_deadline" },
+                  { label: "QC완료예정일", field: "qc_completion_deadline" },
+                  { label: "D-Day", field: "dDayQc" },
+                  { label: "상태", field: "status" },
+                ] as { label: string; field: SortField }[]
+              ).map(({ label, field }) => (
+                <TableHead
+                  key={field}
+                  className="cursor-pointer select-none px-3 text-muted-foreground hover:text-foreground"
+                  onClick={() => toggleSort(field)}
+                >
+                  <span className="inline-flex items-center">
+                    {label}
+                    <SortIcon field={field} sortField={sortField} sortDir={sortDir} />
+                  </span>
+                </TableHead>
               ))}
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={11} className="py-16 text-center text-sm text-muted-foreground">불러오는 중...</TableCell>
-              </TableRow>
+              Array.from({ length: 6 }).map((_, i) => (
+                <TableRow key={i}>
+                  <TableCell className="px-4 py-2.5"><Skeleton className="h-4 w-4" /></TableCell>
+                  <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-16" /></TableCell>
+                  <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-36" /></TableCell>
+                  <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-12" /></TableCell>
+                  <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-16" /></TableCell>
+                  <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-14" /></TableCell>
+                  <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20" /></TableCell>
+                  <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20" /></TableCell>
+                  <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20" /></TableCell>
+                  <TableCell className="px-3 py-2.5"><Skeleton className="h-5 w-14 rounded-full" /></TableCell>
+                  <TableCell className="px-3 py-2.5"><Skeleton className="h-5 w-14 rounded-full" /></TableCell>
+                </TableRow>
+              ))
             ) : filtered.length === 0 ? (
               <TableRow className="hover:bg-transparent">
                 <TableCell colSpan={11} className="py-16 text-center text-sm text-muted-foreground">데이터가 없습니다.</TableCell>
               </TableRow>
             ) : (
-              filtered.map((row) => {
+              sortedData.map((row) => {
                 const isSelected = selectedRows.has(row.id)
                 return (
                   <TableRow
@@ -490,7 +575,16 @@ export default function ProdStatusPage() {
       {/* 모바일 카드 */}
       <div className="flex flex-col gap-2 md:hidden">
         {isLoading ? (
-          <Card className="items-center py-6 text-center text-sm text-muted-foreground">불러오는 중...</Card>
+          Array.from({ length: 4 }).map((_, i) => (
+            <Card key={i} className="gap-2 px-3 py-3">
+              <div className="flex items-center justify-between">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-5 w-14 rounded-full" />
+              </div>
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-3/4" />
+            </Card>
+          ))
         ) : filtered.length === 0 ? (
           <Card className="items-center py-6 text-center text-sm text-muted-foreground">데이터가 없습니다.</Card>
         ) : (
@@ -533,7 +627,7 @@ export default function ProdStatusPage() {
       {/* 푸터 요약 */}
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
         <p>
-          {isLoading && <span className="mr-2">로딩 중...</span>}
+          {isLoading && <Skeleton className="mr-2 inline-block h-3 w-12" />}
           총 <span className="font-semibold text-foreground tabular-nums">{filtered.length}</span>건
           {selectedCount > 0 && <span className="ml-2 font-medium text-primary">· {selectedCount}건 선택됨</span>}
           {stats.overdueCount > 0 && (

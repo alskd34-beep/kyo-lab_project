@@ -5,6 +5,7 @@ import { useAuth } from "@frontend/lib/auth-context"
 import { useLockBodyScroll } from "@frontend/hooks/use-lock-body-scroll"
 import { CalendarDays, Plus, Trash2, X, Loader2, ChevronLeft, ChevronRight } from "lucide-react"
 import { DateField } from "@frontend/components/ui/date-field"
+import { Skeleton } from "@frontend/components/ui/skeleton"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface HolidayRow {
@@ -127,8 +128,13 @@ export default function HolidaysPage() {
           {year}년 공휴일 ({rows.length}일)
         </div>
         {loading ? (
-          <div className="flex items-center justify-center gap-2 py-10 text-sm text-slate-400">
-            <Loader2 size={16} className="animate-spin" /> 불러오는 중…
+          <div className="divide-y divide-slate-100">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 px-4 py-3">
+                <Skeleton className="h-4 w-28 shrink-0" />
+                <Skeleton className="h-4 flex-1" />
+              </div>
+            ))}
           </div>
         ) : rows.length === 0 ? (
           <div className="py-10 text-center text-sm text-slate-400">

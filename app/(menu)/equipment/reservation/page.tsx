@@ -1,9 +1,10 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
 import { useLockBodyScroll } from "@frontend/hooks/use-lock-body-scroll"
-import { Wrench, Plus, Trash2, X, Loader2, CheckCircle2, Ban } from "lucide-react"
+import { Wrench, Plus, Trash2, X, Loader2, CheckCircle2, Ban, ChevronDown, ChevronUp } from "lucide-react"
+import { Skeleton } from "@frontend/components/ui/skeleton"
 import { DateField } from "@frontend/components/ui/date-field"
 import { cn } from "@frontend/lib/utils"
 import { Badge } from "@frontend/components/ui/badge"
@@ -38,6 +39,9 @@ const STATUS_DOT: Record<ReservationStatus, string> = {
   COMPLETED: "bg-blue-500",
 }
 
+type SortField = "status" | "equipmentId" | "startDate" | "userName"
+type SortDir = "asc" | "desc"
+
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function EquipmentReservationPage() {
   const { user } = useAuth()
@@ -50,6 +54,40 @@ export default function EquipmentReservationPage() {
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
+  const [sortField, setSortField] = useState<SortField>("startDate")
+  const [sortDir, setSortDir] = useState<SortDir>("asc")
+
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir(d => d === "asc" ? "desc" : "asc")
+    } else {
+      setSortField(field)
+      setSortDir("asc")
+    }
+  }
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return <ChevronDown size={13} className="opacity-30" />
+    return sortDir === "asc"
+      ? <ChevronUp size={13} className="opacity-80" />
+      : <ChevronDown size={13} className="opacity-80" />
+  }
+
+  const sortedData = useMemo(() => {
+    return [...rows].sort((a, b) => {
+      let cmp = 0
+      if (sortField === "status") {
+        cmp = STATUS_LABEL[a.status].localeCompare(STATUS_LABEL[b.status], "ko")
+      } else if (sortField === "equipmentId") {
+        cmp = a.equipmentId.localeCompare(b.equipmentId, "ko")
+      } else if (sortField === "startDate") {
+        cmp = a.startDate.localeCompare(b.startDate, "ko")
+      } else if (sortField === "userName") {
+        cmp = (a.userName ?? "").localeCompare(b.userName ?? "", "ko")
+      }
+      return sortDir === "asc" ? cmp : -cmp
+    })
+  }, [rows, sortField, sortDir])
 
   const flash = (m: string) => { setMsg(m); setTimeout(() => setMsg(null), 3500) }
 
@@ -164,22 +202,32 @@ export default function EquipmentReservationPage() {
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead className="px-3 text-muted-foreground">상태</TableHead>
-              <TableHead className="px-3 text-muted-foreground">장비</TableHead>
-              <TableHead className="px-3 text-muted-foreground">기간</TableHead>
-              <TableHead className="px-3 text-muted-foreground">예약자</TableHead>
+              <TableHead className="px-3 text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("status")}>
+                <span className="flex items-center gap-1">상태 <SortIcon field="status" /></span>
+              </TableHead>
+              <TableHead className="px-3 text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("equipmentId")}>
+                <span className="flex items-center gap-1">장비 <SortIcon field="equipmentId" /></span>
+              </TableHead>
+              <TableHead className="px-3 text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("startDate")}>
+                <span className="flex items-center gap-1">기간 <SortIcon field="startDate" /></span>
+              </TableHead>
+              <TableHead className="px-3 text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("userName")}>
+                <span className="flex items-center gap-1">예약자 <SortIcon field="userName" /></span>
+              </TableHead>
               <TableHead className="px-3 text-muted-foreground w-32" />
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={5} className="py-16 text-center text-sm text-muted-foreground">
-                  <div className="flex items-center justify-center gap-2">
-                    <Loader2 size={16} className="animate-spin" /> 불러오는 중…
-                  </div>
-                </TableCell>
-              </TableRow>
+              Array.from({ length: 6 }).map((_, i) => (
+                <TableRow key={i}>
+                  <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-16" /></TableCell>
+                  <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-28" /></TableCell>
+                  <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-40" /></TableCell>
+                  <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-16" /></TableCell>
+                  <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
+                </TableRow>
+              ))
             ) : rows.length === 0 ? (
               <TableRow className="hover:bg-transparent">
                 <TableCell colSpan={5} className="py-16 text-center text-sm text-muted-foreground">
@@ -187,7 +235,7 @@ export default function EquipmentReservationPage() {
                 </TableCell>
               </TableRow>
             ) : (
-              rows.map(r => {
+              sortedData.map(r => {
                 const canModify = (isAdmin || r.userId === user?.id) && (r.status === "RESERVED" || r.status === "WAITING")
                 return (
                   <TableRow key={r.id}>

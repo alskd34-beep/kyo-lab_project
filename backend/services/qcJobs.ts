@@ -44,10 +44,30 @@ export interface PendingOrderRow {
   method: string
 }
 
-/** 로그인 사용자의 tester_id 조회 */
+/**
+ * 로그인 사용자의 tester_id 조회.
+ * 사용자·시험자 통합 모델에서 로그인 ID(username) = 시험자 사번(employee_no) 이므로,
+ * users.tester_id 가 비어 있어도 사번이 같은 시험자를 찾아 즉시 연결(자가복구)한다.
+ * (재시드·수동 편집 등으로 1:1 링크가 끊긴 계정도 다음 접근 시 자동 복구)
+ */
 async function getTesterId(userSub: string): Promise<string | null> {
-  const { data } = await supabaseAdmin.from('users').select('tester_id').eq('id', userSub).maybeSingle()
-  return (data?.tester_id as string) ?? null
+  const { data: user } = await supabaseAdmin
+    .from('users').select('tester_id, username').eq('id', userSub).maybeSingle()
+  if (!user) return null
+  if (user.tester_id) return user.tester_id as string
+
+  // 링크 누락 — 사번(=username)이 동일한 시험자로 자가복구
+  const username = user.username as string | undefined
+  if (!username) return null
+  const { data: tester } = await supabaseAdmin
+    .from('testers').select('id').eq('employee_no', username).maybeSingle()
+  if (!tester?.id) return null
+
+  const testerId = tester.id as string
+  // 다른 사용자가 이 시험자를 점유 중이면 먼저 해제(1:1 unique 유지) 후 연결
+  await supabaseAdmin.from('users').update({ tester_id: null }).eq('tester_id', testerId).neq('id', userSub)
+  await supabaseAdmin.from('users').update({ tester_id: testerId }).eq('id', userSub)
+  return testerId
 }
 
 /**

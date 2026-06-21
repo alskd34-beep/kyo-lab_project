@@ -29,11 +29,16 @@ export interface PctOrderRow {
 
 // 수정 가능 필드 (제조팀 제공이 우선순위이나 사유 작성 시 수정 가능)
 const EDITABLE_FIELDS = [
+  'productCode', 'productName', 'batchNo', 'dosageForm',
   'packagingDate', 'dueDate', 'isUrgent', 'method', 'status', 'note', 'assigneeTesterId',
 ] as const
 type EditableField = (typeof EDITABLE_FIELDS)[number]
 
 const FIELD_TO_COL: Record<EditableField, string> = {
+  productCode: 'product_code',
+  productName: 'product_name',
+  batchNo: 'batch_no',
+  dosageForm: 'dosage_form',
   packagingDate: 'packaging_date',
   dueDate: 'due_date',
   isUrgent: 'is_urgent',
@@ -145,7 +150,7 @@ export async function updateOrderWithReason(
   // 현재값 로드
   const { data: current, error: curErr } = await supabaseAdmin
     .from('pct_orders')
-    .select('packaging_date, due_date, is_urgent, method, status, note, assignee_tester_id')
+    .select('product_code, product_name, batch_no, dosage_form, packaging_date, due_date, is_urgent, method, status, note, assignee_tester_id')
     .eq('id', id)
     .single()
   if (curErr) throw curErr

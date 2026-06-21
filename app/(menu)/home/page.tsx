@@ -1,7 +1,9 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 import { Card, CardContent } from '@frontend/components/ui/card'
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@frontend/components/ui/table'
 import { Avatar, AvatarFallback } from '@frontend/components/ui/avatar'
 import type { BatchSummary, BatchStatus, DashboardStats } from '@shared/pqm'
 
@@ -101,6 +103,16 @@ function formatDateTime(value: string | null): string {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
+type SortField = 'product_name' | 'batch_no' | 'qc_completion_deadline' | 'dDayQc' | 'status'
+type SortDir   = 'asc' | 'desc'
+
+function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: SortField | null; sortDir: SortDir }) {
+  if (sortField !== field) return <ChevronDown className="ml-1 inline h-3 w-3 opacity-30" />
+  return sortDir === 'asc'
+    ? <ChevronUp   className="ml-1 inline h-3 w-3 text-slate-600" />
+    : <ChevronDown className="ml-1 inline h-3 w-3 text-slate-600" />
+}
+
 export default function HomePage() {
   const [upcoming, setUpcoming]   = useState<BatchSummary[]>(DEMO_UPCOMING)
   const [stats, setStats]         = useState<DashboardStats>(DEMO_STATS)
@@ -109,6 +121,33 @@ export default function HomePage() {
   const [tableau, setTableau] = useState<TableauSummary | null>(null)
   const [tableauError, setTableauError] = useState<string | null>(null)
   const [isTableauLoading, setIsTableauLoading] = useState(true)
+  const [sortField, setSortField] = useState<SortField | null>(null)
+  const [sortDir, setSortDir]     = useState<SortDir>('asc')
+
+  function toggleSort(field: SortField) {
+    setSortField(prev => {
+      if (prev === field) { setSortDir(d => d === 'asc' ? 'desc' : 'asc'); return field }
+      setSortDir('asc')
+      return field
+    })
+  }
+
+  const sortedData = useMemo(() => {
+    if (!sortField) return upcoming
+    return [...upcoming].sort((a, b) => {
+      let cmp = 0
+      if (sortField === 'dDayQc') {
+        const av = a.dDayQc ?? Infinity
+        const bv = b.dDayQc ?? Infinity
+        cmp = av - bv
+      } else {
+        const av = (a[sortField] ?? '') as string
+        const bv = (b[sortField] ?? '') as string
+        cmp = av.localeCompare(bv, 'ko')
+      }
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+  }, [upcoming, sortField, sortDir])
 
   const loadHomeData = useCallback(async (signal?: AbortSignal) => {
     if (signal?.aborted) return
@@ -291,7 +330,7 @@ export default function HomePage() {
       <div className="flex flex-col lg:flex-row gap-4 min-h-0">
 
         {/* 기한 임박 배치 테이블 (60%) */}
-        <Card className="flex-[3] border border-slate-200 shadow-none rounded-xl bg-white overflow-hidden py-0">
+        <Card className="flex-[3] border border-slate-200 shadow-none rounded-xl bg-white gap-0 overflow-hidden py-0">
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
             <div className="flex items-center gap-2">
               <span className="text-sm font-semibold text-slate-800">기한 임박 배치</span>
@@ -307,48 +346,48 @@ export default function HomePage() {
             {isLoading && <span className="text-[10px] text-slate-400">로딩 중...</span>}
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-sm">
-              <thead>
-                <tr className="bg-slate-50/80 border-b border-slate-100">
-                  <th className="px-4 py-2 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wide">품목명</th>
-                  <th className="px-3 py-2 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wide">제조번호</th>
-                  <th className="px-3 py-2 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wide">QC완료예정일</th>
-                  <th className="px-3 py-2 text-center text-[11px] font-semibold text-slate-500 uppercase tracking-wide">D-Day</th>
-                  <th className="px-3 py-2 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wide">상태</th>
-                </tr>
-              </thead>
-              <tbody>
-                {upcoming.slice(0, 10).map(row => {
+            <Table className="w-full min-w-[640px] text-sm">
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="px-3 text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort('product_name')}>품목명<SortIcon field="product_name" sortField={sortField} sortDir={sortDir} /></TableHead>
+                  <TableHead className="px-3 text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort('batch_no')}>제조번호<SortIcon field="batch_no" sortField={sortField} sortDir={sortDir} /></TableHead>
+                  <TableHead className="px-3 text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort('qc_completion_deadline')}>QC완료예정일<SortIcon field="qc_completion_deadline" sortField={sortField} sortDir={sortDir} /></TableHead>
+                  <TableHead className="px-3 text-center text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort('dDayQc')}>D-Day<SortIcon field="dDayQc" sortField={sortField} sortDir={sortDir} /></TableHead>
+                  <TableHead className="px-3 text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort('status')}>상태<SortIcon field="status" sortField={sortField} sortDir={sortDir} /></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sortedData.slice(0, 10).map(row => {
                   const statusCfg = STATUS_CONFIG[row.status]
                   return (
-                    <tr
+                    <TableRow
                       key={row.id}
                       className="border-b border-slate-50 hover:bg-slate-50/60 transition-colors cursor-pointer"
                     >
-                      <td className="px-4 py-2.5">
-                        <span className="font-medium text-slate-800 text-xs">{row.product_name}</span>
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <span className="font-mono text-xs text-slate-500">{row.batch_no}</span>
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <span className="font-mono text-xs text-slate-600">{row.qc_completion_deadline}</span>
-                      </td>
-                      <td className="px-3 py-2.5 text-center">
+                      <TableCell className="px-3 py-2.5">
+                        <span className="font-medium text-foreground text-xs">{row.product_name}</span>
+                      </TableCell>
+                      <TableCell className="px-3 py-2.5">
+                        <span className="font-mono text-xs text-muted-foreground">{row.batch_no}</span>
+                      </TableCell>
+                      <TableCell className="px-3 py-2.5">
+                        <span className="font-mono text-xs text-muted-foreground">{row.qc_completion_deadline}</span>
+                      </TableCell>
+                      <TableCell className="px-3 py-2.5 text-center">
                         <span className={`text-xs tabular-nums ${dDayColor(row.dDayQc)}`}>
                           {dDayLabel(row.dDayQc)}
                         </span>
-                      </td>
-                      <td className="px-3 py-2.5">
+                      </TableCell>
+                      <TableCell className="px-3 py-2.5">
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusCfg.cls}`}>
                           {statusCfg.label}
                         </span>
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   )
                 })}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         </Card>
 

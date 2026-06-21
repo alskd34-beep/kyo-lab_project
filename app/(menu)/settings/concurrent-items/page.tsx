@@ -5,6 +5,7 @@ import { useAuth } from "@frontend/lib/auth-context"
 import {
   Plus, Pencil, Trash2, X, Loader2, Search, Sparkles, Layers, AlertCircle,
 } from "lucide-react"
+import { Skeleton } from "@frontend/components/ui/skeleton"
 import { cn } from "@frontend/lib/utils"
 import { useLockBodyScroll } from "@frontend/hooks/use-lock-body-scroll"
 import { Button } from "@frontend/components/ui/button"
@@ -136,7 +137,27 @@ export default function ConcurrentItemsPage() {
 
       {/* 목록 */}
       {loading ? (
-        <Card className="items-center py-10 text-center text-sm text-muted-foreground">불러오는 중…</Card>
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Card key={i} className="gap-0 py-0">
+              <div className="flex items-start gap-3 px-4 py-3">
+                <Skeleton className="mt-0.5 size-8 shrink-0 rounded-lg" />
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-5 w-16 rounded-full" />
+                  </div>
+                  <Skeleton className="h-3 w-48" />
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-1.5 border-t px-4 py-3">
+                <Skeleton className="h-6 w-20 rounded-md" />
+                <Skeleton className="h-6 w-24 rounded-md" />
+                <Skeleton className="h-6 w-16 rounded-md" />
+              </div>
+            </Card>
+          ))}
+        </div>
       ) : rows.length === 0 ? (
         <Card className="items-center gap-3 py-12 text-center">
           <Layers className="size-8 text-muted-foreground" />
