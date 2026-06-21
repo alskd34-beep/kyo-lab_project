@@ -8,3 +8,5 @@
 {"t":0,"agent":"a3520ab","agent_type":"executor","event":"agent_stop","success":true,"duration_ms":56800}
 {"t":0,"agent":"af5eb17","agent_type":"executor","event":"agent_stop","success":true,"duration_ms":99891}
 {"t":0,"agent":"a0bec21","agent_type":"unknown","event":"agent_stop","success":true}
+{"t":0,"agent":"a4e359c","agent_type":"Explore","event":"agent_start","parent_mode":"none"}
+{"t":0,"agent":"a4e359c","agent_type":"Explore","event":"agent_stop","success":true,"duration_ms":63101}

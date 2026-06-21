@@ -221,6 +221,206 @@ export async function listWorkspace(userSub: string): Promise<{ testerLinked: bo
   return { testerLinked: true, pendingOrders, jobs }
 }
 
+// ─── 작업자 현황 (관리자 한눈에 보기) ──────────────────────────────────────────
+export interface OverviewJobRow {
+  jobId: string
+  qcNo: string
+  productName: string
+  batchNo: string
+  status: string
+  dueDate: string | null
+  isUrgent: boolean
+  itemsTotal: number
+  itemsCleared: number
+  workStartDate: string | null
+}
+export interface OverviewPendingRow {
+  orderId: string
+  productName: string
+  batchNo: string
+  dueDate: string | null
+  isUrgent: boolean
+}
+export interface WorkerOverviewRow {
+  testerId: string
+  name: string
+  employeeNo: string
+  isActive: boolean
+  pendingCount: number
+  inProgress: number
+  reviewing: number
+  delayed: number
+  completedTotal: number
+  activeJobs: OverviewJobRow[]
+  pendingOrders: OverviewPendingRow[]
+}
+export interface WorkerOverview {
+  totals: {
+    workingTesters: number   // 진행중/대기 업무가 있는 시험자 수
+    activeJobs: number       // 진행중·검토중·지연 작업 총수
+    pending: number          // 시작 대기 오더 총수
+    delayed: number          // 지연 작업 총수
+    completedToday: number   // 오늘 완료한 작업 수
+  }
+  workers: WorkerOverviewRow[]
+}
+
+// 진행 중으로 간주하는 작업 상태
+const ACTIVE_JOB_STATUSES = new Set(['진행중', '검토중', '지연'])
+
+/**
+ * 작업자(시험자)별 작업 현황 집계 — 관리자가 "내 작업"을 수행 중인 작업자들의
+ * 진행 상황을 한눈에 보기 위한 뷰. 기존 테이블만 읽어 JS에서 집계한다.
+ *  - testers       : 활성 시험자 목록
+ *  - qc_jobs       : 시험자별 작업(진행중/검토중/지연/완료)
+ *  - qc_job_items  : 작업별 항목 진행률(완료/전체)
+ *  - pct_orders    : 작업 메타(품목·제조번호·완료예정·긴급) + 시작 대기 오더
+ */
+export async function listWorkerOverview(): Promise<WorkerOverview> {
+  const today = new Date().toISOString().slice(0, 10)
+
+  // 1) 시험자
+  const { data: testerData } = await supabaseAdmin
+    .from('testers')
+    .select('id, employee_no, name, is_active')
+    .order('employee_no', { ascending: true })
+  const testers = (testerData ?? []) as Record<string, unknown>[]
+
+  // 2) 작업 + 3) 오더 (삭제 제외) 병렬
+  const [jobsRes, ordersRes] = await Promise.all([
+    supabaseAdmin
+      .from('qc_jobs')
+      .select('id, order_id, qc_no, assignee_tester_id, status, work_start_date, work_end_date')
+      .order('created_at', { ascending: false }),
+    supabaseAdmin
+      .from('pct_orders')
+      .select('id, product_name, batch_no, due_date, is_urgent, status, assignee_tester_id')
+      .neq('status', '삭제'),
+  ])
+  const jobRows = (jobsRes.data ?? []) as Record<string, unknown>[]
+  const orderRows = (ordersRes.data ?? []) as Record<string, unknown>[]
+  const orderById = new Map<string, Record<string, unknown>>()
+  for (const o of orderRows) orderById.set(o.id as string, o)
+
+  // 4) 작업 항목 진행률 (완료/전체)
+  const jobIds = jobRows.map(j => j.id as string)
+  const itemAgg = new Map<string, { total: number; cleared: number }>()
+  if (jobIds.length > 0) {
+    const { data: items } = await supabaseAdmin
+      .from('qc_job_items')
+      .select('qc_job_id, status')
+      .in('qc_job_id', jobIds)
+    for (const it of items ?? []) {
+      const jid = it.qc_job_id as string
+      const agg = itemAgg.get(jid) ?? { total: 0, cleared: 0 }
+      agg.total += 1
+      if (it.status === 'cleared') agg.cleared += 1
+      itemAgg.set(jid, agg)
+    }
+  }
+
+  // 시험자별 빈 행 초기화
+  const rowByTester = new Map<string, WorkerOverviewRow>()
+  for (const t of testers) {
+    rowByTester.set(t.id as string, {
+      testerId: t.id as string,
+      name: t.name as string,
+      employeeNo: t.employee_no as string,
+      isActive: !!t.is_active,
+      pendingCount: 0,
+      inProgress: 0,
+      reviewing: 0,
+      delayed: 0,
+      completedTotal: 0,
+      activeJobs: [],
+      pendingOrders: [],
+    })
+  }
+
+  let completedToday = 0
+  const startedOrderIds = new Set<string>()
+
+  // 작업 집계
+  for (const j of jobRows) {
+    const testerId = j.assignee_tester_id as string | null
+    startedOrderIds.add(j.order_id as string)
+    if (!testerId) continue
+    const row = rowByTester.get(testerId)
+    if (!row) continue
+
+    const status = j.status as string
+    const o = orderById.get(j.order_id as string)
+    if (status === '완료') {
+      row.completedTotal += 1
+      if ((j.work_end_date as string) === today) completedToday += 1
+      continue
+    }
+    if (!ACTIVE_JOB_STATUSES.has(status)) continue
+
+    if (status === '진행중') row.inProgress += 1
+    else if (status === '검토중') row.reviewing += 1
+    else if (status === '지연') row.delayed += 1
+
+    const agg = itemAgg.get(j.id as string) ?? { total: 0, cleared: 0 }
+    row.activeJobs.push({
+      jobId: j.id as string,
+      qcNo: j.qc_no as string,
+      productName: (o?.product_name as string) ?? '',
+      batchNo: (o?.batch_no as string) ?? '',
+      status,
+      dueDate: (o?.due_date as string) ?? null,
+      isUrgent: !!o?.is_urgent,
+      itemsTotal: agg.total,
+      itemsCleared: agg.cleared,
+      workStartDate: (j.work_start_date as string) ?? null,
+    })
+  }
+
+  // 시작 대기 오더 집계 (배정됐고 status '대기' & 아직 미시작)
+  for (const o of orderRows) {
+    if (o.status !== '대기') continue
+    const testerId = o.assignee_tester_id as string | null
+    if (!testerId) continue
+    if (startedOrderIds.has(o.id as string)) continue
+    const row = rowByTester.get(testerId)
+    if (!row) continue
+    row.pendingCount += 1
+    row.pendingOrders.push({
+      orderId: o.id as string,
+      productName: o.product_name as string,
+      batchNo: o.batch_no as string,
+      dueDate: (o.due_date as string) ?? null,
+      isUrgent: !!o.is_urgent,
+    })
+  }
+
+  // 완료예정 임박 순으로 활성 작업 정렬 (null은 뒤로)
+  const dueRank = (d: string | null) => (d ? new Date(d).getTime() : Number.MAX_SAFE_INTEGER)
+  for (const row of rowByTester.values()) {
+    row.activeJobs.sort((a, b) => dueRank(a.dueDate) - dueRank(b.dueDate))
+    row.pendingOrders.sort((a, b) => dueRank(a.dueDate) - dueRank(b.dueDate))
+  }
+
+  // 작업량 많은 순(진행중→대기) 정렬, 활성 시험자 우선
+  const workers = [...rowByTester.values()].sort((a, b) => {
+    if (a.isActive !== b.isActive) return a.isActive ? -1 : 1
+    const aLoad = a.activeJobs.length + a.pendingCount
+    const bLoad = b.activeJobs.length + b.pendingCount
+    if (aLoad !== bLoad) return bLoad - aLoad
+    return a.employeeNo.localeCompare(b.employeeNo)
+  })
+
+  const totals = {
+    workingTesters: workers.filter(w => w.activeJobs.length > 0 || w.pendingCount > 0).length,
+    activeJobs: workers.reduce((s, w) => s + w.activeJobs.length, 0),
+    pending: workers.reduce((s, w) => s + w.pendingCount, 0),
+    delayed: workers.reduce((s, w) => s + w.delayed, 0),
+    completedToday,
+  }
+
+  return { totals, workers }
+}
+
 /** 작업 시작 — 장비 준비상태 검증 + QC번호 채번 + 항목 체크리스트 생성 + 오더 상태 진행중 + 알림 */
 export async function startJob(orderId: string, userSub: string): Promise<{ jobId: string; qcNo: string; warnings?: string[] }> {
   const testerId = await getTesterId(userSub)

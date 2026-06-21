@@ -120,6 +120,85 @@ export async function listOrders(filters: {
 }
 
 /**
+ * 수동 오더 생성 (오더배정 화면에서 직접 등록).
+ * 제조팀 시트 적재가 아닌 사용자 입력 오더 — product_synced=false, ingest_state='manual'.
+ * 자연키(batch_no, product_code) 중복 시 명확한 에러를 던진다.
+ */
+export async function createOrder(input: {
+  productCode: string
+  productName: string
+  batchNo: string
+  dosageForm?: string | null
+  packagingDate?: string | null
+  dueDate?: string | null
+  isUrgent?: boolean
+  method?: string
+  status?: string
+  assigneeTesterId?: string | null
+  note?: string | null
+}): Promise<PctOrderRow> {
+  const code = (input.productCode ?? '').trim()
+  const name = (input.productName ?? '').trim()
+  const batch = (input.batchNo ?? '').trim()
+  if (!code || !name || !batch) throw new Error('품목코드·품목명·제조번호는 필수입니다.')
+
+  const { data, error } = await supabaseAdmin
+    .from('pct_orders')
+    .insert({
+      product_code:       code,
+      product_name:       name,
+      batch_no:           batch,
+      dosage_form:        input.dosageForm?.trim() || null,
+      packaging_date:     input.packagingDate || null,
+      due_date:           input.dueDate || null,
+      is_urgent:          input.isUrgent ?? false,
+      method:             input.method || '전항목',
+      status:             input.status || '대기',
+      assignee_tester_id: input.assigneeTesterId || null,
+      note:               input.note?.trim() || null,
+      product_synced:     false,       // 수동 등록 — 품목마스터 자동동기화 대상 아님
+      ingest_state:       'manual',    // 적재가 아닌 수동 생성 표시
+    })
+    .select('*')
+    .single()
+  if (error) {
+    if ((error as { code?: string }).code === '23505') {
+      throw new Error('이미 동일한 제조번호·품목코드의 오더가 있습니다.')
+    }
+    throw error
+  }
+
+  const o = data as Record<string, unknown>
+  let assigneeName: string | null = null
+  if (o.assignee_tester_id) {
+    const { data: t } = await supabaseAdmin.from('testers').select('name').eq('id', o.assignee_tester_id as string).maybeSingle()
+    assigneeName = (t?.name as string) ?? null
+  }
+  return {
+    id: o.id as string,
+    productCode: o.product_code as string,
+    productName: o.product_name as string,
+    batchNo: o.batch_no as string,
+    dosageForm: (o.dosage_form as string) ?? null,
+    packagingDate: (o.packaging_date as string) ?? null,
+    dueDate: (o.due_date as string) ?? null,
+    isUrgent: !!o.is_urgent,
+    method: o.method as string,
+    status: o.status as string,
+    assigneeTesterId: (o.assignee_tester_id as string) ?? null,
+    assigneeName,
+    productSynced: !!o.product_synced,
+    note: (o.note as string) ?? null,
+    ingestState: o.ingest_state as string,
+    workdays: null,
+    hasJob: false,
+    locked: !!o.locked,
+    createdAt: o.created_at as string,
+    updatedAt: o.updated_at as string,
+  }
+}
+
+/**
  * 관리자 확정/LOCK 토글 (PRD 원칙1: 확정 → LOCK / 원칙3: LOCK 존중).
  * lock=true 면 자동배정·재배정·시트 자동반영 대상에서 제외된다.
  * locked 컬럼(0015) 미적용 환경에서는 명확한 에러를 던진다.

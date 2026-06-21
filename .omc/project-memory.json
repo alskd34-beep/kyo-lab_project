@@ -42,7 +42,7 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "cd /Users/huus/workspace/kyo-project/kyo-project; rtk tsc --noEmit 2>&1 | grep -E \"qcJobs|error TS\" | head -20; echo \"exit: done\"",
+    "buildCommand": "cd /Users/huus/workspace/kyo-project/kyo-project\nnpx tsc --noEmit 2>&1 | grep -E \"app-sidebar|error TS\" | head; echo \"tc done\"\ngit add frontend/components/dashboard/app-sidebar.tsx\ngit commit -q -m \"feat(menu): 시험현황 노출 + prod-status 라벨 '작업 현황' 정정\n\n- 시험관리 > '시험현황'(test-status) 메뉴 추가 (기존 구현 페이지 노출)\n- prod-status 라벨 '제품시험현황' → '작업 현황' (실제 작업자 현황 내용에 맞게)\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>\"\necho \"IMPROVE=$(git rev-parse --short HEAD)\"",
     "testCommand": null,
     "lintCommand": "npm run lint",
     "devCommand": "npm run dev",
@@ -231,6 +231,12 @@
       "type": "file"
     },
     {
+      "path": "app/(menu)/schedule/orders/page.tsx",
+      "accessCount": 22,
+      "lastAccessed": 1782049646169,
+      "type": "file"
+    },
+    {
       "path": "app/(menu)/insights/stats/page.tsx",
       "accessCount": 21,
       "lastAccessed": 1782040561547,
@@ -273,6 +279,12 @@
       "type": "file"
     },
     {
+      "path": "app/(menu)/product-test/prod-status/page.tsx",
+      "accessCount": 14,
+      "lastAccessed": 1782049249234,
+      "type": "file"
+    },
+    {
       "path": "app/(menu)/test-mgmt/test-items/page.tsx",
       "accessCount": 13,
       "lastAccessed": 1782040436179,
@@ -285,21 +297,9 @@
       "type": "file"
     },
     {
-      "path": "app/(menu)/schedule/orders/page.tsx",
-      "accessCount": 13,
-      "lastAccessed": 1782040498740,
-      "type": "file"
-    },
-    {
       "path": "app/(menu)/schedule/weekly-plan/page.tsx",
       "accessCount": 13,
       "lastAccessed": 1782042605795,
-      "type": "file"
-    },
-    {
-      "path": "app/(menu)/product-test/prod-status/page.tsx",
-      "accessCount": 13,
-      "lastAccessed": 1782049020016,
       "type": "file"
     },
     {
@@ -318,6 +318,12 @@
       "path": "app/(menu)/home/page.tsx",
       "accessCount": 11,
       "lastAccessed": 1782038392827,
+      "type": "file"
+    },
+    {
+      "path": "frontend/components/dashboard/app-sidebar.tsx",
+      "accessCount": 11,
+      "lastAccessed": 1782050058473,
       "type": "file"
     },
     {
@@ -345,6 +351,18 @@
       "type": "file"
     },
     {
+      "path": "backend/services/qcJobs.ts",
+      "accessCount": 5,
+      "lastAccessed": 1782049166050,
+      "type": "file"
+    },
+    {
+      "path": "frontend/components/dashboard/sidebar.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1782049684791,
+      "type": "file"
+    },
+    {
       "path": "app/(menu)/schedule/vacation/page.tsx",
       "accessCount": 4,
       "lastAccessed": 1782040538246,
@@ -360,6 +378,12 @@
       "path": "app/(menu)/schedule/groups/page.tsx",
       "accessCount": 4,
       "lastAccessed": 1782047420330,
+      "type": "file"
+    },
+    {
+      "path": "app/api/pct-orders/route.ts",
+      "accessCount": 4,
+      "lastAccessed": 1782049576957,
       "type": "file"
     },
     {
@@ -399,9 +423,9 @@
       "type": "file"
     },
     {
-      "path": "backend/services/qcJobs.ts",
+      "path": "backend/services/pctOrders.ts",
       "accessCount": 2,
-      "lastAccessed": 1782042946988,
+      "lastAccessed": 1782049560388,
       "type": "file"
     },
     {
@@ -456,6 +480,42 @@
       "path": "backend/services/qcDashboard.ts",
       "accessCount": 1,
       "lastAccessed": 1782049044403,
+      "type": "file"
+    },
+    {
+      "path": "app/api/qc-jobs/overview/route.ts",
+      "accessCount": 1,
+      "lastAccessed": 1782049174835,
+      "type": "file"
+    },
+    {
+      "path": "backend/lib/guard.ts",
+      "accessCount": 1,
+      "lastAccessed": 1782049179963,
+      "type": "file"
+    },
+    {
+      "path": "app/(menu)/test-mgmt/test-reg/page.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1782049332661,
+      "type": "file"
+    },
+    {
+      "path": "app/api/batches/route.ts",
+      "accessCount": 1,
+      "lastAccessed": 1782049346468,
+      "type": "file"
+    },
+    {
+      "path": "app/api/tests/route.ts",
+      "accessCount": 1,
+      "lastAccessed": 1782049363262,
+      "type": "file"
+    },
+    {
+      "path": "backend/services/batches.ts",
+      "accessCount": 1,
+      "lastAccessed": 1782049425569,
       "type": "file"
     }
   ],

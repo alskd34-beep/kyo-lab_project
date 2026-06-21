@@ -3,7 +3,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
 import {
-  RefreshCw, Sparkles, History, AlertCircle, X, Loader2, Database,
+  RefreshCw, Sparkles, History, AlertCircle, X, Loader2, Database, Plus,
   ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Lock, LockOpen, Search, CalendarDays, Users, ListChecks, Layers,
 } from "lucide-react"
 import { cn } from "@frontend/lib/utils"
@@ -224,6 +224,7 @@ export default function OrdersPage() {
   const [year, setYear] = useState("")
   const [tab, setTab] = useState<TabId>("week")
 
+  const [createOpen, setCreateOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<OrderRow | null>(null)
   const [historyTarget, setHistoryTarget] = useState<OrderRow | null>(null)
   const [assigneeTarget, setAssigneeTarget] = useState<{ id: string; name: string } | null>(null)
@@ -681,6 +682,9 @@ export default function OrdersPage() {
         </div>
         {isAdmin && (
           <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="lg" onClick={() => setCreateOpen(true)} disabled={busy !== null}>
+              <Plus />오더 추가
+            </Button>
             <Button variant="outline" size="lg" onClick={runIngest} disabled={busy !== null}>
               {busy === "ingest" ? <Loader2 className="animate-spin" /> : <RefreshCw />}
               지금 적재
@@ -900,6 +904,13 @@ export default function OrdersPage() {
         </div>
       )}
 
+      {createOpen && (
+        <CreateModal
+          testers={testers}
+          onClose={() => setCreateOpen(false)}
+          onCreated={() => { setCreateOpen(false); flash("오더가 추가되었습니다."); void load() }}
+        />
+      )}
       {editTarget && (
         <EditModal
           order={editTarget} testers={testers}
@@ -981,6 +992,175 @@ function StatusBadge({ status }: { status: string }) {
       <span className={cn("size-1.5 rounded-full", STATUS_DOT[status] ?? "bg-slate-400")} />
       {status}
     </Badge>
+  )
+}
+
+// ─── 오더 추가 모달 (수동 생성) ───────────────────────────────────────────────
+interface ProductHit { id: string; productCode: string; name: string }
+function CreateModal({ testers, onClose, onCreated }: {
+  testers: Tester[]; onClose: () => void; onCreated: () => void
+}) {
+  const [form, setForm] = useState({
+    productCode: "", productName: "", batchNo: "", dosageForm: "",
+    packagingDate: "", dueDate: "", isUrgent: false,
+    method: "전항목", status: "대기", assigneeTesterId: "", note: "",
+  })
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  // 품목 검색 (자동완성) — 선택 시 코드·품목명 자동 입력
+  const [pq, setPq] = useState("")
+  const [hits, setHits] = useState<ProductHit[]>([])
+  const [searching, setSearching] = useState(false)
+  const [showHits, setShowHits] = useState(false)
+
+  useEffect(() => {
+    const q = pq.trim()
+    if (!q) { setHits([]); return }
+    let alive = true
+    setSearching(true)
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/products?search=${encodeURIComponent(q)}&limit=10`, { credentials: "include" })
+        const data = await res.json()
+        if (alive) { setHits(data.rows ?? []); setShowHits(true) }
+      } catch {
+        if (alive) setHits([])
+      } finally {
+        if (alive) setSearching(false)
+      }
+    }, 250)
+    return () => { alive = false; clearTimeout(t) }
+  }, [pq])
+
+  const pickProduct = (p: ProductHit) => {
+    setForm(f => ({ ...f, productCode: p.productCode, productName: p.name }))
+    setPq(`${p.name} (${p.productCode})`)
+    setShowHits(false)
+  }
+
+  const save = async () => {
+    if (!form.productCode.trim() || !form.productName.trim() || !form.batchNo.trim()) {
+      setErr("품목코드·품목명·제조번호는 필수입니다."); return
+    }
+    setSaving(true); setErr(null)
+    try {
+      const res = await fetch("/api/pct-orders", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productCode: form.productCode.trim(),
+          productName: form.productName.trim(),
+          batchNo: form.batchNo.trim(),
+          dosageForm: form.dosageForm.trim() || null,
+          packagingDate: form.packagingDate || null,
+          dueDate: form.dueDate || null,
+          isUrgent: form.isUrgent,
+          method: form.method,
+          status: form.status,
+          assigneeTesterId: form.assigneeTesterId || null,
+          note: form.note || null,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      onCreated()
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "저장 실패")
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <SlideOver title="오더 추가" onClose={onClose}>
+      <p className="mb-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] text-blue-700">
+        제조 시트 적재가 아닌 수동 등록 오더입니다. 등록 후 담당자를 지정하세요.
+      </p>
+
+      {/* 품목 검색 (자동완성) */}
+      <div className="relative mb-3">
+        <label className="mb-1 block text-xs font-semibold text-foreground">품목 검색</label>
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={pq}
+            onChange={e => { setPq(e.target.value); setShowHits(true) }}
+            onFocus={() => { if (hits.length) setShowHits(true) }}
+            placeholder="품목명·품목코드로 검색"
+            className={cn(inputCls, "pl-8")}
+          />
+          {searching && <Loader2 className="absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 animate-spin text-muted-foreground" />}
+        </div>
+        {showHits && hits.length > 0 && (
+          <ul className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-md border bg-card shadow-lg">
+            {hits.map(p => (
+              <li key={p.id}>
+                <button
+                  type="button"
+                  onClick={() => pickProduct(p)}
+                  className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
+                >
+                  <span className="truncate font-medium text-foreground">{p.name}</span>
+                  <span className="shrink-0 font-mono text-xs text-muted-foreground">{p.productCode}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field label="품목코드"><input value={form.productCode} onChange={e => setForm({ ...form, productCode: e.target.value })} className={cn(inputCls, "font-mono")} /></Field>
+        <Field label="제조번호"><input value={form.batchNo} onChange={e => setForm({ ...form, batchNo: e.target.value })} className={cn(inputCls, "font-mono")} /></Field>
+        <Field label="품목명" full><input value={form.productName} onChange={e => setForm({ ...form, productName: e.target.value })} className={inputCls} /></Field>
+        <Field label="제형"><input value={form.dosageForm} onChange={e => setForm({ ...form, dosageForm: e.target.value })} placeholder="예: 내용고형제 (선택)" className={inputCls} /></Field>
+        <Field label="포장일"><input type="date" value={form.packagingDate} onChange={e => setForm({ ...form, packagingDate: e.target.value })} className={inputCls} /></Field>
+        <Field label="완료예정일"><input type="date" value={form.dueDate} onChange={e => setForm({ ...form, dueDate: e.target.value })} className={inputCls} /></Field>
+        <Field label="긴급">
+          <Select value={form.isUrgent ? "긴급" : "일반"} onValueChange={v => setForm({ ...form, isUrgent: v === "긴급" })}>
+            <SelectTrigger className="!h-9 w-full px-3"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="일반">일반</SelectItem>
+              <SelectItem value="긴급">긴급</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="진행방법">
+          <Select value={form.method} onValueChange={v => setForm({ ...form, method: v })}>
+            <SelectTrigger className="!h-9 w-full px-3"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {METHOD_OPTIONS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="상태">
+          <Select value={form.status} onValueChange={v => setForm({ ...form, status: v })}>
+            <SelectTrigger className="!h-9 w-full px-3"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="담당자">
+          <Select value={form.assigneeTesterId || "none"} onValueChange={v => setForm({ ...form, assigneeTesterId: v === "none" ? "" : v })}>
+            <SelectTrigger className="!h-9 w-full px-3"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">미배정</SelectItem>
+              {testers.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="비고" full><input value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} className={inputCls} /></Field>
+      </div>
+
+      {err && <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">{err}</p>}
+
+      <div className="mt-4 flex justify-end gap-2">
+        <Button variant="outline" size="lg" onClick={onClose}>취소</Button>
+        <Button size="lg" onClick={save} disabled={saving}>
+          {saving ? <Loader2 className="animate-spin" /> : <Plus />}오더 추가
+        </Button>
+      </div>
+    </SlideOver>
   )
 }
 
