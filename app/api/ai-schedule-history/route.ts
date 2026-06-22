@@ -10,7 +10,9 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const limit = Number(searchParams.get('limit')) || 800
-    const result = await listAiScheduleHistory(limit)
+    const from = searchParams.get('from') ?? undefined
+    const to = searchParams.get('to') ?? undefined
+    const result = await listAiScheduleHistory(limit, { from, to })
     return Response.json(result)
   } catch (err) {
     const msg = err instanceof Error ? err.message : '서버 오류'

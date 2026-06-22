@@ -7,6 +7,7 @@ import { Badge } from "@frontend/components/ui/badge"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@frontend/components/ui/table"
 import {
+  CalendarDays,
   ClipboardPenLine,
   DatabaseZap,
   History,
@@ -109,6 +110,17 @@ function LoadingRows() {
   ))
 }
 
+function todayDate(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+}
+
+function daysAgoDate(days: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() - days)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+}
+
 export default function ReassignmentsPage() {
   const { user } = useAuth()
   const isAdmin = user?.role === "admin"
@@ -119,12 +131,22 @@ export default function ReassignmentsPage() {
   const [msg, setMsg] = useState<string | null>(null)
   const [filter, setFilter] = useState<FilterType>("all")
   const [query, setQuery] = useState("")
+  const [fromDate, setFromDate] = useState(() => daysAgoDate(30))
+  const [toDate, setToDate] = useState(() => todayDate())
 
   const load = useCallback(async () => {
     setLoading(true)
     setMsg(null)
+    if (fromDate && toDate && fromDate > toDate) {
+      setMsg("조회 시작일은 종료일보다 늦을 수 없습니다.")
+      setLoading(false)
+      return
+    }
     try {
-      const res = await fetch("/api/ai-schedule-history?limit=1000", { credentials: "include" })
+      const params = new URLSearchParams({ limit: "1000" })
+      if (fromDate) params.set("from", fromDate)
+      if (toDate) params.set("to", toDate)
+      const res = await fetch(`/api/ai-schedule-history?${params.toString()}`, { credentials: "include" })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? "조회 실패")
       setRows(data.rows ?? [])
@@ -134,7 +156,7 @@ export default function ReassignmentsPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [fromDate, toDate])
 
   useEffect(() => { if (isAdmin) void load() }, [isAdmin, load])
 
@@ -197,21 +219,49 @@ export default function ReassignmentsPage() {
       </div>
 
       <div className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex flex-wrap gap-1.5">
-          {FILTERS.map(item => (
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap gap-1.5">
+            {FILTERS.map(item => (
+              <button
+                key={item.id}
+                onClick={() => setFilter(item.id)}
+                className={cn(
+                  "h-8 rounded-lg border px-3 text-xs font-semibold transition-colors",
+                  filter === item.id
+                    ? "border-slate-900 bg-slate-900 text-white"
+                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
+                )}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 text-xs font-semibold text-slate-600">
+              <CalendarDays className="size-3.5" />
+              조회기간
+            </span>
+            <input
+              type="date"
+              value={fromDate}
+              onChange={e => setFromDate(e.target.value)}
+              className="h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm text-slate-900 focus-visible:border-blue-600 focus-visible:ring-2 focus-visible:ring-blue-200 focus-visible:outline-none"
+            />
+            <span className="text-xs text-slate-400">~</span>
+            <input
+              type="date"
+              value={toDate}
+              onChange={e => setToDate(e.target.value)}
+              className="h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm text-slate-900 focus-visible:border-blue-600 focus-visible:ring-2 focus-visible:ring-blue-200 focus-visible:outline-none"
+            />
             <button
-              key={item.id}
-              onClick={() => setFilter(item.id)}
-              className={cn(
-                "h-8 rounded-lg border px-3 text-xs font-semibold transition-colors",
-                filter === item.id
-                  ? "border-slate-900 bg-slate-900 text-white"
-                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
-              )}
+              type="button"
+              onClick={() => { setFromDate(daysAgoDate(30)); setToDate(todayDate()) }}
+              className="h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
             >
-              {item.label}
+              최근 30일
             </button>
-          ))}
+          </div>
         </div>
         <div className="relative w-full lg:w-80">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />

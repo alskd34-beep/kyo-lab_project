@@ -29,6 +29,11 @@ export interface AiScheduleHistoryStats {
   ingests: number
 }
 
+export interface AiScheduleHistoryFilters {
+  from?: string
+  to?: string
+}
+
 const FIELD_LABEL: Record<string, string> = {
   productCode: '품목코드',
   productName: '품목명',
@@ -55,6 +60,20 @@ function displayEditValue(field: string, value: string | null, testerNames: Map<
   if (field === 'assigneeTesterId') return testerNames.get(value) ?? value
   if (field === 'isUrgent') return value === 'true' ? '긴급' : '일반'
   return value
+}
+
+function startOfDayIso(date: string): string {
+  return `${date}T00:00:00.000Z`
+}
+
+function endOfDayIso(date: string): string {
+  return `${date}T23:59:59.999Z`
+}
+
+function withinRange(value: string, filters: AiScheduleHistoryFilters): boolean {
+  if (filters.from && value < startOfDayIso(filters.from)) return false
+  if (filters.to && value > endOfDayIso(filters.to)) return false
+  return true
 }
 
 async function loadOrderLookup(orderIds: string[]): Promise<Map<string, { productName: string | null; productCode: string | null; batchNo: string | null }>> {
@@ -105,20 +124,36 @@ async function loadTesterNames(testerIds: string[]): Promise<Map<string, string>
   return map
 }
 
-export async function listAiScheduleHistory(limit = 800): Promise<{ rows: AiScheduleHistoryRow[]; stats: AiScheduleHistoryStats }> {
+export async function listAiScheduleHistory(
+  limit = 800,
+  filters: AiScheduleHistoryFilters = {},
+): Promise<{ rows: AiScheduleHistoryRow[]; stats: AiScheduleHistoryStats }> {
   const perSourceLimit = Math.max(100, Math.min(limit, 1000))
 
+  let editQuery = supabaseAdmin
+    .from('pct_order_edits')
+    .select('id, order_id, field, old_value, new_value, reason, edited_by, edited_at')
+    .order('edited_at', { ascending: false })
+    .limit(perSourceLimit)
+
+  let reassignQuery = supabaseAdmin
+    .from('reassignment_history')
+    .select('id, order_id, group_id, before_user, after_user, reason, changed_by, changed_at')
+    .order('changed_at', { ascending: false })
+    .limit(perSourceLimit)
+
+  if (filters.from) {
+    editQuery = editQuery.gte('edited_at', startOfDayIso(filters.from))
+    reassignQuery = reassignQuery.gte('changed_at', startOfDayIso(filters.from))
+  }
+  if (filters.to) {
+    editQuery = editQuery.lte('edited_at', endOfDayIso(filters.to))
+    reassignQuery = reassignQuery.lte('changed_at', endOfDayIso(filters.to))
+  }
+
   const [editRes, reassignRes, ingestRows] = await Promise.all([
-    supabaseAdmin
-      .from('pct_order_edits')
-      .select('id, order_id, field, old_value, new_value, reason, edited_by, edited_at')
-      .order('edited_at', { ascending: false })
-      .limit(perSourceLimit),
-    supabaseAdmin
-      .from('reassignment_history')
-      .select('id, order_id, group_id, before_user, after_user, reason, changed_by, changed_at')
-      .order('changed_at', { ascending: false })
-      .limit(perSourceLimit),
+    editQuery,
+    reassignQuery,
     listIngestLog(perSourceLimit),
   ])
 
@@ -200,24 +235,26 @@ export async function listAiScheduleHistory(limit = 800): Promise<{ rows: AiSche
     }
   })
 
-  const ingestHistoryRows: AiScheduleHistoryRow[] = ingestRows.map(row => ({
-    id: `ingest:${row.id}`,
-    type: 'ingest',
-    occurredAt: row.runAt,
-    orderId: null,
-    productName: row.productName,
-    productCode: row.productCode,
-    batchNo: row.batchNo,
-    title: INGEST_LABEL[row.changeType] ?? `자동 적재 ${row.changeType}`,
-    summary: `${row.batchNo || '-'} · ${row.productCode || '-'}${row.status ? ` · ${row.status}` : ''}`,
-    field: null,
-    beforeValue: null,
-    afterValue: null,
-    reason: row.fileId ? `fileId: ${row.fileId}` : null,
-    actorId: null,
-    actorName: '시스템',
-    status: row.status,
-  }))
+  const ingestHistoryRows: AiScheduleHistoryRow[] = ingestRows
+    .filter(row => withinRange(row.runAt, filters))
+    .map(row => ({
+      id: `ingest:${row.id}`,
+      type: 'ingest',
+      occurredAt: row.runAt,
+      orderId: null,
+      productName: row.productName,
+      productCode: row.productCode,
+      batchNo: row.batchNo,
+      title: INGEST_LABEL[row.changeType] ?? `자동 적재 ${row.changeType}`,
+      summary: `${row.batchNo || '-'} · ${row.productCode || '-'}${row.status ? ` · ${row.status}` : ''}`,
+      field: null,
+      beforeValue: null,
+      afterValue: null,
+      reason: row.fileId ? `fileId: ${row.fileId}` : null,
+      actorId: null,
+      actorName: '시스템',
+      status: row.status,
+    }))
 
   const rows = [...editRows, ...reassignRows, ...ingestHistoryRows]
     .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
