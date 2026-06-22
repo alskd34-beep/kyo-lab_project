@@ -6,8 +6,7 @@ import {
   ChevronDown,
   ChevronUp,
   Grid2x2,
-  Pencil,
-  Plus,
+  Lock,
   Save,
   Trash2,
   Users,
@@ -15,6 +14,7 @@ import {
 
 import { cn } from "@frontend/lib/utils"
 import { Badge } from "@frontend/components/ui/badge"
+import { Skeleton } from "@frontend/components/ui/skeleton"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
 import {
@@ -25,6 +25,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@frontend/components/ui/dialog"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@frontend/components/ui/sheet"
 import { Input } from "@frontend/components/ui/input"
 import {
   Table,
@@ -42,6 +50,9 @@ interface TesterRow {
   canSolo: boolean
   canDuo: boolean
   isActive: boolean
+  userId: string | null
+  username: string | null
+  customerNo: number | null
 }
 
 interface CapabilityRow {
@@ -192,17 +203,13 @@ export default function TestersPage() {
 
   async function handleEdit() {
     if (!selected) return
-    if (!form.employeeNo.trim() || !form.name.trim()) {
-      setError("사번과 이름을 입력하세요.")
-      return
-    }
     setSaving(true)
     setError("")
     try {
       const res = await fetch("/api/testers", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: selected.id, ...form }),
+        body: JSON.stringify({ id: selected.id, canSolo: form.canSolo, canDuo: form.canDuo }),
       })
       const json = (await res.json()) as { error?: string }
       if (!res.ok) {
@@ -399,10 +406,9 @@ export default function TestersPage() {
           </div>
 
           {activeTab === "testers" && (
-            <Button onClick={openAdd} size="lg" className="ml-auto">
-              <Plus />
-              시험자 추가
-            </Button>
+            <p className="ml-auto text-xs text-muted-foreground">
+              시험자는 <span className="font-medium text-foreground">사용자 관리</span>에서 역할을 &apos;시험자&apos;로 설정하면 자동 등록됩니다.
+            </p>
           )}
         </div>
       </div>
@@ -445,16 +451,27 @@ export default function TestersPage() {
           {/* Mobile cards */}
           <div className="flex flex-col gap-2 md:hidden">
             {loading ? (
-              <Card className="items-center py-6 text-center text-sm text-muted-foreground">
-                불러오는 중...
-              </Card>
+              Array.from({ length: 4 }).map((_, i) => (
+                <Card key={i} className="gap-2 px-3 py-3">
+                  <div className="flex items-center justify-between">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-5 w-14 rounded-full" />
+                  </div>
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-3/4" />
+                </Card>
+              ))
             ) : sortedTesters.length === 0 ? (
               <Card className="items-center py-6 text-center text-sm text-muted-foreground">
                 등록된 시험자가 없습니다.
               </Card>
             ) : (
               sortedTesters.map((tester, idx) => (
-                <Card key={tester.id} className="gap-0 px-3 py-3">
+                <Card
+                  key={tester.id}
+                  className="cursor-pointer gap-0 px-3 py-3 transition-colors hover:bg-muted/30"
+                  onClick={() => openEdit(tester)}
+                >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5">
@@ -478,28 +495,18 @@ export default function TestersPage() {
                         {tester.name}
                       </div>
                     </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => openEdit(tester)}
-                        title="수정"
-                      >
-                        <Pencil className="size-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => openDelete(tester)}
-                        title="삭제"
-                        className="text-destructive hover:text-destructive"
-                      >
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={(e) => { e.stopPropagation(); openDelete(tester) }}
+                      title="삭제"
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
                   </div>
 
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t pt-2">
+                  <div className="flex flex-wrap items-center gap-1.5 border-t pt-2">
                     <Badge
                       variant="outline"
                       className={cn(
@@ -531,7 +538,7 @@ export default function TestersPage() {
                       {tester.canDuo ? "2인 가능" : "2인 불가"}
                     </Badge>
                     <button
-                      onClick={() => void toggleActive(tester)}
+                      onClick={(e) => { e.stopPropagation(); void toggleActive(tester) }}
                       className="ml-auto rounded-md border border-input bg-background px-2 py-0.5 text-[10px] font-medium text-foreground transition-colors hover:bg-muted/50"
                     >
                       상태 전환
@@ -544,48 +551,59 @@ export default function TestersPage() {
 
           {/* Desktop table */}
           <Card className="hidden gap-0 overflow-hidden py-0 md:block">
-            {loading ? (
-              <div className="p-16 text-center text-sm text-muted-foreground">
-                불러오는 중...
-              </div>
-            ) : (
-              <Table className="min-w-[640px]">
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead className="w-14 px-3 text-muted-foreground">순번</TableHead>
-                    <TableHead
-                      className="w-28 cursor-pointer px-3 text-muted-foreground"
-                      onClick={() => toggleSort("employeeNo")}
+            <Table className="min-w-[640px]">
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="w-14 px-3 text-muted-foreground">순번</TableHead>
+                  <TableHead
+                    className="w-28 cursor-pointer px-3 text-muted-foreground"
+                    onClick={() => toggleSort("employeeNo")}
+                  >
+                    <span className="flex items-center">
+                      사번 <SortIcon field="employeeNo" />
+                    </span>
+                  </TableHead>
+                  <TableHead
+                    className="cursor-pointer px-3 text-muted-foreground"
+                    onClick={() => toggleSort("name")}
+                  >
+                    <span className="flex items-center">
+                      이름 <SortIcon field="name" />
+                    </span>
+                  </TableHead>
+                  <TableHead className="w-24 px-3 text-center text-muted-foreground">
+                    단독시험
+                  </TableHead>
+                  <TableHead className="w-24 px-3 text-center text-muted-foreground">
+                    2인시험
+                  </TableHead>
+                  <TableHead className="w-20 px-3 text-center text-muted-foreground">
+                    상태
+                  </TableHead>
+                  <TableHead className="w-24 px-3 text-center text-muted-foreground">
+                    관리
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading
+                  ? Array.from({ length: 6 }).map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-6" /></TableCell>
+                        <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20" /></TableCell>
+                        <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20" /></TableCell>
+                        <TableCell className="px-3 py-2.5 text-center"><Skeleton className="h-5 w-14 mx-auto rounded-full" /></TableCell>
+                        <TableCell className="px-3 py-2.5 text-center"><Skeleton className="h-5 w-14 mx-auto rounded-full" /></TableCell>
+                        <TableCell className="px-3 py-2.5 text-center"><Skeleton className="h-5 w-12 mx-auto rounded-full" /></TableCell>
+                        <TableCell className="px-3 py-2.5 text-center"><Skeleton className="h-6 w-6 mx-auto" /></TableCell>
+                      </TableRow>
+                    ))
+                  : sortedTesters.map((tester, idx) => (
+                    <TableRow
+                      key={tester.id}
+                      className="cursor-pointer hover:bg-muted/40"
+                      onClick={() => openEdit(tester)}
                     >
-                      <span className="flex items-center">
-                        사번 <SortIcon field="employeeNo" />
-                      </span>
-                    </TableHead>
-                    <TableHead
-                      className="cursor-pointer px-3 text-muted-foreground"
-                      onClick={() => toggleSort("name")}
-                    >
-                      <span className="flex items-center">
-                        이름 <SortIcon field="name" />
-                      </span>
-                    </TableHead>
-                    <TableHead className="w-24 px-3 text-center text-muted-foreground">
-                      단독시험
-                    </TableHead>
-                    <TableHead className="w-24 px-3 text-center text-muted-foreground">
-                      2인시험
-                    </TableHead>
-                    <TableHead className="w-20 px-3 text-center text-muted-foreground">
-                      상태
-                    </TableHead>
-                    <TableHead className="w-24 px-3 text-center text-muted-foreground">
-                      관리
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sortedTesters.map((tester, idx) => (
-                    <TableRow key={tester.id}>
                       <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">
                         {idx + 1}
                       </TableCell>
@@ -631,7 +649,7 @@ export default function TestersPage() {
                       </TableCell>
                       <TableCell className="px-3 py-2.5 text-center">
                         <button
-                          onClick={() => void toggleActive(tester)}
+                          onClick={(e) => { e.stopPropagation(); void toggleActive(tester) }}
                           className={cn(
                             "rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors hover:bg-muted/50",
                             tester.isActive
@@ -643,41 +661,30 @@ export default function TestersPage() {
                         </button>
                       </TableCell>
                       <TableCell className="px-3 py-2.5 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            onClick={() => openEdit(tester)}
-                            title="수정"
-                          >
-                            <Pencil className="size-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            onClick={() => openDelete(tester)}
-                            title="삭제"
-                            className="text-destructive hover:text-destructive"
-                          >
-                            <Trash2 className="size-3.5" />
-                          </Button>
-                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={(e) => { e.stopPropagation(); openDelete(tester) }}
+                          title="삭제"
+                          className="text-destructive hover:text-destructive"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
-                  {testers.length === 0 && (
-                    <TableRow className="hover:bg-transparent">
-                      <TableCell
-                        colSpan={7}
-                        className="py-16 text-center text-sm text-muted-foreground"
-                      >
-                        등록된 시험자가 없습니다.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            )}
+                {!loading && testers.length === 0 && (
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell
+                      colSpan={7}
+                      className="py-16 text-center text-sm text-muted-foreground"
+                    >
+                      등록된 시험자가 없습니다.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
           </Card>
         </>
       )}
@@ -704,9 +711,18 @@ export default function TestersPage() {
           </div>
 
           {capLoading ? (
-            <Card className="items-center py-6 text-center text-sm text-muted-foreground">
-              불러오는 중...
-            </Card>
+            <div className="flex flex-col gap-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Card key={i} className="gap-2 px-3 py-3">
+                  <div className="flex items-center justify-between">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-5 w-14 rounded-full" />
+                  </div>
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-3/4" />
+                </Card>
+              ))}
+            </div>
           ) : (
             <>
               {/* Mobile capability cards */}
@@ -870,6 +886,9 @@ export default function TestersPage() {
                         }))
                       }
                     />
+                    <p className="text-[11px] text-muted-foreground">
+                      사번이 로그인 ID로 자동 계정 생성됩니다 (기본 비밀번호 qc1234).
+                    </p>
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label className="text-xs font-medium tracking-wide text-foreground">
@@ -948,82 +967,59 @@ export default function TestersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Dialog */}
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden p-0 sm:max-w-xl">
-          <DialogHeader className="border-b px-4 py-4 pr-12 text-left sm:px-5">
-            <DialogTitle className="text-lg font-semibold text-foreground">
-              시험자 수정
-            </DialogTitle>
-            <DialogDescription className="mt-1 text-xs text-muted-foreground">
-              시험자 정보와 시험 가능 범위를 수정합니다.
-            </DialogDescription>
-          </DialogHeader>
+      {/* Edit Sheet */}
+      <Sheet open={editOpen} onOpenChange={setEditOpen}>
+        <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
+          <SheetHeader className="border-b px-5 py-4">
+            <SheetTitle className="text-base font-semibold">시험자 수정</SheetTitle>
+            <SheetDescription className="text-xs text-muted-foreground">
+              시험 가능 범위를 수정합니다.
+            </SheetDescription>
+          </SheetHeader>
 
-          <div className="max-h-[65dvh] overflow-y-auto bg-muted/30 px-4 py-4 sm:px-5">
+          <div className="flex-1 overflow-y-auto bg-muted/30 px-5 py-4">
             <div className="grid gap-4">
-              <section className="rounded-lg border bg-card p-3 shadow-sm sm:p-4">
-                <div className="mb-3 border-b pb-3">
-                  <h3 className="text-sm font-semibold text-foreground">기본 정보</h3>
-                </div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium tracking-wide text-foreground">
-                      사번 <span className="text-destructive">*</span>
-                    </label>
-                    <Input
-                      value={form.employeeNo}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          employeeNo: e.target.value,
-                        }))
-                      }
-                    />
+              {/* 기본 정보 — 읽기 전용 */}
+              <section className="rounded-lg border bg-card p-4 shadow-sm">
+                <h3 className="mb-3 border-b pb-2 text-sm font-semibold text-foreground">기본 정보</h3>
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2 rounded-lg border border-dashed bg-muted/40 px-3 py-2.5">
+                    <Lock size={13} className="shrink-0 text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">사번</span>
+                    <span className="font-mono text-sm font-semibold text-foreground">
+                      {selected?.employeeNo ?? '-'}
+                    </span>
+                    <span className="ml-auto text-[10px] text-muted-foreground">변경 불가</span>
                   </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium tracking-wide text-foreground">
-                      이름 <span className="text-destructive">*</span>
-                    </label>
-                    <Input
-                      value={form.name}
-                      onChange={(e) =>
-                        setForm((prev) => ({ ...prev, name: e.target.value }))
-                      }
-                    />
+                  <div className="flex items-center gap-2 rounded-lg border border-dashed bg-muted/40 px-3 py-2.5">
+                    <Lock size={13} className="shrink-0 text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">이름</span>
+                    <span className="text-sm font-semibold text-foreground">
+                      {selected?.name ?? '-'}
+                    </span>
+                    <span className="ml-auto text-[10px] text-muted-foreground">사용자 관리에서 변경</span>
                   </div>
                 </div>
               </section>
 
-              <section className="rounded-lg border bg-card p-3 shadow-sm sm:p-4">
-                <div className="mb-3 border-b pb-3">
-                  <h3 className="text-sm font-semibold text-foreground">시험 가능 범위</h3>
-                </div>
+              {/* 시험 가능 범위 */}
+              <section className="rounded-lg border bg-card p-4 shadow-sm">
+                <h3 className="mb-3 border-b pb-2 text-sm font-semibold text-foreground">시험 가능 범위</h3>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <label className="flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium text-foreground">
+                  <label className="flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium text-foreground cursor-pointer hover:bg-muted/30">
                     <input
                       type="checkbox"
                       checked={form.canSolo}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          canSolo: e.target.checked,
-                        }))
-                      }
+                      onChange={(e) => setForm((prev) => ({ ...prev, canSolo: e.target.checked }))}
                       className="cb-custom"
                     />
                     단독 시험 가능
                   </label>
-                  <label className="flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium text-foreground">
+                  <label className="flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium text-foreground cursor-pointer hover:bg-muted/30">
                     <input
                       type="checkbox"
                       checked={form.canDuo}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          canDuo: e.target.checked,
-                        }))
-                      }
+                      onChange={(e) => setForm((prev) => ({ ...prev, canDuo: e.target.checked }))}
                       className="cb-custom"
                     />
                     2인 시험 가능
@@ -1039,23 +1035,15 @@ export default function TestersPage() {
             </div>
           </div>
 
-          <DialogFooter className="border-t bg-card px-4 py-4 sm:px-5">
-            <Button
-              variant="outline"
-              onClick={() => setEditOpen(false)}
-            >
-              취소
-            </Button>
-            <Button
-              onClick={() => void handleEdit()}
-              disabled={saving}
-            >
+          <SheetFooter className="border-t bg-card px-5 py-4">
+            <Button variant="outline" onClick={() => setEditOpen(false)}>취소</Button>
+            <Button onClick={() => void handleEdit()} disabled={saving}>
               <Save />
               {saving ? "저장 중..." : "저장"}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
       {/* Delete Dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>

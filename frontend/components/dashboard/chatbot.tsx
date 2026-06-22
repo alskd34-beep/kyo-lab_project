@@ -269,7 +269,7 @@ export default function Chatbot() {
                     응답 중...
                   </span>
                 ) : (
-                  'AI 기반 QC 도우미'
+                  'ChatGPT 기반 QC 도우미'
                 )}
               </p>
             </div>
@@ -359,7 +359,7 @@ export default function Chatbot() {
             </button>
           </div>
           <p className="mt-1.5 text-center text-[10px] text-slate-400">
-            AI가 생성한 답변은 부정확할 수 있습니다
+            ChatGPT가 생성한 답변은 부정확할 수 있습니다
           </p>
         </div>
       </div>

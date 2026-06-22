@@ -8,6 +8,9 @@ import {
   Trash2,
   PackageOpen,
   User as UserIcon,
+  ChevronDown,
+  ChevronUp,
+  ChevronsUpDown,
 } from "lucide-react"
 
 import { cn } from "@frontend/lib/utils"
@@ -61,6 +64,8 @@ export default function PretestChecklistPage() {
   const [search, setSearch] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [sortField, setSortField] = useState<keyof NoteRow>("occurredAt")
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
 
   // 입력 폼
   const [occurredDate, setOccurredDate] = useState(nowParts().date)
@@ -109,6 +114,34 @@ export default function PretestChecklistPage() {
         p.productCode.toLowerCase().includes(q)
     )
   }, [products, search])
+
+  const sortedNotes = useMemo(() => {
+    const arr = [...notes]
+    arr.sort((a, b) => {
+      const av = a[sortField] ?? ""
+      const bv = b[sortField] ?? ""
+      const cmp = String(av).localeCompare(String(bv), "ko")
+      return sortDir === "asc" ? cmp : -cmp
+    })
+    return arr
+  }, [notes, sortField, sortDir])
+
+  function toggleSort(field: keyof NoteRow) {
+    if (sortField === field) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"))
+    } else {
+      setSortField(field)
+      setSortDir("asc")
+    }
+  }
+
+  function SortIcon({ field }: { field: keyof NoteRow }) {
+    if (sortField !== field)
+      return <ChevronsUpDown className="ml-1 inline size-3 opacity-40" />
+    return sortDir === "asc"
+      ? <ChevronUp className="ml-1 inline size-3" />
+      : <ChevronDown className="ml-1 inline size-3" />
+  }
 
   function resetForm() {
     const n = nowParts()
@@ -172,7 +205,7 @@ export default function PretestChecklistPage() {
   }
 
   return (
-    <div className="flex flex-col gap-4 p-4 md:p-6">
+    <div className="flex min-h-0 flex-col gap-4 p-4 md:p-6 lg:h-[calc(100svh-4rem)]">
       {/* 헤더 */}
       <div className="flex min-w-0 flex-wrap items-center gap-3">
         <ClipboardCheck className="size-5 shrink-0 text-foreground" />
@@ -190,7 +223,7 @@ export default function PretestChecklistPage() {
         </div>
       )}
 
-      <div className="grid min-h-0 grid-cols-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+      <div className="grid min-h-0 grid-cols-1 gap-4 lg:flex-1 lg:grid-cols-[320px_minmax(0,1fr)]">
         {/* 품목 목록 */}
         <Card className="flex min-h-0 flex-col gap-0 overflow-hidden py-0 max-h-[40vh] lg:max-h-none">
           <div className="border-b px-4 py-3">
@@ -338,12 +371,37 @@ export default function PretestChecklistPage() {
                   <Table className="min-w-[760px]">
                     <TableHeader>
                       <TableRow className="hover:bg-transparent">
-                        <TableHead className="px-3 text-muted-foreground whitespace-nowrap">일시</TableHead>
-                        <TableHead className="px-3 text-muted-foreground">확인사항</TableHead>
+                        <TableHead
+                          className="cursor-pointer select-none px-3 text-muted-foreground whitespace-nowrap"
+                          onClick={() => toggleSort("occurredAt")}
+                        >
+                          일시<SortIcon field="occurredAt" />
+                        </TableHead>
+                        <TableHead
+                          className="cursor-pointer select-none px-3 text-muted-foreground"
+                          onClick={() => toggleSort("content")}
+                        >
+                          확인사항<SortIcon field="content" />
+                        </TableHead>
                         <TableHead className="px-3 text-muted-foreground">특이사항</TableHead>
-                        <TableHead className="px-3 text-muted-foreground whitespace-nowrap">이슈 로트</TableHead>
-                        <TableHead className="px-3 text-muted-foreground whitespace-nowrap">작성자</TableHead>
-                        <TableHead className="px-3 text-muted-foreground whitespace-nowrap">작성시각</TableHead>
+                        <TableHead
+                          className="cursor-pointer select-none px-3 text-muted-foreground whitespace-nowrap"
+                          onClick={() => toggleSort("issueLot")}
+                        >
+                          이슈 로트<SortIcon field="issueLot" />
+                        </TableHead>
+                        <TableHead
+                          className="cursor-pointer select-none px-3 text-muted-foreground whitespace-nowrap"
+                          onClick={() => toggleSort("createdByName")}
+                        >
+                          작성자<SortIcon field="createdByName" />
+                        </TableHead>
+                        <TableHead
+                          className="cursor-pointer select-none px-3 text-muted-foreground whitespace-nowrap"
+                          onClick={() => toggleSort("createdAt")}
+                        >
+                          작성시각<SortIcon field="createdAt" />
+                        </TableHead>
                         <TableHead className="w-14 px-3 text-center text-muted-foreground">삭제</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -355,7 +413,7 @@ export default function PretestChecklistPage() {
                           </TableCell>
                         </TableRow>
                       ) : (
-                        notes.map((n) => (
+                        sortedNotes.map((n) => (
                           <TableRow key={n.id} className="align-top">
                             <TableCell className="px-3 py-2.5 font-mono text-xs whitespace-nowrap text-muted-foreground">
                               {fmtDT(n.occurredAt)}

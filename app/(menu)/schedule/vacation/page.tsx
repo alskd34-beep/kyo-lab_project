@@ -7,7 +7,9 @@ import {
   CalendarDays, Plus, Trash2, X, Loader2, Check, ChevronLeft, ChevronRight, CheckCircle2,
   Sparkles, Lightbulb, Ban, AlertTriangle, Users, FlaskConical,
 } from "lucide-react"
+import { Skeleton } from "@frontend/components/ui/skeleton"
 import { DateRangeField } from "@frontend/components/ui/date-range-field"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@frontend/components/ui/select"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 type ScheduleType = "ANNUAL" | "HALF_DAY" | "BUSINESS_TRIP"
@@ -278,8 +280,16 @@ export default function VacationPage() {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center gap-2 py-20 text-sm text-slate-400">
-            <Loader2 size={16} className="animate-spin" /> 불러오는 중…
+          <div className="divide-y divide-slate-100">
+            {Array.from({ length: 6 }).map((_, wi) => (
+              <div key={wi} className="grid grid-cols-7" style={{ height: DAY_NUM_H + LANE_H + 6 }}>
+                {Array.from({ length: 7 }).map((_, di) => (
+                  <div key={di} className="border-r border-slate-100 px-1.5 pt-1 last:border-r-0">
+                    <Skeleton className="h-4 w-5" />
+                  </div>
+                ))}
+              </div>
+            ))}
           </div>
         ) : (
           <div className="divide-y divide-slate-100">
@@ -548,8 +558,31 @@ function SuggestionPanel({ from, to }: { from: string; to: string }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-10 text-sm text-slate-400">
-        <Loader2 size={16} className="animate-spin" /> 가능 품목 계산 중…
+      <div className="flex flex-col gap-3">
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <Skeleton className="mb-3 h-4 w-36" />
+          <div className="flex flex-wrap gap-1.5">
+            <Skeleton className="h-5 w-16 rounded-full" />
+            <Skeleton className="h-5 w-20 rounded-full" />
+          </div>
+          <Skeleton className="mt-2 h-3 w-24" />
+        </div>
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+          <div className="border-b border-slate-100 px-3 py-2">
+            <Skeleton className="h-4 w-32" />
+          </div>
+          <div className="flex flex-col divide-y divide-slate-100">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="flex items-center justify-between px-3 py-2">
+                <div className="flex flex-col gap-1.5 min-w-0">
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-3 w-28" />
+                </div>
+                <Skeleton className="h-5 w-12 rounded-full" />
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     )
   }
@@ -733,16 +766,17 @@ function AddModal({
           {isAdmin && (
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-600">대상자</label>
-              <select
-                value={userId}
-                onChange={e => setUserId(e.target.value)}
-                className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
-              >
-                <option value="">본인 (관리자)</option>
-                {users.map(u => (
-                  <option key={u.id} value={u.id}>{u.displayName ?? u.username}</option>
-                ))}
-              </select>
+              <Select value={userId || "self"} onValueChange={v => setUserId(v === "self" ? "" : v)}>
+                <SelectTrigger className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm">
+                  <SelectValue placeholder="본인 (관리자)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="self">본인 (관리자)</SelectItem>
+                  {users.map(u => (
+                    <SelectItem key={u.id} value={u.id}>{u.displayName ?? u.username}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           )}
 

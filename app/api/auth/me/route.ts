@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
       displayName: user.displayName,
       avatarUrl:   user.avatarUrl,
       role:        user.role,
+      customerNo:  user.customerNo,
     },
   })
 }

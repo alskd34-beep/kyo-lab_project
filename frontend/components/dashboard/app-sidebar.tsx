@@ -48,7 +48,6 @@ const NAV_SECTIONS: NavSection[] = [
           { id: "schedule-pct", label: "AI 스케줄", live: true },
           { id: "schedule-monthly", label: "월간 스케줄", live: true },
           { id: "schedule-orders", label: "오더 배정", adminOnly: true, live: true },
-          { id: "schedule-groups", label: "동시분석 그룹", adminOnly: true, live: true },
           { id: "schedule-vacation", label: "휴가 캘린더", live: true },
           { id: "schedule-holidays", label: "공휴일 캘린더", adminOnly: true, live: true },
           { id: "schedule-reassign", label: "재배정 이력", adminOnly: true, live: true },
@@ -59,8 +58,8 @@ const NAV_SECTIONS: NavSection[] = [
       {
         id: "test-mgmt", icon: FlaskConical, label: "시험관리",
         subItems: [
-          { id: "prod-status", label: "제품시험현황", live: true },
-          { id: "test-reg", label: "시험등록", live: true },
+          { id: "prod-status", label: "작업 현황", live: true },
+          { id: "test-status", label: "시험현황", live: true },
           { id: "test-result", label: "결과입력" },
           { id: "test-cert", label: "성적서관리" },
           { id: "testers", label: "시험자 관리", live: true },
@@ -154,7 +153,7 @@ const PATH_MAP: Record<string, string> = {
   "schedule-dashboard": "/schedule/dashboard",
   "my-tasks": "/my-tasks",
   "prod-status": "/product-test/prod-status",
-  "test-reg": "/test-mgmt/test-reg",
+  "test-status": "/test-mgmt/test-status",
   "test-result": "/test-mgmt/test-result",
   "test-cert": "/test-mgmt/test-cert",
   testers: "/test-mgmt/testers",
@@ -309,7 +308,14 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                   </Avatar>
                   <div className="grid flex-1 text-left text-sm leading-tight">
                     <span className="truncate font-medium">{name}</span>
-                    <span className="truncate text-xs text-muted-foreground">{isAdmin ? "관리자" : "시험자"}</span>
+                    <span className="truncate text-xs text-muted-foreground">
+                      {isAdmin ? "관리자" : "시험자"}
+                      {user?.customerNo != null && (
+                        <span className="ml-1.5 font-mono text-[10px] opacity-70">
+                          #{String(user.customerNo).padStart(5, '0')}
+                        </span>
+                      )}
+                    </span>
                   </div>
                   <ChevronsUpDown className="ml-auto size-4" />
                 </SidebarMenuButton>

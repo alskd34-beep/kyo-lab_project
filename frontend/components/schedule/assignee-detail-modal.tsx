@@ -12,9 +12,10 @@
 
 import { useEffect, useMemo, useState } from "react"
 import {
-  X, RefreshCw, SlidersHorizontal, Layers, History, Calendar,
+  X, RefreshCw, SlidersHorizontal, Layers, Calendar,
   ChevronDown, ChevronRight, ExternalLink, ArrowLeftRight, Loader2,
 } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@frontend/components/ui/select'
 import { cn } from "@frontend/lib/utils"
 import { useLockBodyScroll } from "@frontend/hooks/use-lock-body-scroll"
 
@@ -206,13 +207,18 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
               <button onClick={() => void load()} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-100">
                 {loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}새로고침
               </button>
-              <label className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-100">
-                <SlidersHorizontal className="size-4" />
-                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="cursor-pointer bg-transparent text-sm outline-none">
-                  <option value="">필터</option>
-                  {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </label>
+              <div className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700">
+                <SlidersHorizontal className="size-4 shrink-0" />
+                <Select value={statusFilter || 'all'} onValueChange={v => setStatusFilter(v === 'all' ? '' : v)}>
+                  <SelectTrigger className="h-auto border-0 p-0 shadow-none focus:ring-0 text-sm font-medium text-slate-700 bg-transparent">
+                    <SelectValue placeholder="필터" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">전체</SelectItem>
+                    {STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
 

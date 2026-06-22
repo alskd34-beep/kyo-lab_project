@@ -6,12 +6,14 @@
  * 데이터: GET /api/insights/tester-evaluation?from&to (admin)
  */
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell,
 } from "recharts"
-import { Loader2, Gauge, CalendarDays, CheckCircle2, Timer, RefreshCw } from "lucide-react"
+import { Loader2, Gauge, CalendarDays, CheckCircle2, Timer, RefreshCw, ChevronDown, ChevronUp } from "lucide-react"
 import { DateRangeField } from "@frontend/components/ui/date-range-field"
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@frontend/components/ui/table"
+import { Skeleton } from "@frontend/components/ui/skeleton"
 
 interface TesterRow {
   testerId: string; name: string; completed: number
@@ -33,12 +35,40 @@ const fmtPct = (v: number | null) => (v == null ? "—" : `${v}%`)
 const fmtDay = (v: number | null) => (v == null ? "—" : `${v}일`)
 const fmtMin = (v: number | null) => (v == null ? "—" : `${v}분`)
 
+function SortIcon({ field, sortField, sortDir }: { field: keyof TesterRow; sortField: keyof TesterRow; sortDir: "asc" | "desc" }) {
+  if (field !== sortField) return <ChevronDown size={11} className="text-slate-300" />
+  return sortDir === "asc" ? <ChevronUp size={11} className="text-slate-600" /> : <ChevronDown size={11} className="text-slate-600" />
+}
+
 export default function TesterEvaluationPage() {
   const [from, setFrom] = useState("")
   const [to, setTo] = useState("")
   const [data, setData] = useState<EvalData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [sortField, setSortField] = useState<keyof TesterRow>("name")
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
+
+  const toggleSort = (field: keyof TesterRow) => {
+    setSortField((prev) => {
+      if (prev === field) { setSortDir((d) => (d === "asc" ? "desc" : "asc")); return field }
+      setSortDir("asc"); return field
+    })
+  }
+
+  const sortedData = useMemo(() => {
+    if (!data) return []
+    return [...data.byTester].sort((a, b) => {
+      const av = a[sortField]; const bv = b[sortField]
+      if (av == null && bv == null) return 0
+      if (av == null) return 1
+      if (bv == null) return -1
+      const cmp = typeof av === "string" && typeof bv === "string"
+        ? av.localeCompare(bv, "ko")
+        : (av as number) - (bv as number)
+      return sortDir === "asc" ? cmp : -cmp
+    })
+  }, [data, sortField, sortDir])
 
   // 마운트 시 기본 기간(최근 90일)
   useEffect(() => {
@@ -107,7 +137,68 @@ export default function TesterEvaluationPage() {
       )}
 
       {loading ? (
-        <div className="rounded-xl border border-slate-200 bg-white px-3 py-16 text-center text-slate-400 shadow-sm">불러오는 중…</div>
+        <>
+          {/* KPI 카드 skeleton */}
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-7 w-7 rounded-lg" />
+                  <Skeleton className="h-3.5 w-20" />
+                </div>
+                <Skeleton className="mt-2 h-8 w-16" />
+              </div>
+            ))}
+          </div>
+
+          {/* 차트 skeleton */}
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <Skeleton className="h-4 w-48 mb-3" />
+            <Skeleton className="h-40 w-full" />
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <div key={i} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <Skeleton className="h-4 w-40 mb-3" />
+                <Skeleton className="h-40 w-full" />
+              </div>
+            ))}
+          </div>
+
+          {/* 테이블 skeleton */}
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm gap-0 py-0">
+            <div className="border-b border-slate-100 px-4 py-3">
+              <Skeleton className="h-4 w-24" />
+            </div>
+            <div className="overflow-x-auto">
+              <Table className="w-full min-w-[640px] text-sm">
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="px-3 text-muted-foreground">시험자</TableHead>
+                    <TableHead className="px-3 text-muted-foreground text-right">완료건</TableHead>
+                    <TableHead className="px-3 text-muted-foreground text-right">공수 준수율</TableHead>
+                    <TableHead className="px-3 text-muted-foreground text-right">평균 소요일</TableHead>
+                    <TableHead className="px-3 text-muted-foreground text-right">가중 처리량</TableHead>
+                    <TableHead className="px-3 text-muted-foreground text-right">가동률</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <TableRow key={i} className="border-b border-slate-100 last:border-0">
+                      <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20" /></TableCell>
+                      <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-8 ml-auto" /></TableCell>
+                      <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-12 ml-auto" /></TableCell>
+                      <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-10 ml-auto" /></TableCell>
+                      <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-10 ml-auto" /></TableCell>
+                      <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-12 ml-auto" /></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        </>
       ) : !hasData ? (
         <div className="rounded-xl border border-slate-200 bg-white px-3 py-16 text-center shadow-sm">
           <p className="text-sm font-medium text-slate-500">완료된 작업이 없어 표시할 실적이 없습니다.</p>
@@ -172,37 +263,49 @@ export default function TesterEvaluationPage() {
           </div>
 
           {/* 시험자별 상세 표 */}
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm gap-0 py-0">
             <div className="border-b border-slate-100 px-4 py-3">
               <h2 className="text-sm font-bold text-slate-800">시험자별 상세</h2>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px] text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                    <th className="px-4 py-2">시험자</th>
-                    <th className="px-4 py-2 text-right">완료건</th>
-                    <th className="px-4 py-2 text-right">공수 준수율</th>
-                    <th className="px-4 py-2 text-right">평균 소요일</th>
-                    <th className="px-4 py-2 text-right">가중 처리량</th>
-                    <th className="px-4 py-2 text-right">가동률</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data!.byTester.map((t) => (
-                    <tr key={t.testerId} className="border-b border-slate-100 last:border-0 text-slate-700 hover:bg-slate-50">
-                      <td className="px-4 py-2.5 font-medium text-slate-900">{t.name}</td>
-                      <td className="px-4 py-2.5 text-right">{t.completed}</td>
-                      <td className="px-4 py-2.5 text-right">
+              <Table className="w-full min-w-[640px] text-sm">
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="px-3 text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("name")}>
+                      <span className="inline-flex items-center gap-1">시험자<SortIcon field="name" sortField={sortField} sortDir={sortDir} /></span>
+                    </TableHead>
+                    <TableHead className="px-3 text-muted-foreground text-right cursor-pointer select-none" onClick={() => toggleSort("completed")}>
+                      <span className="inline-flex items-center justify-end gap-1">완료건<SortIcon field="completed" sortField={sortField} sortDir={sortDir} /></span>
+                    </TableHead>
+                    <TableHead className="px-3 text-muted-foreground text-right cursor-pointer select-none" onClick={() => toggleSort("adherenceRate")}>
+                      <span className="inline-flex items-center justify-end gap-1">공수 준수율<SortIcon field="adherenceRate" sortField={sortField} sortDir={sortDir} /></span>
+                    </TableHead>
+                    <TableHead className="px-3 text-muted-foreground text-right cursor-pointer select-none" onClick={() => toggleSort("avgActualDays")}>
+                      <span className="inline-flex items-center justify-end gap-1">평균 소요일<SortIcon field="avgActualDays" sortField={sortField} sortDir={sortDir} /></span>
+                    </TableHead>
+                    <TableHead className="px-3 text-muted-foreground text-right cursor-pointer select-none" onClick={() => toggleSort("weightedThroughput")}>
+                      <span className="inline-flex items-center justify-end gap-1">가중 처리량<SortIcon field="weightedThroughput" sortField={sortField} sortDir={sortDir} /></span>
+                    </TableHead>
+                    <TableHead className="px-3 text-muted-foreground text-right cursor-pointer select-none" onClick={() => toggleSort("utilization")}>
+                      <span className="inline-flex items-center justify-end gap-1">가동률<SortIcon field="utilization" sortField={sortField} sortDir={sortDir} /></span>
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sortedData.map((t) => (
+                    <TableRow key={t.testerId} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                      <TableCell className="px-3 py-2.5 font-medium text-foreground">{t.name}</TableCell>
+                      <TableCell className="px-3 py-2.5 text-right">{t.completed}</TableCell>
+                      <TableCell className="px-3 py-2.5 text-right">
                         <span className="font-semibold" style={{ color: rateColor(t.adherenceRate) }}>{fmtPct(t.adherenceRate)}</span>
-                      </td>
-                      <td className="px-4 py-2.5 text-right">{fmtDay(t.avgActualDays)}</td>
-                      <td className="px-4 py-2.5 text-right">{t.weightedThroughput}</td>
-                      <td className="px-4 py-2.5 text-right">{fmtPct(t.utilization)}</td>
-                    </tr>
+                      </TableCell>
+                      <TableCell className="px-3 py-2.5 text-right">{fmtDay(t.avgActualDays)}</TableCell>
+                      <TableCell className="px-3 py-2.5 text-right">{t.weightedThroughput}</TableCell>
+                      <TableCell className="px-3 py-2.5 text-right">{fmtPct(t.utilization)}</TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           </div>
         </>

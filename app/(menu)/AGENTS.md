@@ -16,7 +16,7 @@ Route group containing every authenticated screen of the QC system, wrapped in a
 |-----------|---------|
 | `home/` | Landing dashboard after login |
 | `product-test/` | Product testing: `products` (품목 마스터 + 평균공수 통합), `prod-reg`, `prod-status`, `prod-std` |
-| `test-mgmt/` | Test management: `test-master`, `test-items`, `test-reg`, `test-result`, `test-status`, `test-cert`, `testers` |
+| `test-mgmt/` | Test management: `test-master`, `test-items`, `test-result`, `test-status`, `test-cert`, `testers` (수동 오더 생성은 `schedule/orders`로 통합) |
 | `schedule/` | Scheduling: `monthly`, `weekly`, `weekly-plan`, `pct` (Monday-style boards + planners) |
 | `stability/` | Stability studies: `stab-plan`, `stab-report`, `stab-status` |
 | `deviation/` | Deviations: `oos` (out-of-spec), `capa`, `inv-report` (조사 보고) |

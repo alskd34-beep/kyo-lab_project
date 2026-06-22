@@ -66,7 +66,6 @@ const NAV_SECTIONS: NavSection[] = [
           { id: "schedule-pct", label: "AI 스케줄", live: true },
           { id: "schedule-monthly", label: "월간 스케줄", live: true },
           { id: "schedule-orders", label: "오더 배정", live: true, adminOnly: true },
-          { id: "schedule-groups", label: "동시분석 그룹", live: true, adminOnly: true },
           { id: "schedule-vacation", label: "휴가 캘린더", live: true },
           { id: "schedule-holidays", label: "공휴일 캘린더", live: true, adminOnly: true },
           { id: "schedule-reassign", label: "재배정 이력", live: true, adminOnly: true },
@@ -80,7 +79,6 @@ const NAV_SECTIONS: NavSection[] = [
         label: "시험관리",
         subItems: [
           { id: "prod-status", label: "제품시험현황", live: true },
-          { id: "test-reg", label: "시험등록", live: true },
           { id: "test-result", label: "결과입력" },
           { id: "test-cert", label: "성적서관리" },
           { id: "testers", label: "시험자 관리", live: true },
@@ -198,7 +196,6 @@ const PATH_MAP: Record<string, string> = {
   "my-tasks": "/my-tasks",
   // 시험관리
   "test-status": "/test-mgmt/test-status",
-  "test-reg": "/test-mgmt/test-reg",
   "test-result": "/test-mgmt/test-result",
   "test-cert": "/test-mgmt/test-cert",
   testers: "/test-mgmt/testers",

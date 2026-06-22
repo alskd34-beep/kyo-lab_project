@@ -9,12 +9,13 @@ import {
   type PctMonthlyAssignment,
 } from '@frontend/lib/pct-schedule-bridge'
 import { Card, CardContent, CardHeader, CardTitle } from '@frontend/components/ui/card'
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@frontend/components/ui/table'
 import { Button } from '@frontend/components/ui/button'
+import { Skeleton } from '@frontend/components/ui/skeleton'
 import {
   Calendar,
   ChevronLeft,
   ChevronRight,
-  Loader2,
   AlertCircle,
   Users,
   AlertTriangle,
@@ -472,9 +473,15 @@ export default function MonthlySchedulePage() {
         {/* 로딩 */}
         {loading && (
           <Card className={`${BORDER} ${CARD_BG}`}>
-            <CardContent className="flex flex-col items-center justify-center gap-2 py-12">
-              <Loader2 size={28} className="animate-spin text-violet-500" />
-              <p className={`text-sm font-medium ${TXT_SECONDARY}`}>월간 스케줄 불러오는 중...</p>
+            <CardContent className="py-4">
+              <div className="grid grid-cols-7 gap-1">
+                {Array.from({ length: 7 }).map((_, i) => (
+                  <Skeleton key={i} className="h-8 rounded" />
+                ))}
+                {Array.from({ length: 35 }).map((_, i) => (
+                  <Skeleton key={`cell-${i}`} className="h-20 rounded" />
+                ))}
+              </div>
             </CardContent>
           </Card>
         )}
@@ -569,20 +576,20 @@ export default function MonthlySchedulePage() {
                   </p>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[640px] border-collapse text-xs">
-                      <thead>
-                        <tr className="bg-slate-100 dark:bg-slate-800/60">
-                          <th
+                    <Table className="w-full min-w-[640px] border-collapse text-xs">
+                      <TableHeader>
+                        <TableRow className="bg-slate-100 dark:bg-slate-800/60">
+                          <TableHead
                             className={`sticky left-0 z-10 border-b ${BORDER} bg-slate-100 dark:bg-slate-800/60 px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide ${TXT_TERTIARY}`}
                             style={{ minWidth: 120 }}
                           >
                             시험자
-                          </th>
+                          </TableHead>
                           {days.map(d => {
                             const dow = dayOfWeek(d)
                             const isWeekend = dow === 0 || dow === 6
                             return (
-                              <th
+                              <TableHead
                                 key={d}
                                 className={`border-b border-l ${BORDER} px-1 py-2 text-center text-[10px] font-semibold ${
                                   isWeekend ? 'text-red-500 dark:text-red-400' : TXT_TERTIARY
@@ -591,15 +598,15 @@ export default function MonthlySchedulePage() {
                               >
                                 <div>{Number(d.slice(-2))}</div>
                                 <div className="text-[9px] font-normal opacity-70">{DOW_KOR[dow]}</div>
-                              </th>
+                              </TableHead>
                             )
                           })}
-                        </tr>
-                      </thead>
-                      <tbody>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
                         {visibleTesters.map(t => (
-                          <tr key={t.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
-                            <td
+                          <TableRow key={t.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
+                            <TableCell
                               className={`sticky left-0 z-10 border-b ${BORDER} bg-white dark:bg-slate-900 px-3 py-2 text-sm font-semibold ${TXT_PRIMARY}`}
                             >
                               <div className="flex items-center gap-1.5">
@@ -608,7 +615,7 @@ export default function MonthlySchedulePage() {
                                 </div>
                                 {t.name}
                               </div>
-                            </td>
+                            </TableCell>
                             {days.map(d => {
                               const k = `${t.id}::${d}`
                               const rows = cellMap.get(k) ?? []
@@ -617,7 +624,7 @@ export default function MonthlySchedulePage() {
                                 return dow === 0 || dow === 6
                               })()
                               return (
-                                <td
+                                <TableCell
                                   key={k}
                                   className={`border-b border-l ${BORDER} p-0.5 align-top ${
                                     isWeekend ? 'bg-slate-50/60 dark:bg-slate-800/30' : ''
@@ -638,13 +645,13 @@ export default function MonthlySchedulePage() {
                                       )
                                     })}
                                   </div>
-                                </td>
+                                </TableCell>
                               )
                             })}
-                          </tr>
+                          </TableRow>
                         ))}
-                      </tbody>
-                    </table>
+                      </TableBody>
+                    </Table>
                   </div>
                 )}
               </CardContent>

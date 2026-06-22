@@ -1,9 +1,9 @@
 'use client'
 
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { ImagePlus, Pencil, Save, Trash2, Upload, UserPlus, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { ChevronDown, ChevronUp, ImagePlus, Pencil, Save, Trash2, Upload, UserPlus, X } from 'lucide-react'
+import { Skeleton } from '@frontend/components/ui/skeleton'
 import { useAuth } from '@frontend/lib/auth-context'
-import { Avatar, AvatarFallback, AvatarImage } from '@frontend/components/ui/avatar'
 import {
   Dialog,
   DialogContent,
@@ -12,22 +12,54 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@frontend/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@frontend/components/ui/select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@frontend/components/ui/table'
 
 interface UserRow {
   id:          string
   username:    string
   displayName: string | null
   avatarUrl:   string | null
-  role:        'admin' | 'user'
+  role:        'admin' | 'tester'
   isActive:    boolean
   lastLoginAt: string | null
   createdAt:   string
+  customerNo:  number | null
+  testerId:    string | null
+  testerName:  string | null
+}
+
+/** 내부 고객번호 표기 — 5자리 zero-pad (미부여 시 '-') */
+function fmtCustomerNo(n: number | null): string {
+  return n == null ? '-' : String(n).padStart(5, '0')
 }
 
 const MAX_AVATAR_SIZE = 1024 * 1024
 
-function getInitial(user: Pick<UserRow, 'displayName' | 'username'>) {
-  return (user.displayName ?? user.username ?? '?').charAt(0).toUpperCase()
+// 임시 프로필 — 포유류 이모지(이름 기반으로 항상 동일하게 부여)
+const MAMMAL_EMOJIS = [
+  '🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮',
+  '🐷', '🐵', '🐗', '🐴', '🦄', '🐺', '🦝', '🦓', '🦌', '🦬', '🐂', '🐎',
+  '🐖', '🐏', '🐑', '🐐', '🦙', '🦒', '🐘', '🦣', '🦏', '🦛', '🐁', '🐀',
+  '🐇', '🦫', '🦦', '🦥', '🦨', '🦡', '🐈', '🐕', '🐅', '🐆', '🐃', '🐄',
+]
+function mammalEmoji(seed: string): string {
+  let h = 0
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0
+  return MAMMAL_EMOJIS[h % MAMMAL_EMOJIS.length]
 }
 
 function readImageAsDataUrl(file: File): Promise<string> {
@@ -54,16 +86,48 @@ export default function UsersAdminPage() {
   const [creating, setCreating] = useState(false)
   const [editingUser, setEditingUser] = useState<UserRow | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [sortField, setSortField] = useState<'displayName' | 'username' | 'role' | 'customerNo' | 'lastLoginAt'>('customerNo')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+
+  const sortedUsers = useMemo(() => {
+    return [...users].sort((a, b) => {
+      let va: string, vb: string
+      if (sortField === 'customerNo') {
+        va = String(a.customerNo ?? 0).padStart(10, '0')
+        vb = String(b.customerNo ?? 0).padStart(10, '0')
+      } else if (sortField === 'lastLoginAt') {
+        va = a.lastLoginAt ?? ''
+        vb = b.lastLoginAt ?? ''
+      } else {
+        va = String(a[sortField] ?? '')
+        vb = String(b[sortField] ?? '')
+      }
+      return sortDir === 'asc' ? va.localeCompare(vb, 'ko') : vb.localeCompare(va, 'ko')
+    })
+  }, [users, sortField, sortDir])
+
+  function toggleSort(field: typeof sortField) {
+    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortField(field); setSortDir('asc') }
+  }
+
+  function SortIcon({ field }: { field: typeof sortField }) {
+    if (sortField !== field) return <ChevronDown size={11} className="ml-1 inline opacity-30" />
+    return sortDir === 'asc'
+      ? <ChevronUp size={11} className="ml-1 inline text-primary" />
+      : <ChevronDown size={11} className="ml-1 inline text-primary" />
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
 
-    const r = await fetch('/api/users', { cache: 'no-store', credentials: 'include' })
-    if (r.ok) {
-      setUsers((await r.json()).users)
+    const usersRes = await fetch('/api/users', { cache: 'no-store', credentials: 'include' })
+
+    if (usersRes.ok) {
+      setUsers((await usersRes.json()).users)
     } else {
-      setError((await r.json().catch(() => ({}))).error ?? '조회 실패')
+      setError((await usersRes.json().catch(() => ({}))).error ?? '조회 실패')
     }
 
     setLoading(false)
@@ -127,39 +191,58 @@ export default function UsersAdminPage() {
       )}
 
       <div className="hidden overflow-x-auto rounded-lg border border-slate-200 bg-white md:block">
-        <table className="w-full min-w-[640px] text-sm">
-          <thead className="bg-slate-50/80 text-[11px] uppercase tracking-wide text-slate-500">
-            <tr>
-              <th className="px-3 py-2 text-left">사용자</th>
-              <th className="px-3 py-2 text-left">아이디</th>
-              <th className="px-3 py-2 text-left">역할</th>
-              <th className="px-3 py-2 text-left">상태</th>
-              <th className="px-3 py-2 text-left">마지막 로그인</th>
-              <th className="px-3 py-2"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={6} className="px-3 py-6 text-center text-xs text-slate-400">로딩 중...</td></tr>
-            ) : users.map(u => (
-              <tr key={u.id} className="border-t border-slate-100">
-                <td className="px-3 py-2">
+        <Table className="w-full min-w-[640px] text-sm">
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="cursor-pointer select-none px-3 text-left text-muted-foreground" onClick={() => toggleSort('customerNo')}>고객번호<SortIcon field="customerNo" /></TableHead>
+              <TableHead className="cursor-pointer select-none px-3 text-left text-muted-foreground" onClick={() => toggleSort('displayName')}>사용자<SortIcon field="displayName" /></TableHead>
+              <TableHead className="cursor-pointer select-none px-3 text-left text-muted-foreground" onClick={() => toggleSort('username')}>사번(아이디)<SortIcon field="username" /></TableHead>
+              <TableHead className="cursor-pointer select-none px-3 text-left text-muted-foreground" onClick={() => toggleSort('role')}>역할<SortIcon field="role" /></TableHead>
+              <TableHead className="px-3 text-left text-muted-foreground">상태</TableHead>
+              <TableHead className="cursor-pointer select-none px-3 text-left text-muted-foreground" onClick={() => toggleSort('lastLoginAt')}>마지막 로그인<SortIcon field="lastLoginAt" /></TableHead>
+              <TableHead className="px-3 text-muted-foreground"></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading
+              ? Array.from({ length: 6 }).map((_, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-14" /></TableCell>
+                    <TableCell className="px-3 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <Skeleton className="size-8 rounded-xl" />
+                        <Skeleton className="h-4 w-24" />
+                      </div>
+                    </TableCell>
+                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20" /></TableCell>
+                    <TableCell className="px-3 py-2.5"><Skeleton className="h-5 w-14 rounded-full" /></TableCell>
+                    <TableCell className="px-3 py-2.5"><Skeleton className="h-5 w-12 rounded-full" /></TableCell>
+                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-32" /></TableCell>
+                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
+                  </TableRow>
+                ))
+              : sortedUsers.map(u => (
+              <TableRow key={u.id} className="border-t border-slate-100">
+                <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground tabular-nums">
+                  {fmtCustomerNo(u.customerNo)}
+                </TableCell>
+                <TableCell className="px-3 py-2.5">
                   <div className="flex items-center gap-2">
                     <UserAvatar user={u} />
-                    <span>{u.displayName ?? '-'}</span>
+                    <span className="font-medium text-foreground">{u.displayName ?? '-'}</span>
                   </div>
-                </td>
-                <td className="px-3 py-2 font-mono text-xs">{u.username}</td>
-                <td className="px-3 py-2">
+                </TableCell>
+                <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{u.username}</TableCell>
+                <TableCell className="px-3 py-2.5">
                   <RoleBadge role={u.role} />
-                </td>
-                <td className="px-3 py-2">
+                </TableCell>
+                <TableCell className="px-3 py-2.5">
                   <StatusBadge isActive={u.isActive} />
-                </td>
-                <td className="px-3 py-2 font-mono text-[11px] text-slate-500">
+                </TableCell>
+                <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">
                   {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('ko-KR') : '-'}
-                </td>
-                <td className="px-3 py-2 text-right">
+                </TableCell>
+                <TableCell className="px-3 py-2.5 text-right">
                   <button
                     onClick={() => setEditingUser(u)}
                     className="mr-2 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-blue-600 hover:bg-blue-50"
@@ -176,17 +259,26 @@ export default function UsersAdminPage() {
                       삭제
                     </button>
                   )}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
 
       <div className="space-y-2 md:hidden">
-        {loading ? (
-          <p className="rounded-lg border border-slate-200 bg-white px-3 py-6 text-center text-xs text-slate-400">로딩 중...</p>
-        ) : users.map(u => (
+        {loading
+          ? Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="rounded-lg border border-slate-200 bg-white p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-5 w-14 rounded-full" />
+                </div>
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-3/4" />
+              </div>
+            ))
+          : users.map(u => (
           <div key={u.id} className="rounded-lg border border-slate-200 bg-white p-3">
             <div className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2">
@@ -194,6 +286,7 @@ export default function UsersAdminPage() {
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-slate-800">{u.displayName ?? '-'}</p>
                   <p className="truncate font-mono text-xs text-slate-500">{u.username}</p>
+                  <p className="font-mono text-[10px] text-slate-400">#{fmtCustomerNo(u.customerNo)}</p>
                 </div>
               </div>
               <div className="flex shrink-0 gap-1">
@@ -227,6 +320,7 @@ export default function UsersAdminPage() {
       </div>
 
       <EditUserDialog
+        key={editingUser?.id ?? 'none'}
         user={editingUser}
         open={editingUser !== null}
         onOpenChange={(open) => { if (!open) setEditingUser(null) }}
@@ -237,22 +331,25 @@ export default function UsersAdminPage() {
 }
 
 function UserAvatar({ user }: { user: UserRow }) {
+  if (user.avatarUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={user.avatarUrl} alt="" className="size-8 shrink-0 rounded-xl object-cover ring-1 ring-border" />
+    )
+  }
   return (
-    <Avatar className="h-8 w-8">
-      {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt="" />}
-      <AvatarFallback className="bg-blue-600 text-xs font-bold text-white">
-        {getInitial(user)}
-      </AvatarFallback>
-    </Avatar>
+    <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-xl bg-muted text-lg ring-1 ring-border" aria-hidden>
+      {mammalEmoji(user.username ?? user.displayName ?? '?')}
+    </span>
   )
 }
 
 function RoleBadge({ role }: { role: UserRow['role'] }) {
   return (
-    <span className={`rounded-full px-2 py-0.5 text-[11px] ${
-      role === 'admin' ? 'bg-violet-50 text-violet-700' : 'bg-slate-100 text-slate-600'
+    <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+      role === 'admin' ? 'bg-violet-50 text-violet-700' : 'bg-blue-50 text-blue-700'
     }`}>
-      {role}
+      {role === 'admin' ? '관리자' : '시험자'}
     </span>
   )
 }
@@ -272,7 +369,7 @@ function CreateForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: 
   const [username, setU] = useState('')
   const [password, setP] = useState('')
   const [displayName, setD] = useState('')
-  const [role, setR] = useState<'admin' | 'user'>('user')
+  const [role, setR] = useState<'admin' | 'tester'>('tester')
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -301,10 +398,15 @@ function CreateForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: 
       <input className="rounded border border-slate-200 bg-white px-2 py-1.5" placeholder="아이디" value={username} onChange={e => setU(e.target.value)} />
       <input className="rounded border border-slate-200 bg-white px-2 py-1.5" placeholder="비밀번호" type="password" value={password} onChange={e => setP(e.target.value)} />
       <input className="rounded border border-slate-200 bg-white px-2 py-1.5" placeholder="이름" value={displayName} onChange={e => setD(e.target.value)} />
-      <select className="rounded border border-slate-200 bg-white px-2 py-1.5" value={role} onChange={e => setR(e.target.value as 'admin' | 'user')}>
-        <option value="user">user</option>
-        <option value="admin">admin</option>
-      </select>
+      <Select value={role} onValueChange={v => setR(v as 'admin' | 'tester')}>
+        <SelectTrigger className="h-9 w-full px-3">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="tester">시험자</SelectItem>
+          <SelectItem value="admin">관리자</SelectItem>
+        </SelectContent>
+      </Select>
       <div className="flex gap-1">
         <button type="submit" disabled={busy || !username || !password} className="flex-1 rounded bg-blue-600 px-2 py-1.5 text-white disabled:opacity-50">생성</button>
         <button type="button" onClick={onCancel} className="rounded border border-slate-200 bg-white px-2 py-1.5"><X size={12} /></button>
@@ -327,7 +429,7 @@ function EditUserDialog({
 }) {
   const [displayName, setDisplayName] = useState('')
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
-  const [role, setRole] = useState<'admin' | 'user'>('user')
+  const [role, setRole] = useState<'admin' | 'tester'>('tester')
   const [isActive, setIsActive] = useState(true)
   const [password, setPassword] = useState('')
   const [err, setErr] = useState<string | null>(null)
@@ -335,16 +437,13 @@ function EditUserDialog({
 
   useEffect(() => {
     if (!user) return
-
-    queueMicrotask(() => {
-      setDisplayName(user.displayName ?? '')
-      setAvatarUrl(user.avatarUrl)
-      setRole(user.role)
-      setIsActive(user.isActive)
-      setPassword('')
-      setErr(null)
-      setBusy(false)
-    })
+    setDisplayName(user.displayName ?? '')
+    setAvatarUrl(user.avatarUrl)
+    setRole(user.role === 'admin' ? 'admin' : 'tester')
+    setIsActive(user.isActive)
+    setPassword('')
+    setErr(null)
+    setBusy(false)
   }, [user])
 
   if (!user) return null
@@ -364,7 +463,11 @@ function EditUserDialog({
     setBusy(true)
     setErr(null)
 
-    const body: Record<string, unknown> = { displayName, role, isActive }
+    const body: Record<string, unknown> = {
+      displayName,
+      role,
+      isActive,
+    }
     if (avatarUrl !== user.avatarUrl) body.avatarUrl = avatarUrl
     if (password) body.password = password
 
@@ -390,17 +493,24 @@ function EditUserDialog({
       <DialogContent className="mx-4 w-[calc(100%-2rem)] max-h-[90vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>사용자 수정</DialogTitle>
-          <DialogDescription>{user.username} 계정 정보를 수정합니다.</DialogDescription>
+          <DialogDescription>
+            {user.username} 계정 정보를 수정합니다.
+            {user.customerNo != null && (
+              <span className="ml-2 font-mono text-[11px] text-slate-400">고객번호 {fmtCustomerNo(user.customerNo)}</span>
+            )}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-5 md:grid-cols-[140px_1fr]">
           <div className="flex flex-col items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
-            <Avatar className="h-24 w-24">
-              {avatarUrl && <AvatarImage src={avatarUrl} alt="" />}
-              <AvatarFallback className="bg-blue-600 text-2xl font-bold text-white">
-                {getInitial(user)}
-              </AvatarFallback>
-            </Avatar>
+            {avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={avatarUrl} alt="" className="size-24 rounded-2xl object-cover ring-1 ring-border" />
+            ) : (
+              <span className="inline-flex size-24 items-center justify-center rounded-2xl bg-muted text-5xl ring-1 ring-border" aria-hidden>
+                {mammalEmoji(user.username ?? user.displayName ?? '?')}
+              </span>
+            )}
             <label className="inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-md bg-slate-800 px-3 py-2 text-xs font-medium text-white hover:bg-slate-700">
               <Upload size={13} />
               사진 업로드
@@ -432,25 +542,30 @@ function EditUserDialog({
             </label>
             <label className="block text-xs font-medium text-slate-600">
               역할
-              <select
-                className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                value={role}
-                onChange={e => setRole(e.target.value as 'admin' | 'user')}
-              >
-                <option value="user">user</option>
-                <option value="admin">admin</option>
-              </select>
+              <Select value={role} onValueChange={v => setRole(v as 'admin' | 'tester')}>
+                <SelectTrigger className="mt-1 h-9 w-full px-3">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="tester">시험자</SelectItem>
+                  <SelectItem value="admin">관리자</SelectItem>
+                </SelectContent>
+              </Select>
+              {role === 'tester' && (
+                <p className="mt-1 text-[10px] text-slate-400">시험자 역할 저장 시 시험자 목록에 자동 등록됩니다.</p>
+              )}
             </label>
             <label className="block text-xs font-medium text-slate-600">
               상태
-              <select
-                className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                value={isActive ? '1' : '0'}
-                onChange={e => setIsActive(e.target.value === '1')}
-              >
-                <option value="1">활성</option>
-                <option value="0">비활성</option>
-              </select>
+              <Select value={isActive ? '1' : '0'} onValueChange={v => setIsActive(v === '1')}>
+                <SelectTrigger className="mt-1 h-9 w-full px-3">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">활성</SelectItem>
+                  <SelectItem value="0">비활성</SelectItem>
+                </SelectContent>
+              </Select>
             </label>
             <label className="block text-xs font-medium text-slate-600">
               새 비밀번호

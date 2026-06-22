@@ -3,8 +3,8 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
 import {
-  RefreshCw, Sparkles, History, AlertCircle, X, Loader2, Database,
-  ChevronDown, ChevronRight, ChevronLeft, Lock, LockOpen, Search, CalendarDays, Users, ListChecks, Layers,
+  RefreshCw, Sparkles, History, AlertCircle, X, Loader2, Database, Plus,
+  ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Lock, LockOpen, Search, CalendarDays, Users, ListChecks, Layers,
 } from "lucide-react"
 import { cn } from "@frontend/lib/utils"
 import { useLockBodyScroll } from "@frontend/hooks/use-lock-body-scroll"
@@ -21,6 +21,7 @@ import {
 import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@frontend/components/ui/popover"
+import { Skeleton } from "@frontend/components/ui/skeleton"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 interface OrderRow {
@@ -75,6 +76,7 @@ const STATUS_DOT: Record<string, string> = {
 }
 
 const FIELD_LABEL: Record<string, string> = {
+  productCode: "품목코드", productName: "품목명", batchNo: "제조번호", dosageForm: "제형",
   packagingDate: "포장일", dueDate: "완료예정일", isUrgent: "긴급",
   method: "진행방법", status: "상태", note: "비고", assigneeTesterId: "담당자",
 }
@@ -222,6 +224,7 @@ export default function OrdersPage() {
   const [year, setYear] = useState("")
   const [tab, setTab] = useState<TabId>("week")
 
+  const [createOpen, setCreateOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<OrderRow | null>(null)
   const [historyTarget, setHistoryTarget] = useState<OrderRow | null>(null)
   const [assigneeTarget, setAssigneeTarget] = useState<{ id: string; name: string } | null>(null)
@@ -232,6 +235,20 @@ export default function OrdersPage() {
   const [bulkTester, setBulkTester] = useState("")
   const [families, setFamilies] = useState<{ id: string; name: string; codes: string[] }[]>([])
   const [famCollapsed, setFamCollapsed] = useState<Set<string>>(new Set())
+  const [sortField, setSortField] = useState<keyof OrderRow | null>(null)
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
+
+  const toggleSort = (field: keyof OrderRow) => {
+    if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc")
+    else { setSortField(field); setSortDir("asc") }
+  }
+
+  const SortIcon = ({ field }: { field: keyof OrderRow }) => {
+    if (sortField !== field) return <ChevronDown className="ml-1 inline size-3 text-muted-foreground/40" />
+    return sortDir === "asc"
+      ? <ChevronUp className="ml-1 inline size-3 text-primary" />
+      : <ChevronDown className="ml-1 inline size-3 text-primary" />
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -492,6 +509,23 @@ export default function OrdersPage() {
   type RowItem =
     | { type: "single"; row: OrderRow }
     | { type: "family"; familyId: string; familyName: string; rows: OrderRow[] }
+  // 컬럼 정렬용 행 비교 함수
+  const sortRowsBy = useCallback((arr: OrderRow[]): OrderRow[] => {
+    if (!sortField) return arr
+    const dir = sortDir === "asc" ? 1 : -1
+    return [...arr].sort((a, b) => {
+      const av = a[sortField]
+      const bv = b[sortField]
+      // null/undefined는 항상 맨 뒤
+      if (av == null && bv == null) return 0
+      if (av == null) return 1
+      if (bv == null) return -1
+      if (typeof av === "boolean" && typeof bv === "boolean") return (av === bv ? 0 : av ? -1 : 1) * dir
+      if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir
+      return String(av).localeCompare(String(bv), "ko") * dir
+    })
+  }, [sortField, sortDir])
+
   const buildRowTree = (groupKey: string, rows: OrderRow[]): RowItem[] => {
     const famRows = new Map<string, OrderRow[]>()
     for (const r of rows) {
@@ -528,9 +562,12 @@ export default function OrdersPage() {
         singleItems.push({ item: { type: "single", row: r }, assignee: asgKey(r.assigneeName), name: r.productName })
       }
     }
-    const byAssigneeThenName = (a: Sortable, b: Sortable) => byKo(a.assignee, b.assignee) || byKo(a.name, b.name)
-    familyItems.sort(byAssigneeThenName)
-    singleItems.sort(byAssigneeThenName)
+    // 컬럼 정렬이 활성화된 경우 내부 정렬 대신 입력 순서를 보존
+    if (!sortField) {
+      const byAssigneeThenName = (a: Sortable, b: Sortable) => byKo(a.assignee, b.assignee) || byKo(a.name, b.name)
+      familyItems.sort(byAssigneeThenName)
+      singleItems.sort(byAssigneeThenName)
+    }
     return [...familyItems, ...singleItems].map(x => x.item)
   }
 
@@ -645,6 +682,9 @@ export default function OrdersPage() {
         </div>
         {isAdmin && (
           <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="lg" onClick={() => setCreateOpen(true)} disabled={busy !== null}>
+              <Plus />오더 추가
+            </Button>
             <Button variant="outline" size="lg" onClick={runIngest} disabled={busy !== null}>
               {busy === "ingest" ? <Loader2 className="animate-spin" /> : <RefreshCw />}
               지금 적재
@@ -745,7 +785,32 @@ export default function OrdersPage() {
 
       {/* 그룹 카드 */}
       {loading ? (
-        <Card className="items-center py-10 text-center text-sm text-muted-foreground">불러오는 중…</Card>
+        <div className="flex flex-col gap-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Card key={i} className="gap-0 overflow-hidden py-0">
+              <div className="flex items-center gap-3 px-4 py-3">
+                <Skeleton className="h-3 w-1.5 rounded-full" />
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="ml-auto h-4 w-16" />
+              </div>
+              <div className="border-t px-4 py-3">
+                <div className="flex flex-col gap-2.5">
+                  {Array.from({ length: 3 }).map((_, j) => (
+                    <div key={j} className="flex items-center gap-3">
+                      <Skeleton className="h-4 w-8" />
+                      <Skeleton className="h-4 w-40" />
+                      <Skeleton className="h-4 w-20" />
+                      <Skeleton className="h-4 w-20" />
+                      <Skeleton className="h-4 w-16" />
+                      <Skeleton className="h-4 w-16" />
+                      <Skeleton className="ml-auto h-5 w-14 rounded-full" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
       ) : rows.length === 0 ? (
         <Card className="items-center py-10 text-center text-sm text-muted-foreground">
           적재된 오더가 없습니다. &quot;지금 적재&quot;로 시트를 불러오세요.
@@ -761,7 +826,7 @@ export default function OrdersPage() {
             return (
               <Card
                 key={g.key}
-                className={cn("gap-0 py-0", g.isThisWeek && "border-primary/40 ring-1 ring-primary/20")}
+                className={cn("gap-0 overflow-hidden py-0", g.isThisWeek && "border-primary/40 ring-1 ring-primary/20")}
               >
                 {/* 그룹 헤더 */}
                 <button
@@ -793,22 +858,22 @@ export default function OrdersPage() {
                       <TableHeader>
                         <TableRow className="hover:bg-transparent">
                           <TableHead className="w-12 px-3 text-center text-muted-foreground">확정</TableHead>
-                          <TableHead className="px-3 text-muted-foreground">품목명</TableHead>
-                          <TableHead className="px-3 text-muted-foreground">품목코드</TableHead>
-                          <TableHead className="px-3 text-muted-foreground">제조번호</TableHead>
-                          <TableHead className="px-3 text-muted-foreground">제형</TableHead>
-                          <TableHead className="px-3 text-muted-foreground">포장일</TableHead>
-                          <TableHead className="px-3 text-muted-foreground">완료예정</TableHead>
-                          <TableHead className="px-3 text-muted-foreground">긴급</TableHead>
-                          <TableHead className="px-3 text-muted-foreground">진행방법</TableHead>
-                          <TableHead className="px-3 text-muted-foreground">공수</TableHead>
-                          <TableHead className="px-3 text-muted-foreground">담당자</TableHead>
-                          <TableHead className="px-3 text-muted-foreground">상태</TableHead>
+                          <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort("productName")}>품목명<SortIcon field="productName" /></TableHead>
+                          <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort("productCode")}>품목코드<SortIcon field="productCode" /></TableHead>
+                          <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort("batchNo")}>제조번호<SortIcon field="batchNo" /></TableHead>
+                          <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort("dosageForm")}>제형<SortIcon field="dosageForm" /></TableHead>
+                          <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort("packagingDate")}>포장일<SortIcon field="packagingDate" /></TableHead>
+                          <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort("dueDate")}>완료예정<SortIcon field="dueDate" /></TableHead>
+                          <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort("isUrgent")}>긴급<SortIcon field="isUrgent" /></TableHead>
+                          <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort("method")}>진행방법<SortIcon field="method" /></TableHead>
+                          <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort("workdays")}>공수<SortIcon field="workdays" /></TableHead>
+                          <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort("assigneeName")}>담당자<SortIcon field="assigneeName" /></TableHead>
+                          <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort("status")}>상태<SortIcon field="status" /></TableHead>
                           <TableHead className="px-3 text-right text-muted-foreground">관리</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {buildRowTree(g.key, g.rows).map(item => {
+                        {buildRowTree(g.key, sortRowsBy(g.rows)).map(item => {
                           if (item.type === "single") return renderOrderRow(item.row)
                           const fc = famCollapsed.has(item.familyId)
                           return (
@@ -839,6 +904,13 @@ export default function OrdersPage() {
         </div>
       )}
 
+      {createOpen && (
+        <CreateModal
+          testers={testers}
+          onClose={() => setCreateOpen(false)}
+          onCreated={() => { setCreateOpen(false); flash("오더가 추가되었습니다."); void load() }}
+        />
+      )}
       {editTarget && (
         <EditModal
           order={editTarget} testers={testers}
@@ -873,23 +945,26 @@ export default function OrdersPage() {
               <span className="h-8 w-px bg-border" />
 
               {/* 담당자 일괄 배정 — 확정 해제된(미확정) 건만 */}
-              <div className="flex items-center gap-1.5">
-                <Select value={bulkTester} onValueChange={setBulkTester}>
-                  <SelectTrigger className="h-9 w-40"><SelectValue placeholder="담당자 선택" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">미배정</SelectItem>
-                    {testers.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <Button
-                  size="default"
-                  onClick={applyAssign}
-                  disabled={busy !== null || !bulkTester || unlockedCount === 0}
-                  title={unlockedCount === 0 ? "확정 해제된 오더만 담당자 배정이 가능합니다" : undefined}
-                >
-                  {busy === "assign-bulk" ? <Loader2 className="animate-spin" /> : <Users />}배정
-                </Button>
-              </div>
+              {unlockedCount === 0 ? (
+                <span className="text-sm font-medium text-amber-700">확정된 대상은 배정불가합니다.</span>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <Select value={bulkTester} onValueChange={setBulkTester}>
+                    <SelectTrigger className="h-9 w-40"><SelectValue placeholder="담당자 선택" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">미배정</SelectItem>
+                      {testers.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    size="default"
+                    onClick={applyAssign}
+                    disabled={busy !== null || !bulkTester}
+                  >
+                    {busy === "assign-bulk" ? <Loader2 className="animate-spin" /> : <Users />}배정
+                  </Button>
+                </div>
+              )}
 
               <span className="h-8 w-px bg-border" />
 
@@ -920,11 +995,184 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
+// ─── 오더 추가 모달 (수동 생성) ───────────────────────────────────────────────
+interface ProductHit { id: string; productCode: string; name: string }
+function CreateModal({ testers, onClose, onCreated }: {
+  testers: Tester[]; onClose: () => void; onCreated: () => void
+}) {
+  const [form, setForm] = useState({
+    productCode: "", productName: "", batchNo: "", dosageForm: "",
+    packagingDate: "", dueDate: "", isUrgent: false,
+    method: "전항목", status: "대기", assigneeTesterId: "", note: "",
+  })
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  // 품목 검색 (자동완성) — 선택 시 코드·품목명 자동 입력
+  const [pq, setPq] = useState("")
+  const [hits, setHits] = useState<ProductHit[]>([])
+  const [searching, setSearching] = useState(false)
+  const [showHits, setShowHits] = useState(false)
+
+  useEffect(() => {
+    const q = pq.trim()
+    if (!q) { setHits([]); return }
+    let alive = true
+    setSearching(true)
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/products?search=${encodeURIComponent(q)}&limit=10`, { credentials: "include" })
+        const data = await res.json()
+        if (alive) { setHits(data.rows ?? []); setShowHits(true) }
+      } catch {
+        if (alive) setHits([])
+      } finally {
+        if (alive) setSearching(false)
+      }
+    }, 250)
+    return () => { alive = false; clearTimeout(t) }
+  }, [pq])
+
+  const pickProduct = (p: ProductHit) => {
+    setForm(f => ({ ...f, productCode: p.productCode, productName: p.name }))
+    setPq(`${p.name} (${p.productCode})`)
+    setShowHits(false)
+  }
+
+  const save = async () => {
+    if (!form.productCode.trim() || !form.productName.trim() || !form.batchNo.trim()) {
+      setErr("품목코드·품목명·제조번호는 필수입니다."); return
+    }
+    setSaving(true); setErr(null)
+    try {
+      const res = await fetch("/api/pct-orders", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productCode: form.productCode.trim(),
+          productName: form.productName.trim(),
+          batchNo: form.batchNo.trim(),
+          dosageForm: form.dosageForm.trim() || null,
+          packagingDate: form.packagingDate || null,
+          dueDate: form.dueDate || null,
+          isUrgent: form.isUrgent,
+          method: form.method,
+          status: form.status,
+          assigneeTesterId: form.assigneeTesterId || null,
+          note: form.note || null,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      onCreated()
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "저장 실패")
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <SlideOver title="오더 추가" onClose={onClose}>
+      <p className="mb-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] text-blue-700">
+        제조 시트 적재가 아닌 수동 등록 오더입니다. 등록 후 담당자를 지정하세요.
+      </p>
+
+      {/* 품목 검색 (자동완성) */}
+      <div className="relative mb-3">
+        <label className="mb-1 block text-xs font-semibold text-foreground">품목 검색</label>
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={pq}
+            onChange={e => { setPq(e.target.value); setShowHits(true) }}
+            onFocus={() => { if (hits.length) setShowHits(true) }}
+            placeholder="품목명·품목코드로 검색"
+            className={cn(inputCls, "pl-8")}
+          />
+          {searching && <Loader2 className="absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 animate-spin text-muted-foreground" />}
+        </div>
+        {showHits && hits.length > 0 && (
+          <ul className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-md border bg-card shadow-lg">
+            {hits.map(p => (
+              <li key={p.id}>
+                <button
+                  type="button"
+                  onClick={() => pickProduct(p)}
+                  className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
+                >
+                  <span className="truncate font-medium text-foreground">{p.name}</span>
+                  <span className="shrink-0 font-mono text-xs text-muted-foreground">{p.productCode}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field label="품목코드"><input value={form.productCode} onChange={e => setForm({ ...form, productCode: e.target.value })} className={cn(inputCls, "font-mono")} /></Field>
+        <Field label="제조번호"><input value={form.batchNo} onChange={e => setForm({ ...form, batchNo: e.target.value })} className={cn(inputCls, "font-mono")} /></Field>
+        <Field label="품목명" full><input value={form.productName} onChange={e => setForm({ ...form, productName: e.target.value })} className={inputCls} /></Field>
+        <Field label="제형"><input value={form.dosageForm} onChange={e => setForm({ ...form, dosageForm: e.target.value })} placeholder="예: 내용고형제 (선택)" className={inputCls} /></Field>
+        <Field label="포장일"><input type="date" value={form.packagingDate} onChange={e => setForm({ ...form, packagingDate: e.target.value })} className={inputCls} /></Field>
+        <Field label="완료예정일"><input type="date" value={form.dueDate} onChange={e => setForm({ ...form, dueDate: e.target.value })} className={inputCls} /></Field>
+        <Field label="긴급">
+          <Select value={form.isUrgent ? "긴급" : "일반"} onValueChange={v => setForm({ ...form, isUrgent: v === "긴급" })}>
+            <SelectTrigger className="!h-9 w-full px-3"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="일반">일반</SelectItem>
+              <SelectItem value="긴급">긴급</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="진행방법">
+          <Select value={form.method} onValueChange={v => setForm({ ...form, method: v })}>
+            <SelectTrigger className="!h-9 w-full px-3"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {METHOD_OPTIONS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="상태">
+          <Select value={form.status} onValueChange={v => setForm({ ...form, status: v })}>
+            <SelectTrigger className="!h-9 w-full px-3"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="담당자">
+          <Select value={form.assigneeTesterId || "none"} onValueChange={v => setForm({ ...form, assigneeTesterId: v === "none" ? "" : v })}>
+            <SelectTrigger className="!h-9 w-full px-3"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">미배정</SelectItem>
+              {testers.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="비고" full><input value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} className={inputCls} /></Field>
+      </div>
+
+      {err && <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">{err}</p>}
+
+      <div className="mt-4 flex justify-end gap-2">
+        <Button variant="outline" size="lg" onClick={onClose}>취소</Button>
+        <Button size="lg" onClick={save} disabled={saving}>
+          {saving ? <Loader2 className="animate-spin" /> : <Plus />}오더 추가
+        </Button>
+      </div>
+    </SlideOver>
+  )
+}
+
 // ─── 수정 모달 (사유 필수) ────────────────────────────────────────────────────
 function EditModal({ order, testers, onClose, onSaved }: {
   order: OrderRow; testers: Tester[]; onClose: () => void; onSaved: () => void
 }) {
   const [form, setForm] = useState({
+    productCode: order.productCode ?? "",
+    productName: order.productName ?? "",
+    batchNo: order.batchNo ?? "",
+    dosageForm: order.dosageForm ?? "",
     packagingDate: order.packagingDate ?? "",
     dueDate: order.dueDate ?? "",
     isUrgent: order.isUrgent,
@@ -938,10 +1186,17 @@ function EditModal({ order, testers, onClose, onSaved }: {
   const [err, setErr] = useState<string | null>(null)
 
   const save = async () => {
+    if (!form.productCode.trim() || !form.productName.trim() || !form.batchNo.trim()) {
+      setErr("품목코드·품목명·제조번호는 비울 수 없습니다."); return
+    }
     if (!reason.trim()) { setErr("수정 사유는 필수입니다."); return }
     setSaving(true); setErr(null)
     try {
       const patch: Record<string, string | boolean | null> = {
+        productCode: form.productCode.trim(),
+        productName: form.productName.trim(),
+        batchNo: form.batchNo.trim(),
+        dosageForm: form.dosageForm.trim() || null,
         packagingDate: form.packagingDate || null,
         dueDate: form.dueDate || null,
         isUrgent: form.isUrgent,
@@ -965,7 +1220,14 @@ function EditModal({ order, testers, onClose, onSaved }: {
 
   return (
     <SlideOver title={`오더 수정 — ${order.productName}`} onClose={onClose}>
+      <p className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700">
+        품목코드·제조번호를 바꾸면 적재 자연키가 변경되어 다음 적재 시 신규로 인식될 수 있습니다. 신중히 수정하세요.
+      </p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field label="품목코드"><input value={form.productCode} onChange={e => setForm({ ...form, productCode: e.target.value })} className={cn(inputCls, "font-mono")} /></Field>
+        <Field label="제조번호"><input value={form.batchNo} onChange={e => setForm({ ...form, batchNo: e.target.value })} className={cn(inputCls, "font-mono")} /></Field>
+        <Field label="품목명" full><input value={form.productName} onChange={e => setForm({ ...form, productName: e.target.value })} className={inputCls} /></Field>
+        <Field label="제형"><input value={form.dosageForm} onChange={e => setForm({ ...form, dosageForm: e.target.value })} placeholder="예: 내용고형제 (선택)" className={inputCls} /></Field>
         <Field label="포장일"><input type="date" value={form.packagingDate} onChange={e => setForm({ ...form, packagingDate: e.target.value })} className={inputCls} /></Field>
         <Field label="완료예정일"><input type="date" value={form.dueDate} onChange={e => setForm({ ...form, dueDate: e.target.value })} className={inputCls} /></Field>
         <Field label="긴급">
@@ -1060,7 +1322,24 @@ function HistoryModal({ order, testers, onClose }: { order: OrderRow; testers: T
   return (
     <Modal title={`수정이력 — ${order.productName}`} onClose={onClose}>
       {loading ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">불러오는 중…</p>
+        <div className="flex flex-col gap-2.5 py-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="rounded-lg border bg-muted/40 px-3 py-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <Skeleton className="h-5 w-10 rounded-md" />
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-5 w-14 rounded-full" />
+                </div>
+                <Skeleton className="h-3 w-24" />
+              </div>
+              <div className="mt-2 flex flex-col gap-1.5">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-3/4" />
+              </div>
+            </div>
+          ))}
+        </div>
       ) : sessions.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted-foreground">수정 이력이 없습니다.</p>
       ) : (
@@ -1170,7 +1449,34 @@ function IngestLogModal({ onClose }: { onClose: () => void }) {
   return (
     <Modal title="적재 이력 (생산계획 가져오기)" onClose={onClose}>
       {loading ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">불러오는 중…</p>
+        <div className="flex flex-col gap-4 py-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i}>
+              <div className="mb-2 flex items-center gap-2">
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-3 w-12" />
+              </div>
+              <div className="mb-2 flex gap-1.5">
+                <Skeleton className="h-5 w-16 rounded-full" />
+                <Skeleton className="h-5 w-16 rounded-full" />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                {Array.from({ length: 2 }).map((_, j) => (
+                  <div key={j} className="rounded-lg border bg-muted/30 px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <Skeleton className="h-5 w-14 rounded-full" />
+                      <Skeleton className="h-4 w-40" />
+                    </div>
+                    <div className="mt-1 flex gap-2">
+                      <Skeleton className="h-3 w-24" />
+                      <Skeleton className="h-3 w-20" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       ) : rows.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted-foreground">아직 적재한 이력이 없습니다.</p>
       ) : (

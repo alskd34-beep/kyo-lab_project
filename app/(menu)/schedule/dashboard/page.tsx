@@ -6,6 +6,7 @@ import {
   CheckCircle2, AlertTriangle, UserMinus, Pill, Sparkles, Repeat,
   CalendarDays, Layers,
 } from "lucide-react"
+import { Skeleton } from "@frontend/components/ui/skeleton"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 interface QcDashboard {
@@ -90,7 +91,40 @@ export default function QcDashboardPage() {
       )}
 
       {loading && !data ? (
-        <div className="rounded-xl border border-slate-200 bg-white px-3 py-10 text-center text-slate-400 shadow-sm">불러오는 중…</div>
+        <>
+          {/* KPI skeleton */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3.5 shadow-sm">
+                <Skeleton className="h-10 w-10 shrink-0 rounded-lg" />
+                <div className="min-w-0 flex-1 space-y-2">
+                  <Skeleton className="h-3 w-16" />
+                  <Skeleton className="h-6 w-12" />
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* 차트 skeleton */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <section key={i} className="rounded-xl border border-slate-200 bg-white shadow-sm">
+                <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3">
+                  <Skeleton className="h-4 w-4" />
+                  <Skeleton className="h-4 w-32" />
+                </div>
+                <div className="flex flex-col gap-3 px-4 py-4">
+                  {Array.from({ length: 5 }).map((_, j) => (
+                    <div key={j} className="flex items-center gap-3">
+                      <Skeleton className="h-4 w-20 shrink-0" />
+                      <Skeleton className="h-2.5 flex-1 rounded-full" />
+                      <Skeleton className="h-4 w-14 shrink-0" />
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        </>
       ) : !data ? null : (
         <>
           {/* KPI 카드 그리드 */}

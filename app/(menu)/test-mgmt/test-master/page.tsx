@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react"
 import {
   AlertTriangle,
+  ChevronDown,
+  ChevronUp,
   ClipboardList,
   Pencil,
   Plus,
@@ -31,6 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@frontend/components/ui/select"
+import { Skeleton } from "@frontend/components/ui/skeleton"
 import {
   Table,
   TableBody,
@@ -86,6 +89,16 @@ const EMPTY_FORM: FormState = {
   requiresDuo: false,
 }
 
+type SortField = "name" | "category" | "estimatedHours"
+type SortDir = "asc" | "desc"
+
+function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: SortField; sortDir: SortDir }) {
+  if (sortField !== field) return <ChevronDown className="size-3 opacity-30" />
+  return sortDir === "asc"
+    ? <ChevronUp className="size-3" />
+    : <ChevronDown className="size-3" />
+}
+
 function CategoryBadge({ category }: { category: string }) {
   const dot = CATEGORY_DOT[category] ?? CATEGORY_DOT["기타"]
   return (
@@ -108,6 +121,8 @@ export default function TestMasterPage() {
   const [deleteTarget, setDeleteTarget] = useState<TestItemRow | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [sortField, setSortField] = useState<SortField>("name")
+  const [sortDir, setSortDir] = useState<SortDir>("asc")
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -147,6 +162,31 @@ export default function TestMasterPage() {
       return true
     })
   }, [rows, search, activeTab])
+
+  function toggleSort(field: SortField) {
+    if (sortField === field) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"))
+    } else {
+      setSortField(field)
+      setSortDir("asc")
+    }
+  }
+
+  const sortedData = useMemo(() => {
+    return [...filtered].sort((a, b) => {
+      let cmp = 0
+      if (sortField === "name") {
+        cmp = a.name.localeCompare(b.name, "ko")
+      } else if (sortField === "category") {
+        cmp = a.category.localeCompare(b.category, "ko")
+      } else if (sortField === "estimatedHours") {
+        const ah = a.estimatedHours ?? -1
+        const bh = b.estimatedHours ?? -1
+        cmp = ah - bh
+      }
+      return sortDir === "asc" ? cmp : -cmp
+    })
+  }, [filtered, sortField, sortDir])
 
   const tabCounts = useMemo(() => {
     const counts: Record<string, number> = { 전체: rows.length }
@@ -392,9 +432,16 @@ export default function TestMasterPage() {
       {/* 모바일 카드 */}
       <div className="flex flex-col gap-2 md:hidden">
         {loading ? (
-          <Card className="items-center py-6 text-center text-sm text-muted-foreground">
-            불러오는 중...
-          </Card>
+          Array.from({ length: 4 }).map((_, i) => (
+            <Card key={i} className="gap-2 px-3 py-3">
+              <div className="flex items-center justify-between">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-5 w-14 rounded-full" />
+              </div>
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-3/4" />
+            </Card>
+          ))
         ) : filtered.length === 0 ? (
           <Card className="items-center py-6 text-center text-sm text-muted-foreground">
             데이터가 없습니다.
@@ -481,9 +528,33 @@ export default function TestMasterPage() {
         <Table className="min-w-[640px]">
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead className="px-3 text-muted-foreground">시험항목명</TableHead>
-              <TableHead className="w-28 px-3 text-muted-foreground">대분류</TableHead>
-              <TableHead className="w-32 px-3 text-center text-muted-foreground">예상시간(h)</TableHead>
+              <TableHead
+                className="cursor-pointer select-none px-3 text-muted-foreground"
+                onClick={() => toggleSort("name")}
+              >
+                <span className="inline-flex items-center gap-1">
+                  시험항목명
+                  <SortIcon field="name" sortField={sortField} sortDir={sortDir} />
+                </span>
+              </TableHead>
+              <TableHead
+                className="w-28 cursor-pointer select-none px-3 text-muted-foreground"
+                onClick={() => toggleSort("category")}
+              >
+                <span className="inline-flex items-center gap-1">
+                  대분류
+                  <SortIcon field="category" sortField={sortField} sortDir={sortDir} />
+                </span>
+              </TableHead>
+              <TableHead
+                className="w-32 cursor-pointer select-none px-3 text-center text-muted-foreground"
+                onClick={() => toggleSort("estimatedHours")}
+              >
+                <span className="inline-flex items-center justify-center gap-1">
+                  예상시간(h)
+                  <SortIcon field="estimatedHours" sortField={sortField} sortDir={sortDir} />
+                </span>
+              </TableHead>
               <TableHead className="w-24 px-3 text-center text-muted-foreground">2인시험</TableHead>
               <TableHead className="w-20 px-3 text-center text-muted-foreground">활성</TableHead>
               <TableHead className="w-24 px-3 text-center text-muted-foreground">액션</TableHead>
@@ -491,11 +562,16 @@ export default function TestMasterPage() {
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={6} className="py-16 text-center text-sm text-muted-foreground">
-                  불러오는 중...
-                </TableCell>
-              </TableRow>
+              Array.from({ length: 6 }).map((_, i) => (
+                <TableRow key={i}>
+                  <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-36" /></TableCell>
+                  <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20" /></TableCell>
+                  <TableCell className="px-3 py-2.5 text-center"><Skeleton className="mx-auto h-4 w-8" /></TableCell>
+                  <TableCell className="px-3 py-2.5 text-center"><Skeleton className="mx-auto h-5 w-12 rounded-full" /></TableCell>
+                  <TableCell className="px-3 py-2.5 text-center"><Skeleton className="mx-auto h-5 w-10 rounded-full" /></TableCell>
+                  <TableCell className="px-3 py-2.5 text-center"><Skeleton className="mx-auto h-6 w-14" /></TableCell>
+                </TableRow>
+              ))
             ) : filtered.length === 0 ? (
               <TableRow className="hover:bg-transparent">
                 <TableCell colSpan={6} className="py-16 text-center text-sm text-muted-foreground">
@@ -503,7 +579,7 @@ export default function TestMasterPage() {
                 </TableCell>
               </TableRow>
             ) : (
-              filtered.map((row) => (
+              sortedData.map((row) => (
                 <TableRow key={row.id}>
                   <TableCell className="px-3 py-2.5 font-medium text-foreground">
                     {row.name}

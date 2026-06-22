@@ -4,8 +4,10 @@ import { useCallback, useEffect, useState } from "react"
 import {
   Play, CheckCircle2, Circle, Loader2, AlertTriangle, Clock, XCircle, ShieldAlert, ClipboardList,
 } from "lucide-react"
+import { Skeleton } from "@frontend/components/ui/skeleton"
 import { DateField } from "@frontend/components/ui/date-field"
 import { useLockBodyScroll } from "@frontend/hooks/use-lock-body-scroll"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@frontend/components/ui/select"
 
 interface JobItem {
   id: string; testItemName: string; sequenceOrder: number
@@ -281,7 +283,69 @@ export default function MyTasksPage() {
   const activeJobs = jobs.filter(j => j.status === "진행중" || j.status === "검토중" || j.status === "지연")
   const doneJobs = jobs.filter(j => j.status === "완료")
 
-  if (loading) return <div className="p-3 md:p-5 text-sm text-slate-400">불러오는 중…</div>
+  if (loading) return (
+    <div className="flex flex-col gap-4 p-3 md:p-5">
+      {/* 헤더 */}
+      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+        <Skeleton className="h-5 w-24" />
+        <Skeleton className="mt-1.5 h-3 w-72" />
+      </div>
+      {/* ① 배정완료 · 시작 대기 */}
+      <section>
+        <Skeleton className="mb-2 h-3 w-36" />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="mt-1 h-3 w-1/2" />
+                </div>
+              </div>
+              <div className="mt-2 flex items-center gap-2">
+                <Skeleton className="h-3 w-20" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+              <Skeleton className="mt-3 h-9 w-full rounded-lg" />
+            </div>
+          ))}
+        </div>
+      </section>
+      {/* ② 진행 중 */}
+      <section>
+        <Skeleton className="mb-2 h-3 w-24" />
+        <div className="flex flex-col gap-3">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="rounded-xl border border-slate-200 bg-white shadow-sm">
+              <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-4 w-56" />
+                <div className="flex gap-2">
+                  <Skeleton className="h-8 w-36 rounded-lg" />
+                  <Skeleton className="h-8 w-36 rounded-lg" />
+                  <Skeleton className="h-8 w-20 rounded-full" />
+                </div>
+              </div>
+              <div className="px-4 py-3">
+                <Skeleton className="mb-2 h-3 w-32" />
+                <div className="flex flex-col gap-1">
+                  {Array.from({ length: 3 }).map((_, j) => (
+                    <div key={j} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <Skeleton className="h-4 w-4 rounded-full" />
+                        <Skeleton className="h-4 w-32" />
+                      </div>
+                      <Skeleton className="h-7 w-14 rounded-md" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  )
 
   if (!linked) {
     return (
@@ -447,13 +511,17 @@ export default function MyTasksPage() {
                 />
               </div>
             </div>
-            <select
+            <Select
               value={job.status}
-              onChange={e => patchJob(job.id, { status: e.target.value })}
-              className={`h-8 rounded-full border px-2 text-[11px] font-semibold focus-visible:outline-none ${STATUS_CLS[job.status] ?? ""}`}
+              onValueChange={v => patchJob(job.id, { status: v })}
             >
-              {STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}
-            </select>
+              <SelectTrigger className={`h-8 rounded-full border px-2 text-[11px] font-semibold focus-visible:outline-none ${STATUS_CLS[job.status] ?? ""}`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 

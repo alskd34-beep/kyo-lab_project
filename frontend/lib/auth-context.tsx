@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 
-export type UserRole = 'admin' | 'user'
+export type UserRole = 'admin' | 'tester'
 
 export interface AuthUser {
   id:          string
@@ -11,6 +11,7 @@ export interface AuthUser {
   displayName: string | null
   avatarUrl:   string | null
   role:        UserRole
+  customerNo:  number | null
 }
 
 interface AuthCtx {

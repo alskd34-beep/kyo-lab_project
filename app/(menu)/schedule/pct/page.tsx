@@ -10,6 +10,7 @@
 
 import { useState, useMemo, useCallback, useEffect, useRef } from "react"
 import { Card, CardContent } from "@frontend/components/ui/card"
+import { Skeleton } from "@frontend/components/ui/skeleton"
 import { Button } from "@frontend/components/ui/button"
 import { cn } from "@frontend/lib/utils"
 import {
@@ -1055,6 +1056,19 @@ export default function PctPage() {
               </CardContent>
             </Card>
           </>
+        )}
+
+        {/* 시트 로딩 중 스켈레톤 */}
+        {loading && rows.length === 0 && (
+          <Card className={`${BORDER} ${CARD_BG}`}>
+            <CardContent className="p-3 sm:p-4">
+              <div className="space-y-3">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <Skeleton key={i} className="h-10 w-full" />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {/* 데이터 없을 때 안내 */}
