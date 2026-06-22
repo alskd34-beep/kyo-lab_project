@@ -8,6 +8,7 @@ export interface TesterRow {
   id: string
   employeeNo: string
   name: string
+  avatarUrl: string | null
   canSolo: boolean
   canDuo: boolean
   isActive: boolean
@@ -32,11 +33,12 @@ export interface CapabilityMatrixRow {
   proficiencyLevel: ProficiencyLevel
 }
 
-function mapTester(r: Record<string, unknown>, link?: { userId: string; username: string; customerNo: number | null }): TesterRow {
+function mapTester(r: Record<string, unknown>, link?: { userId: string; username: string; customerNo: number | null; avatarUrl: string | null }): TesterRow {
   return {
     id:         r.id as string,
     employeeNo: r.employee_no as string,
     name:       r.name as string,
+    avatarUrl:  link?.avatarUrl ?? null,
     canSolo:    r.can_solo as boolean,
     canDuo:     r.can_duo as boolean,
     isActive:   r.is_active as boolean,
@@ -57,14 +59,15 @@ export async function listTesters(): Promise<TesterRow[]> {
   // 연결된 사용자 계정(1:1) 매핑
   const { data: users } = await supabase
     .from('users')
-    .select('id, username, tester_id, customer_no')
+    .select('id, username, tester_id, customer_no, avatar_url')
     .not('tester_id', 'is', null)
-  const linkByTester = new Map<string, { userId: string; username: string; customerNo: number | null }>()
+  const linkByTester = new Map<string, { userId: string; username: string; customerNo: number | null; avatarUrl: string | null }>()
   for (const u of (users ?? []) as Record<string, unknown>[]) {
     linkByTester.set(u.tester_id as string, {
       userId:     u.id as string,
       username:   u.username as string,
       customerNo: (u.customer_no as number) ?? null,
+      avatarUrl:  (u.avatar_url as string | null) ?? null,
     })
   }
 

@@ -6,6 +6,7 @@ import { RefreshCw, Loader2, Search, History, ShieldAlert, ChevronDown, ChevronU
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@frontend/components/ui/select'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@frontend/components/ui/table'
 import { Skeleton } from "@frontend/components/ui/skeleton"
+import { TesterOptionLabel, primeTesterProfileCache } from "@frontend/lib/tester-profiles"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 interface ReassignmentRow {
@@ -24,7 +25,7 @@ interface ReassignmentRow {
 }
 interface StatItem { name: string; count: number }
 interface Stats { byTester: StatItem[]; byProduct: StatItem[] }
-interface Tester { id: string; name: string }
+interface Tester { id: string; name: string; avatarUrl?: string | null; employeeNo?: string | null }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function ReassignmentsPage() {
@@ -89,9 +90,10 @@ export default function ReassignmentsPage() {
       }
       const rData = await rRes.json()
       const tData = await tRes.json()
+      primeTesterProfileCache(tData.rows ?? [])
       setRows(rData.rows ?? [])
       setStats(rData.stats ?? { byTester: [], byProduct: [] })
-      setTesters((tData.rows ?? []).map((t: Tester) => ({ id: t.id, name: t.name })))
+      setTesters(tData.rows ?? [])
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "목록을 불러오지 못했습니다.")
     } finally {
@@ -148,7 +150,11 @@ export default function ReassignmentsPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">전체 시험자(변경 후)</SelectItem>
-            {testers.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+            {testers.map(t => (
+              <SelectItem key={t.id} value={t.id}>
+                <TesterOptionLabel testerId={t.id} name={t.name} />
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <div className="flex items-center gap-1.5">

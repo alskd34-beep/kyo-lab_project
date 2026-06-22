@@ -61,11 +61,10 @@ const NAV_SECTIONS: NavSection[] = [
         icon: <Calendar size={18} />,
         label: "스케줄",
         live: true,
-        defaultPath: "/schedule/pct",
+        defaultPath: "/schedule/orders",
         subItems: [
-          { id: "schedule-pct", label: "AI 스케줄", live: true },
           { id: "schedule-monthly", label: "월간 스케줄", live: true },
-          { id: "schedule-orders", label: "오더 배정", live: true, adminOnly: true },
+          { id: "schedule-orders", label: "AI 스케줄", live: true, adminOnly: true },
           { id: "schedule-vacation", label: "휴가 캘린더", live: true },
           { id: "schedule-holidays", label: "공휴일 캘린더", live: true, adminOnly: true },
           { id: "schedule-reassign", label: "재배정 이력", live: true, adminOnly: true },
@@ -183,7 +182,6 @@ const ALL_NAV = NAV_SECTIONS.flatMap((s) => s.items)
 const PATH_MAP: Record<string, string> = {
   home: "/home",
   // 스케줄
-  "schedule-pct": "/schedule/pct",
   "schedule-weekly-plan": "/schedule/weekly-plan",
   "schedule-weekly": "/schedule/weekly",
   "schedule-monthly": "/schedule/monthly",

@@ -18,6 +18,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@frontend/components/ui/select'
 import { cn } from "@frontend/lib/utils"
 import { useLockBodyScroll } from "@frontend/hooks/use-lock-body-scroll"
+import { TesterAvatar } from "@frontend/lib/tester-profiles"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface OrderRow {
@@ -60,20 +61,6 @@ const GROUP_ACCENTS = [
   "bg-amber-500", "bg-rose-500", "bg-teal-500", "bg-fuchsia-500",
 ]
 const DAILY_CAPACITY = 8 // 하루 가용 공수(일) 기준 — 부하율 표시용
-
-const AVATAR_EMOJIS = ["🧑‍🔬", "👩‍🔬", "🧑‍⚕️", "👨‍⚕️", "🦊", "🐼", "🐯", "🐨", "🐵", "🦁", "🐱", "🐶", "🐧", "🐰"]
-function avatarEmoji(name: string): string {
-  let h = 0
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0
-  return AVATAR_EMOJIS[h % AVATAR_EMOJIS.length]
-}
-function Avatar({ name, className }: { name: string; className?: string }) {
-  return (
-    <span className={cn("inline-flex shrink-0 items-center justify-center rounded-xl bg-slate-100 ring-1 ring-slate-200", className)}>
-      {avatarEmoji(name)}
-    </span>
-  )
-}
 
 function isoToWeek(iso: string | null): { key: string; label: string } {
   if (!iso) return { key: "no-date", label: "기간 미정" }
@@ -193,7 +180,7 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
           {/* 헤더 */}
           <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm md:flex-row md:items-center md:justify-between">
             <div className="flex items-center gap-3">
-              <Avatar name={testerName} className="size-11 text-2xl" />
+              <TesterAvatar testerId={testerId} name={testerName} size="md" className="size-11 rounded-xl text-2xl" />
               <div>
                 <h2 className="text-lg font-black tracking-tight text-slate-900">{testerName}</h2>
                 <p className="text-xs font-medium text-slate-500">QC 과제 배정 현황</p>
@@ -293,7 +280,7 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
           <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4">
             {/* 프로필 */}
             <div className="flex items-center gap-3">
-              <Avatar name={testerName} className="size-12 text-2xl" />
+              <TesterAvatar testerId={testerId} name={testerName} size="md" className="size-12 rounded-xl text-2xl" />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-base font-bold text-slate-900">{testerName}</p>
                 <p className="truncate text-xs text-slate-500">{subtitle ?? "QC 시험팀"}</p>

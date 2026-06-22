@@ -43,11 +43,10 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { id: "home", icon: Home, label: "홈" },
       {
-        id: "schedule", icon: Calendar, label: "스케줄", defaultPath: "/schedule/pct",
+        id: "schedule", icon: Calendar, label: "스케줄", defaultPath: "/schedule/orders",
         subItems: [
-          { id: "schedule-pct", label: "AI 스케줄", live: true },
           { id: "schedule-monthly", label: "월간 스케줄", live: true },
-          { id: "schedule-orders", label: "오더 배정", adminOnly: true, live: true },
+          { id: "schedule-orders", label: "AI 스케줄", adminOnly: true, live: true },
           { id: "schedule-vacation", label: "휴가 캘린더", live: true },
           { id: "schedule-holidays", label: "공휴일 캘린더", adminOnly: true, live: true },
           { id: "schedule-reassign", label: "재배정 이력", adminOnly: true, live: true },
@@ -143,7 +142,6 @@ const NAV_SECTIONS: NavSection[] = [
 
 const PATH_MAP: Record<string, string> = {
   home: "/home",
-  "schedule-pct": "/schedule/pct",
   "schedule-monthly": "/schedule/monthly",
   "schedule-orders": "/schedule/orders",
   "schedule-groups": "/schedule/groups",

@@ -23,6 +23,12 @@ interface AuthCtx {
 }
 
 const Ctx = createContext<AuthCtx | null>(null)
+const AUTO_LOGIN_COOKIE = 'kd_auto_login'
+
+function clearAutoLoginCookie() {
+  if (typeof document === 'undefined') return
+  document.cookie = `${AUTO_LOGIN_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user,    setUser]    = useState<AuthUser | null>(null)
@@ -71,6 +77,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => { if (refreshTimer.current) clearInterval(refreshTimer.current) }
   }, [user, refresh])
 
+  // 절전/탭 비활성으로 타이머가 멈췄다가 돌아온 경우 즉시 세션을 갱신합니다.
+  useEffect(() => {
+    if (!user) return
+
+    const refreshOnResume = () => {
+      if (document.visibilityState === 'visible') void refresh()
+    }
+
+    window.addEventListener('focus', refreshOnResume)
+    document.addEventListener('visibilitychange', refreshOnResume)
+    return () => {
+      window.removeEventListener('focus', refreshOnResume)
+      document.removeEventListener('visibilitychange', refreshOnResume)
+    }
+  }, [user, refresh])
+
   const login = useCallback(async (username: string, password: string) => {
     const r = await fetch('/api/auth/login', {
       method:  'POST',
@@ -88,6 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
+    clearAutoLoginCookie()
     setUser(null)
     router.push('/login')
   }, [router])

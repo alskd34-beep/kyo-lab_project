@@ -19,8 +19,12 @@ const supabase = createClient(SUPABASE_URL, SERVICE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
 })
 
+type ExecSqlRpcClient = {
+  rpc: (fn: 'exec_sql', args: { query: string }) => Promise<{ error: { message?: string } | null }>
+}
+
 async function execSqlViaRpc(sql: string): Promise<void> {
-  const { error } = await (supabase as any).rpc('exec_sql', { query: sql })
+  const { error } = await (supabase as unknown as ExecSqlRpcClient).rpc('exec_sql', { query: sql })
   if (error) throw error
 }
 
@@ -66,8 +70,8 @@ async function runMigrationFiles(): Promise<void> {
       try {
         await execSqlViaRpc(stmt)
         if ((i + 1) % 50 === 0) console.log(`  ${i + 1}/${statements.length} 완료`)
-      } catch (err: any) {
-        const msg = err?.message ?? String(err)
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
         // 이미 존재하는 객체는 무시
         if (msg.includes('already exists') || msg.includes('duplicate')) {
           continue
@@ -85,7 +89,7 @@ async function main() {
   console.log(`Supabase URL: ${SUPABASE_URL}\n`)
 
   // exec_sql RPC 존재 여부 확인
-  const { error: testErr } = await (supabase as any).rpc('exec_sql', { query: 'SELECT 1' })
+  const { error: testErr } = await (supabase as unknown as ExecSqlRpcClient).rpc('exec_sql', { query: 'SELECT 1' })
   if (testErr) {
     await createExecFn()
     process.exit(1)

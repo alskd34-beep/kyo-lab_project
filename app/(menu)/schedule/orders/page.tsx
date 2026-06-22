@@ -9,6 +9,7 @@ import {
 import { cn } from "@frontend/lib/utils"
 import { useLockBodyScroll } from "@frontend/hooks/use-lock-body-scroll"
 import { AssigneeDetailModal } from "@frontend/components/schedule/assignee-detail-modal"
+import { TesterAvatar, TesterOptionLabel, primeTesterProfileCache } from "@frontend/lib/tester-profiles"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
 import { Badge } from "@frontend/components/ui/badge"
@@ -40,11 +41,12 @@ interface OrderRow {
   productSynced: boolean
   note: string | null
   ingestState: string
+  source: "manual" | "auto"
   workdays: number | null
   hasJob: boolean
   locked: boolean
 }
-interface Tester { id: string; name: string }
+interface Tester { id: string; name: string; avatarUrl?: string | null; employeeNo?: string | null }
 interface EditRow {
   id: string; field: string; oldValue: string | null; newValue: string | null
   reason: string; editedAt: string; editedBy: string | null; editedByName: string | null
@@ -52,7 +54,7 @@ interface EditRow {
 
 // 화면에 렌더링할 그룹(주차/담당자/상태 공통 형태)
 interface RenderGroup {
-  key: string; label: string; color: string; rows: OrderRow[]; meta: string; isThisWeek?: boolean
+  key: string; label: string; color: string; rows: OrderRow[]; meta: string; isThisWeek?: boolean; assigneeTesterId?: string | null
 }
 
 type TabId = "week" | "assignee" | "status"
@@ -111,28 +113,6 @@ function thisWeekKey(): string {
 
 const pushTo = (m: Map<string, OrderRow[]>, k: string, r: OrderRow) => {
   const arr = m.get(k); if (arr) arr.push(r); else m.set(k, [r])
-}
-
-// 담당자 프로필 이미지가 아직 없어 이름 기반으로 일관된 이모지 아바타를 부여한다.
-// (같은 이름은 항상 같은 이모지 → 식별성 유지)
-const AVATAR_EMOJIS = ["🧑‍🔬", "👩‍🔬", "🧑‍⚕️", "👨‍⚕️", "🦊", "🐼", "🐯", "🐨", "🐵", "🦁", "🐱", "🐶", "🐧", "🐰"]
-function avatarEmoji(name: string): string {
-  let h = 0
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0
-  return AVATAR_EMOJIS[h % AVATAR_EMOJIS.length]
-}
-function AssigneeAvatar({ name, size = "sm" }: { name: string; size?: "sm" | "md" }) {
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-md bg-muted ring-1 ring-border",
-        size === "sm" ? "size-7 text-[16px]" : "size-9 text-[22px]",
-      )}
-    >
-      {avatarEmoji(name)}
-    </span>
-  )
 }
 
 // 완료예정일 임박 여부 (오늘 기준 3일 이내·기한 경과 포함, 완료·삭제 제외)
@@ -262,8 +242,9 @@ export default function OrdersPage() {
       const oData = await oRes.json()
       const tData = await tRes.json()
       const fData = await fRes.json().catch(() => ({ rows: [] }))
+      primeTesterProfileCache(tData.rows ?? [])
       setRows(oData.rows ?? [])
-      setTesters((tData.rows ?? []).map((t: Tester) => ({ id: t.id, name: t.name })))
+      setTesters(tData.rows ?? [])
       setFamilies((fData.rows ?? []).map((f: { id: string; name: string; members: { productCode: string }[] }) =>
         ({ id: f.id, name: f.name, codes: f.members.map(m => m.productCode) })))
     } catch {
@@ -368,7 +349,7 @@ export default function OrdersPage() {
     } finally { setBusy(null) }
   }
 
-  const unsyncedCount = rows.filter(r => !r.productSynced).length
+  const unsyncedCount = rows.filter(r => r.source === "auto" && !r.productSynced).length
 
   // ─── 이름 검색 (품목명·담당자·품목코드·제조번호) ──────────────────────────
   const filteredRows = useMemo(() => {
@@ -446,16 +427,20 @@ export default function OrdersPage() {
     }
     if (tab === "assignee") {
       const m = new Map<string, OrderRow[]>()
-      for (const r of scopedRows) pushTo(m, r.assigneeName ?? "__none", r)
+      for (const r of scopedRows) pushTo(m, r.assigneeTesterId ?? "__none", r)
       let ci = 0
       return Array.from(m.entries())
-        .map(([key, rs]) => ({
+        .map(([key, rs]) => {
+          const assigneeName = rs.find(r => r.assigneeName)?.assigneeName ?? null
+          return {
           key: `as:${key}`,
-          label: key === "__none" ? "미배정" : key,
+          label: key === "__none" ? "미배정" : assigneeName ?? "이름없음",
           color: key === "__none" ? "bg-slate-400" : GROUP_COLORS[ci++ % GROUP_COLORS.length],
           rows: rs,
           meta: `${rs.length}건`,
-        }))
+          assigneeTesterId: key === "__none" ? null : key,
+          }
+        })
         .sort((a, b) => {
           const an = a.label === "미배정" ? 1 : 0
           const bn = b.label === "미배정" ? 1 : 0
@@ -604,7 +589,8 @@ export default function OrdersPage() {
           <div className={cn("flex items-center gap-1.5", indented && "pl-6")}>
             {indented && <span className="text-muted-foreground/60">└</span>}
             {r.productName}
-            {!r.productSynced && (
+            <SourceBadge source={r.source} />
+            {r.source === "auto" && !r.productSynced && (
               <Badge variant="outline" className="border-amber-200 text-amber-700">미동기화</Badge>
             )}
           </div>
@@ -628,7 +614,7 @@ export default function OrdersPage() {
                 title={`${r.assigneeName} 담당 오더 보기`}
                 className="inline-flex items-center gap-1.5 font-medium text-foreground hover:text-primary"
               >
-                <AssigneeAvatar name={r.assigneeName} />
+                <TesterAvatar testerId={r.assigneeTesterId} name={r.assigneeName} size="sm" />
                 <span className="underline-offset-2 hover:underline">{r.assigneeName}</span>
               </button>
             : <span className="text-muted-foreground">미배정</span>}
@@ -670,7 +656,7 @@ export default function OrdersPage() {
       {/* 헤더 */}
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-foreground">오더 배정 · 관리</h1>
+          <h1 className="text-xl font-semibold text-foreground">AI 스케줄 · 관리</h1>
           <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             제조부서 PCT 적재 오더의 담당자 배정과 수정을 관리합니다.
             {unsyncedCount > 0 && (
@@ -837,7 +823,7 @@ export default function OrdersPage() {
                   )}
                 >
                   {tab === "assignee" && g.label !== "미배정"
-                    ? <AssigneeAvatar name={g.label} size="md" />
+                    ? <TesterAvatar testerId={g.assigneeTesterId} name={g.label} size="md" />
                     : <span className={cn("h-3 w-1.5 shrink-0 rounded-full", g.color)} />}
                   <span className="flex-1 text-sm font-semibold text-foreground">
                     {g.label}
@@ -953,7 +939,11 @@ export default function OrdersPage() {
                     <SelectTrigger className="h-9 w-40"><SelectValue placeholder="담당자 선택" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">미배정</SelectItem>
-                      {testers.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                      {testers.map(t => (
+                        <SelectItem key={t.id} value={t.id}>
+                          <TesterOptionLabel testerId={t.id} name={t.name} />
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <Button
@@ -992,6 +982,14 @@ function StatusBadge({ status }: { status: string }) {
       <span className={cn("size-1.5 rounded-full", STATUS_DOT[status] ?? "bg-slate-400")} />
       {status}
     </Badge>
+  )
+}
+
+function SourceBadge({ source }: { source: OrderRow["source"] }) {
+  return source === "manual" ? (
+    <Badge variant="outline" className="border-blue-200 text-blue-700">수동</Badge>
+  ) : (
+    <Badge variant="outline" className="border-emerald-200 text-emerald-700">자동</Badge>
   )
 }
 
@@ -1145,7 +1143,11 @@ function CreateModal({ testers, onClose, onCreated }: {
             <SelectTrigger className="!h-9 w-full px-3"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="none">미배정</SelectItem>
-              {testers.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+              {testers.map(t => (
+                <SelectItem key={t.id} value={t.id}>
+                  <TesterOptionLabel testerId={t.id} name={t.name} />
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </Field>
@@ -1168,6 +1170,7 @@ function CreateModal({ testers, onClose, onCreated }: {
 function EditModal({ order, testers, onClose, onSaved }: {
   order: OrderRow; testers: Tester[]; onClose: () => void; onSaved: () => void
 }) {
+  const isAutoOrder = order.source === "auto"
   const [form, setForm] = useState({
     productCode: order.productCode ?? "",
     productName: order.productName ?? "",
@@ -1186,16 +1189,13 @@ function EditModal({ order, testers, onClose, onSaved }: {
   const [err, setErr] = useState<string | null>(null)
 
   const save = async () => {
-    if (!form.productCode.trim() || !form.productName.trim() || !form.batchNo.trim()) {
+    if (!isAutoOrder && (!form.productCode.trim() || !form.productName.trim() || !form.batchNo.trim())) {
       setErr("품목코드·품목명·제조번호는 비울 수 없습니다."); return
     }
     if (!reason.trim()) { setErr("수정 사유는 필수입니다."); return }
     setSaving(true); setErr(null)
     try {
       const patch: Record<string, string | boolean | null> = {
-        productCode: form.productCode.trim(),
-        productName: form.productName.trim(),
-        batchNo: form.batchNo.trim(),
         dosageForm: form.dosageForm.trim() || null,
         packagingDate: form.packagingDate || null,
         dueDate: form.dueDate || null,
@@ -1204,6 +1204,11 @@ function EditModal({ order, testers, onClose, onSaved }: {
         status: form.status,
         assigneeTesterId: form.assigneeTesterId || null,
         note: form.note || null,
+      }
+      if (!isAutoOrder) {
+        patch.productCode = form.productCode.trim()
+        patch.productName = form.productName.trim()
+        patch.batchNo = form.batchNo.trim()
       }
       const res = await fetch("/api/pct-orders", {
         method: "PATCH", credentials: "include",
@@ -1220,13 +1225,20 @@ function EditModal({ order, testers, onClose, onSaved }: {
 
   return (
     <SlideOver title={`오더 수정 — ${order.productName}`} onClose={onClose}>
-      <p className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700">
-        품목코드·제조번호를 바꾸면 적재 자연키가 변경되어 다음 적재 시 신규로 인식될 수 있습니다. 신중히 수정하세요.
+      <p className={cn(
+        "mb-3 rounded-md border px-3 py-2 text-[11px]",
+        isAutoOrder
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : "border-blue-200 bg-blue-50 text-blue-700",
+      )}>
+        {isAutoOrder
+          ? "자동 적재 오더입니다. 품목코드·제조번호·품목명은 제조팀 원본 기준으로 고정됩니다."
+          : "수동 등록 오더입니다. 품목코드·제조번호·품목명까지 수정할 수 있으며 변경 내용은 이력에 남습니다."}
       </p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label="품목코드"><input value={form.productCode} onChange={e => setForm({ ...form, productCode: e.target.value })} className={cn(inputCls, "font-mono")} /></Field>
-        <Field label="제조번호"><input value={form.batchNo} onChange={e => setForm({ ...form, batchNo: e.target.value })} className={cn(inputCls, "font-mono")} /></Field>
-        <Field label="품목명" full><input value={form.productName} onChange={e => setForm({ ...form, productName: e.target.value })} className={inputCls} /></Field>
+        <Field label="품목코드"><input value={form.productCode} disabled={isAutoOrder} onChange={e => setForm({ ...form, productCode: e.target.value })} className={cn(inputCls, "font-mono disabled:bg-muted disabled:text-muted-foreground")} /></Field>
+        <Field label="제조번호"><input value={form.batchNo} disabled={isAutoOrder} onChange={e => setForm({ ...form, batchNo: e.target.value })} className={cn(inputCls, "font-mono disabled:bg-muted disabled:text-muted-foreground")} /></Field>
+        <Field label="품목명" full><input value={form.productName} disabled={isAutoOrder} onChange={e => setForm({ ...form, productName: e.target.value })} className={cn(inputCls, "disabled:bg-muted disabled:text-muted-foreground")} /></Field>
         <Field label="제형"><input value={form.dosageForm} onChange={e => setForm({ ...form, dosageForm: e.target.value })} placeholder="예: 내용고형제 (선택)" className={inputCls} /></Field>
         <Field label="포장일"><input type="date" value={form.packagingDate} onChange={e => setForm({ ...form, packagingDate: e.target.value })} className={inputCls} /></Field>
         <Field label="완료예정일"><input type="date" value={form.dueDate} onChange={e => setForm({ ...form, dueDate: e.target.value })} className={inputCls} /></Field>
@@ -1260,7 +1272,11 @@ function EditModal({ order, testers, onClose, onSaved }: {
             <SelectTrigger className="!h-9 w-full px-3"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="none">미배정</SelectItem>
-              {testers.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+              {testers.map(t => (
+                <SelectItem key={t.id} value={t.id}>
+                  <TesterOptionLabel testerId={t.id} name={t.name} />
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </Field>

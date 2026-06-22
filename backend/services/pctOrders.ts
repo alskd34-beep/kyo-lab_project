@@ -20,6 +20,7 @@ export interface PctOrderRow {
   productSynced: boolean
   note: string | null
   ingestState: string
+  source: 'manual' | 'auto'
   workdays: number | null   // 품목코드 기준 공수(일, DAY) — product_workload.avg_workdays
   hasJob: boolean           // QC 작업 시작 여부
   locked: boolean           // 관리자 확정/LOCK (원칙1·3). 컬럼 미적용 환경에서는 false
@@ -27,12 +28,13 @@ export interface PctOrderRow {
   updatedAt: string
 }
 
-// 수정 가능 필드 (제조팀 제공이 우선순위이나 사유 작성 시 수정 가능)
+// 수정 가능 필드. 자동 적재 오더는 품목코드·품목명·제조번호를 서버에서 보호한다.
 const EDITABLE_FIELDS = [
   'productCode', 'productName', 'batchNo', 'dosageForm',
   'packagingDate', 'dueDate', 'isUrgent', 'method', 'status', 'note', 'assigneeTesterId',
 ] as const
 type EditableField = (typeof EDITABLE_FIELDS)[number]
+const AUTO_IMMUTABLE_FIELDS = ['productCode', 'productName', 'batchNo'] as const
 
 const FIELD_TO_COL: Record<EditableField, string> = {
   productCode: 'product_code',
@@ -111,6 +113,7 @@ export async function listOrders(filters: {
     productSynced: !!o.product_synced,
     note: (o.note as string) ?? null,
     ingestState: o.ingest_state as string,
+    source: o.ingest_state === 'manual' ? 'manual' : 'auto',
     workdays: workdaysByCode.get(o.product_code as string) ?? null,
     hasJob: jobOrderIds.has(o.id as string),
     locked: !!o.locked,   // select('*') 결과. 컬럼 미적용 시 undefined → false
@@ -190,6 +193,7 @@ export async function createOrder(input: {
     productSynced: !!o.product_synced,
     note: (o.note as string) ?? null,
     ingestState: o.ingest_state as string,
+    source: 'manual',
     workdays: null,
     hasJob: false,
     locked: !!o.locked,
@@ -229,11 +233,13 @@ export async function updateOrderWithReason(
   // 현재값 로드
   const { data: current, error: curErr } = await supabaseAdmin
     .from('pct_orders')
-    .select('product_code, product_name, batch_no, dosage_form, packaging_date, due_date, is_urgent, method, status, note, assignee_tester_id')
+    .select('product_code, product_name, batch_no, dosage_form, packaging_date, due_date, is_urgent, method, status, note, assignee_tester_id, ingest_state')
     .eq('id', id)
     .single()
   if (curErr) throw curErr
 
+  const currentRow = current as Record<string, unknown>
+  const isManual = currentRow.ingest_state === 'manual'
   const dbPatch: Record<string, unknown> = {}
   const edits: Array<{ field: string; old_value: string | null; new_value: string | null }> = []
 
@@ -241,10 +247,13 @@ export async function updateOrderWithReason(
     if (!(field in patch)) continue
     const col = FIELD_TO_COL[field]
     const newVal = patch[field] ?? null
-    const oldVal = (current as Record<string, unknown>)[col] ?? null
+    const oldVal = currentRow[col] ?? null
     const oldStr = oldVal === null ? null : String(oldVal)
     const newStr = newVal === null ? null : String(newVal)
     if (oldStr === newStr) continue
+    if (!isManual && AUTO_IMMUTABLE_FIELDS.includes(field as (typeof AUTO_IMMUTABLE_FIELDS)[number])) {
+      throw new Error('자동 적재 오더는 품목코드·품목명·제조번호를 수정할 수 없습니다.')
+    }
     dbPatch[col] = newVal
     edits.push({ field, old_value: oldStr, new_value: newStr })
   }

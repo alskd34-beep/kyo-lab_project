@@ -7,6 +7,14 @@ import { FlaskConical, Lock, User as UserIcon, Eye, EyeOff } from 'lucide-react'
 
 const LS_SAVED_ID    = 'kd-saved-id'
 const LS_AUTO_LOGIN  = 'kd-auto-login'
+const AUTO_LOGIN_COOKIE = 'kd_auto_login'
+const REFRESH_TTL_SEC = 60 * 60 * 24 * 7
+
+function writeAutoLoginCookie(enabled: boolean) {
+  document.cookie = enabled
+    ? `${AUTO_LOGIN_COOKIE}=1; Path=/; Max-Age=${REFRESH_TTL_SEC}; SameSite=Lax`
+    : `${AUTO_LOGIN_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`
+}
 
 function readLoginPrefs() {
   if (typeof window === 'undefined') {
@@ -53,7 +61,10 @@ function LoginForm() {
   // 자동로그인 체크되어있고 토큰이 유효해 user가 복원되면 홈으로 이동
   useEffect(() => {
     if (loading) return
-    if (user && autoLogin) router.replace(next)
+    if (user && autoLogin) {
+      try { writeAutoLoginCookie(true) } catch {}
+      router.replace(next)
+    }
   }, [user, loading, autoLogin, router, next])
 
   const submit = async (e: React.FormEvent) => {
@@ -73,6 +84,7 @@ function LoginForm() {
       else            localStorage.removeItem(LS_SAVED_ID)
       if (autoLogin)  localStorage.setItem(LS_AUTO_LOGIN, '1')
       else            localStorage.removeItem(LS_AUTO_LOGIN)
+      writeAutoLoginCookie(autoLogin)
     } catch {}
 
     router.replace(next)

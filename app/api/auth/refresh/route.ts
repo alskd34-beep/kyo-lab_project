@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
           displayName: user.displayName,
           avatarUrl:   user.avatarUrl,
           role:        user.role,
+          customerNo:  user.customerNo,
         },
       }),
       { status: 200, headers },

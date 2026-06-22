@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 import { ChevronDown, ChevronUp, ImagePlus, Pencil, Save, Trash2, Upload, UserPlus, X } from 'lucide-react'
 import { Skeleton } from '@frontend/components/ui/skeleton'
 import { useAuth } from '@frontend/lib/auth-context'
+import { TesterAvatar, invalidateTesterProfileCache } from '@frontend/lib/tester-profiles'
 import {
   Dialog,
   DialogContent,
@@ -42,25 +43,29 @@ interface UserRow {
   testerName:  string | null
 }
 
+type SortField = 'displayName' | 'username' | 'role' | 'customerNo' | 'lastLoginAt'
+
 /** 내부 고객번호 표기 — 5자리 zero-pad (미부여 시 '-') */
 function fmtCustomerNo(n: number | null): string {
   return n == null ? '-' : String(n).padStart(5, '0')
 }
 
-const MAX_AVATAR_SIZE = 1024 * 1024
-
-// 임시 프로필 — 포유류 이모지(이름 기반으로 항상 동일하게 부여)
-const MAMMAL_EMOJIS = [
-  '🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮',
-  '🐷', '🐵', '🐗', '🐴', '🦄', '🐺', '🦝', '🦓', '🦌', '🦬', '🐂', '🐎',
-  '🐖', '🐏', '🐑', '🐐', '🦙', '🦒', '🐘', '🦣', '🦏', '🦛', '🐁', '🐀',
-  '🐇', '🦫', '🦦', '🦥', '🦨', '🦡', '🐈', '🐕', '🐅', '🐆', '🐃', '🐄',
-]
-function mammalEmoji(seed: string): string {
-  let h = 0
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0
-  return MAMMAL_EMOJIS[h % MAMMAL_EMOJIS.length]
+function SortIcon({
+  field,
+  sortField,
+  sortDir,
+}: {
+  field: SortField
+  sortField: SortField
+  sortDir: 'asc' | 'desc'
+}) {
+  if (sortField !== field) return <ChevronDown size={11} className="ml-1 inline opacity-30" />
+  return sortDir === 'asc'
+    ? <ChevronUp size={11} className="ml-1 inline text-primary" />
+    : <ChevronDown size={11} className="ml-1 inline text-primary" />
 }
+
+const MAX_AVATAR_SIZE = 1024 * 1024
 
 function readImageAsDataUrl(file: File): Promise<string> {
   if (!file.type.startsWith('image/')) {
@@ -86,7 +91,7 @@ export default function UsersAdminPage() {
   const [creating, setCreating] = useState(false)
   const [editingUser, setEditingUser] = useState<UserRow | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [sortField, setSortField] = useState<'displayName' | 'username' | 'role' | 'customerNo' | 'lastLoginAt'>('customerNo')
+  const [sortField, setSortField] = useState<SortField>('customerNo')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
   const sortedUsers = useMemo(() => {
@@ -106,16 +111,9 @@ export default function UsersAdminPage() {
     })
   }, [users, sortField, sortDir])
 
-  function toggleSort(field: typeof sortField) {
+  function toggleSort(field: SortField) {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
     else { setSortField(field); setSortDir('asc') }
-  }
-
-  function SortIcon({ field }: { field: typeof sortField }) {
-    if (sortField !== field) return <ChevronDown size={11} className="ml-1 inline opacity-30" />
-    return sortDir === 'asc'
-      ? <ChevronUp size={11} className="ml-1 inline text-primary" />
-      : <ChevronDown size={11} className="ml-1 inline text-primary" />
   }
 
   const load = useCallback(async () => {
@@ -151,6 +149,7 @@ export default function UsersAdminPage() {
     if (!confirm('정말 삭제하시겠습니까?')) return
     const r = await fetch(`/api/users/${id}`, { method: 'DELETE', credentials: 'include' })
     if (r.ok) {
+      invalidateTesterProfileCache()
       void load()
     } else {
       setError((await r.json().catch(() => ({}))).error ?? '삭제 실패')
@@ -159,6 +158,7 @@ export default function UsersAdminPage() {
 
   const handleSaved = async (savedUser: UserRow) => {
     setEditingUser(null)
+    invalidateTesterProfileCache()
     await load()
     if (savedUser.id === me?.id) await refresh()
   }
@@ -194,12 +194,12 @@ export default function UsersAdminPage() {
         <Table className="w-full min-w-[640px] text-sm">
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead className="cursor-pointer select-none px-3 text-left text-muted-foreground" onClick={() => toggleSort('customerNo')}>고객번호<SortIcon field="customerNo" /></TableHead>
-              <TableHead className="cursor-pointer select-none px-3 text-left text-muted-foreground" onClick={() => toggleSort('displayName')}>사용자<SortIcon field="displayName" /></TableHead>
-              <TableHead className="cursor-pointer select-none px-3 text-left text-muted-foreground" onClick={() => toggleSort('username')}>사번(아이디)<SortIcon field="username" /></TableHead>
-              <TableHead className="cursor-pointer select-none px-3 text-left text-muted-foreground" onClick={() => toggleSort('role')}>역할<SortIcon field="role" /></TableHead>
+              <TableHead className="cursor-pointer select-none px-3 text-left text-muted-foreground" onClick={() => toggleSort('customerNo')}>고객번호<SortIcon field="customerNo" sortField={sortField} sortDir={sortDir} /></TableHead>
+              <TableHead className="cursor-pointer select-none px-3 text-left text-muted-foreground" onClick={() => toggleSort('displayName')}>사용자<SortIcon field="displayName" sortField={sortField} sortDir={sortDir} /></TableHead>
+              <TableHead className="cursor-pointer select-none px-3 text-left text-muted-foreground" onClick={() => toggleSort('username')}>사번(아이디)<SortIcon field="username" sortField={sortField} sortDir={sortDir} /></TableHead>
+              <TableHead className="cursor-pointer select-none px-3 text-left text-muted-foreground" onClick={() => toggleSort('role')}>역할<SortIcon field="role" sortField={sortField} sortDir={sortDir} /></TableHead>
               <TableHead className="px-3 text-left text-muted-foreground">상태</TableHead>
-              <TableHead className="cursor-pointer select-none px-3 text-left text-muted-foreground" onClick={() => toggleSort('lastLoginAt')}>마지막 로그인<SortIcon field="lastLoginAt" /></TableHead>
+              <TableHead className="cursor-pointer select-none px-3 text-left text-muted-foreground" onClick={() => toggleSort('lastLoginAt')}>마지막 로그인<SortIcon field="lastLoginAt" sortField={sortField} sortDir={sortDir} /></TableHead>
               <TableHead className="px-3 text-muted-foreground"></TableHead>
             </TableRow>
           </TableHeader>
@@ -331,16 +331,14 @@ export default function UsersAdminPage() {
 }
 
 function UserAvatar({ user }: { user: UserRow }) {
-  if (user.avatarUrl) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src={user.avatarUrl} alt="" className="size-8 shrink-0 rounded-xl object-cover ring-1 ring-border" />
-    )
-  }
   return (
-    <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-xl bg-muted text-lg ring-1 ring-border" aria-hidden>
-      {mammalEmoji(user.username ?? user.displayName ?? '?')}
-    </span>
+    <TesterAvatar
+      testerId={user.testerId}
+      name={user.displayName ?? user.testerName ?? user.username}
+      avatarUrl={user.avatarUrl}
+      size="md"
+      className="rounded-xl"
+    />
   )
 }
 
@@ -390,6 +388,7 @@ function CreateForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: 
       setErr((await r.json().catch(() => ({}))).error ?? '생성 실패')
       return
     }
+    invalidateTesterProfileCache()
     onCreated()
   }
 
@@ -427,24 +426,13 @@ function EditUserDialog({
   onOpenChange: (open: boolean) => void
   onSaved: (user: UserRow) => void | Promise<void>
 }) {
-  const [displayName, setDisplayName] = useState('')
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
-  const [role, setRole] = useState<'admin' | 'tester'>('tester')
-  const [isActive, setIsActive] = useState(true)
+  const [displayName, setDisplayName] = useState(user?.displayName ?? '')
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(user?.avatarUrl ?? null)
+  const [role, setRole] = useState<'admin' | 'tester'>(user?.role === 'admin' ? 'admin' : 'tester')
+  const [isActive, setIsActive] = useState(user?.isActive ?? true)
   const [password, setPassword] = useState('')
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-
-  useEffect(() => {
-    if (!user) return
-    setDisplayName(user.displayName ?? '')
-    setAvatarUrl(user.avatarUrl)
-    setRole(user.role === 'admin' ? 'admin' : 'tester')
-    setIsActive(user.isActive)
-    setPassword('')
-    setErr(null)
-    setBusy(false)
-  }, [user])
 
   if (!user) return null
 
@@ -503,14 +491,12 @@ function EditUserDialog({
 
         <div className="grid gap-5 md:grid-cols-[140px_1fr]">
           <div className="flex flex-col items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
-            {avatarUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={avatarUrl} alt="" className="size-24 rounded-2xl object-cover ring-1 ring-border" />
-            ) : (
-              <span className="inline-flex size-24 items-center justify-center rounded-2xl bg-muted text-5xl ring-1 ring-border" aria-hidden>
-                {mammalEmoji(user.username ?? user.displayName ?? '?')}
-              </span>
-            )}
+            <TesterAvatar
+              testerId={user.testerId}
+              name={displayName || user.testerName || user.username}
+              avatarUrl={avatarUrl}
+              size="lg"
+            />
             <label className="inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-md bg-slate-800 px-3 py-2 text-xs font-medium text-white hover:bg-slate-700">
               <Upload size={13} />
               사진 업로드
