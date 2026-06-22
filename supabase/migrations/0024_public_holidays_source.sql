@@ -1,4 +1,4 @@
--- 0021_public_holidays_source.sql
+-- 0024_public_holidays_source.sql
 -- public_holidays 출처 구분 컬럼(source) 추가: 'api' | 'manual'
 --   - data.go.kr 공휴일 API 로 가져온 행은 'api', 사용자가 직접 추가한 행은 'manual'.
 --   - 기존 행은 모두 'manual' 로 채운다(과거 수동/시드 데이터 보존 → 자동 수집이 덮어쓰지 않도록).

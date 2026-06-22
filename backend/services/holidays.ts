@@ -162,7 +162,7 @@ export async function importHolidays(year: number): Promise<ImportResult> {
     .lte('date', `${year}-12-31`)
   if (exErr) {
     if (pgCode(exErr) === '42703') {
-      throw new Error('source 컬럼이 없습니다. 0021_public_holidays_source 마이그레이션을 먼저 적용하세요.')
+      throw new Error('source 컬럼이 없습니다. 0024_public_holidays_source 마이그레이션을 먼저 적용하세요.')
     }
     if (pgCode(exErr) !== '42P01') {
       throw new Error(`공휴일 가져오기 실패(기존 조회): ${exErr.message}`)
@@ -184,7 +184,7 @@ export async function importHolidays(year: number): Promise<ImportResult> {
     const { error } = await supabase.from('public_holidays').upsert(toUpsert, { onConflict: 'date' })
     if (error) {
       if (pgCode(error) === '42703') {
-        throw new Error('source 컬럼이 없습니다. 0021_public_holidays_source 마이그레이션을 먼저 적용하세요.')
+        throw new Error('source 컬럼이 없습니다. 0024_public_holidays_source 마이그레이션을 먼저 적용하세요.')
       }
       throw new Error(`공휴일 가져오기 실패(저장): ${error.message}`)
     }
