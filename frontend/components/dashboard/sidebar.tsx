@@ -78,9 +78,9 @@ const NAV_SECTIONS: NavSection[] = [
         label: "시험관리",
         subItems: [
           { id: "prod-status", label: "제품시험현황", live: true },
-          { id: "test-result", label: "결과입력" },
-          { id: "test-cert", label: "성적서관리" },
-          { id: "testers", label: "시험자 관리", live: true },
+          { id: "test-result", label: "결과입력", adminOnly: true },
+          { id: "test-cert", label: "성적서관리", adminOnly: true },
+          { id: "testers", label: "시험자 관리", live: true, adminOnly: true },
         ],
       },
       {
@@ -102,7 +102,7 @@ const NAV_SECTIONS: NavSection[] = [
         id: "deviation",
         icon: <AlertTriangle size={18} />,
         label: "일탈관리",
-        badge: 3,
+        adminOnly: true,
         subItems: [
           { id: "oos", label: "OOS현황" },
           { id: "capa", label: "CAPA관리" },
@@ -126,9 +126,9 @@ const NAV_SECTIONS: NavSection[] = [
         icon: <BarChart2 size={18} />,
         label: "인사이트",
         subItems: [
-          { id: "dash", label: "대시보드" },
+          { id: "dash", label: "대시보드", adminOnly: true },
           { id: "stats", label: "시험자 운영평가", live: true, adminOnly: true },
-          { id: "ins-report", label: "리포트" },
+          { id: "ins-report", label: "리포트", adminOnly: true },
         ],
       },
       {
@@ -136,12 +136,12 @@ const NAV_SECTIONS: NavSection[] = [
         icon: <Cpu size={18} />,
         label: "장비관리",
         subItems: [
-          { id: "equip-master", label: "장비 마스터", live: true },
+          { id: "equip-master", label: "장비 마스터", live: true, adminOnly: true },
           { id: "equip-reservation", label: "장비 예약", live: true },
-          { id: "equip-operation", label: "장비 가동 현황" },
-          { id: "equip-backup", label: "장비 백업 현황" },
-          { id: "equip-usage", label: "장비 사용현황" },
-          { id: "equip-ai-maint", label: "장비 예측 정비 AI" },
+          { id: "equip-operation", label: "장비 가동 현황", adminOnly: true },
+          { id: "equip-backup", label: "장비 백업 현황", adminOnly: true },
+          { id: "equip-usage", label: "장비 사용현황", adminOnly: true },
+          { id: "equip-ai-maint", label: "장비 예측 정비 AI", adminOnly: true },
         ],
       },
     ],
@@ -153,6 +153,7 @@ const NAV_SECTIONS: NavSection[] = [
         id: "master-settings",
         icon: <SlidersHorizontal size={18} />,
         label: "기준 설정",
+        adminOnly: true,
         subItems: [
           { id: "products-master", label: "품목 마스터", live: true },
           { id: "test-master", label: "시험항목 마스터", live: true },
@@ -165,6 +166,7 @@ const NAV_SECTIONS: NavSection[] = [
         id: "settings",
         icon: <Settings size={18} />,
         label: "계정 설정",
+        adminOnly: true,
         subItems: [
           { id: "users", label: "사용자 관리", live: true, adminOnly: true },
           { id: "roles", label: "권한 관리", adminOnly: true },

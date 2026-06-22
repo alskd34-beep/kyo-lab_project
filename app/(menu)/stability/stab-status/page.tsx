@@ -86,7 +86,7 @@ function mapRow(row: Record<string, string>, idx: number): StabilitySheetRow {
   const requestNo = pick(row, ['진행정보/의뢰번호', '상세정보/의뢰번호', '의뢰번호', '외뢰번호'])
 
   return {
-    id: `${productCode || 'unknown'}-${batchNo || requestNo || idx}`,
+    id: `${productCode || 'unknown'}-${batchNo || 'no-batch'}-${requestNo || 'no-request'}-${idx}`,
     productCode,
     productName: pick(row, ['안정성시험 계획 정보/품목', '품목', '품목명', '자재내역']),
     testType: pick(row, ['안정성시험 계획 정보/시험종류', '시험종류', '시험유형']),
