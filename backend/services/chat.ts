@@ -1,8 +1,8 @@
 /**
- * [BACKEND] Chat 서비스 - Letsur Staix(OpenAI 호환 게이트웨이) 연동
+ * [BACKEND] Chat 서비스 - 역할별 챗봇 라우팅
  *
- * .env.local 의 LETSUR_* 환경변수로 게이트웨이를 호출해 답변을 생성하고,
- * 프런트엔드는 기존 Dify 호환 SSE 포맷을 그대로 재사용합니다.
+ * 관리자(admin)는 Letsur Staix(OpenAI 호환 게이트웨이), 시험자(tester)는 MISO(Dify 호환)를
+ * 호출해 답변을 생성하고, 프런트엔드는 동일한 Dify 호환 SSE 포맷을 그대로 재사용합니다.
  *           data: {"event":"message","answer":"...","conversation_id":"..."}\n\n
  *           data: [DONE]\n\n
  */
@@ -10,6 +10,7 @@
 import { randomUUID } from 'crypto'
 import { supabase, supabaseAdmin } from '@backend/lib/supabase'
 import { runLetsurText } from '@backend/lib/letsurClient'
+import { runMisoText } from '@backend/lib/misoClient'
 
 const SYSTEM_PROMPT  = `당신은 광동제약 KD QC(품질관리) 어시스턴트입니다.
 사용자 질문에 대해 답할 때, [DB 컨텍스트] 블록이 제공된다면 반드시 그 안의 사실만을 근거로 답하세요.
@@ -612,10 +613,19 @@ function createCliStream(
 }
 
 /**
- * Letsur 게이트웨이에 채팅 메시지를 전송하고 SSE 스트림을 반환합니다.
+ * 채팅 메시지를 역할별 챗봇(admin=Letsur, tester=MISO)으로 전송하고 SSE 스트림을 반환합니다.
  */
 export async function sendChatMessage({ message, conversationId, viewer, signal }: ChatRequest): Promise<Response> {
   const convId = conversationId && conversationId.trim() ? conversationId : randomUUID()
+
+  // 시험자(admin 외): MISO 앱(자체 지식·시스템 프롬프트 보유)에 사용자 메시지를 그대로 전달.
+  // QC DB 컨텍스트/시스템 프롬프트를 덧붙이지 않는다(앱 고유 도메인을 침범하지 않도록).
+  if (viewer.role !== 'admin') {
+    const stream = createCliStream(convId, () => runMisoText(message, { signal, user: viewer.userSub }))
+    return new Response(stream)
+  }
+
+  // 관리자: QC DB 컨텍스트 + 대화 이력을 합친 prompt 를 Letsur 게이트웨이로 전달.
   const scope = await resolveScope(viewer)
   const [history, dbContext] = await Promise.all([
     conversationId ? loadHistory(conversationId) : Promise.resolve([] as ChatMsg[]),
