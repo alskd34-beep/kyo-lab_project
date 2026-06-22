@@ -49,6 +49,7 @@ interface OrderForAssign {
   due_date: string | null
   is_urgent: boolean
   method: string
+  assignee_tester_id: string | null
 }
 
 /** 배정 선택 함수 — 오더 1건 → 시험자(또는 null) */
@@ -232,9 +233,19 @@ async function applyAssignments(
       continue
     }
     if (hit?.id) {
+      const beforeUser = (o.assignee_tester_id as string | null) ?? null
       await supabaseAdmin.from('pct_orders').update({ assignee_tester_id: hit.id }).eq('id', o.id)
       assigned++
       details.push({ orderId: o.id, testerId: hit.id, testerName: hit.name, note: '배정됨' })
+      if (beforeUser !== hit.id) {
+        await logReassignment({
+          orderId: o.id,
+          beforeUser,
+          afterUser: hit.id,
+          reason: 'AI 자동배정',
+          changedBy: null,
+        }).catch(() => {})
+      }
       // [규칙1] 향정신성 의약품 배정 시 관리자 알림 필수
       if (isPsychotropic(o.product_name)) {
         await createNotification({
