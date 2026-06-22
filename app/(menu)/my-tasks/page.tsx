@@ -172,6 +172,13 @@ export default function MyTasksPage() {
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [msgType, setMsgType] = useState<"info" | "error">("info")
+  // 다중 선택(배정완료·시작 대기) 일괄 실행
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkBusy, setBulkBusy] = useState(false)
+  // 다중 선택(진행 중) 일괄 상태 변경
+  const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set())
+  const [jobBulkBusy, setJobBulkBusy] = useState(false)
+  const [bulkStatus, setBulkStatus] = useState<string>("검토중")
 
   /** 장비 준비상태 모달 상태 */
   const [readinessModal, setReadinessModal] = useState<{
@@ -192,12 +199,30 @@ export default function MyTasksPage() {
   }, [])
   useEffect(() => { void load() }, [load])
 
+  // pending 갱신 시(시작 완료 등) 더 이상 없는 항목은 선택에서 제거
+  useEffect(() => {
+    setSelected(prev => {
+      const ids = new Set(pending.map(o => o.id))
+      const next = new Set([...prev].filter(id => ids.has(id)))
+      return next.size === prev.size ? prev : next
+    })
+  }, [pending])
+
+  // jobs 갱신 시 더 이상 진행 중이 아닌(완료된 등) 항목은 선택에서 제거
+  useEffect(() => {
+    setSelectedJobs(prev => {
+      const ids = new Set(jobs.filter(j => j.status === "진행중" || j.status === "검토중" || j.status === "지연").map(j => j.id))
+      const next = new Set([...prev].filter(id => ids.has(id)))
+      return next.size === prev.size ? prev : next
+    })
+  }, [jobs])
+
   const flash = (m: string, type: "info" | "error" = "info") => {
     setMsg(m); setMsgType(type); setTimeout(() => setMsg(null), 4000)
   }
 
-  /** 실제 시작 API 호출 */
-  const doStart = async (orderId: string) => {
+  /** 시작 API 호출(코어) — 알림/새로고침 없이 결과만 반환 (일괄 실행에서 재사용) */
+  const doStartCore = async (orderId: string): Promise<{ qcNo: string; warnings?: string[] }> => {
     const res = await fetch("/api/qc-jobs", {
       method: "POST", credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -205,6 +230,12 @@ export default function MyTasksPage() {
     })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error)
+    return data
+  }
+
+  /** 단건 시작 — 알림 + 새로고침 */
+  const doStart = async (orderId: string) => {
+    const data = await doStartCore(orderId)
     const warnNote = data.warnings?.length ? ` (경고: ${(data.warnings as string[]).join(", ")})` : ""
     flash(`작업 시작 — QC ${data.qcNo}${warnNote}`)
     await load()
@@ -253,6 +284,45 @@ export default function MyTasksPage() {
     }
   }
 
+  /** 선택 실행 — 선택된 대기 오더를 순차 시작. 장비 차단(blocked) 건은 제외, 결과 요약 표시. */
+  const startSelected = async () => {
+    const ids = pending.filter(o => selected.has(o.id)).map(o => o.id)
+    if (ids.length === 0) return
+    setBulkBusy(true)
+    const nameById = new Map(pending.map(o => [o.id, o.productName] as const))
+    let started = 0
+    const blocked: string[] = []
+    const failed: string[] = []
+    try {
+      for (const id of ids) {
+        try {
+          const rRes = await fetch(`/api/qc-jobs/readiness?orderId=${id}`, { credentials: "include" })
+          const readiness: ReadinessResult = await rRes.json()
+          if (!Array.isArray(readiness.checks)) { failed.push(nameById.get(id) ?? id); continue }
+          // 장비 차단 건은 단건 모달과 동일하게 시작 불가 → 제외
+          if (readiness.checks.some(c => c.blocked)) { blocked.push(nameById.get(id) ?? id); continue }
+          await doStartCore(id)
+          started++
+        } catch {
+          failed.push(nameById.get(id) ?? id)
+        }
+      }
+      await load()
+      setSelected(new Set())
+      const parts: string[] = [`${started}건 시작`]
+      if (blocked.length) parts.push(`장비 차단 ${blocked.length}건 제외(${blocked.join(", ")})`)
+      if (failed.length) parts.push(`실패 ${failed.length}건`)
+      flash(parts.join(" · "), failed.length ? "error" : "info")
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  const allSelected = pending.length > 0 && selected.size === pending.length
+  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(pending.map(o => o.id)))
+  const toggleOne = (id: string) =>
+    setSelected(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
+
   const clearItem = async (jobId: string, itemId: string) => {
     setBusy(itemId)
     try {
@@ -267,14 +337,19 @@ export default function MyTasksPage() {
     finally { setBusy(null) }
   }
 
+  /** 잡 PATCH 코어 — 새로고침/알림 없음 (일괄에서 재사용) */
+  const patchJobCore = async (jobId: string, patch: Record<string, string>) => {
+    const res = await fetch(`/api/qc-jobs/${jobId}`, {
+      method: "PATCH", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    })
+    if (!res.ok) throw new Error((await res.json()).error)
+  }
+
   const patchJob = async (jobId: string, patch: Record<string, string>) => {
     try {
-      const res = await fetch(`/api/qc-jobs/${jobId}`, {
-        method: "PATCH", credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
-      })
-      if (!res.ok) throw new Error((await res.json()).error)
+      await patchJobCore(jobId, patch)
       await load()
     } catch (e) { flash(`저장 실패: ${e instanceof Error ? e.message : ""}`, "error") }
   }
@@ -282,6 +357,34 @@ export default function MyTasksPage() {
   // 작업을 상태별로 분리
   const activeJobs = jobs.filter(j => j.status === "진행중" || j.status === "검토중" || j.status === "지연")
   const doneJobs = jobs.filter(j => j.status === "완료")
+
+  const allJobsSelected = activeJobs.length > 0 && selectedJobs.size === activeJobs.length
+  const toggleAllJobs = () => setSelectedJobs(allJobsSelected ? new Set() : new Set(activeJobs.map(j => j.id)))
+  const toggleJob = (id: string) =>
+    setSelectedJobs(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
+
+  /** 선택 적용 — 선택된 진행 중 작업의 상태를 콤보 박스 값으로 일괄 변경 */
+  const applyBulkStatus = async () => {
+    const ids = activeJobs.filter(j => selectedJobs.has(j.id)).map(j => j.id)
+    if (ids.length === 0) return
+    setJobBulkBusy(true)
+    const nameById = new Map(activeJobs.map(j => [j.id, `QC ${j.qcNo}`] as const))
+    let ok = 0
+    const failed: string[] = []
+    try {
+      for (const id of ids) {
+        try { await patchJobCore(id, { status: bulkStatus }); ok++ }
+        catch { failed.push(nameById.get(id) ?? id) }
+      }
+      await load()
+      setSelectedJobs(new Set())
+      const parts: string[] = [`${ok}건 '${bulkStatus}' 적용`]
+      if (failed.length) parts.push(`실패 ${failed.length}건`)
+      flash(parts.join(" · "), failed.length ? "error" : "info")
+    } finally {
+      setJobBulkBusy(false)
+    }
+  }
 
   if (loading) return (
     <div className="flex flex-col gap-4 p-3 md:p-5">
@@ -386,9 +489,33 @@ export default function MyTasksPage() {
 
         {/* ① 배정완료 · 시작 대기 */}
         <section>
-          <h2 className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            ① 배정완료 · 시작 대기 ({pending.length})
-          </h2>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-1">
+            <h2 className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              ① 배정완료 · 시작 대기 ({pending.length})
+            </h2>
+            {pending.length > 0 && (
+              <div className="flex items-center gap-2">
+                <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={toggleAll}
+                    disabled={bulkBusy}
+                    className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                  />
+                  전체 선택
+                </label>
+                <button
+                  onClick={() => void startSelected()}
+                  disabled={selected.size === 0 || bulkBusy || busy !== null}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-blue-600 px-3 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {bulkBusy ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+                  선택 실행 ({selected.size})
+                </button>
+              </div>
+            )}
+          </div>
           {pending.length === 0 ? (
             <p className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-400">대기 중인 오더가 없습니다.</p>
           ) : (
@@ -396,10 +523,19 @@ export default function MyTasksPage() {
               {pending.map(o => {
                 const dd = dDay(o.dueDate)
                 const isBusy = busy === o.id
+                const isChecked = selected.has(o.id)
                 return (
-                  <div key={o.id} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
+                  <div key={o.id} className={`rounded-xl border bg-white p-3 shadow-sm transition-colors ${isChecked ? "border-blue-400 ring-1 ring-blue-300" : "border-slate-200"}`}>
+                    <div className="flex items-start gap-2">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => toggleOne(o.id)}
+                        disabled={bulkBusy}
+                        aria-label={`${o.productName} ${o.batchNo} 선택`}
+                        className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                      />
+                      <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold text-slate-900">{o.productName}</p>
                         <p className="font-mono text-xs text-slate-500">{o.batchNo}</p>
                       </div>
@@ -420,7 +556,7 @@ export default function MyTasksPage() {
                     </div>
                     <button
                       onClick={() => start(o.id)}
-                      disabled={busy !== null}
+                      disabled={busy !== null || bulkBusy}
                       className="mt-3 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                     >
                       {isBusy ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} />}
@@ -435,14 +571,46 @@ export default function MyTasksPage() {
 
         {/* ② 진행 중 */}
         <section>
-          <h2 className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            ② 진행 중 ({activeJobs.length})
-          </h2>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-1">
+            <h2 className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              ② 진행 중 ({activeJobs.length})
+            </h2>
+            {activeJobs.length > 0 && (
+              <div className="flex items-center gap-2">
+                <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={allJobsSelected}
+                    onChange={toggleAllJobs}
+                    disabled={jobBulkBusy}
+                    className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                  />
+                  전체 선택
+                </label>
+                <Select value={bulkStatus} onValueChange={setBulkStatus}>
+                  <SelectTrigger className="h-8 w-[88px] rounded-lg border-slate-200 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <button
+                  onClick={() => void applyBulkStatus()}
+                  disabled={selectedJobs.size === 0 || jobBulkBusy}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-blue-600 px-3 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {jobBulkBusy ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                  선택 적용 ({selectedJobs.size})
+                </button>
+              </div>
+            )}
+          </div>
           {activeJobs.length === 0 ? (
             <p className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-400">진행 중인 작업이 없습니다.</p>
           ) : (
             <div className="flex flex-col gap-3">
-              {activeJobs.map(job => renderJobCard(job))}
+              {activeJobs.map(job => renderJobCard(job, true))}
             </div>
           )}
         </section>
@@ -464,7 +632,7 @@ export default function MyTasksPage() {
     </>
   )
 
-  function renderJobCard(job: Job) {
+  function renderJobCard(job: Job, selectable = false) {
     const cleared = job.items.filter(i => i.status === "cleared").length
     const dd = dDay(job.dueDate)
     const isDone = job.status === "완료"
@@ -472,7 +640,18 @@ export default function MyTasksPage() {
       <div key={job.id} className={`rounded-xl border shadow-sm ${isDone ? "border-emerald-200 bg-emerald-50/30" : "border-slate-200 bg-white"}`}>
         {/* 헤더 */}
         <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 md:flex-row md:items-center md:justify-between">
-          <div className="min-w-0">
+          <div className="flex min-w-0 items-start gap-2">
+            {selectable && (
+              <input
+                type="checkbox"
+                checked={selectedJobs.has(job.id)}
+                onChange={() => toggleJob(job.id)}
+                disabled={jobBulkBusy}
+                aria-label={`QC ${job.qcNo} 선택`}
+                className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+              />
+            )}
+            <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className="font-mono text-sm font-bold text-blue-700">QC {job.qcNo}</span>
               {job.isUrgent && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700">긴급</span>}
@@ -485,11 +664,12 @@ export default function MyTasksPage() {
             <p className="mt-0.5 truncate text-sm font-semibold text-slate-900">
               {job.productName} <span className="font-mono text-xs font-normal text-slate-500">/ {job.batchNo}</span>
             </p>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 md:justify-end">
+            <div className="flex shrink-0 items-center gap-1.5">
               <span className="text-xs text-slate-500">시작</span>
-              <div className="w-36">
+              <div className="w-32">
                 <DateField
                   size="sm"
                   noLabel
@@ -499,9 +679,9 @@ export default function MyTasksPage() {
                 />
               </div>
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex shrink-0 items-center gap-1.5">
               <span className="text-xs text-slate-500">종료</span>
-              <div className="w-36">
+              <div className="w-32">
                 <DateField
                   size="sm"
                   noLabel
@@ -515,7 +695,7 @@ export default function MyTasksPage() {
               value={job.status}
               onValueChange={v => patchJob(job.id, { status: v })}
             >
-              <SelectTrigger className={`h-8 rounded-full border px-2 text-[11px] font-semibold focus-visible:outline-none ${STATUS_CLS[job.status] ?? ""}`}>
+              <SelectTrigger className={`h-8 shrink-0 rounded-full border px-2.5 text-[11px] font-semibold focus-visible:outline-none ${STATUS_CLS[job.status] ?? ""}`}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

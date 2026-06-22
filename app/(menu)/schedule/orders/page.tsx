@@ -610,7 +610,7 @@ export default function OrdersPage() {
         <TableCell className="px-3 py-2.5">
           {r.assigneeName && r.assigneeTesterId
             ? <button
-                onClick={() => setAssigneeTarget({ id: r.assigneeTesterId!, name: r.assigneeName! })}
+                onClick={(e) => { e.stopPropagation(); setAssigneeTarget({ id: r.assigneeTesterId!, name: r.assigneeName! }) }}
                 title={`${r.assigneeName} 담당 오더 보기`}
                 className="inline-flex items-center gap-1.5 font-medium text-foreground hover:text-primary"
               >

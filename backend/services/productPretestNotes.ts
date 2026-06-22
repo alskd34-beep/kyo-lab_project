@@ -80,6 +80,33 @@ export async function addNote(input: AddNoteInput): Promise<PretestNoteRow> {
   return mapRow(data as Record<string, unknown>)
 }
 
+/**
+ * 여러 품목에 동일한 확인사항을 한 번에 적재한다(유사 품목 복사 등록).
+ * @returns 실제 적재된 건수
+ */
+export async function addNoteToProducts(
+  productIds: string[],
+  data: Omit<AddNoteInput, 'productId'>,
+): Promise<number> {
+  const ids = [...new Set(productIds.filter(Boolean))]
+  if (ids.length === 0) return 0
+  const rows = ids.map(productId => ({
+    product_id:      productId,
+    content:         data.content,
+    occurred_at:     data.occurredAt || null,
+    remark:          data.remark || null,
+    issue_lot:       data.issueLot || null,
+    created_by:      data.createdBy || null,
+    created_by_name: data.createdByName || null,
+  }))
+  const { data: inserted, error } = await supabaseAdmin
+    .from('product_pretest_notes')
+    .insert(rows)
+    .select('id')
+  if (error) throw error
+  return inserted?.length ?? 0
+}
+
 export async function updateNote(
   id: string,
   patch: Partial<{ content: string; occurredAt: string | null; remark: string | null; issueLot: string | null }>,

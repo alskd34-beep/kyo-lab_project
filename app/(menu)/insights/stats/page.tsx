@@ -108,7 +108,7 @@ export default function TesterEvaluationPage() {
       {/* 헤더 */}
       <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm md:flex-row md:items-end md:justify-between md:py-4">
         <div>
-          <h1 className="text-base font-bold text-slate-900 sm:text-lg">시험자 운영평가</h1>
+          <h1 className="text-base font-bold text-slate-900 sm:text-lg">운영평가</h1>
           <p className="mt-1 text-xs font-medium text-slate-600">
             완료된 작업의 실적으로 공수 준수율·소요일·처리량·가동률을 집계합니다.
             {data && <span className="ml-2 text-slate-400">기간 근무일 {data.period.workingDays}일</span>}

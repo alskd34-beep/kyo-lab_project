@@ -1,7 +1,7 @@
 /**
- * [BACKEND] Chat 서비스 - Codex CLI 연동
+ * [BACKEND] Chat 서비스 - Letsur Staix(OpenAI 호환 게이트웨이) 연동
  *
- * 서버에 설치된 `codex exec`를 실행해 답변을 생성하고,
+ * .env.local 의 LETSUR_* 환경변수로 게이트웨이를 호출해 답변을 생성하고,
  * 프런트엔드는 기존 Dify 호환 SSE 포맷을 그대로 재사용합니다.
  *           data: {"event":"message","answer":"...","conversation_id":"..."}\n\n
  *           data: [DONE]\n\n
@@ -9,7 +9,7 @@
 
 import { randomUUID } from 'crypto'
 import { supabase, supabaseAdmin } from '@backend/lib/supabase'
-import { runCodexText } from '@backend/lib/codexCli'
+import { runLetsurText } from '@backend/lib/letsurClient'
 
 const SYSTEM_PROMPT  = `당신은 광동제약 KD QC(품질관리) 어시스턴트입니다.
 사용자 질문에 대해 답할 때, [DB 컨텍스트] 블록이 제공된다면 반드시 그 안의 사실만을 근거로 답하세요.
@@ -86,6 +86,12 @@ async function buildDbContext(message: string, scope: Scope): Promise<string> {
     const range = detectDateRange(message)
     if (range) {
       const block = await buildScheduleBlock(range, scope)
+      if (block) sections.push(block)
+    }
+
+    // 1) 긴급 의도("긴급/시급/급한") → 긴급 오더 블록 (날짜 의도 있으면 기간 한정)
+    if (/긴급|시급|급한|급하게/.test(message)) {
+      const block = await buildUrgentBlock(scope, range)
       if (block) sections.push(block)
     }
 
@@ -349,7 +355,7 @@ function detectDateRange(message: string): { label: string; from: string; to: st
 
 /** 권한 스코프를 적용한 pct_orders 조회 (비관리자는 본인 tester_id로 강제) */
 async function fetchScopedOrders(
-  opts: { productCode?: string; testerId?: string; dueFrom?: string; dueTo?: string },
+  opts: { productCode?: string; testerId?: string; dueFrom?: string; dueTo?: string; urgent?: boolean },
   scope: Scope,
 ): Promise<OrderRow[]> {
   let restrictTester: string | null = null
@@ -367,6 +373,7 @@ async function fetchScopedOrders(
   if (opts.productCode) q = q.eq('product_code', opts.productCode)
   if (opts.dueFrom) q = q.gte('due_date', opts.dueFrom)
   if (opts.dueTo) q = q.lte('due_date', opts.dueTo)
+  if (opts.urgent) q = q.eq('is_urgent', true)
   if (restrictTester) q = q.eq('assignee_tester_id', restrictTester)
 
   const { data } = await q.order('due_date', { ascending: true }).limit(20)
@@ -446,6 +453,22 @@ async function buildScheduleBlock(range: { label: string; from: string; to: stri
   const orders = await fetchScopedOrders({ dueFrom: range.from, dueTo: range.to }, scope)
   const head = `### 일정 — ${range.label}${scope.isAdmin ? '' : ' (본인 배정)'} : 완료예정 기준 ${orders.length}건`
   if (orders.length === 0) return `${head}\n- 해당 기간 오더 없음`
+  const [names, jobs] = await Promise.all([
+    testerNameMap(orders.map(o => o.assignee_tester_id)),
+    jobItemsForOrders(orders.map(o => o.id)),
+  ])
+  return [head, ...orders.map(o => formatOrderLine(o, names, jobs))].join('\n')
+}
+
+/** 긴급(is_urgent) 오더 블록. 날짜 의도가 있으면 해당 기간으로 한정한다. */
+async function buildUrgentBlock(scope: Scope, range: { label: string; from: string; to: string } | null): Promise<string> {
+  const orders = await fetchScopedOrders(
+    { urgent: true, dueFrom: range?.from, dueTo: range?.to },
+    scope,
+  )
+  const period = range ? ` — ${range.label}` : ''
+  const head = `### 긴급 오더${period}${scope.isAdmin ? '' : ' (본인 배정)'} : ${orders.length}건`
+  if (orders.length === 0) return `${head}\n- 긴급으로 지정된 오더 없음`
   const [names, jobs] = await Promise.all([
     testerNameMap(orders.map(o => o.assignee_tester_id)),
     jobItemsForOrders(orders.map(o => o.id)),
@@ -536,7 +559,7 @@ function chunkText(text: string, size = 120): string[] {
   return chunks
 }
 
-function codexPrompt(message: string, history: ChatMsg[], dbContext: string): string {
+function buildPrompt(message: string, history: ChatMsg[], dbContext: string): string {
   const historyBlock = history.length > 0
     ? [
         '대화 이력:',
@@ -589,7 +612,7 @@ function createCliStream(
 }
 
 /**
- * Codex CLI 에 채팅 메시지를 전송하고 SSE 스트림을 반환합니다.
+ * Letsur 게이트웨이에 채팅 메시지를 전송하고 SSE 스트림을 반환합니다.
  */
 export async function sendChatMessage({ message, conversationId, viewer, signal }: ChatRequest): Promise<Response> {
   const convId = conversationId && conversationId.trim() ? conversationId : randomUUID()
@@ -598,8 +621,8 @@ export async function sendChatMessage({ message, conversationId, viewer, signal 
     conversationId ? loadHistory(conversationId) : Promise.resolve([] as ChatMsg[]),
     buildDbContext(message, scope),
   ])
-  const prompt = codexPrompt(message, history, dbContext)
-  const stream = createCliStream(convId, () => runCodexText(prompt, { signal }))
+  const prompt = buildPrompt(message, history, dbContext)
+  const stream = createCliStream(convId, () => runLetsurText(prompt, { signal }))
 
   return new Response(stream)
 }

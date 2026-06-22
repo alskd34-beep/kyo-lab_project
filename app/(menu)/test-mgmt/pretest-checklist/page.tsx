@@ -11,6 +11,8 @@ import {
   ChevronDown,
   ChevronUp,
   ChevronsUpDown,
+  Copy,
+  X,
 } from "lucide-react"
 
 import { cn } from "@frontend/lib/utils"
@@ -22,7 +24,9 @@ import { Input } from "@frontend/components/ui/input"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@frontend/components/ui/table"
-import { DateField } from "@frontend/components/ui/date-field"
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@frontend/components/ui/dialog"
 
 interface ProductRow {
   id: string
@@ -42,17 +46,41 @@ interface NoteRow {
   createdAt: string
 }
 
-// 현재 날짜/시각
-function nowParts() {
-  const d = new Date()
-  const p = (n: number) => String(n).padStart(2, "0")
-  return {
-    date: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`,
-    time: `${p(d.getHours())}:${p(d.getMinutes())}`,
-  }
-}
 const fmtDT = (iso: string | null) =>
   iso ? iso.slice(0, 16).replace("T", " ") : "—"
+
+// 현재 로컬(브라우저) 일시를 naive ISO 문자열로 — 발생 일시 자동 기록용
+function localNowStamp() {
+  const d = new Date()
+  const p = (n: number) => String(n).padStart(2, "0")
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
+
+// 제형 표현(품목명 끝에 붙는 어미) — 브랜드 토큰 추출 시 제거
+const DOSAGE_FORMS = [
+  "연질캡슐", "경질캡슐", "캡슐", "정제", "정", "시럽", "주사", "주",
+  "산제", "산", "과립", "액제", "액", "현탁액", "점안액", "점안", "연고",
+  "크림", "겔", "패치", "좌제", "환", "분말", "건조시럽",
+]
+
+/** 품목명에서 브랜드 토큰을 뽑는다. 예: "베니톨정100mg" → "베니톨" */
+function brandToken(name: string): string {
+  let s = name.trim()
+  s = s.replace(/[\s(［(].*$/, "") // 공백/괄호 이후 제거
+  s = s.replace(/[0-9].*$/, "")    // 첫 숫자 이후 제거
+  for (const f of DOSAGE_FORMS) {
+    if (s.length > f.length && s.endsWith(f)) { s = s.slice(0, -f.length); break }
+  }
+  return s.trim()
+}
+
+/** 두 품목명이 유사(같은 브랜드 계열)한지 판정 */
+function isSimilarName(a: string, b: string): boolean {
+  const ta = brandToken(a)
+  const tb = brandToken(b)
+  if (ta.length < 2 || tb.length < 2) return false
+  return ta === tb || ta.startsWith(tb) || tb.startsWith(ta)
+}
 
 export default function PretestChecklistPage() {
   const { user } = useAuth()
@@ -63,13 +91,18 @@ export default function PretestChecklistPage() {
   const [notes, setNotes] = useState<NoteRow[]>([])
   const [search, setSearch] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [okMsg, setOkMsg] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+
+  // 유사 품목 동시 적용
+  const [extraIds, setExtraIds] = useState<Set<string>>(new Set())
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [pickerSearch, setPickerSearch] = useState("")
+  const [similarOnly, setSimilarOnly] = useState(true)
   const [sortField, setSortField] = useState<keyof NoteRow>("occurredAt")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
 
-  // 입력 폼
-  const [occurredDate, setOccurredDate] = useState(nowParts().date)
-  const [occurredTime, setOccurredTime] = useState(nowParts().time)
+  // 입력 폼 (발생 일시는 등록 시점으로 자동 기록)
   const [content, setContent] = useState("")
   const [remark, setRemark] = useState("")
   const [issueLot, setIssueLot] = useState("")
@@ -81,6 +114,9 @@ export default function PretestChecklistPage() {
   useEffect(() => {
     if (selected) void loadNotes(selected.id)
     else setNotes([])
+    // 품목 전환 시 유사 품목 선택·메시지 초기화
+    setExtraIds(new Set())
+    setOkMsg(null)
   }, [selected])
 
   async function loadProducts() {
@@ -126,6 +162,47 @@ export default function PretestChecklistPage() {
     return arr
   }, [notes, sortField, sortDir])
 
+  // 선택된 품목 외 후보 (유사 품목 동시 적용 picker)
+  const pickerCandidates = useMemo(() => {
+    if (!selected) return []
+    const q = pickerSearch.trim().toLowerCase()
+    return products
+      .filter(p => p.id !== selected.id)
+      .filter(p => !similarOnly || isSimilarName(selected.name, p.name))
+      .filter(p =>
+        !q ||
+        p.name.toLowerCase().includes(q) ||
+        p.productCode.toLowerCase().includes(q)
+      )
+  }, [products, selected, pickerSearch, similarOnly])
+
+  // 선택된 추가 품목 객체 (칩 표시용)
+  const extraProducts = useMemo(
+    () => products.filter(p => extraIds.has(p.id)),
+    [products, extraIds]
+  )
+
+  function toggleExtra(id: string) {
+    setExtraIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  // 현재 picker에 보이는 후보 전체 선택/해제
+  function toggleAllVisible() {
+    const visibleIds = pickerCandidates.map(p => p.id)
+    const allSelected = visibleIds.length > 0 && visibleIds.every(id => extraIds.has(id))
+    setExtraIds(prev => {
+      const next = new Set(prev)
+      if (allSelected) visibleIds.forEach(id => next.delete(id))
+      else visibleIds.forEach(id => next.add(id))
+      return next
+    })
+  }
+
   function toggleSort(field: keyof NoteRow) {
     if (sortField === field) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"))
@@ -144,9 +221,6 @@ export default function PretestChecklistPage() {
   }
 
   function resetForm() {
-    const n = nowParts()
-    setOccurredDate(n.date)
-    setOccurredTime(n.time)
     setContent("")
     setRemark("")
     setIssueLot("")
@@ -156,17 +230,17 @@ export default function PretestChecklistPage() {
     if (!selected || !content.trim()) return
     setBusy(true)
     setError(null)
+    setOkMsg(null)
     try {
-      const occurredAt = occurredDate
-        ? `${occurredDate}T${occurredTime || "00:00"}:00`
-        : null
+      // 선택 품목 + 유사 품목(extraIds)에 동일 확인사항 적재 (발생 일시는 서버에서 자동 기록)
+      const productIds = [selected.id, ...extraIds]
       const res = await fetch("/api/product-pretest-notes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          productId: selected.id,
+          productIds,
           content: content.trim(),
-          occurredAt,
+          occurredAt: localNowStamp(),
           remark: remark.trim() || null,
           issueLot: issueLot.trim() || null,
         }),
@@ -175,7 +249,15 @@ export default function PretestChecklistPage() {
         const d = await res.json()
         throw new Error(d.error ?? "추가 실패")
       }
+      const d = (await res.json()) as { count?: number }
+      const count = d.count ?? productIds.length
+      setOkMsg(
+        count > 1
+          ? `${count}개 품목에 동일한 확인사항을 등록했습니다.`
+          : "확인사항을 등록했습니다."
+      )
       resetForm()
+      setExtraIds(new Set())
       await loadNotes(selected.id)
     } catch (e) {
       setError(String(e))
@@ -220,6 +302,12 @@ export default function PretestChecklistPage() {
       {error && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive">
           {error}
+        </div>
+      )}
+
+      {okMsg && (
+        <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700">
+          {okMsg}
         </div>
       )}
 
@@ -308,22 +396,9 @@ export default function PretestChecklistPage() {
                   <div className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground">
                     <UserIcon className="size-3" /> 작성자
                     <span className="font-medium text-foreground">{myName}</span>
-                    <span>· 작성시각은 자동 기록</span>
+                    <span>· 발생 일시·작성시각은 자동 기록</span>
                   </div>
-                  <div className="grid gap-2.5 md:grid-cols-[auto_auto_1fr]">
-                    <div>
-                      <label className="mb-1 block text-[11px] font-medium text-muted-foreground">일자</label>
-                      <DateField value={occurredDate} onChange={setOccurredDate} size="sm" noLabel />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-[11px] font-medium text-muted-foreground">시각</label>
-                      <input
-                        type="time"
-                        value={occurredTime}
-                        onChange={(e) => setOccurredTime(e.target.value)}
-                        className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
-                      />
-                    </div>
+                  <div className="grid gap-2.5 md:grid-cols-2">
                     <div>
                       <label className="mb-1 block text-[11px] font-medium text-muted-foreground">이슈발생 로트(제조번호)</label>
                       <Input
@@ -355,13 +430,53 @@ export default function PretestChecklistPage() {
                       className="w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     />
                   </div>
+                  {/* 유사 품목 동시 적용 */}
+                  <div className="mt-3 rounded-md border border-dashed border-input bg-background/60 p-2.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => { setPickerSearch(""); setSimilarOnly(true); setPickerOpen(true) }}
+                      >
+                        <Copy className="size-3.5" />
+                        유사 품목에도 적용
+                      </Button>
+                      <span className="text-[11px] text-muted-foreground">
+                        {extraIds.size > 0
+                          ? <>이 품목 포함 <span className="font-semibold text-foreground">{extraIds.size + 1}개</span> 품목에 동일하게 등록됩니다.</>
+                          : "동일한 확인사항을 여러 유사 품목에 한 번에 등록할 수 있습니다."}
+                      </span>
+                    </div>
+                    {extraProducts.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {extraProducts.map(p => (
+                          <span
+                            key={p.id}
+                            className="inline-flex items-center gap-1 rounded-full border bg-muted/60 py-0.5 pr-1 pl-2 text-[11px] text-foreground"
+                          >
+                            {p.name}
+                            <button
+                              type="button"
+                              onClick={() => toggleExtra(p.id)}
+                              title="제외"
+                              className="rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                            >
+                              <X className="size-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                   <div className="mt-2.5 flex justify-end">
                     <Button
                       onClick={() => void handleAdd()}
                       disabled={busy || !content.trim()}
                     >
                       <Plus />
-                      등록
+                      {extraIds.size > 0 ? `${extraIds.size + 1}개 품목에 등록` : "등록"}
                     </Button>
                   </div>
                 </div>
@@ -456,6 +571,93 @@ export default function PretestChecklistPage() {
           )}
         </Card>
       </div>
+
+      {/* 유사 품목 선택 모달 */}
+      <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>유사 품목에도 적용</DialogTitle>
+            <DialogDescription>
+              {selected
+                ? <><span className="font-medium text-foreground">{selected.name}</span> 와(과) 함께 동일한 확인사항을 등록할 품목을 선택하세요.</>
+                : "품목을 먼저 선택하세요."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <label className="flex cursor-pointer items-center gap-1.5 text-xs text-foreground">
+              <input
+                type="checkbox"
+                className="cb-custom"
+                checked={similarOnly}
+                onChange={() => setSimilarOnly(v => !v)}
+              />
+              이름이 비슷한 품목만 보기
+            </label>
+            <button
+              type="button"
+              onClick={toggleAllVisible}
+              disabled={pickerCandidates.length === 0}
+              className="text-xs font-medium text-primary hover:underline disabled:opacity-40"
+            >
+              {pickerCandidates.length > 0 && pickerCandidates.every(p => extraIds.has(p.id))
+                ? "전체 해제" : "보이는 품목 전체 선택"}
+            </button>
+          </div>
+
+          <div className="relative">
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="품목명 / 코드 검색..."
+              value={pickerSearch}
+              onChange={(e) => setPickerSearch(e.target.value)}
+              className="h-9 pl-9"
+            />
+          </div>
+
+          <div className="max-h-[45vh] min-h-[120px] overflow-y-auto rounded-md border">
+            {pickerCandidates.length === 0 ? (
+              <p className="py-10 text-center text-sm text-muted-foreground">
+                {similarOnly ? "이름이 비슷한 품목이 없습니다. 위 체크를 해제하면 전체 품목에서 선택할 수 있습니다." : "품목이 없습니다."}
+              </p>
+            ) : (
+              <ul className="divide-y">
+                {pickerCandidates.map(p => (
+                  <li key={p.id}>
+                    <label className="flex cursor-pointer items-center gap-2.5 px-3 py-2 hover:bg-muted/50">
+                      <input
+                        type="checkbox"
+                        className="cb-custom"
+                        checked={extraIds.has(p.id)}
+                        onChange={() => toggleExtra(p.id)}
+                      />
+                      <span className="font-mono text-[10px] font-semibold text-muted-foreground">
+                        {p.productCode}
+                      </span>
+                      <span className="truncate text-sm font-medium text-foreground">
+                        {p.name}
+                      </span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <DialogFooter className="sm:items-center sm:justify-between">
+            <span className="text-xs text-muted-foreground sm:mr-auto">
+              <span className="font-semibold text-foreground">{extraIds.size}</span>개 추가 선택됨
+            </span>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setExtraIds(new Set())} disabled={extraIds.size === 0}>
+                선택 초기화
+              </Button>
+              <Button onClick={() => setPickerOpen(false)}>선택 완료</Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

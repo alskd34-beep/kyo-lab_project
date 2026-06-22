@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error('[api/chat]', err)
     const msg = err instanceof Error ? err.message : '서버 오류가 발생했습니다.'
-    const status = msg.includes('환경변수') || msg.includes('codex CLI') || msg.includes('Codex CLI') ? 503 : 500
+    const status = msg.includes('환경변수') || msg.includes('게이트웨이') ? 503 : 500
     return Response.json({ error: msg }, { status })
   }
 }

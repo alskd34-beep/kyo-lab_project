@@ -6,6 +6,7 @@
 ## QC 시험 스케줄 자동배정 프로세스
 제조팀 생산계획(구글시트) → QC 시험 스케줄 자동생성 → AI 배정 추천 → 관리자 확정·LOCK 워크플로우의
 전체 요구사항과 구현 현황은 **[.claude/commands/qc-schedule-process.md](./.claude/commands/qc-schedule-process.md)** (슬래시 커맨드 `/qc-schedule-process`) 및 **[docs/qc-schedule-status.md](./docs/qc-schedule-status.md)** 를 기준으로 한다.
+현재 시스템 전체의 as-built PRD는 **[docs/PRD-current-system.md](./docs/PRD-current-system.md)**, 단계별 동작 흐름은 **[docs/WORKFLOW-current-system.md](./docs/WORKFLOW-current-system.md)** 를 참고한다.
 
 ## 핵심 작업 규칙 (AGENTS.md 요약)
 - 3계층 분리: 페이지/컴포넌트(frontend) → API 라우트 핸들러(`app/api`, thin) → 서비스(`backend/services`, 로직+Supabase).

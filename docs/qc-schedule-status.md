@@ -1,6 +1,7 @@
 # QC 시험 스케줄 자동배정 — 구현 현황
 
 프로세스 정의: `.claude/commands/qc-schedule-process.md` (`/qc-schedule-process`)
+현재 시스템 전체 PRD(as-built): [`docs/PRD-current-system.md`](./PRD-current-system.md)
 최종 갱신: 2026-06-14
 
 ## ✅ 완료 (PCT 1차 구현)

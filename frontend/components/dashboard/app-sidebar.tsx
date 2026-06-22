@@ -98,7 +98,7 @@ const NAV_SECTIONS: NavSection[] = [
         id: "insights", icon: BarChart2, label: "인사이트",
         subItems: [
           { id: "dash", label: "대시보드", adminOnly: true },
-          { id: "stats", label: "시험자 운영평가", adminOnly: true, live: true },
+          { id: "stats", label: "운영평가", adminOnly: true, live: true },
           { id: "ins-report", label: "리포트", adminOnly: true },
         ],
       },

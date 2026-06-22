@@ -1,16 +1,16 @@
 /**
  * [BACKEND] 품목별 시험 전 확인사항 (일시·작성자·특이사항·이슈로트 포함)
- *   GET    /api/product-pretest-notes?productId=                       — 목록 (인증)
- *   POST   { productId, content, occurredAt?, remark?, issueLot? }     — 추가 (인증, 작성자 자동기록)
- *   PATCH  { id, content?, occurredAt?, remark?, issueLot? }           — 수정 (인증)
- *   DELETE { id }                                                      — 삭제 (인증)
+ *   GET    /api/product-pretest-notes?productId=                                   — 목록 (인증)
+ *   POST   { productId 또는 productIds[], content, occurredAt?, remark?, issueLot? } — 추가 (인증, 작성자 자동기록, 유사 품목 동시 적재 지원)
+ *   PATCH  { id, content?, occurredAt?, remark?, issueLot? }                        — 수정 (인증)
+ *   DELETE { id }                                                                  — 삭제 (인증)
  */
 
 import { NextRequest } from 'next/server'
 import { requireAuth } from '@backend/lib/guard'
 import {
   listByProduct,
-  addNote,
+  addNoteToProducts,
   updateNote,
   removeNote,
 } from '@backend/services/productPretestNotes'
@@ -35,12 +35,15 @@ export async function POST(req: NextRequest) {
   const auth = await requireAuth(req)
   if (!auth.ok) return auth.response
   try {
-    const { productId, content, occurredAt, remark, issueLot } = await req.json()
-    if (!productId || !content?.trim()) {
-      return Response.json({ error: 'productId, content는 필수입니다.' }, { status: 400 })
+    const { productId, productIds, content, occurredAt, remark, issueLot } = await req.json()
+    // 대상 품목: productIds(유사 품목 동시 적재) 우선, 없으면 단일 productId
+    const ids: string[] = Array.isArray(productIds) && productIds.length > 0
+      ? productIds.filter((x: unknown): x is string => typeof x === 'string' && x.trim().length > 0)
+      : (typeof productId === 'string' && productId ? [productId] : [])
+    if (ids.length === 0 || !content?.trim()) {
+      return Response.json({ error: 'productId(또는 productIds), content는 필수입니다.' }, { status: 400 })
     }
-    const row = await addNote({
-      productId,
+    const count = await addNoteToProducts(ids, {
       content: content.trim(),
       occurredAt: occurredAt || null,
       remark: remark?.trim() || null,
@@ -49,7 +52,7 @@ export async function POST(req: NextRequest) {
       createdBy: auth.payload.sub ?? null,
       createdByName: auth.payload.username ?? null,
     })
-    return Response.json({ row }, { status: 201 })
+    return Response.json({ count }, { status: 201 })
   } catch (err) {
     const msg = err instanceof Error ? err.message : '서버 오류'
     return Response.json({ error: msg }, { status: 500 })
