@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { X, Send, Sparkles, MoreVertical, Bot, ImagePlus, Loader2 } from 'lucide-react'
+import { X, Send, Sparkles, Trash2, Bot, ImagePlus, Loader2 } from 'lucide-react'
 import { useAuth } from '@frontend/lib/auth-context'
+import { ConfirmMessageDialog } from '@frontend/components/common/confirm-message'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Message {
@@ -23,6 +24,15 @@ function todayLabel() {
   return new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })
 }
 
+function createWelcomeMessage(): Message {
+  return {
+    id: 'welcome',
+    role: 'bot',
+    content: '안녕하세요. QCink입니다.\nQC 업무부터 일반적인 질문까지 편하게 말씀해 주세요.',
+    time: nowTime(),
+  }
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function Chatbot() {
   const [open, setOpen] = useState(false)
@@ -30,6 +40,9 @@ export default function Chatbot() {
   const [messages, setMessages] = useState<Message[]>([])
   const [conversationId, setConversationId] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
+  const [clearDialogOpen, setClearDialogOpen] = useState(false)
+  const [isClearing, setIsClearing] = useState(false)
+  const [clearError, setClearError] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -82,15 +95,7 @@ export default function Chatbot() {
         if (latest.difyConvId) setConversationId(latest.difyConvId)
       } catch {
         if (cancelled) return
-        setMessages([
-          {
-            id: 'welcome',
-            role: 'bot',
-            content:
-              'KD QC 어시스턴트입니다.\n시험 현황, 원료, 제품, 안정성 시험 등 QC 업무에 대해 질문해주세요.',
-            time: nowTime(),
-          },
-        ])
+        setMessages([createWelcomeMessage()])
       }
     })()
 
@@ -132,6 +137,13 @@ export default function Chatbot() {
     const userMsg: Message = { id: Date.now().toString(), role: 'user', content: query, time: nowTime(), images: imageUrls.length ? imageUrls : undefined }
     const botId = `bot-${Date.now()}`
     const botMsg: Message = { id: botId, role: 'bot', content: '', time: nowTime(), streaming: true }
+    const recentHistory = messages
+      .filter(message => message.id !== 'welcome' && message.content.trim() && !message.streaming)
+      .slice(-10)
+      .map(message => ({
+        role: message.role === 'bot' ? 'assistant' : 'user',
+        content: message.content,
+      }))
 
     setMessages(prev => [...prev, userMsg, botMsg])
     setIsStreaming(true)
@@ -143,7 +155,7 @@ export default function Chatbot() {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: query, conversationId, files: fileIds }),
+        body: JSON.stringify({ message: query, conversationId, files: fileIds, history: recentHistory }),
         signal: abort.signal,
       })
 
@@ -201,15 +213,19 @@ export default function Chatbot() {
 
       // 대화 이력 영속화 (Supabase 미연결 시 서버에서 무시됨)
       if (localBotText && localConvId) {
-        fetch('/api/chat/history', {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            difyConvId: localConvId,
-            userText:   query,
-            botText:    localBotText,
-          }),
-        }).catch(() => {})
+        try {
+          await fetch('/api/chat/history', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              difyConvId: localConvId,
+              userText:   query,
+              botText:    localBotText,
+            }),
+          })
+        } catch (error) {
+          console.error('대화 이력 저장 실패:', error)
+        }
       }
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
@@ -238,12 +254,31 @@ export default function Chatbot() {
     setOpen(false)
   }
 
-  const resetConversation = () => {
+  const resetConversation = async () => {
+    if (isClearing) return
+
     abortRef.current?.abort()
-    setMessages([])
-    setConversationId('')
     setIsStreaming(false)
-    setTimeout(() => setOpen(true), 50)
+    setIsClearing(true)
+    setClearError('')
+
+    try {
+      const response = await fetch('/api/chat/history', { method: 'DELETE' })
+      if (!response.ok) throw new Error('대화 이력 삭제 실패')
+
+      attachments.forEach(attachment => URL.revokeObjectURL(attachment.url))
+      setAttachments([])
+      setInput('')
+      setConversationId('')
+      setMessages([createWelcomeMessage()])
+      setClearDialogOpen(false)
+      setTimeout(() => inputRef.current?.focus(), 100)
+    } catch (error) {
+      console.error('대화 초기화 실패:', error)
+      setClearError('대화 내용을 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.')
+    } finally {
+      setIsClearing(false)
+    }
   }
 
   return (
@@ -257,7 +292,7 @@ export default function Chatbot() {
           boxShadow: '0 0 0 0 rgba(37, 99, 235, 0.4)',
           animation: open ? 'none' : 'chatbotPulse 2.5s ease-in-out infinite',
         }}
-        title="KD QC 어시스턴트"
+        title="QCink AI 에이전트"
       >
         {open ? (
           <X size={22} className="text-white" />
@@ -298,7 +333,7 @@ export default function Chatbot() {
               <Bot size={16} className="text-white" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-white leading-tight">KD QC 어시스턴트</p>
+              <p className="text-sm font-semibold text-white leading-tight">QCink</p>
               <p className="text-[11px] text-blue-200 leading-none mt-0.5">
                 {isStreaming ? (
                   <span className="flex items-center gap-1">
@@ -306,18 +341,24 @@ export default function Chatbot() {
                     응답 중...
                   </span>
                 ) : (
-                  'ChatGPT 기반 QC 도우미'
+                  'QC 업무 AI 에이전트'
                 )}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-1">
             <button
-              onClick={resetConversation}
-              className="rounded-full p-1.5 text-white/60 hover:bg-white/15 hover:text-white transition-colors"
-              title="대화 초기화"
+              type="button"
+              onClick={() => {
+                setClearError('')
+                setClearDialogOpen(true)
+              }}
+              disabled={isStreaming || isClearing}
+              className="rounded-full p-1.5 text-white/60 transition-colors hover:bg-white/15 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+              title="대화 내용 전체 삭제"
+              aria-label="대화 내용 전체 삭제"
             >
-              <MoreVertical size={16} />
+              {isClearing ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
             </button>
             <button
               onClick={handleClose}
@@ -443,10 +484,25 @@ export default function Chatbot() {
             </button>
           </div>
           <p className="mt-1.5 text-center text-[10px] text-slate-400">
-            ChatGPT가 생성한 답변은 부정확할 수 있습니다
+            QCink의 답변은 중요한 업무 판단 전에 확인해 주세요
           </p>
         </div>
       </div>
+
+      <ConfirmMessageDialog
+        open={clearDialogOpen}
+        title="대화 내용을 모두 삭제할까요?"
+        description="저장된 모든 질문과 답변이 삭제되며 되돌릴 수 없습니다."
+        confirmLabel="대화 삭제"
+        variant="danger"
+        pending={isClearing}
+        error={clearError}
+        onOpenChange={nextOpen => {
+          if (!nextOpen) setClearError('')
+          setClearDialogOpen(nextOpen)
+        }}
+        onConfirm={resetConversation}
+      />
 
       {/* ── CSS Animations ────────────────────────────────────────────────── */}
       <style>{`

@@ -1,7 +1,7 @@
 'use client'
 
 import type { CSSProperties } from 'react'
-import { AppSidebar } from '@frontend/components/dashboard/app-sidebar'
+import dynamic from 'next/dynamic'
 import Chatbot from '@frontend/components/dashboard/chatbot'
 import NotificationBell from '@frontend/components/dashboard/notification-bell'
 import { Separator } from '@frontend/components/ui/separator'
@@ -9,6 +9,12 @@ import {
   SidebarInset, SidebarProvider, SidebarTrigger,
 } from '@frontend/components/ui/sidebar'
 import { cn } from '@frontend/lib/utils'
+
+// Radix 메뉴 ID는 사용자 권한과 화면 폭에 따라 달라질 수 있어 클라이언트에서만 구성한다.
+const AppSidebar = dynamic(
+  () => import('@frontend/components/dashboard/app-sidebar').then(module => module.AppSidebar),
+  { ssr: false },
+)
 
 export default function MenuLayout({ children }: { children: React.ReactNode }) {
   return (

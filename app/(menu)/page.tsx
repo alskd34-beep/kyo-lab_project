@@ -81,6 +81,7 @@ export default function QCDashboard() {
   const [selectedRows, setSelectedRows]   = useState<Set<number>>(new Set())
   const [searchValue, setSearchValue]     = useState('')
   const [dateRange, setDateRange]         = useState<DateRange | undefined>(undefined)
+  const [isHydrated, setIsHydrated]       = useState(false)
   const [sortField, setSortField]         = useState<keyof TestRow | null>(null)
   const [sortDir, setSortDir]             = useState<'asc' | 'desc'>('asc')
 
@@ -89,6 +90,7 @@ export default function QCDashboard() {
     const today = new Date()
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 클라이언트 전용 시각 동기화(마운트 1회)
     setDateRange({ from: subMonths(today, 1), to: today })
+    setIsHydrated(true)
   }, [])
   const [tableData, setTableData]         = useState<TestRow[]>(DEMO_TABLE_DATA)
   const [isLoading, setIsLoading]         = useState(false)
@@ -318,33 +320,47 @@ export default function QCDashboard() {
               {/* Toolbar */}
               <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-4 py-2.5">
                 {/* Date range */}
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 transition-colors"
-                    >
-                      <CalendarIcon size={13} className="text-slate-400" />
-                      <span className="tabular-nums">
-                        {dateRange?.from ? format(dateRange.from, 'yyyy.MM.dd') : '시작일'}
-                      </span>
-                      <span className="text-slate-300">~</span>
-                      <span className="tabular-nums">
-                        {dateRange?.to ? format(dateRange.to, 'yyyy.MM.dd') : '종료일'}
-                      </span>
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent align="start" className="w-auto p-0">
-                    <Calendar
-                      mode="range"
-                      selected={dateRange}
-                      onSelect={setDateRange}
-                      numberOfMonths={2}
-                      locale={ko}
-                      defaultMonth={dateRange?.from}
-                    />
-                  </PopoverContent>
-                </Popover>
+                {isHydrated ? (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 transition-colors"
+                      >
+                        <CalendarIcon size={13} className="text-slate-400" />
+                        <span className="tabular-nums">
+                          {dateRange?.from ? format(dateRange.from, 'yyyy.MM.dd') : '시작일'}
+                        </span>
+                        <span className="text-slate-300">~</span>
+                        <span className="tabular-nums">
+                          {dateRange?.to ? format(dateRange.to, 'yyyy.MM.dd') : '종료일'}
+                        </span>
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-auto p-0">
+                      <Calendar
+                        mode="range"
+                        selected={dateRange}
+                        onSelect={setDateRange}
+                        numberOfMonths={2}
+                        locale={ko}
+                        defaultMonth={dateRange?.from}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    aria-label="기간 선택 준비 중"
+                    className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-600"
+                  >
+                    <CalendarIcon size={13} className="text-slate-400" />
+                    <span className="tabular-nums">시작일</span>
+                    <span className="text-slate-300">~</span>
+                    <span className="tabular-nums">종료일</span>
+                  </button>
+                )}
 
                 {/* Search */}
                 <div className="flex min-w-0 w-full sm:w-auto sm:flex-1 md:max-w-[240px] items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">

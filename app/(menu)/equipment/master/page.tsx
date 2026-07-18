@@ -16,6 +16,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@frontend/components/ui/select"
+import { useConfirmMessage } from "@frontend/components/common/confirm-message"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -96,6 +97,7 @@ function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: 
 
 export default function EquipmentMasterPage() {
   const { user } = useAuth()
+  const { requestConfirm } = useConfirmMessage()
   const isAdmin = user?.role === "admin"
 
   const [rows, setRows] = useState<EquipmentMasterRow[]>([])
@@ -150,7 +152,14 @@ export default function EquipmentMasterPage() {
   useEffect(() => { void load() }, [load])
 
   const handleDelete = async (row: EquipmentMasterRow) => {
-    if (!confirm(`장비 '${row.name}(${row.code})'을 삭제할까요?`)) return
+    const confirmed = await requestConfirm({
+      title: "장비를 삭제할까요?",
+      description: `${row.name}(${row.code}) 장비 정보를 삭제합니다. 연결된 예약이 있으면 삭제가 제한될 수 있습니다.`,
+      confirmLabel: "장비 삭제",
+      variant: "danger",
+    })
+    if (!confirmed) return
+
     setBusy(row.id)
     try {
       const res = await fetch(`/api/equipment-master/${row.id}`, {

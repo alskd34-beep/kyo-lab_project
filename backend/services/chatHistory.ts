@@ -28,6 +28,7 @@ export async function upsertConversation(params: {
     .from('chat_conversations')
     .select('id')
     .eq('dify_conv_id', params.difyConvId)
+    .eq('user_key', params.userKey)
     .maybeSingle()
 
   if (existing?.id) return existing.id as string
@@ -75,7 +76,16 @@ export async function listConversations(userKey: string): Promise<StoredConversa
   }))
 }
 
-export async function getMessages(conversationId: string): Promise<StoredMessage[]> {
+export async function getMessages(conversationId: string, userKey: string): Promise<StoredMessage[]> {
+  const { data: conversation, error: conversationError } = await supabase
+    .from('chat_conversations')
+    .select('id')
+    .eq('id', conversationId)
+    .eq('user_key', userKey)
+    .maybeSingle()
+  if (conversationError) throw conversationError
+  if (!conversation) throw new Error('대화를 찾을 수 없습니다.')
+
   const { data, error } = await supabase
     .from('chat_messages')
     .select('id, role, content, created_at')
@@ -88,4 +98,14 @@ export async function getMessages(conversationId: string): Promise<StoredMessage
     content:   r.content as string,
     createdAt: r.created_at as string,
   }))
+}
+
+/** 사용자의 모든 대화와 하위 메시지를 삭제합니다. */
+export async function deleteConversations(userKey: string): Promise<void> {
+  const { error } = await supabase
+    .from('chat_conversations')
+    .delete()
+    .eq('user_key', userKey)
+
+  if (error) throw error
 }

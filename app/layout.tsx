@@ -5,6 +5,7 @@ import "./globals.css"
 import { ThemeProvider } from "@frontend/components/providers/theme-provider"
 import { AuthProvider } from "@frontend/lib/auth-context"
 import { ToastMessageProvider } from "@frontend/components/common/toast-message"
+import { ConfirmMessageProvider } from "@frontend/components/common/confirm-message"
 import { cn } from "@frontend/lib/utils";
 
 export const metadata: Metadata = {
@@ -33,7 +34,9 @@ export default function RootLayout({
       <body>
         <ThemeProvider>
           <AuthProvider>
-            <ToastMessageProvider>{children}</ToastMessageProvider>
+            <ToastMessageProvider>
+              <ConfirmMessageProvider>{children}</ConfirmMessageProvider>
+            </ToastMessageProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>

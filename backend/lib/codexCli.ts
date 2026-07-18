@@ -14,22 +14,65 @@
  */
 
 import { spawn } from 'node:child_process'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { access, mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 
 /** Codex AI 배분 사용 여부 (옵트인) */
 export function codexAssignEnabled(): boolean {
   return process.env.ENABLE_CODEX_ASSIGN === '1'
 }
 
-function codexCmd(): string {
-  return process.env.CODEX_EXEC_CMD || 'codex exec'
+async function codexCmd(): Promise<string> {
+  const configured = process.env.CODEX_EXEC_CMD?.trim()
+  if (configured) return configured
+
+  // VS Code 확장으로 설치된 CLI는 개발 서버 PATH에 포함되지 않을 수 있다.
+  const extensionsDir = join(homedir(), '.vscode', 'extensions')
+  try {
+    const entries = await readdir(extensionsDir, { withFileTypes: true })
+    const extensionDirs = entries
+      .filter(entry => entry.isDirectory() && entry.name.startsWith('openai.chatgpt-'))
+      .map(entry => entry.name)
+      .sort()
+      .reverse()
+
+    for (const extensionDir of extensionDirs) {
+      const binDir = join(extensionsDir, extensionDir, 'bin')
+      try {
+        const platforms = await readdir(binDir, { withFileTypes: true })
+        for (const platform of platforms) {
+          if (!platform.isDirectory()) continue
+          const executable = join(binDir, platform.name, 'codex')
+          try {
+            await access(executable)
+            return `${shellQuote(executable)} exec`
+          } catch {
+            // 다음 플랫폼 실행 파일을 확인한다.
+          }
+        }
+      } catch {
+        // 다음 확장 버전을 확인한다.
+      }
+    }
+  } catch {
+    // 전역 PATH의 codex 명령으로 계속 시도한다.
+  }
+
+  return 'codex exec'
 }
 
 function codexModel(): string | null {
   const model = process.env.CODEX_MODEL?.trim()
   return model ? model : null
+}
+
+/**
+ * 어시스턴트용 모델 오버라이드.
+ * 미지정 시 현재 Codex 계정에서 지원하는 CLI 기본 모델을 사용한다.
+ */
+export function codexAssistantModel(): string | null {
+  return process.env.CODEX_ASSISTANT_MODEL?.trim() || codexModel()
 }
 
 function shellQuote(value: string): string {
@@ -62,12 +105,18 @@ interface RunCodexOptions {
   timeoutMs?: number
   signal?: AbortSignal
   extraArgs?: string[]
+  /** null이면 CODEX_MODEL도 무시하고 Codex CLI의 계정별 기본 모델을 사용한다. */
+  model?: string | null
+}
+
+export interface CodexCliError extends Error {
+  stderr?: string
 }
 
 async function runCodexProcess(prompt: string, options: RunCodexOptions = {}): Promise<{ stdout: string; stderr: string }> {
-  const model = codexModel()
+  const model = options.model === undefined ? codexModel() : options.model
   const args = model ? ['--model', model, ...(options.extraArgs ?? [])] : (options.extraArgs ?? [])
-  const cmd = appendArgs(codexCmd(), args)
+  const cmd = appendArgs(await codexCmd(), args)
   const result = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
     const child = spawn('sh', ['-c', cmd], { stdio: ['pipe', 'pipe', 'pipe'] })
     let out = ''
@@ -101,7 +150,12 @@ async function runCodexProcess(prompt: string, options: RunCodexOptions = {}): P
     child.on('close', code => {
       clearTimeout(timer)
       options.signal?.removeEventListener('abort', onAbort)
-      if (code !== 0) reject(new Error(`codex CLI 종료코드 ${code}: ${err.slice(0, 500)}`))
+      if (code !== 0) {
+        const error = new Error(`codex CLI 종료코드 ${code}: ${err.slice(0, 500)}`) as CodexCliError
+        // 화면에는 짧은 오류만 노출하되, 호출부에서는 전체 원인으로 폴백 여부를 판단한다.
+        error.stderr = err
+        reject(error)
+      }
       else resolve({ stdout: out, stderr: err })
     })
 

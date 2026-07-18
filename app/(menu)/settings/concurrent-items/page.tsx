@@ -11,6 +11,7 @@ import { useLockBodyScroll } from "@frontend/hooks/use-lock-body-scroll"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
 import { Badge } from "@frontend/components/ui/badge"
+import { useConfirmMessage } from "@frontend/components/common/confirm-message"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 interface FamilyMember { productCode: string; productName: string | null }
@@ -20,6 +21,7 @@ interface ProductOpt { productCode: string; name: string }
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function ConcurrentItemsPage() {
   const { user } = useAuth()
+  const { requestConfirm } = useConfirmMessage()
   const isAdmin = user?.role === "admin"
 
   const [rows, setRows] = useState<FamilyRow[]>([])
@@ -49,7 +51,14 @@ export default function ConcurrentItemsPage() {
 
   // LLM(Codex)으로 기존 군을 모두 지우고 재그룹핑
   const runSeedLLM = async () => {
-    if (!confirm("기존 동시분석 품목군을 모두 삭제하고 LLM으로 다시 그룹핑합니다. 진행할까요?")) return
+    const confirmed = await requestConfirm({
+      title: "AI로 품목군을 다시 그룹할까요?",
+      description: "기존 동시분석 품목군을 모두 삭제한 뒤 LLM 기준으로 새로 생성합니다.",
+      confirmLabel: "재그룹핑 시작",
+      variant: "warning",
+    })
+    if (!confirmed) return
+
     setBusy("seed-llm")
     try {
       const res = await fetch("/api/concurrent-product-families?seed=llm", { method: "POST", credentials: "include" })
@@ -64,7 +73,14 @@ export default function ConcurrentItemsPage() {
   }
 
   const remove = async (f: FamilyRow) => {
-    if (!confirm(`"${f.name}" 품목군을 삭제할까요?`)) return
+    const confirmed = await requestConfirm({
+      title: "품목군을 삭제할까요?",
+      description: `"${f.name}" 품목군과 품목 연결 정보가 삭제되며 되돌릴 수 없습니다.`,
+      confirmLabel: "품목군 삭제",
+      variant: "danger",
+    })
+    if (!confirmed) return
+
     setBusy(`del-${f.id}`)
     try {
       const res = await fetch(`/api/concurrent-product-families/${f.id}`, { method: "DELETE", credentials: "include" })

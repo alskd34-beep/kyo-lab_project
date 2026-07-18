@@ -5,6 +5,7 @@ import { ChevronDown, ChevronUp, ImagePlus, Pencil, Save, Trash2, Upload, UserPl
 import { Skeleton } from '@frontend/components/ui/skeleton'
 import { useAuth } from '@frontend/lib/auth-context'
 import { TesterAvatar, invalidateTesterProfileCache } from '@frontend/lib/tester-profiles'
+import { useConfirmMessage } from '@frontend/components/common/confirm-message'
 import {
   Dialog,
   DialogContent,
@@ -86,6 +87,7 @@ function readImageAsDataUrl(file: File): Promise<string> {
 
 export default function UsersAdminPage() {
   const { user: me, refresh } = useAuth()
+  const { requestConfirm } = useConfirmMessage()
   const [users, setUsers] = useState<UserRow[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
@@ -146,7 +148,15 @@ export default function UsersAdminPage() {
   }
 
   const remove = async (id: string) => {
-    if (!confirm('정말 삭제하시겠습니까?')) return
+    const target = users.find(user => user.id === id)
+    const confirmed = await requestConfirm({
+      title: '사용자를 삭제할까요?',
+      description: `${target?.displayName ?? target?.username ?? '선택한 사용자'}의 계정 정보가 삭제되며 되돌릴 수 없습니다.`,
+      confirmLabel: '사용자 삭제',
+      variant: 'danger',
+    })
+    if (!confirmed) return
+
     const r = await fetch(`/api/users/${id}`, { method: 'DELETE', credentials: 'include' })
     if (r.ok) {
       invalidateTesterProfileCache()

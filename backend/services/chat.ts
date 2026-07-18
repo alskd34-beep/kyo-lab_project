@@ -11,11 +11,17 @@ import { randomUUID } from 'crypto'
 import { supabase, supabaseAdmin } from '@backend/lib/supabase'
 import { runLetsurText } from '@backend/lib/letsurClient'
 import { runMisoText } from '@backend/lib/misoClient'
+import { codexAssistantModel, runCodexText, type CodexCliError } from '@backend/lib/codexCli'
+import { buildQthinkAnswerPrompt } from '@backend/lib/qthinkPrompts'
+import {
+  analyzeQthinkIntent,
+  buildQthinkDataContext,
+  matchQthinkFixedIntent,
+  selectRelevantHistory,
+  type QthinkModelRunner,
+  type QthinkScope,
+} from '@backend/services/qthinkAgent'
 
-const SYSTEM_PROMPT  = `당신은 광동제약 KD QC(품질관리) 어시스턴트입니다.
-사용자 질문에 대해 답할 때, [DB 컨텍스트] 블록이 제공된다면 반드시 그 안의 사실만을 근거로 답하세요.
-DB 컨텍스트에 없는 사실을 지어내지 말고, 정보가 부족하면 "DB에 해당 정보가 없습니다." 라고 답합니다.
-답변은 한국어로 정확하고 간결하게, 필요한 경우 표·리스트로 구조화하세요.`
 const HISTORY_LIMIT  = 10
 const ACTIVE_STATUSES = ['pending', 'in_progress', 'on_hold']
 
@@ -28,10 +34,7 @@ export interface ChatViewer {
 }
 
 /** 조회 권한 범위: 관리자=전체, 그 외=본인 배정(tester_id)만 */
-interface Scope {
-  isAdmin: boolean
-  testerId: string | null
-}
+type Scope = QthinkScope
 
 interface ChatRequest {
   message: string
@@ -41,10 +44,12 @@ interface ChatRequest {
   signal?: AbortSignal
   /** 첨부 이미지 file id 목록 (시험자/MISO 전용) */
   imageFileIds?: string[]
+  /** 브라우저가 보유한 최근 대화. DB 저장 지연 시 문맥 폴백으로 사용한다. */
+  recentHistory?: ChatMsg[]
 }
 
 interface ChatMsg {
-  role: 'system' | 'user' | 'assistant'
+  role: 'user' | 'assistant'
   content: string
 }
 
@@ -312,14 +317,14 @@ interface JobInfo {
 
 /** 요청자 신원 → 조회 권한 범위 산정 (관리자=전체, 그 외=본인 tester_id) */
 async function resolveScope(viewer: ChatViewer): Promise<Scope> {
-  if (viewer.role === 'admin') return { isAdmin: true, testerId: null }
+  if (viewer.role === 'admin') return { isAdmin: true, testerId: null, userId: viewer.userSub }
   let testerId: string | null = null
   try {
     const { data } = await supabaseAdmin
       .from('users').select('tester_id').eq('id', viewer.userSub).maybeSingle()
     testerId = (data?.tester_id as string) ?? null
   } catch { /* 무시 — 폴백: 본인 연결 없음 */ }
-  return { isAdmin: false, testerId }
+  return { isAdmin: false, testerId, userId: viewer.userSub }
 }
 
 /** KST 기준 오늘(YYYY-MM-DD) */
@@ -525,12 +530,13 @@ async function buildTesterOrdersBlock(t: TesterLite, scope: Scope): Promise<stri
 // ─── 대화 이력 ────────────────────────────────────────────────────────────────
 
 /** 동일 conversationId(dify_conv_id) 의 직전 대화를 assistant/user 포맷으로 가져옵니다. */
-async function loadHistory(difyConvId: string): Promise<ChatMsg[]> {
+async function loadHistory(difyConvId: string, userKey: string): Promise<ChatMsg[]> {
   try {
     const conv = await supabase
       .from('chat_conversations')
       .select('id')
       .eq('dify_conv_id', difyConvId)
+      .eq('user_key', userKey)
       .maybeSingle()
 
     const cid = conv.data?.id as string | undefined
@@ -540,10 +546,10 @@ async function loadHistory(difyConvId: string): Promise<ChatMsg[]> {
       .from('chat_messages')
       .select('role, content, created_at')
       .eq('conversation_id', cid)
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: false })
       .limit(HISTORY_LIMIT)
 
-    return (msgs.data ?? []).map(m => ({
+    return (msgs.data ?? []).reverse().map(m => ({
       role:    m.role === 'bot' ? 'assistant' : 'user',
       content: m.content as string,
     }))
@@ -560,30 +566,6 @@ function chunkText(text: string, size = 120): string[] {
     chunks.push(normalized.slice(i, i + size))
   }
   return chunks
-}
-
-function buildPrompt(message: string, history: ChatMsg[], dbContext: string): string {
-  const historyBlock = history.length > 0
-    ? [
-        '대화 이력:',
-        ...history.map(m => `${m.role === 'assistant' ? '어시스턴트' : '사용자'}: ${m.content}`),
-      ].join('\n')
-    : '대화 이력: 없음'
-
-  return [
-    SYSTEM_PROMPT,
-    `오늘 날짜는 ${kstToday()} (KST) 입니다. "오늘/내일/이번 주" 등 상대적 표현은 이 날짜를 기준으로 해석하세요.`,
-    dbContext || '[DB 컨텍스트] 없음',
-    historyBlock,
-    '현재 사용자 질문:',
-    message,
-    '',
-    '응답 규칙:',
-    '- 한국어로만 답변하세요.',
-    '- DB 컨텍스트가 있으면 그 사실만 사용하세요.',
-    '- 정보가 부족하면 "DB에 해당 정보가 없습니다."라고 답하세요.',
-    '- 최종 답변만 출력하세요. 사전 설명이나 메타 코멘트는 쓰지 마세요.',
-  ].join('\n\n')
 }
 
 function createCliStream(
@@ -609,9 +591,12 @@ function createCliStream(
         controller.close()
       } catch (err) {
         // 스트림은 이미 200으로 시작됐으므로, 오류를 답변 메시지로 표시해 무응답(빈 말풍선)을 방지한다.
-        const reason = err instanceof Error ? err.message : '알 수 없는 오류'
+        console.error('[qthink] 응답 생성 실패', err)
+        const reason = err instanceof Error && err.name === 'AbortError'
+          ? '요청이 취소되었습니다.'
+          : '응답을 생성하지 못했습니다. 잠시 후 다시 시도해 주세요.'
         controller.enqueue(encoder.encode(
-          `data: ${JSON.stringify({ event: 'message', answer: `⚠️ 챗봇 응답 오류: ${reason}`, conversation_id: conversationId })}\n\n`,
+          `data: ${JSON.stringify({ event: 'message', answer: `QCink 응답 오류: ${reason}`, conversation_id: conversationId })}\n\n`,
         ))
         controller.enqueue(encoder.encode('data: [DONE]\n\n'))
         controller.close()
@@ -620,11 +605,48 @@ function createCliStream(
   })
 }
 
+/** 개발기간에는 CLI 기반 어시스턴트를 우선 사용한다. */
+function shouldUseCliAssistantForAdmin(): boolean {
+  const flag = process.env.CHAT_ADMIN_USE_CLI?.trim().toLowerCase()
+  if (flag === '1' || flag === 'true' || flag === 'yes' || flag === 'on') return true
+  if (flag === '0' || flag === 'false' || flag === 'no' || flag === 'off') return false
+  return process.env.NODE_ENV !== 'production'
+}
+
+function isUnsupportedCodexModelError(error: unknown): boolean {
+  const cliError = error as CodexCliError
+  const message = error instanceof Error ? `${error.message}\n${cliError.stderr ?? ''}` : ''
+  return message.includes('model is not supported when using Codex with a ChatGPT account')
+}
+
+async function runAdminCliAssistant(prompt: string, model: string | null, signal?: AbortSignal): Promise<string> {
+  try {
+    return await runCodexText(prompt, { signal, model })
+  } catch (error) {
+    // 계정에서 지원하지 않는 모델은 Codex CLI의 계정별 기본 모델로 한 번만 재시도한다.
+    if (!isUnsupportedCodexModelError(error)) throw error
+    console.warn(`[chat] Codex 모델 ${model ?? '(기본값)'}을 사용할 수 없어 CLI 기본 모델로 재시도합니다.`)
+    return runCodexText(prompt, { signal, model: null })
+  }
+}
+
+function createAdminModelRunner(signal?: AbortSignal): QthinkModelRunner {
+  if (shouldUseCliAssistantForAdmin()) {
+    const model = codexAssistantModel()
+    return prompt => runAdminCliAssistant(prompt, model, signal)
+  }
+  return prompt => runLetsurText(prompt, { signal })
+}
+
 /**
- * 채팅 메시지를 역할별 챗봇(admin=Letsur, tester=MISO)으로 전송하고 SSE 스트림을 반환합니다.
+ * 채팅 메시지를 역할별 QCink 백엔드(admin=에이전트, tester=MISO)로 전송합니다.
  */
-export async function sendChatMessage({ message, conversationId, viewer, signal, imageFileIds }: ChatRequest): Promise<Response> {
+export async function sendChatMessage({ message, conversationId, viewer, signal, imageFileIds, recentHistory }: ChatRequest): Promise<Response> {
   const convId = conversationId && conversationId.trim() ? conversationId : randomUUID()
+  const fixedAnswer = matchQthinkFixedIntent(message)
+  if (fixedAnswer) {
+    return new Response(createCliStream(convId, async () => fixedAnswer))
+  }
 
   // 시험자(admin 외): MISO 앱(자체 지식·시스템 프롬프트 보유)에 사용자 메시지를 그대로 전달.
   // QC DB 컨텍스트/시스템 프롬프트를 덧붙이지 않는다(앱 고유 도메인을 침범하지 않도록). 첨부 이미지(시험일지 등)도 함께 전달.
@@ -633,14 +655,35 @@ export async function sendChatMessage({ message, conversationId, viewer, signal,
     return new Response(stream)
   }
 
-  // 관리자: QC DB 컨텍스트 + 대화 이력을 합친 prompt 를 Letsur 게이트웨이로 전달.
+  // 관리자: 의도 분석 → 허용 도구 조회 → 검증된 컨텍스트 기반 답변.
   const scope = await resolveScope(viewer)
-  const [history, dbContext] = await Promise.all([
-    conversationId ? loadHistory(conversationId) : Promise.resolve([] as ChatMsg[]),
-    buildDbContext(message, scope),
-  ])
-  const prompt = buildPrompt(message, history, dbContext)
-  const stream = createCliStream(convId, () => runLetsurText(prompt, { signal }))
+  const storedHistory = conversationId ? await loadHistory(conversationId, viewer.userSub) : [] as ChatMsg[]
+  const history = recentHistory && recentHistory.length > 0
+    ? recentHistory.slice(-HISTORY_LIMIT)
+    : storedHistory
+  const relevantHistory = selectRelevantHistory(message, history)
+  const runModel = createAdminModelRunner(signal)
+  const intent = await analyzeQthinkIntent({ question: message, history, runModel })
+
+  if (intent.responseType === 'chat' && intent.chatAnswer) {
+    return new Response(createCliStream(convId, async () => intent.chatAnswer ?? ''))
+  }
+
+  const [legacyContext, agentContext] = intent.responseType === 'data'
+    ? await Promise.all([
+        buildDbContext(message, scope),
+        buildQthinkDataContext(intent, scope),
+      ])
+    : ['', '']
+  const dataContext = [agentContext, legacyContext].filter(Boolean).join('\n\n')
+  const prompt = buildQthinkAnswerPrompt({
+    question: message,
+    today: kstToday(),
+    role: viewer.role,
+    history: relevantHistory,
+    dataContext,
+  })
+  const stream = createCliStream(convId, () => runModel(prompt))
 
   return new Response(stream)
 }

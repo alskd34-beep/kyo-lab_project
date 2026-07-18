@@ -13,6 +13,7 @@ import { Card } from "@frontend/components/ui/card"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@frontend/components/ui/table"
+import { useConfirmMessage } from "@frontend/components/common/confirm-message"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 type ReservationStatus = "RESERVED" | "WAITING" | "CANCELLED" | "COMPLETED"
@@ -45,6 +46,7 @@ type SortDir = "asc" | "desc"
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function EquipmentReservationPage() {
   const { user } = useAuth()
+  const { requestConfirm } = useConfirmMessage()
   const isAdmin = user?.role === "admin"
 
   const [rows, setRows] = useState<ReservationRow[]>([])
@@ -108,7 +110,17 @@ export default function EquipmentReservationPage() {
   useEffect(() => { void load() }, [load])
 
   const cancel = async (id: string) => {
-    if (!confirm("이 예약을 취소할까요?")) return
+    const target = rows.find(row => row.id === id)
+    const confirmed = await requestConfirm({
+      title: "장비 예약을 취소할까요?",
+      description: target
+        ? `${target.equipmentId} 장비의 ${target.startDate} ~ ${target.endDate} 예약을 취소합니다.`
+        : "선택한 장비 예약을 취소합니다.",
+      confirmLabel: "예약 취소",
+      variant: "warning",
+    })
+    if (!confirmed) return
+
     setBusy(id)
     try {
       const res = await fetch(`/api/equipment-reservation/${id}`, {
@@ -137,7 +149,17 @@ export default function EquipmentReservationPage() {
   }
 
   const remove = async (id: string) => {
-    if (!confirm("이 예약을 삭제할까요?")) return
+    const target = rows.find(row => row.id === id)
+    const confirmed = await requestConfirm({
+      title: "장비 예약을 삭제할까요?",
+      description: target
+        ? `${target.equipmentId} 장비의 ${target.startDate} ~ ${target.endDate} 예약 기록을 삭제합니다.`
+        : "선택한 장비 예약 기록을 삭제합니다.",
+      confirmLabel: "예약 삭제",
+      variant: "danger",
+    })
+    if (!confirmed) return
+
     setBusy(id)
     try {
       const res = await fetch(`/api/equipment-reservation/${id}`, { method: "DELETE", credentials: "include" })

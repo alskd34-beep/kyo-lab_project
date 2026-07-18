@@ -6,6 +6,7 @@ import { useLockBodyScroll } from "@frontend/hooks/use-lock-body-scroll"
 import { CalendarDays, Plus, Trash2, X, Loader2, ChevronLeft, ChevronRight, Download } from "lucide-react"
 import { DateField } from "@frontend/components/ui/date-field"
 import { Skeleton } from "@frontend/components/ui/skeleton"
+import { useConfirmMessage } from "@frontend/components/common/confirm-message"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface HolidayRow {
@@ -18,6 +19,7 @@ interface HolidayRow {
 // ─── Component ───────────────────────────────────────────────────────────────
 export default function HolidaysPage() {
   const { user } = useAuth()
+  const { requestConfirm } = useConfirmMessage()
   const isAdmin = user?.role === "admin"
 
   const now = new Date()
@@ -52,7 +54,14 @@ export default function HolidaysPage() {
   useEffect(() => { void load() }, [load])
 
   const remove = async (date: string) => {
-    if (!confirm(`${date} 공휴일을 삭제할까요?`)) return
+    const confirmed = await requestConfirm({
+      title: "공휴일을 삭제할까요?",
+      description: `${date} 공휴일을 삭제하면 스케줄 자동배정에서 근무일로 처리될 수 있습니다.`,
+      confirmLabel: "공휴일 삭제",
+      variant: "danger",
+    })
+    if (!confirmed) return
+
     setBusy(date)
     try {
       const res = await fetch("/api/holidays", {

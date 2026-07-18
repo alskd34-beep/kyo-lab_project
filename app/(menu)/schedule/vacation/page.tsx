@@ -10,6 +10,7 @@ import {
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import { DateRangeField } from "@frontend/components/ui/date-range-field"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@frontend/components/ui/select"
+import { useConfirmMessage } from "@frontend/components/common/confirm-message"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 type ScheduleType = "ANNUAL" | "HALF_DAY" | "BUSINESS_TRIP"
@@ -114,6 +115,7 @@ const HOLIDAY_H = 16 // 공휴일 라벨 줄 높이(공휴일이 있는 주에�
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function VacationPage() {
   const { user } = useAuth()
+  const { requestConfirm } = useConfirmMessage()
   const isAdmin = user?.role === "admin"
 
   const now = new Date()
@@ -189,7 +191,17 @@ export default function VacationPage() {
   const openCreate = (day: string) => setAddDefaults({ start: day, end: day })
 
   const remove = async (id: string) => {
-    if (!confirm("이 일정을 삭제할까요?")) return
+    const target = rows.find(row => row.id === id)
+    const confirmed = await requestConfirm({
+      title: "휴가 일정을 삭제할까요?",
+      description: target
+        ? `${target.userName ?? "사용자"}의 ${target.startDate} ~ ${target.endDate} 일정을 삭제합니다.`
+        : "선택한 휴가 일정을 삭제합니다.",
+      confirmLabel: "일정 삭제",
+      variant: "danger",
+    })
+    if (!confirmed) return
+
     setBusy(id)
     try {
       const res = await fetch(`/api/operator-schedule/${id}`, { method: "DELETE", credentials: "include" })
