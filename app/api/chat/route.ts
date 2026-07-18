@@ -13,12 +13,13 @@ export async function POST(req: NextRequest) {
   const auth = await requireAuth(req)
   if (!auth.ok) return auth.response
   try {
-    const { message, conversationId } = await req.json()
+    const { message, conversationId, files } = await req.json()
     const difyRes = await sendChatMessage({
       message,
       conversationId,
       viewer: { userSub: auth.payload.sub, role: auth.payload.role },
       signal: req.signal,
+      imageFileIds: Array.isArray(files) ? files.filter((x: unknown): x is string => typeof x === 'string') : undefined,
     })
 
     return new Response(difyRes.body, {

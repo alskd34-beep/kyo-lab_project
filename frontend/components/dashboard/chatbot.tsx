@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { X, Send, Sparkles, MoreVertical, Bot } from 'lucide-react'
+import { X, Send, Sparkles, MoreVertical, Bot, ImagePlus, Loader2 } from 'lucide-react'
+import { useAuth } from '@frontend/lib/auth-context'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Message {
@@ -10,6 +11,8 @@ interface Message {
   content: string
   time: string
   streaming?: boolean
+  /** 사용자 첨부 이미지 미리보기 URL (시험자 챗봇) */
+  images?: string[]
 }
 
 function nowTime() {
@@ -30,6 +33,13 @@ export default function Chatbot() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const abortRef = useRef<AbortController | null>(null)
+
+  // 이미지 첨부(시험자 챗봇 = MISO 전용)
+  const { user } = useAuth()
+  const canAttach = !!user && user.role !== 'admin'
+  const [attachments, setAttachments] = useState<{ id: string; name: string; url: string }[]>([])
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -87,12 +97,39 @@ export default function Chatbot() {
     return () => { cancelled = true }
   }, [open, messages.length])
 
+  const handleFiles = async (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return
+    setUploading(true)
+    try {
+      for (const file of Array.from(fileList)) {
+        if (!file.type.startsWith('image/')) continue
+        const fd = new FormData()
+        fd.append('file', file)
+        const res = await fetch('/api/chat/upload', { method: 'POST', body: fd })
+        const d = await res.json().catch(() => ({}))
+        if (!res.ok) { console.error('이미지 업로드 실패:', d.error); continue }
+        setAttachments(prev => [...prev, { id: d.id, name: d.name ?? file.name, url: URL.createObjectURL(file) }])
+      }
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  const removeAttachment = (id: string) =>
+    setAttachments(prev => prev.filter(a => a.id !== id))
+
   const sendMessage = async () => {
     const text = input.trim()
-    if (!text || isStreaming) return
-    setInput('')
+    if ((!text && attachments.length === 0) || isStreaming) return
 
-    const userMsg: Message = { id: Date.now().toString(), role: 'user', content: text, time: nowTime() }
+    const fileIds = attachments.map(a => a.id)
+    const imageUrls = attachments.map(a => a.url)
+    const query = text || '첨부한 이미지(시험일지)를 확인해줘'
+    setInput('')
+    setAttachments([])
+
+    const userMsg: Message = { id: Date.now().toString(), role: 'user', content: query, time: nowTime(), images: imageUrls.length ? imageUrls : undefined }
     const botId = `bot-${Date.now()}`
     const botMsg: Message = { id: botId, role: 'bot', content: '', time: nowTime(), streaming: true }
 
@@ -106,7 +143,7 @@ export default function Chatbot() {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, conversationId }),
+        body: JSON.stringify({ message: query, conversationId, files: fileIds }),
         signal: abort.signal,
       })
 
@@ -169,7 +206,7 @@ export default function Chatbot() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             difyConvId: localConvId,
-            userText:   text,
+            userText:   query,
             botText:    localBotText,
           }),
         }).catch(() => {})
@@ -311,6 +348,14 @@ export default function Chatbot() {
                 </div>
               )}
               <div className={`flex flex-col gap-1 max-w-[76%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                {msg.images && msg.images.length > 0 && (
+                  <div className="flex flex-wrap justify-end gap-1.5">
+                    {msg.images.map((src, i) => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img key={i} src={src} alt="첨부 이미지" className="h-20 w-20 rounded-lg border border-slate-200 object-cover" />
+                    ))}
+                  </div>
+                )}
                 <div
                   className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
                     msg.role === 'user'
@@ -339,20 +384,59 @@ export default function Chatbot() {
 
         {/* Input */}
         <div className="shrink-0 border-t border-slate-100 px-3 py-2.5">
+          {/* 첨부 이미지 미리보기 (시험자) */}
+          {attachments.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-2">
+              {attachments.map(a => (
+                <div key={a.id} className="relative">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={a.url} alt={a.name} className="h-14 w-14 rounded-lg border border-slate-200 object-cover" />
+                  <button
+                    onClick={() => removeAttachment(a.id)}
+                    title="첨부 제거"
+                    className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-slate-700 text-white hover:bg-slate-900"
+                  >
+                    <X size={10} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+            {canAttach && (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={e => handleFiles(e.target.files)}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isStreaming || uploading}
+                  title="이미지 첨부 (시험일지 등)"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-600 disabled:opacity-40"
+                >
+                  {uploading ? <Loader2 size={15} className="animate-spin" /> : <ImagePlus size={15} />}
+                </button>
+              </>
+            )}
             <input
               ref={inputRef}
               type="text"
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={isStreaming ? '응답 중...' : '질문을 입력하세요...'}
+              placeholder={isStreaming ? '응답 중...' : canAttach ? '질문 또는 이미지 첨부...' : '질문을 입력하세요...'}
               disabled={isStreaming}
               className="flex-1 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400 disabled:opacity-50"
             />
             <button
               onClick={sendMessage}
-              disabled={!input.trim() || isStreaming}
+              disabled={(!input.trim() && attachments.length === 0) || isStreaming || uploading}
               className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-white transition-all hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
             >
               <Send size={13} />

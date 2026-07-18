@@ -39,6 +39,8 @@ interface ChatRequest {
   conversationId?: string
   viewer: ChatViewer
   signal?: AbortSignal
+  /** 첨부 이미지 file id 목록 (시험자/MISO 전용) */
+  imageFileIds?: string[]
 }
 
 interface ChatMsg {
@@ -606,7 +608,13 @@ function createCliStream(
         controller.enqueue(encoder.encode('data: [DONE]\n\n'))
         controller.close()
       } catch (err) {
-        controller.error(err)
+        // 스트림은 이미 200으로 시작됐으므로, 오류를 답변 메시지로 표시해 무응답(빈 말풍선)을 방지한다.
+        const reason = err instanceof Error ? err.message : '알 수 없는 오류'
+        controller.enqueue(encoder.encode(
+          `data: ${JSON.stringify({ event: 'message', answer: `⚠️ 챗봇 응답 오류: ${reason}`, conversation_id: conversationId })}\n\n`,
+        ))
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+        controller.close()
       }
     },
   })
@@ -615,13 +623,13 @@ function createCliStream(
 /**
  * 채팅 메시지를 역할별 챗봇(admin=Letsur, tester=MISO)으로 전송하고 SSE 스트림을 반환합니다.
  */
-export async function sendChatMessage({ message, conversationId, viewer, signal }: ChatRequest): Promise<Response> {
+export async function sendChatMessage({ message, conversationId, viewer, signal, imageFileIds }: ChatRequest): Promise<Response> {
   const convId = conversationId && conversationId.trim() ? conversationId : randomUUID()
 
   // 시험자(admin 외): MISO 앱(자체 지식·시스템 프롬프트 보유)에 사용자 메시지를 그대로 전달.
-  // QC DB 컨텍스트/시스템 프롬프트를 덧붙이지 않는다(앱 고유 도메인을 침범하지 않도록).
+  // QC DB 컨텍스트/시스템 프롬프트를 덧붙이지 않는다(앱 고유 도메인을 침범하지 않도록). 첨부 이미지(시험일지 등)도 함께 전달.
   if (viewer.role !== 'admin') {
-    const stream = createCliStream(convId, () => runMisoText(message, { signal, user: viewer.userSub }))
+    const stream = createCliStream(convId, () => runMisoText(message, { signal, user: viewer.userSub, imageFileIds }))
     return new Response(stream)
   }
 
