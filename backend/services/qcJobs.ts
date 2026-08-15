@@ -268,6 +268,107 @@ export interface WorkerOverview {
 // 진행 중으로 간주하는 작업 상태
 const ACTIVE_JOB_STATUSES = new Set(['진행중', '검토중', '지연'])
 
+// ─── 작업 상세 (시험항목 진행 내역) ──────────────────────────────────────────
+export interface JobDetail {
+  jobId: string
+  qcNo: string
+  status: string
+  workStartDate: string | null
+  workEndDate: string | null
+  createdAt: string | null
+  orderId: string
+  productCode: string | null
+  productName: string
+  batchNo: string
+  dueDate: string | null
+  isUrgent: boolean
+  method: string | null
+  testerName: string | null
+  testerEmployeeNo: string | null
+  items: JobItemRow[]
+  /** 현재 수행 중으로 간주되는 항목 id (미완료 중 sequence_order 최소). 작업이 활성 상태가 아니면 null */
+  currentItemId: string | null
+  /** 현재 항목을 시작한 시각 = 직전 클리어 시각 ?? 작업 생성 시각 (clearItem 의 경과시간 기준과 동일) */
+  currentItemStartedAt: string | null
+}
+
+/**
+ * 작업 상세 조회 — 어떤 시험항목을 수행 중인지 확인용 (관리자 작업현황 화면).
+ *
+ * qc_job_items 에는 'pending' | 'cleared' 두 상태만 있고 항목별 "진행중" 플래그가 없다.
+ * clearItem 이 직전 cleared_at 을 기준으로 경과시간을 적재하는 순차 처리 모델이므로,
+ * 미완료 항목 중 sequence_order 가 가장 작은 항목을 현재 수행 항목으로 간주한다.
+ */
+export async function getJobDetail(jobId: string): Promise<JobDetail | null> {
+  const { data: job } = await supabaseAdmin
+    .from('qc_jobs')
+    .select('id, order_id, qc_no, status, work_start_date, work_end_date, created_at, assignee_tester_id')
+    .eq('id', jobId)
+    .maybeSingle()
+  if (!job) return null
+
+  const [orderRes, testerRes, itemsRes] = await Promise.all([
+    supabaseAdmin
+      .from('pct_orders')
+      .select('id, product_code, product_name, batch_no, due_date, is_urgent, method')
+      .eq('id', job.order_id as string)
+      .maybeSingle(),
+    job.assignee_tester_id
+      ? supabaseAdmin.from('testers').select('name, employee_no').eq('id', job.assignee_tester_id as string).maybeSingle()
+      : Promise.resolve({ data: null }),
+    supabaseAdmin
+      .from('qc_job_items')
+      .select('id, test_item_name, sequence_order, status, cleared_at, elapsed_minutes')
+      .eq('qc_job_id', jobId)
+      .order('sequence_order', { ascending: true }),
+  ])
+
+  const order = orderRes.data as Record<string, unknown> | null
+  const tester = testerRes.data as Record<string, unknown> | null
+
+  const items: JobItemRow[] = (itemsRes.data ?? []).map(it => ({
+    id: it.id as string,
+    testItemName: it.test_item_name as string,
+    sequenceOrder: it.sequence_order as number,
+    status: it.status as string,
+    clearedAt: (it.cleared_at as string) ?? null,
+    elapsedMinutes: (it.elapsed_minutes as number) ?? null,
+  }))
+
+  const status = job.status as string
+  const current = ACTIVE_JOB_STATUSES.has(status)
+    ? items.find(i => i.status !== 'cleared') ?? null
+    : null
+
+  // 직전 클리어 시각(가장 늦은 cleared_at) — 없으면 작업 생성 시각
+  const lastClearedAt = items
+    .filter(i => i.clearedAt)
+    .map(i => i.clearedAt as string)
+    .sort()
+    .at(-1) ?? null
+
+  return {
+    jobId: job.id as string,
+    qcNo: job.qc_no as string,
+    status,
+    workStartDate: (job.work_start_date as string) ?? null,
+    workEndDate: (job.work_end_date as string) ?? null,
+    createdAt: (job.created_at as string) ?? null,
+    orderId: job.order_id as string,
+    productCode: (order?.product_code as string) ?? null,
+    productName: (order?.product_name as string) ?? '',
+    batchNo: (order?.batch_no as string) ?? '',
+    dueDate: (order?.due_date as string) ?? null,
+    isUrgent: !!order?.is_urgent,
+    method: (order?.method as string) ?? null,
+    testerName: (tester?.name as string) ?? null,
+    testerEmployeeNo: (tester?.employee_no as string) ?? null,
+    items,
+    currentItemId: current?.id ?? null,
+    currentItemStartedAt: current ? (lastClearedAt ?? (job.created_at as string) ?? null) : null,
+  }
+}
+
 /**
  * 작업자(시험자)별 작업 현황 집계 — 관리자가 "내 작업"을 수행 중인 작업자들의
  * 진행 상황을 한눈에 보기 위한 뷰. 기존 테이블만 읽어 JS에서 집계한다.

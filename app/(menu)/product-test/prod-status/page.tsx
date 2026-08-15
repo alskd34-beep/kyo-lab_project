@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import {
-  RefreshCw, Search, Users, TriangleAlert, CheckCircle2, ClipboardList, Clock,
+  RefreshCw, Search, Users, TriangleAlert, CheckCircle2, ClipboardList, Clock, ListChecks,
 } from "lucide-react"
 import { cn } from "@frontend/lib/utils"
 import { useAuth } from "@frontend/lib/auth-context"
@@ -12,6 +12,7 @@ import { Card } from "@frontend/components/ui/card"
 import { Input } from "@frontend/components/ui/input"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import { TesterAvatar } from "@frontend/lib/tester-profiles"
+import { JobDetailModal } from "@frontend/components/product-test/job-detail-modal"
 
 // ─── Types (백엔드 listWorkerOverview 와 동일) ───────────────────────────────
 interface OverviewJob {
@@ -105,6 +106,13 @@ export default function ProdStatusPage() {
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
   const [onlyWorking, setOnlyWorking] = useState(true)
+  const [detailJobId, setDetailJobId] = useState<string | null>(null)
+  const [detailOpen, setDetailOpen] = useState(false)
+
+  function openDetail(jobId: string) {
+    setDetailJobId(jobId)
+    setDetailOpen(true)
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -126,7 +134,7 @@ export default function ProdStatusPage() {
   useEffect(() => { void load() }, [load])
 
   const workers = useMemo(() => {
-    let rows = data?.workers ?? []
+    let rows = (data?.workers ?? []).filter(w => w.isActive)
     if (onlyWorking) rows = rows.filter(w => w.activeJobs.length > 0 || w.pendingCount > 0)
     if (search.trim()) {
       const q = search.trim()
@@ -261,7 +269,16 @@ export default function ProdStatusPage() {
                   <p className="py-1 text-xs text-muted-foreground">진행 중인 작업이 없습니다.</p>
                 ) : (
                   w.activeJobs.map((j) => (
-                    <div key={j.jobId} className="rounded-lg border bg-card p-2.5">
+                    <div
+                      key={j.jobId}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => openDetail(j.jobId)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openDetail(j.jobId) }
+                      }}
+                      className="cursor-pointer rounded-lg border bg-card p-2.5 transition-colors hover:border-violet-300 hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    >
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex min-w-0 items-center gap-1.5">
                           <span className="font-mono text-xs font-bold text-blue-700">QC {j.qcNo}</span>
@@ -277,6 +294,10 @@ export default function ProdStatusPage() {
                         <span className="ml-1 font-mono text-xs font-normal text-muted-foreground">/ {j.batchNo}</span>
                       </p>
                       {j.itemsTotal > 0 && <div className="mt-2"><ProgressBar cleared={j.itemsCleared} total={j.itemsTotal} /></div>}
+                      <p className="mt-1.5 flex items-center gap-1 text-[11px] text-muted-foreground">
+                        <ListChecks className="size-3" />
+                        클릭하면 수행 중인 시험항목을 확인할 수 있습니다.
+                      </p>
                     </div>
                   ))
                 )}
@@ -311,6 +332,8 @@ export default function ProdStatusPage() {
           ))}
         </div>
       ) : null}
+
+      <JobDetailModal jobId={detailJobId} open={detailOpen} onOpenChange={setDetailOpen} />
     </div>
   )
 }
