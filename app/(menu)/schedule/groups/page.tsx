@@ -99,7 +99,7 @@ export default function GroupsPage() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={rebuild} disabled={busy !== null}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-blue-600 px-3 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-indigo-600 px-3 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-50"
             >
               {busy === "rebuild" ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
               그룹 재생성

@@ -230,7 +230,7 @@ export default function TestStatusPage() {
                       className={`
                         group relative flex shrink-0 items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors
                         ${isActive
-                          ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600 after:rounded-t-full'
+                          ? 'text-indigo-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-indigo-600 after:rounded-t-full'
                           : 'text-slate-500 hover:text-slate-700'}
                       `}
                     >
@@ -363,7 +363,7 @@ export default function TestStatusPage() {
                   />
                 </div>
 
-                <Button size="sm" className="h-7 bg-blue-600 px-4 text-xs font-medium hover:bg-blue-700 rounded-lg shadow-none">
+                <Button size="sm" className="h-7 px-4 text-xs font-medium rounded-lg shadow-none">
                   조회
                 </Button>
 

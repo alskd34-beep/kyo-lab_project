@@ -156,7 +156,7 @@ export default function HolidaysPage() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white">
             <CalendarDays size={20} />
           </div>
           <div>
@@ -169,7 +169,7 @@ export default function HolidaysPage() {
             <button
               onClick={() => void importFromApi()}
               disabled={importing}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3.5 py-2 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-100 disabled:opacity-60"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-sm font-semibold text-indigo-700 transition-colors hover:bg-indigo-100 disabled:opacity-60"
               title="data.go.kr 공휴일 API 에서 해당 연도를 불러와 반영합니다(수동 등록은 보존)."
             >
               {importing ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
@@ -177,7 +177,7 @@ export default function HolidaysPage() {
             </button>
             <button
               onClick={() => setShowAdd(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
             >
               <Plus size={16} /> 공휴일 추가
             </button>

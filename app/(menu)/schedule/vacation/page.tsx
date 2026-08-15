@@ -256,7 +256,7 @@ export default function VacationPage() {
       {/* Header */}
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white">
             <CalendarDays size={20} />
           </div>
           <div>
@@ -267,13 +267,13 @@ export default function VacationPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setRangeCheck(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-100"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700 transition-colors hover:bg-indigo-100"
           >
             <Sparkles size={16} /> 기간 가능 품목
           </button>
           <button
             onClick={() => openCreate(todayIso)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
           >
             <Plus size={16} /> 휴가 등록
           </button>
@@ -360,7 +360,7 @@ export default function VacationPage() {
                       return (
                         <div key={di} className="px-1.5 pt-1">
                           <span className={`inline-flex h-5 min-w-5 items-center justify-center px-1 text-[11px] font-semibold ${
-                            isToday ? "rounded-full bg-blue-600 text-white"
+                            isToday ? "rounded-full bg-indigo-600 text-white"
                             : holidayName ? "text-rose-600"
                             : inMonth ? (di === 0 ? "text-red-500" : di === 6 ? "text-blue-500" : "text-slate-600")
                             : "text-slate-300"

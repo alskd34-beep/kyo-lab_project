@@ -198,7 +198,7 @@ export default function UsersAdminPage() {
         </div>
         <button
           onClick={() => setCreating(true)}
-          className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 md:w-auto"
+          className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 md:w-auto"
         >
           <UserPlus size={13} />
           사용자 추가
@@ -462,7 +462,7 @@ function CreateForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: 
         </SelectContent>
       </Select>
       <div className="flex gap-1">
-        <button type="submit" disabled={busy || !username || !password} className="flex-1 rounded bg-blue-600 px-2 py-1.5 text-white disabled:opacity-50">생성</button>
+        <button type="submit" disabled={busy || !username || !password} className="flex-1 rounded bg-indigo-600 px-2 py-1.5 text-white disabled:opacity-50">생성</button>
         <button type="button" onClick={onCancel} className="rounded border border-slate-200 bg-white px-2 py-1.5"><X size={12} /></button>
       </div>
       {err && <p className="text-red-600 sm:col-span-2 md:col-span-5">{err}</p>}

@@ -384,7 +384,7 @@ export default function Chatbot() {
               className={`flex gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
             >
               {msg.role === 'bot' && (
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-emerald-600 mt-0.5">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-600 mt-0.5">
                   <Bot size={13} className="text-white" />
                 </div>
               )}
@@ -400,7 +400,7 @@ export default function Chatbot() {
                 <div
                   className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
                     msg.role === 'user'
-                      ? 'bg-blue-600 text-white rounded-tr-sm'
+                      ? 'bg-indigo-600 text-white rounded-tr-sm'
                       : 'bg-slate-100 text-slate-800 rounded-tl-sm'
                   }`}
                 >
@@ -478,7 +478,7 @@ export default function Chatbot() {
             <button
               onClick={sendMessage}
               disabled={(!input.trim() && attachments.length === 0) || isStreaming || uploading}
-              className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-white transition-all hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
+              className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 text-white transition-all hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
             >
               <Send size={13} />
             </button>

@@ -233,7 +233,7 @@ export default function WeeklyPlanPage() {
 
         {/* Header */}
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 shadow-md shadow-blue-600/30">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 shadow-md shadow-indigo-600/30">
             <CalendarRange size={20} className="text-white" />
           </div>
           <div>
@@ -269,7 +269,7 @@ export default function WeeklyPlanPage() {
               <Button
                 onClick={generate}
                 disabled={loading}
-                className="h-9 gap-1.5 bg-blue-600 px-5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+                className="h-9 gap-1.5 px-5 text-sm font-medium disabled:opacity-60"
               >
                 {loading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
                 {loading ? '생성 중...' : '주간 계획 생성'}

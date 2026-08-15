@@ -243,7 +243,7 @@ export default function SchedulerPage() {
 
         {/* ── Header ─────────────────────────────────────────────────────── */}
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 shadow-md shadow-blue-600/30">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 shadow-md shadow-indigo-600/30">
             <Sparkles size={20} className="text-white" />
           </div>
           <div>
@@ -280,7 +280,7 @@ export default function SchedulerPage() {
               <Button
                 onClick={generateSchedule}
                 disabled={loading}
-                className="h-9 gap-1.5 bg-blue-600 px-5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+                className="h-9 gap-1.5 px-5 text-sm font-medium disabled:opacity-60"
               >
                 {loading ? (
                   <>

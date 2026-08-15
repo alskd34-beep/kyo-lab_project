@@ -298,7 +298,7 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
                 <p className="text-[10px] font-bold text-slate-400">오늘 공수</p>
                 <p className="mt-1 text-sm font-black text-slate-900">{todayLoad}<span className="text-slate-400"> / {DAILY_CAPACITY}일</span></p>
                 <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100">
-                  <div className="h-full rounded-full bg-blue-600" style={{ width: `${loadPct}%` }} />
+                  <div className="h-full rounded-full bg-indigo-600" style={{ width: `${loadPct}%` }} />
                 </div>
                 <p className="mt-1 text-[10px] text-slate-400">{loadPct}%</p>
               </div>
@@ -376,7 +376,7 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
               <ExternalLink className="size-4" />상세보기
             </button>
             <button onClick={onReassign} disabled={!onReassign}
-              className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl bg-blue-600 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-40">
+              className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl bg-indigo-600 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-40">
               <ArrowLeftRight className="size-4" />배정 변경
             </button>
           </div>

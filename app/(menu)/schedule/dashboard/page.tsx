@@ -69,7 +69,7 @@ export default function QcDashboardPage() {
       {/* 헤더 */}
       <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm md:flex-row md:items-center md:justify-between md:py-4">
         <div className="flex items-center gap-2.5">
-          <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-white">
+          <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600 text-white">
             <LayoutDashboard size={18} />
           </span>
           <div>
@@ -161,7 +161,7 @@ export default function QcDashboardPage() {
                     <span className="w-20 shrink-0 truncate text-sm font-medium text-slate-700">{t.name}</span>
                     <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-slate-100">
                       <div
-                        className="h-full rounded-full bg-blue-600"
+                        className="h-full rounded-full bg-indigo-600"
                         style={{ width: `${Math.max((t.days / maxDays) * 100, 4)}%` }}
                       />
                     </div>
