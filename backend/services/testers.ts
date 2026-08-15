@@ -48,11 +48,19 @@ function mapTester(r: Record<string, unknown>, link?: { userId: string; username
   }
 }
 
-export async function listTesters(): Promise<TesterRow[]> {
-  const { data, error } = await supabase
+/**
+ * 시험자 목록.
+ * @param opts.activeOnly true 면 비활성(is_active=false) 시험자를 제외한다.
+ *   배정 후보·담당자 선택 목록처럼 "일할 사람"만 필요한 곳은 반드시 true 로 호출한다.
+ *   시험자 관리 화면처럼 비활성자도 편집해야 하는 곳은 기본값(전체)을 쓴다.
+ */
+export async function listTesters(opts: { activeOnly?: boolean } = {}): Promise<TesterRow[]> {
+  let query = supabase
     .from('testers')
     .select('id, employee_no, name, can_solo, can_duo, is_active')
     .order('employee_no', { ascending: true })
+  if (opts.activeOnly) query = query.eq('is_active', true)
+  const { data, error } = await query
   if (error) throw error
   const rows = (data ?? []) as Record<string, unknown>[]
 
@@ -139,10 +147,13 @@ export async function updateTester(
   const { error } = await supabase.from('testers').update(patch).eq('id', id)
   if (error) throw error
 
-  // 연결된 사용자 계정 동기화 — 사번 변경 시 로그인 ID(username)도 함께 변경
+  // 연결된 사용자 계정 동기화
+  // - 사번 변경 시 로그인 ID(username)도 함께 변경
+  // - 활성/비활성은 users.is_active 와 항상 같은 값을 유지한다(계정 정지 ↔ 배정 제외 일원화)
   const userPatch: Record<string, unknown> = {}
   if (input.employeeNo !== undefined) userPatch.username = input.employeeNo
   if (input.name       !== undefined) userPatch.display_name = input.name
+  if (input.isActive   !== undefined) userPatch.is_active = input.isActive
   if (Object.keys(userPatch).length > 0) {
     await supabase.from('users').update(userPatch).eq('tester_id', id)
   }
@@ -159,6 +170,25 @@ export async function updateTester(
 export async function deleteTester(id: string): Promise<void> {
   const { error } = await supabase.from('testers').delete().eq('id', id)
   if (error) throw error
+}
+
+/**
+ * 배정 대상 시험자가 활성 상태인지 검증한다. 비활성이면 에러를 던진다.
+ * UI 에서 목록을 걸러도 직접 API 호출·오래된 화면 상태로 비활성자가 넘어올 수 있으므로
+ * 담당자를 실제로 기록하는 서버 경로에서 마지막 방어선으로 호출한다.
+ */
+export async function assertTesterAssignable(testerId: string | null | undefined): Promise<void> {
+  if (!testerId) return
+  const { data, error } = await supabase
+    .from('testers')
+    .select('name, is_active')
+    .eq('id', testerId)
+    .maybeSingle()
+  if (error) throw error
+  if (!data) throw new Error('존재하지 않는 시험자입니다.')
+  if (!(data as Record<string, unknown>).is_active) {
+    throw new Error(`비활성 시험자(${(data as Record<string, unknown>).name})에게는 배정할 수 없습니다.`)
+  }
 }
 
 export async function listCapabilities(): Promise<CapabilityRow[]> {

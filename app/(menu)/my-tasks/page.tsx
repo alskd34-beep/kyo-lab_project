@@ -25,9 +25,12 @@ interface PendingOrder {
 
 /** equipmentMaster ReadinessResult (UI 전용 타입) */
 interface EquipmentCheck {
-  code: string; name: string; found: boolean; status: string
+  code: string; name: string | null; found: boolean; status: string | null
   calibrationOk: boolean; calibrationDueDate: string | null
-  available: boolean; blocked: boolean; warning: boolean; reason: string | null
+  available: boolean
+  blocked: boolean          // 하드 차단 — 사유는 reason
+  warning: string | null    // 소프트 경고 문구 (미등록/검교정 중/예약 점유 등)
+  reason: string | null     // blocked 사유
 }
 /** 시험 전 확인사항 (product_pretest_notes) */
 interface PretestNote {
@@ -98,7 +101,8 @@ function ReadinessModal({
                 <li key={c.code} className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs">
                   <XCircle size={14} className="mt-0.5 shrink-0 text-red-500" />
                   <div>
-                    <span className="font-semibold text-red-800">{c.name}</span>
+                    {/* 마스터 미등록 장비는 name이 없으므로 코드로 대체 */}
+                    <span className="font-semibold text-red-800">{c.name ?? c.code}</span>
                     {c.reason && <p className="text-red-700">{c.reason}</p>}
                   </div>
                 </li>
@@ -106,17 +110,24 @@ function ReadinessModal({
             </ul>
           )}
           {warnings.length > 0 && (
-            <ul className={`flex flex-col gap-2 ${blocked.length > 0 ? "mt-2" : ""}`}>
-              {warnings.map(c => (
-                <li key={c.code} className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs">
-                  <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-500" />
-                  <div>
-                    <span className="font-semibold text-amber-800">{c.name}</span>
-                    {c.reason && <p className="text-amber-700">{c.reason}</p>}
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <div className={blocked.length > 0 ? "mt-3" : ""}>
+              <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                <AlertTriangle size={12} /> 장비 경고 ({warnings.length})
+              </p>
+              <ul className="flex flex-col gap-2">
+                {warnings.map(c => (
+                  <li key={c.code} className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs">
+                    <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-500" />
+                    <div>
+                      {/* 마스터 미등록 장비는 name이 없으므로 코드로 대체 */}
+                      <span className="font-semibold text-amber-800">{c.name ?? c.code}</span>
+                      {/* 경고 사유는 warning 필드에 담긴다(reason은 blocked 전용) */}
+                      {c.warning && <p className="text-amber-700">{c.warning}</p>}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
           {notes.length > 0 && (
             <div className={blocked.length > 0 || warnings.length > 0 ? "mt-3" : ""}>
@@ -221,6 +232,20 @@ export default function MyTasksPage() {
     setMsg(m); setMsgType(type); setTimeout(() => setMsg(null), 4000)
   }
 
+  /**
+   * 장비 준비상태 조회.
+   * 응답이 실패(401 세션만료·500 등)면 body 에 checks 가 없으므로, 그대로 쓰면
+   * "reading 'some'" 같은 엉뚱한 오류가 뜬다. 여기서 실제 사유로 바꿔 던진다.
+   */
+  const fetchReadiness = async (orderId: string): Promise<ReadinessResult> => {
+    const res = await fetch(`/api/qc-jobs/readiness?orderId=${orderId}`, { credentials: "include" })
+    const data = await res.json().catch(() => ({}))
+    if (res.status === 401) throw new Error("로그인 세션이 만료되었습니다. 다시 로그인해주세요.")
+    if (!res.ok) throw new Error(data?.error ?? `준비상태 조회 실패 (HTTP ${res.status})`)
+    if (!Array.isArray(data?.checks)) throw new Error("준비상태 응답 형식이 올바르지 않습니다.")
+    return data as ReadinessResult
+  }
+
   /** 시작 API 호출(코어) — 알림/새로고침 없이 결과만 반환 (일괄 실행에서 재사용) */
   const doStartCore = async (orderId: string): Promise<{ qcNo: string; warnings?: string[] }> => {
     const res = await fetch("/api/qc-jobs", {
@@ -228,8 +253,9 @@ export default function MyTasksPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ orderId }),
     })
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.error)
+    const data = await res.json().catch(() => ({}))
+    if (res.status === 401) throw new Error("로그인 세션이 만료되었습니다. 다시 로그인해주세요.")
+    if (!res.ok) throw new Error(data?.error ?? `작업 시작 실패 (HTTP ${res.status})`)
     return data
   }
 
@@ -246,8 +272,7 @@ export default function MyTasksPage() {
     setBusy(orderId)
     try {
       // 장비 준비상태 조회
-      const rRes = await fetch(`/api/qc-jobs/readiness?orderId=${orderId}`, { credentials: "include" })
-      const readiness: ReadinessResult = await rRes.json()
+      const readiness = await fetchReadiness(orderId)
 
       const hasBlocked = readiness.checks.some(c => c.blocked)
       const hasWarning = readiness.checks.some(c => c.warning && !c.blocked)
@@ -293,25 +318,26 @@ export default function MyTasksPage() {
     let started = 0
     const blocked: string[] = []
     const failed: string[] = []
+    let lastError = ""
     try {
       for (const id of ids) {
         try {
-          const rRes = await fetch(`/api/qc-jobs/readiness?orderId=${id}`, { credentials: "include" })
-          const readiness: ReadinessResult = await rRes.json()
-          if (!Array.isArray(readiness.checks)) { failed.push(nameById.get(id) ?? id); continue }
+          const readiness = await fetchReadiness(id)
           // 장비 차단 건은 단건 모달과 동일하게 시작 불가 → 제외
           if (readiness.checks.some(c => c.blocked)) { blocked.push(nameById.get(id) ?? id); continue }
           await doStartCore(id)
           started++
-        } catch {
+        } catch (e) {
           failed.push(nameById.get(id) ?? id)
+          lastError = e instanceof Error ? e.message : ""
         }
       }
       await load()
       setSelected(new Set())
       const parts: string[] = [`${started}건 시작`]
       if (blocked.length) parts.push(`장비 차단 ${blocked.length}건 제외(${blocked.join(", ")})`)
-      if (failed.length) parts.push(`실패 ${failed.length}건`)
+      // 실패는 건수만 알려주면 원인을 알 수 없으므로 마지막 사유를 함께 표시한다.
+      if (failed.length) parts.push(`실패 ${failed.length}건${lastError ? ` — ${lastError}` : ""}`)
       flash(parts.join(" · "), failed.length ? "error" : "info")
     } finally {
       setBulkBusy(false)

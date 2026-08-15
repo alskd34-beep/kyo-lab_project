@@ -3,6 +3,7 @@
  */
 
 import { supabaseAdmin } from '@backend/lib/supabase'
+import { assertTesterAssignable } from '@backend/services/testers'
 
 export interface PctOrderRow {
   id: string
@@ -144,6 +145,8 @@ export async function createOrder(input: {
   const name = (input.productName ?? '').trim()
   const batch = (input.batchNo ?? '').trim()
   if (!code || !name || !batch) throw new Error('품목코드·품목명·제조번호는 필수입니다.')
+  // 비활성 시험자는 담당자로 지정할 수 없다
+  await assertTesterAssignable(input.assigneeTesterId)
 
   const { data, error } = await supabaseAdmin
     .from('pct_orders')
@@ -229,6 +232,8 @@ export async function updateOrderWithReason(
 ): Promise<void> {
   const trimmedReason = (reason ?? '').trim()
   if (!trimmedReason) throw new Error('수정 사유는 필수입니다.')
+  // 담당자를 바꾸는 수정이면 비활성 시험자 지정을 차단한다
+  if (patch.assigneeTesterId) await assertTesterAssignable(String(patch.assigneeTesterId))
 
   // 현재값 로드
   const { data: current, error: curErr } = await supabaseAdmin

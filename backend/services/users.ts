@@ -241,7 +241,15 @@ export async function updateUser(
     .select('*')
     .single()
   if (error) throw error
-  return toDTO(data as DbUser)
+
+  const saved = data as DbUser
+  // 계정 활성/비활성 → 연결된 시험자에 전파.
+  // testers.is_active 가 배정 후보(AI 스케줄·담당자 선택)의 기준이므로,
+  // 여기서 맞춰주지 않으면 "계정은 비활성인데 배정은 되는" 불일치가 생긴다.
+  if (patch.isActive !== undefined && saved.tester_id) {
+    await supabase.from('testers').update({ is_active: patch.isActive }).eq('id', saved.tester_id)
+  }
+  return toDTO(saved)
 }
 
 export async function deleteUser(id: string): Promise<void> {

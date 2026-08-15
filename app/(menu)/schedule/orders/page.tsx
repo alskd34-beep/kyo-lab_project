@@ -46,7 +46,15 @@ interface OrderRow {
   hasJob: boolean
   locked: boolean
 }
-interface Tester { id: string; name: string; avatarUrl?: string | null; employeeNo?: string | null }
+interface Tester { id: string; name: string; avatarUrl?: string | null; employeeNo?: string | null; isActive?: boolean }
+
+/**
+ * 담당자 선택 후보 — 비활성(계정 정지) 시험자는 목록에서 제외한다.
+ * 단, 이미 그 사람에게 배정된 오더를 수정할 때 값이 빈칸으로 보이지 않도록 현재 담당자(keepId)는 남긴다.
+ */
+function assignableTesters(testers: Tester[], keepId?: string | null): Tester[] {
+  return testers.filter(t => t.isActive !== false || t.id === keepId)
+}
 interface EditRow {
   id: string; field: string; oldValue: string | null; newValue: string | null
   reason: string; editedAt: string; editedBy: string | null; editedByName: string | null
@@ -939,7 +947,7 @@ export default function OrdersPage() {
                     <SelectTrigger className="h-9 w-40"><SelectValue placeholder="담당자 선택" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">미배정</SelectItem>
-                      {testers.map(t => (
+                      {assignableTesters(testers).map(t => (
                         <SelectItem key={t.id} value={t.id}>
                           <TesterOptionLabel testerId={t.id} name={t.name} />
                         </SelectItem>
@@ -1143,7 +1151,7 @@ function CreateModal({ testers, onClose, onCreated }: {
             <SelectTrigger className="!h-9 w-full px-3"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="none">미배정</SelectItem>
-              {testers.map(t => (
+              {assignableTesters(testers, form.assigneeTesterId).map(t => (
                 <SelectItem key={t.id} value={t.id}>
                   <TesterOptionLabel testerId={t.id} name={t.name} />
                 </SelectItem>
@@ -1272,7 +1280,7 @@ function EditModal({ order, testers, onClose, onSaved }: {
             <SelectTrigger className="!h-9 w-full px-3"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="none">미배정</SelectItem>
-              {testers.map(t => (
+              {assignableTesters(testers, form.assigneeTesterId).map(t => (
                 <SelectItem key={t.id} value={t.id}>
                   <TesterOptionLabel testerId={t.id} name={t.name} />
                 </SelectItem>

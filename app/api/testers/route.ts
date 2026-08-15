@@ -3,9 +3,11 @@ import { listTesters, createTester, updateTester, deleteTester } from '@backend/
 
 export const runtime = 'nodejs'
 
-export async function GET() {
+/** GET /api/testers[?activeOnly=1] — activeOnly=1 이면 비활성 시험자를 제외한다(배정 후보용) */
+export async function GET(req: NextRequest) {
   try {
-    const rows = await listTesters()
+    const activeOnly = req.nextUrl.searchParams.get('activeOnly') === '1'
+    const rows = await listTesters({ activeOnly })
     return Response.json({ rows })
   } catch (err) {
     return Response.json({ error: err instanceof Error ? err.message : '서버 오류' }, { status: 500 })

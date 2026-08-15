@@ -88,7 +88,8 @@ const NAV_SECTIONS: NavSection[] = [
         icon: <ShieldCheck size={18} />,
         label: "안정성시험",
         subItems: [
-          { id: "stab-status", label: "안정성현황" },
+          // 안정성현황은 구글시트(안정성시험 계획) 연동으로 실제 데이터가 표시된다 → live
+          { id: "stab-status", label: "안정성현황", live: true },
           { id: "stab-plan", label: "시험계획" },
           { id: "stab-report", label: "결과보고" },
         ],

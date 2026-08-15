@@ -10,7 +10,7 @@
 
 import { supabaseAdmin } from '@backend/lib/supabase'
 import { selectAll } from '@backend/lib/supabasePage'
-import { listTesters, listCapabilities, listCapabilityMatrix } from '@backend/services/testers'
+import { listTesters, listCapabilities, listCapabilityMatrix, assertTesterAssignable } from '@backend/services/testers'
 import { testersOnLeave } from '@backend/services/operatorSchedule'
 import { createNotification } from '@backend/services/notifications'
 import { logReassignment } from '@backend/services/reassignmentHistory'
@@ -270,10 +270,10 @@ interface CodexAssignResponse {
 
 async function autoAssignCodex(orders: OrderForAssign[], excludedTesterIds: Set<string>): Promise<{ mode: 'codex'; pick: PickFn }> {
   const [allTesters, capabilities, matrix, itemsByCode, workload] = await Promise.all([
-    listTesters(), listCapabilities(), listCapabilityMatrix(), productItemsByCode(), currentWorkload(),
+    listTesters({ activeOnly: true }), listCapabilities(), listCapabilityMatrix(), productItemsByCode(), currentWorkload(),
   ])
-  // 휴가/출장 중인 시험자는 배정 후보에서 제외
-  const testers = allTesters.filter(t => !excludedTesterIds.has(t.id))
+  // 비활성(퇴사·휴직 등) 시험자와 휴가/출장 중인 시험자는 배정 후보에서 제외
+  const testers = allTesters.filter(t => t.isActive && !excludedTesterIds.has(t.id))
 
   // 시험자별 보유 역량명 (Y/O 만)
   const capNameById = new Map<string, string>()
@@ -339,7 +339,7 @@ async function autoAssignCodex(orders: OrderForAssign[], excludedTesterIds: Set<
 async function autoAssignRule(orders: OrderForAssign[], excludedTesterIds: Set<string>): Promise<{ mode: 'rule'; pick: PickFn }> {
   const [allTesters, capabilities, matrix, productsRes, ptiRes, testItemsRes, equipRes, workloadRes] =
     await Promise.all([
-      listTesters(),
+      listTesters({ activeOnly: true }),
       listCapabilities(),
       listCapabilityMatrix(),
       selectAll(supabaseAdmin, 'products', 'id, product_code'),
@@ -349,8 +349,8 @@ async function autoAssignRule(orders: OrderForAssign[], excludedTesterIds: Set<s
       selectAll(supabaseAdmin, 'product_workload', 'product_code, avg_workdays'),
     ])
 
-  // 휴가/출장 중인 시험자는 배정 후보에서 제외
-  const testers = allTesters.filter(t => !excludedTesterIds.has(t.id))
+  // 비활성(퇴사·휴직 등) 시험자와 휴가/출장 중인 시험자는 배정 후보에서 제외
+  const testers = allTesters.filter(t => t.isActive && !excludedTesterIds.has(t.id))
 
   const codeById = new Map<string, string>()
   for (const p of productsRes.data ?? []) codeById.set(p.id as string, String(p.product_code))
@@ -461,6 +461,9 @@ export async function assignManually(
   testerId: string | null,
   opts: { changedBy?: string | null; reason?: string | null } = {},
 ): Promise<void> {
+  // 비활성 시험자에게는 수동으로도 배정할 수 없다(계정 비활성 = 업무 제외).
+  await assertTesterAssignable(testerId)
+
   // 변경 전 담당자 조회 → 재배정 이력용
   const { data: before } = await supabaseAdmin
     .from('pct_orders')
