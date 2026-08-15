@@ -8,6 +8,7 @@ import { Button } from "@frontend/components/ui/button"
 import { DateRangeField } from "@frontend/components/ui/date-range-field"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import { CellStack } from "@frontend/components/ui/table-cell-stack"
+import { TesterAvatar } from "@frontend/lib/tester-profiles"
 import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from "@frontend/components/ui/table-sort"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@frontend/components/ui/table"
 import {
@@ -224,7 +225,7 @@ export default function ReassignmentsPage() {
 
   if (!isAdmin) {
     return (
-      <div className="flex flex-col gap-4 p-3 md:p-5">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3 md:p-5">
         <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm font-medium text-amber-700">
           <ShieldAlert size={18} /> 관리자만 접근할 수 있는 화면입니다.
         </div>
@@ -233,7 +234,7 @@ export default function ReassignmentsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-4 p-3 md:p-5">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3 md:p-5">
       <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm md:flex-row md:items-center md:justify-between md:py-4">
         <div>
           <h1 className="text-base font-bold text-slate-900 sm:text-lg">AI 스케줄 전체 이력</h1>
@@ -380,7 +381,14 @@ export default function ReassignmentsPage() {
                     />
                   </TableCell>
                   <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">
-                    <span className="block truncate">{row.actorName ?? "—"}</span>
+                    {row.actorName ? (
+                      <div className="flex min-w-0 items-center gap-2">
+                        <TesterAvatar name={row.actorName} size="xs" />
+                        <span className="block truncate">{row.actorName}</span>
+                      </div>
+                    ) : (
+                      <span className="block truncate">—</span>
+                    )}
                   </TableCell>
                 </TableRow>
               ))

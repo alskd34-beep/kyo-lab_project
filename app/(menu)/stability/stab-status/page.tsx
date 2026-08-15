@@ -264,7 +264,7 @@ export default function StabStatusPage() {
   }, [rows])
 
   return (
-    <div className="flex min-h-0 flex-col gap-4 p-3 md:p-5">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3 md:p-5">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2">

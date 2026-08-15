@@ -15,6 +15,7 @@ import { DateRangeField } from "@frontend/components/ui/date-range-field"
 import { SortColumnHeader, sortCol, type SortDir } from "@frontend/components/ui/table-sort"
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@frontend/components/ui/table"
 import { Skeleton } from "@frontend/components/ui/skeleton"
+import { TesterAvatar } from "@frontend/lib/tester-profiles"
 
 interface TesterRow {
   testerId: string; name: string; completed: number
@@ -109,7 +110,7 @@ export default function TesterEvaluationPage() {
   const hasData = !!data && data.totals.completedJobs > 0
 
   return (
-    <div className="flex flex-col gap-4 p-3 md:p-5">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3 md:p-5">
       {/* 헤더 */}
       <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm md:flex-row md:items-end md:justify-between md:py-4">
         <div>
@@ -310,7 +311,10 @@ export default function TesterEvaluationPage() {
                 {sortedData.map((t) => (
                   <TableRow key={t.testerId} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
                     <TableCell className="px-3 py-2.5 font-medium text-foreground">
-                      <span className="block truncate" title={t.name}>{t.name}</span>
+                      <div className="flex min-w-0 items-center gap-2">
+                        <TesterAvatar testerId={t.testerId} name={t.name} size="sm" />
+                        <span className="block truncate" title={t.name}>{t.name}</span>
+                      </div>
                     </TableCell>
                     <TableCell className="px-3 py-2.5 text-right tabular-nums">{t.completed}</TableCell>
                     <TableCell className="px-3 py-2.5 text-right tabular-nums">

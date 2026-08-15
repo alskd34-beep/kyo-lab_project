@@ -5,6 +5,7 @@ import { Button } from '@frontend/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@frontend/components/ui/card'
 import { DateRangeField } from '@frontend/components/ui/date-range-field'
 import { Skeleton } from '@frontend/components/ui/skeleton'
+import { TesterAvatar } from '@frontend/lib/tester-profiles'
 import {
   Table,
   TableBody,
@@ -409,9 +410,7 @@ export default function SchedulerPage() {
                           {/* 컬럼 헤더 */}
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-[11px] font-bold text-white">
-                                {group.name.slice(0, 1)}
-                              </div>
+                              <TesterAvatar testerId={String(group.tester_id)} name={group.name} size="sm" />
                               <div>
                                 <p className={`text-sm font-semibold ${TXT_PRIMARY}`}>{group.name}</p>
                                 <p className={`text-[10px] ${TXT_MUTED}`}>{group.items.length}건 배정</p>

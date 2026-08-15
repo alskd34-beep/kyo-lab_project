@@ -861,9 +861,9 @@ export default function OrdersPage() {
       : `${renderGroups.length}개 상태`
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col gap-3 overflow-hidden p-4 md:p-6">
-      {/* 헤더 */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-4 md:p-6">
+      {/* 헤더 · 조회조건 — 스크롤하지 않음 */}
+      <div className="flex shrink-0 flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <h1 className="text-xl font-semibold text-foreground">AI 스케줄 · 관리</h1>
           <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
@@ -893,11 +893,11 @@ export default function OrdersPage() {
       </div>
 
       {msg && (
-        <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">{msg}</div>
+        <div className="shrink-0 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">{msg}</div>
       )}
 
       {/* 탭 (주차별 / 담당자별 / 상태별) */}
-      <div className="inline-flex h-9 w-fit items-center gap-0.5 rounded-lg bg-muted p-0.5 text-muted-foreground">
+      <div className="inline-flex h-9 w-fit shrink-0 items-center gap-0.5 rounded-lg bg-muted p-0.5 text-muted-foreground">
         {TABS.map(t => (
           <button
             key={t.id}
@@ -913,7 +913,7 @@ export default function OrdersPage() {
       </div>
 
       {/* 필터 */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
         <Select value={statusFilter || "all"} onValueChange={v => setStatusFilter(v === "all" ? "" : v)}>
           <SelectTrigger className="!h-9 px-3"><SelectValue /></SelectTrigger>
           <SelectContent>
@@ -978,9 +978,11 @@ export default function OrdersPage() {
         </Button>
       </div>
 
-      {/* 그룹 카드 */}
+      {/* 그룹 카드 — 조회조건 아래 아코디언만 스크롤 */}
       {loading ? (
-        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
+        <div className="relative min-h-0 flex-1 basis-0">
+        {/* [&>*]:shrink-0 — 없으면 카드들이 컨테이너 높이에 맞춰 찌그러져 스크롤이 생기지 않는다 */}
+        <div className="absolute inset-0 flex flex-col gap-3 overflow-y-auto overscroll-contain [&>*]:shrink-0">
           {Array.from({ length: 4 }).map((_, i) => (
             <Card key={i} className="gap-0 overflow-hidden py-0">
               <div className="flex items-center gap-3 px-4 py-3">
@@ -1006,16 +1008,19 @@ export default function OrdersPage() {
             </Card>
           ))}
         </div>
+        </div>
       ) : rows.length === 0 ? (
-        <Card className="items-center py-10 text-center text-sm text-muted-foreground">
+        <Card className="min-h-0 flex-1 items-center py-10 text-center text-sm text-muted-foreground">
           적재된 오더가 없습니다. &quot;지금 적재&quot;로 시트를 불러오세요.
         </Card>
       ) : renderGroups.length === 0 ? (
-        <Card className="items-center py-10 text-center text-sm text-muted-foreground">
+        <Card className="min-h-0 flex-1 items-center py-10 text-center text-sm text-muted-foreground">
           {search.trim() ? `"${search.trim()}" 검색 결과가 없습니다.` : "해당 기간에 표시할 오더가 없습니다."}
         </Card>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
+        <div className="relative min-h-0 flex-1 basis-0">
+        {/* [&>*]:shrink-0 — 없으면 카드들이 컨테이너 높이에 맞춰 찌그러져 스크롤이 생기지 않는다 */}
+        <div className="absolute inset-0 flex flex-col gap-3 overflow-y-auto overscroll-contain [&>*]:shrink-0">
           {renderGroups.map(g => {
             const isCollapsed = collapsed.has(g.key)
             return (
@@ -1074,7 +1079,7 @@ export default function OrdersPage() {
                       </div>
 
                       <div className="hidden md:block">
-                    <Table>
+                    <Table layout="content">
                       <colgroup>
                         <col className="w-[5%]" />
                         <col className="w-[28%]" />
@@ -1130,6 +1135,7 @@ export default function OrdersPage() {
               </Card>
             )
           })}
+        </div>
         </div>
       )}
 

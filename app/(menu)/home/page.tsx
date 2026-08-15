@@ -189,7 +189,7 @@ export default function HomePage() {
   ]
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 p-4 md:p-6">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4 md:p-6">
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <h1 className="text-xl font-semibold text-foreground">홈</h1>
         <p className="text-sm text-muted-foreground">기한 임박 배치와 오늘 시험 배정을 한눈에 봅니다.</p>

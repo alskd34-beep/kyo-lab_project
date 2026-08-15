@@ -15,6 +15,7 @@
 import { useState, useMemo, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@frontend/components/ui/card'
 import { Button } from '@frontend/components/ui/button'
+import { TesterAvatar } from '@frontend/lib/tester-profiles'
 import {
   CalendarRange,
   Sparkles,
@@ -414,9 +415,7 @@ export default function WeeklyPlanPage() {
                           {/* 컬럼 헤더 */}
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <div className={`flex h-7 w-7 items-center justify-center rounded-full ${color} text-[11px] font-bold text-white`}>
-                                {g.name.slice(0, 1)}
-                              </div>
+                              <TesterAvatar name={g.name} size="sm" />
                               <div>
                                 <p className={`text-sm font-semibold ${TXT_PRIMARY}`}>{g.name}</p>
                                 <p className={`text-[10px] ${TXT_MUTED}`}>{g.items.length}건 · {g.load}일</p>

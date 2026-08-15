@@ -34,6 +34,7 @@ import {
   SheetTitle,
 } from "@frontend/components/ui/sheet"
 import { Input } from "@frontend/components/ui/input"
+import { TesterAvatar, primeTesterProfileCache } from "@frontend/lib/tester-profiles"
 import {
   Table,
   TableBody,
@@ -47,6 +48,7 @@ interface TesterRow {
   id: string
   employeeNo: string
   name: string
+  avatarUrl?: string | null
   canSolo: boolean
   canDuo: boolean
   isActive: boolean
@@ -158,7 +160,9 @@ export default function TestersPage() {
     try {
       const res = await fetch("/api/testers")
       const json = (await res.json()) as { rows?: TesterRow[] }
-      setTesters(json.rows ?? [])
+      const rows = json.rows ?? []
+      setTesters(rows)
+      primeTesterProfileCache(rows)
     } finally {
       setLoading(false)
     }
@@ -346,12 +350,25 @@ export default function TestersPage() {
   }
 
   const sortedTesters = useMemo(() => {
+    const mul = sortDir === "asc" ? 1 : -1
+    // 활성 시험자를 항상 위로 올린다. 선택한 정렬은 활성/비활성 그룹 안에서 적용된다.
+    const activeRank = (t: TesterRow) => (t.isActive ? 0 : 1)
+    const byName = (a: TesterRow, b: TesterRow) => a.name.localeCompare(b.name, "ko")
+
     return [...testers].sort((a, b) => {
-      const mul = sortDir === "asc" ? 1 : -1
-      if (sortField === "canSolo" || sortField === "canDuo" || sortField === "isActive") {
-        return (Number(a[sortField]) - Number(b[sortField])) * mul
+      const groupDiff = activeRank(a) - activeRank(b)
+      // 상태(활성) 컬럼 정렬만 방향으로 그룹 순서를 뒤집는다 (오름차순 = 활성 먼저)
+      if (sortField === "isActive") {
+        return groupDiff !== 0 ? groupDiff * mul : byName(a, b)
       }
-      return a[sortField].localeCompare(b[sortField], "ko") * mul
+      if (groupDiff !== 0) return groupDiff
+
+      if (sortField === "canSolo" || sortField === "canDuo") {
+        const diff = (Number(a[sortField]) - Number(b[sortField])) * mul
+        return diff !== 0 ? diff : byName(a, b)
+      }
+      const diff = a[sortField].localeCompare(b[sortField], "ko") * mul
+      return diff !== 0 ? diff : byName(a, b)
     })
   }, [testers, sortDir, sortField])
 
@@ -505,8 +522,9 @@ export default function TestersPage() {
                           {tester.isActive ? "활성" : "비활성"}
                         </Badge>
                       </div>
-                      <div className="mt-1 text-sm font-semibold text-foreground">
-                        {tester.name}
+                      <div className="mt-1 flex items-center gap-2">
+                        <TesterAvatar testerId={tester.id} name={tester.name} avatarUrl={tester.avatarUrl} size="sm" />
+                        <span className="text-sm font-semibold text-foreground">{tester.name}</span>
                       </div>
                     </div>
                     <Button
@@ -520,37 +538,23 @@ export default function TestersPage() {
                     </Button>
                   </div>
 
+                  {/* 가능한 항목만 노출 — '불가'는 표시하지 않는다 */}
                   <div className="flex flex-wrap items-center gap-1.5 border-t pt-2">
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "gap-1.5 text-[10px]",
-                        tester.canSolo ? "border-emerald-200 text-emerald-700" : ""
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "size-1.5 rounded-full",
-                          tester.canSolo ? "bg-emerald-500" : "bg-muted-foreground"
-                        )}
-                      />
-                      {tester.canSolo ? "단독 가능" : "단독 불가"}
-                    </Badge>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "gap-1.5 text-[10px]",
-                        tester.canDuo ? "border-amber-200 text-amber-700" : ""
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "size-1.5 rounded-full",
-                          tester.canDuo ? "bg-amber-500" : "bg-muted-foreground"
-                        )}
-                      />
-                      {tester.canDuo ? "2인 가능" : "2인 불가"}
-                    </Badge>
+                    {tester.canSolo && (
+                      <Badge variant="outline" className="gap-1.5 border-emerald-200 text-[10px] text-emerald-700">
+                        <span className="size-1.5 rounded-full bg-emerald-500" />
+                        단독 가능
+                      </Badge>
+                    )}
+                    {tester.canDuo && (
+                      <Badge variant="outline" className="gap-1.5 border-amber-200 text-[10px] text-amber-700">
+                        <span className="size-1.5 rounded-full bg-amber-500" />
+                        2인 가능
+                      </Badge>
+                    )}
+                    {!tester.canSolo && !tester.canDuo && (
+                      <span className="text-[10px] text-muted-foreground/50">—</span>
+                    )}
                     <button
                       onClick={(e) => { e.stopPropagation(); void toggleActive(tester) }}
                       className="ml-auto rounded-md border border-input bg-background px-2 py-0.5 text-[10px] font-medium text-foreground transition-colors hover:bg-muted/50"
@@ -612,23 +616,24 @@ export default function TestersPage() {
                         {idx + 1}
                       </TableCell>
                       <TableCell className="px-3 py-2">
-                        <CellStack
-                          primary={tester.name}
-                          secondary={tester.employeeNo}
-                          primaryClass="font-medium text-foreground"
-                          title={`${tester.name} ${tester.employeeNo}`}
-                        />
+                        <div className="flex min-w-0 items-center gap-2">
+                          <TesterAvatar testerId={tester.id} name={tester.name} avatarUrl={tester.avatarUrl} size="sm" />
+                          <CellStack
+                            primary={tester.name}
+                            secondary={tester.employeeNo}
+                            primaryClass="font-medium text-foreground"
+                            title={`${tester.name} ${tester.employeeNo}`}
+                          />
+                        </div>
                       </TableCell>
                       <TableCell className="px-3 py-2">
+                        {/* 가능한 항목만 노출 — '불가'는 표시하지 않는다 */}
                         <div className="min-w-0">
-                          <StatusLine
-                            color={tester.canSolo ? "bg-emerald-500" : "bg-muted-foreground"}
-                            label={tester.canSolo ? "단독 가능" : "단독 불가"}
-                          />
-                          <StatusLine
-                            color={tester.canDuo ? "bg-amber-500" : "bg-muted-foreground"}
-                            label={tester.canDuo ? "2인 가능" : "2인 불가"}
-                          />
+                          {tester.canSolo && <StatusLine color="bg-emerald-500" label="단독 가능" />}
+                          {tester.canDuo && <StatusLine color="bg-amber-500" label="2인 가능" />}
+                          {!tester.canSolo && !tester.canDuo && (
+                            <span className="text-xs text-muted-foreground/50">—</span>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell className="px-3 py-2">
@@ -718,13 +723,16 @@ export default function TestersPage() {
                 ) : (
                   activeTesters.map((tester) => (
                     <Card key={tester.id} className="gap-0 px-3 py-3">
-                      <div className="mb-2 border-b pb-2">
-                        <p className="text-sm font-semibold text-foreground">
-                          {tester.name}
-                        </p>
-                        <p className="font-mono text-[11px] text-muted-foreground">
-                          {tester.employeeNo}
-                        </p>
+                      <div className="mb-2 flex items-center gap-2 border-b pb-2">
+                        <TesterAvatar testerId={tester.id} name={tester.name} avatarUrl={tester.avatarUrl} size="sm" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-foreground">
+                            {tester.name}
+                          </p>
+                          <p className="font-mono text-[11px] text-muted-foreground">
+                            {tester.employeeNo}
+                          </p>
+                        </div>
                       </div>
                       <div className="grid grid-cols-1 gap-1.5 min-[420px]:grid-cols-2">
                         {capabilities.map((capability) => {
@@ -787,8 +795,11 @@ export default function TestersPage() {
                   <TableBody>
                     {activeTesters.map((tester) => (
                       <TableRow key={tester.id}>
-                        <TableCell className="sticky left-0 z-10 border-r px-3 py-2.5 font-medium text-foreground bg-card">
-                          {tester.name}
+                        <TableCell className="sticky left-0 z-10 border-r bg-card px-3 py-2.5 font-medium text-foreground">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <TesterAvatar testerId={tester.id} name={tester.name} avatarUrl={tester.avatarUrl} size="xs" />
+                            <span className="truncate">{tester.name}</span>
+                          </div>
                         </TableCell>
                         <TableCell className="sticky left-[100px] z-10 border-r px-3 py-2.5 text-center font-mono text-muted-foreground bg-card">
                           {tester.employeeNo}
@@ -951,7 +962,10 @@ export default function TestersPage() {
       <Sheet open={editOpen} onOpenChange={setEditOpen}>
         <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
           <SheetHeader className="border-b px-5 py-4">
-            <SheetTitle className="text-base font-semibold">시험자 수정</SheetTitle>
+            <SheetTitle className="flex items-center gap-2 text-base font-semibold">
+              <TesterAvatar testerId={selected?.id} name={selected?.name} avatarUrl={selected?.avatarUrl} size="sm" />
+              시험자 수정
+            </SheetTitle>
             <SheetDescription className="text-xs text-muted-foreground">
               시험 가능 범위를 수정합니다.
             </SheetDescription>

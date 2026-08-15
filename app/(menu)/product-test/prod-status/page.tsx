@@ -11,6 +11,7 @@ import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
 import { Input } from "@frontend/components/ui/input"
 import { Skeleton } from "@frontend/components/ui/skeleton"
+import { TesterAvatar } from "@frontend/lib/tester-profiles"
 
 // ─── Types (백엔드 listWorkerOverview 와 동일) ───────────────────────────────
 interface OverviewJob {
@@ -239,7 +240,7 @@ export default function ProdStatusPage() {
             <Card key={w.testerId} className="gap-0 overflow-hidden py-0">
               {/* 카드 헤더 */}
               <div className="flex items-center gap-2 border-b px-4 py-3">
-                <span className={cn("size-2 shrink-0 rounded-full", w.isActive ? "bg-emerald-500" : "bg-slate-300")} />
+                <TesterAvatar testerId={w.testerId} name={w.name} size="md" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <span className="truncate text-sm font-semibold text-foreground">{w.name}</span>

@@ -18,7 +18,7 @@ import {
 } from '@frontend/components/ui/table'
 import { CellStack } from '@frontend/components/ui/table-cell-stack'
 import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from '@frontend/components/ui/table-sort'
-import { Avatar, AvatarFallback } from '@frontend/components/ui/avatar'
+import { TesterAvatar } from '@frontend/lib/tester-profiles'
 import { Calendar } from '@frontend/components/ui/calendar'
 import {
   Popover,
@@ -70,11 +70,6 @@ const DEMO_TABLE_DATA: TestRow[] = [
   { id:7,  category:'원료',   type:'이화학시험',  product:'홍삼정 에브리타임 2X',  testNo:'QC-2024-0349', items:'진세노사이드 함량',    contractor:'광동제약(주)', manager:'정다은', managerInit:'정', receiveDate:'2024.03.15', dueDate:'2024.03.29', status:'inprogress' },
   { id:8,  category:'완제품', type:'관능시험',    product:'헛개수 플러스',          testNo:'QC-2024-0356', items:'색상, 향, 맛, 이물',   contractor:'광동제약(주)', manager:'이서연', managerInit:'이', receiveDate:'2024.03.18', dueDate:'2024.04.01', status:'reviewing'  },
 ]
-
-const AVATAR_COLORS: Record<string, string> = {
-  김: 'bg-blue-500', 박: 'bg-violet-500', 이: 'bg-emerald-500',
-  최: 'bg-amber-500', 정: 'bg-rose-500',
-}
 
 type SortField = 'category' | 'type' | 'product' | 'testNo' | 'items' | 'contractor' | 'manager' | 'receiveDate' | 'dueDate' | 'status'
 
@@ -464,11 +459,7 @@ export default function QCDashboard() {
                           <CellStack
                             primary={
                               <span className="flex min-w-0 items-center gap-1.5">
-                                <Avatar className="h-5 w-5 shrink-0">
-                                  <AvatarFallback className={`text-[10px] font-bold text-white ${AVATAR_COLORS[row.managerInit] ?? 'bg-slate-400'}`}>
-                                    {row.managerInit}
-                                  </AvatarFallback>
-                                </Avatar>
+                                <TesterAvatar name={row.manager} size="xs" />
                                 <span className="truncate">{row.manager}</span>
                               </span>
                             }

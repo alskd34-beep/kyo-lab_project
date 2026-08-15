@@ -84,7 +84,7 @@ export default function GroupsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-4 p-3 md:p-5">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3 md:p-5">
       {/* 헤더 */}
       <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm md:flex-row md:items-center md:justify-between md:py-4">
         <div>

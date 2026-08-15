@@ -495,7 +495,7 @@ export default function TestItemsPage() {
   const hasSelection = !!selectedProduct
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-x-hidden p-4 md:p-6">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto p-4 md:p-6">
       {/* 페이지 헤더 */}
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
         <div className="flex min-w-0 items-center gap-3">

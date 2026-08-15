@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@frontend/components/u
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@frontend/components/ui/table'
 import { Button } from '@frontend/components/ui/button'
 import { Skeleton } from '@frontend/components/ui/skeleton'
+import { TesterAvatar } from '@frontend/lib/tester-profiles'
 import {
   Calendar,
   ChevronLeft,
@@ -610,10 +611,8 @@ export default function MonthlySchedulePage() {
                               className={`sticky left-0 z-10 border-b ${BORDER} bg-white dark:bg-slate-900 px-3 py-2 text-sm font-semibold ${TXT_PRIMARY}`}
                             >
                               <div className="flex items-center gap-1.5">
-                                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white">
-                                  {t.name.slice(0, 1)}
-                                </div>
-                                {t.name}
+                                <TesterAvatar testerId={String(t.id)} name={t.name} size="xs" />
+                                <span className="truncate">{t.name}</span>
                               </div>
                             </TableCell>
                             {days.map(d => {

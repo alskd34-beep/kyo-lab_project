@@ -13,16 +13,21 @@ function Table({
 }: React.ComponentProps<"table"> & {
   containerClassName?: string
   containerRef?: React.Ref<HTMLDivElement>
-  /** fluid: 화면 너비에 맞추고 가로 스크롤 없음. wide: 행렬처럼 가로 스크롤 허용. */
-  layout?: "fluid" | "wide"
+  /** fluid: 화면 너비에 맞추고 안쪽에서 세로 스크롤. content: 높이만큼 늘어나 바깥 스크롤. wide: 가로 스크롤 허용. */
+  layout?: "fluid" | "content" | "wide"
 }) {
+  const containerOverflow =
+    layout === "content" ? "overflow-x-hidden overflow-y-visible"
+    : layout === "fluid" ? "overflow-x-hidden overflow-y-auto"
+    : "overflow-auto"
   return (
     <div
       ref={containerRef}
       data-slot="table-container"
       className={cn(
-        "relative min-h-0 min-w-0 w-full flex-1",
-        layout === "fluid" ? "overflow-x-hidden overflow-y-auto" : "overflow-auto",
+        "relative min-w-0 w-full",
+        layout === "content" ? "h-auto" : "min-h-0 flex-1",
+        containerOverflow,
         containerClassName,
       )}
     >
@@ -30,7 +35,7 @@ function Table({
         data-slot="table"
         className={cn(
           "w-full caption-bottom text-sm",
-          layout === "fluid" && "table-fixed",
+          (layout === "fluid" || layout === "content") && "table-fixed",
           className,
         )}
         {...props}

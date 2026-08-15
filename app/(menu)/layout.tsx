@@ -45,8 +45,8 @@ export default function MenuLayout({ children }: { children: React.ReactNode }) 
           </div>
         </header>
 
-        {/* 본문 — 리스트 화면은 h-full 로 내부 스크롤, 그 외는 이 영역이 스크롤 */}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto">
+        {/* 본문 — 높이를 고정해 각 페이지가 조회조건/목록 스크롤을 나눈다 */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {children}
         </div>
       </SidebarInset>

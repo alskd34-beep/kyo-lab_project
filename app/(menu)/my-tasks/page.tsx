@@ -414,7 +414,7 @@ export default function MyTasksPage() {
   }
 
   if (loading) return (
-    <div className="flex flex-col gap-4 p-4 md:p-6">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 md:p-6">
       {/* 헤더 */}
       <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
         <Skeleton className="h-5 w-24" />
@@ -500,7 +500,7 @@ export default function MyTasksPage() {
         />
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col gap-4 p-4 md:p-6">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4 md:p-6">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <h1 className="text-xl font-semibold text-foreground">내 작업</h1>
           <p className="text-sm text-muted-foreground">배정된 오더를 시작하고 시험항목별로 진행 상황을 기록합니다.</p>

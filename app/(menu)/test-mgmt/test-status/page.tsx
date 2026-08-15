@@ -14,7 +14,7 @@ import {
 } from '@frontend/components/ui/table'
 import { CellStack } from '@frontend/components/ui/table-cell-stack'
 import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from '@frontend/components/ui/table-sort'
-import { Avatar, AvatarFallback } from '@frontend/components/ui/avatar'
+import { TesterAvatar } from '@frontend/lib/tester-profiles'
 import { Calendar } from '@frontend/components/ui/calendar'
 import {
   Popover,
@@ -57,11 +57,6 @@ function buildKpis(rows: TestRow[]): KpiItem[] {
     { label: '완료',     value: String(by('completed')),  unit: '건', sub: '시험 완료',      accent: 'text-emerald-600', bg: 'bg-emerald-50/60', border: 'border-emerald-100' },
     { label: '부적합',   value: String(by('fail')),       unit: '건', sub: '기준 이탈',      accent: 'text-red-600',     bg: 'bg-red-50/60',     border: 'border-red-100'     },
   ]
-}
-
-const AVATAR_COLORS: Record<string, string> = {
-  김: 'bg-blue-500', 박: 'bg-violet-500', 이: 'bg-emerald-500',
-  최: 'bg-amber-500', 정: 'bg-rose-500',
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -429,11 +424,7 @@ export default function TestStatusPage() {
                             <p className="mt-1 text-[11px] text-slate-600 truncate">{row.items}</p>
                             <div className="mt-1.5 flex items-center justify-between gap-2">
                               <div className="flex items-center gap-1.5 min-w-0">
-                                <Avatar className="h-5 w-5 shrink-0">
-                                  <AvatarFallback className={`text-[9px] font-bold text-white ${AVATAR_COLORS[row.managerInit] ?? 'bg-slate-400'}`}>
-                                    {row.managerInit}
-                                  </AvatarFallback>
-                                </Avatar>
+                                <TesterAvatar name={row.manager} size="xs" />
                                 <span className="text-[11px] text-slate-700">{row.manager}</span>
                               </div>
                               <span className="text-[10px] font-mono text-slate-400">~{row.dueDate}</span>
@@ -532,11 +523,7 @@ export default function TestStatusPage() {
                           <CellStack
                             primary={
                               <span className="flex min-w-0 items-center gap-1.5">
-                                <Avatar className="h-5 w-5 shrink-0">
-                                  <AvatarFallback className={`text-[10px] font-bold text-white ${AVATAR_COLORS[row.managerInit] ?? 'bg-slate-400'}`}>
-                                    {row.managerInit}
-                                  </AvatarFallback>
-                                </Avatar>
+                                <TesterAvatar name={row.manager} size="xs" />
                                 <span className="truncate">{row.manager}</span>
                               </span>
                             }

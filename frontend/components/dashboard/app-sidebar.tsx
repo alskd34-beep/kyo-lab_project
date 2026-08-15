@@ -9,7 +9,7 @@ import {
 
 import { cn } from "@frontend/lib/utils"
 import { useAuth } from "@frontend/lib/auth-context"
-import { Avatar, AvatarFallback, AvatarImage } from "@frontend/components/ui/avatar"
+import { TesterAvatar } from "@frontend/lib/tester-profiles"
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@frontend/components/ui/collapsible"
@@ -49,7 +49,6 @@ const NAV_SECTIONS: NavSection[] = [
           { id: "schedule-monthly", label: "월간 스케줄", live: true },
           { id: "schedule-orders", label: "AI 스케줄", adminOnly: true, live: true },
           { id: "schedule-vacation", label: "휴가 캘린더", live: true },
-          { id: "schedule-holidays", label: "공휴일 캘린더", adminOnly: true, live: true },
           { id: "schedule-reassign", label: "재배정 이력", adminOnly: true, live: true },
           { id: "schedule-dashboard", label: "관리자 대시보드", adminOnly: true, live: true },
         ],
@@ -127,6 +126,7 @@ const NAV_SECTIONS: NavSection[] = [
           { id: "test-items", label: "품목별 시험항목 관리", live: true },
           { id: "pretest-checklist", label: "시험 전 확인사항", live: true },
           { id: "concurrent-items", label: "동시분석 품목", adminOnly: true, live: true },
+          { id: "schedule-holidays", label: "공휴일 캘린더", adminOnly: true, live: true },
         ],
       },
       {
@@ -201,7 +201,6 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
     if (isMobile) setOpenMobile(false)
   }
   const name = user?.displayName ?? user?.username ?? "게스트"
-  const initial = name.charAt(0)
 
   const subHref = (id: string) => PATH_MAP[id] ?? "#"
   const subActive = (id: string) => {
@@ -311,10 +310,12 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
-                  <Avatar className="size-8 rounded-lg">
-                    {user?.avatarUrl && <AvatarImage src={user.avatarUrl} alt="" />}
-                    <AvatarFallback className="rounded-lg bg-primary text-primary-foreground text-xs font-bold">{initial}</AvatarFallback>
-                  </Avatar>
+                  <TesterAvatar
+                    name={name}
+                    avatarUrl={user?.avatarUrl}
+                    size="md"
+                    className="rounded-lg"
+                  />
                   <div className="grid flex-1 text-left text-sm leading-tight">
                     <span className="truncate font-medium">{name}</span>
                     <span className="truncate text-xs text-muted-foreground">

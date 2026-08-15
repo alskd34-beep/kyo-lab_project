@@ -7,6 +7,7 @@ export interface TesterProfile {
   id: string
   name: string
   employeeNo: string | null
+  userId: string | null
   avatarUrl: string | null
   profileEmoji: string
 }
@@ -16,16 +17,30 @@ interface TesterApiRow {
   name: string
   employeeNo?: string | null
   employee_no?: string | null
+  userId?: string | null
+  username?: string | null
   avatarUrl?: string | null
 }
 
-const CACHE_KEY = 'kd_tester_profile_cache_v1'
+interface UserApiRow {
+  id: string
+  username?: string | null
+  displayName?: string | null
+  testerId?: string | null
+  testerName?: string | null
+  avatarUrl?: string | null
+}
+
+const CACHE_KEY = 'kd_people_profile_cache_v2'
 const PROFILE_EMOJIS = [
   '🧑‍🔬', '👩‍🔬', '👨‍🔬', '🧑‍⚕️', '👩‍⚕️', '👨‍⚕️',
   '🙂', '😄', '😊', '😎', '🤓', '🧐', '🙋', '🙆',
 ]
 
 let profiles = new Map<string, TesterProfile>()
+let byUserId = new Map<string, string>()
+let byEmployeeNo = new Map<string, string>()
+let byName = new Map<string, string>()
 let currentSnapshot: TesterProfile[] = []
 let loaded = false
 let inflight: Promise<void> | null = null
@@ -45,14 +60,33 @@ function snapshot(): TesterProfile[] {
   return currentSnapshot
 }
 
+function rebuildIndexes() {
+  byUserId = new Map()
+  byEmployeeNo = new Map()
+  byName = new Map()
+  for (const p of profiles.values()) {
+    if (p.userId) byUserId.set(p.userId, p.id)
+    if (p.employeeNo) byEmployeeNo.set(p.employeeNo, p.id)
+    if (p.name) byName.set(p.name.trim(), p.id)
+  }
+}
+
 function setProfiles(next: Map<string, TesterProfile>) {
   profiles = next
   currentSnapshot = Array.from(next.values())
+  rebuildIndexes()
 }
 
 function subscribe(listener: () => void): () => void {
   listeners.add(listener)
   return () => listeners.delete(listener)
+}
+
+function persistableSnapshot(): TesterProfile[] {
+  return snapshot().map(row => ({
+    ...row,
+    avatarUrl: row.avatarUrl && row.avatarUrl.startsWith('data:') ? null : row.avatarUrl,
+  }))
 }
 
 function readPersistedCache() {
@@ -62,7 +96,11 @@ function readPersistedCache() {
     const raw = window.localStorage.getItem(CACHE_KEY)
     if (!raw) return
     const rows = JSON.parse(raw) as TesterProfile[]
-    setProfiles(new Map(rows.map(row => [row.id, row])))
+    setProfiles(new Map(rows.map(row => [row.id, {
+      ...row,
+      userId: row.userId ?? null,
+      profileEmoji: row.profileEmoji || profileEmoji(row.id || row.name),
+    }])))
   } catch {
     setProfiles(new Map())
   }
@@ -70,28 +108,80 @@ function readPersistedCache() {
 
 function writePersistedCache() {
   if (typeof window === 'undefined') return
-  window.localStorage.setItem(CACHE_KEY, JSON.stringify(snapshot()))
+  try {
+    window.localStorage.setItem(CACHE_KEY, JSON.stringify(persistableSnapshot()))
+  } catch {
+    try {
+      window.localStorage.removeItem(CACHE_KEY)
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
-function normalizeRows(rows: TesterApiRow[]): Map<string, TesterProfile> {
-  return new Map(rows.map(row => {
-    const employeeNo = row.employeeNo ?? row.employee_no ?? null
-    const seed = row.id || employeeNo || row.name
-    return [row.id, {
+function upsertMany(rows: TesterProfile[]) {
+  const next = new Map(profiles)
+  for (const row of rows) {
+    const prev = next.get(row.id)
+    next.set(row.id, {
       id: row.id,
-      name: row.name,
-      employeeNo,
-      avatarUrl: row.avatarUrl ?? null,
-      profileEmoji: profileEmoji(seed),
-    }]
-  }))
+      name: row.name || prev?.name || '',
+      employeeNo: row.employeeNo ?? prev?.employeeNo ?? null,
+      userId: row.userId ?? prev?.userId ?? null,
+      avatarUrl: row.avatarUrl !== undefined ? row.avatarUrl : (prev?.avatarUrl ?? null),
+      profileEmoji: prev?.profileEmoji ?? row.profileEmoji,
+    })
+  }
+  setProfiles(next)
+  writePersistedCache()
+  emit()
+}
+
+function fromTesterRow(row: TesterApiRow): TesterProfile {
+  const employeeNo = row.employeeNo ?? row.employee_no ?? row.username ?? null
+  const seed = row.id || employeeNo || row.name
+  return {
+    id: row.id,
+    name: row.name,
+    employeeNo,
+    userId: row.userId ?? null,
+    avatarUrl: row.avatarUrl ?? null,
+    profileEmoji: profileEmoji(seed),
+  }
 }
 
 export function primeTesterProfileCache(rows: TesterApiRow[]) {
-  setProfiles(normalizeRows(rows))
   loaded = true
-  writePersistedCache()
-  emit()
+  upsertMany(rows.map(fromTesterRow))
+}
+
+export function primePeopleCacheFromUsers(rows: UserApiRow[]) {
+  loaded = true
+  upsertMany(rows.map(row => {
+    const id = row.testerId || `user:${row.id}`
+    const name = row.displayName || row.testerName || row.username || ''
+    return {
+      id,
+      name,
+      employeeNo: row.username ?? null,
+      userId: row.id,
+      avatarUrl: row.avatarUrl ?? null,
+      profileEmoji: profileEmoji(id || name),
+    }
+  }))
+}
+
+export function upsertPersonProfile(row: Partial<TesterProfile> & { id: string }) {
+  loaded = true
+  const prev = profiles.get(row.id)
+  upsertMany([{
+    id: row.id,
+    name: row.name ?? prev?.name ?? '',
+    employeeNo: row.employeeNo ?? prev?.employeeNo ?? null,
+    userId: row.userId ?? prev?.userId ?? null,
+    avatarUrl: row.avatarUrl !== undefined ? row.avatarUrl : (prev?.avatarUrl ?? null),
+    profileEmoji: prev?.profileEmoji ?? profileEmoji(row.id),
+  }])
 }
 
 export async function refreshTesterProfileCache(): Promise<void> {
@@ -115,8 +205,28 @@ export function invalidateTesterProfileCache() {
   loaded = false
   inflight = null
   setProfiles(new Map())
-  if (typeof window !== 'undefined') window.localStorage.removeItem(CACHE_KEY)
+  if (typeof window !== 'undefined') {
+    try { window.localStorage.removeItem(CACHE_KEY) } catch { /* ignore */ }
+  }
   emit()
+}
+
+function lookupId(id?: string | null, name?: string | null): string | null {
+  if (id) {
+    if (profiles.has(id)) return id
+    const fromUser = byUserId.get(id)
+    if (fromUser) return fromUser
+    const fromEmp = byEmployeeNo.get(id)
+    if (fromEmp) return fromEmp
+  }
+  if (name) {
+    const trimmed = name.trim()
+    const fromName = byName.get(trimmed)
+    if (fromName) return fromName
+    const fromEmp = byEmployeeNo.get(trimmed)
+    if (fromEmp) return fromEmp
+  }
+  return null
 }
 
 export function useTesterProfiles() {
@@ -129,9 +239,8 @@ export function useTesterProfiles() {
   }, [])
 
   const getProfile = useCallback((id?: string | null, name?: string | null): TesterProfile | null => {
-    if (id && profiles.has(id)) return profiles.get(id) ?? null
-    if (name) return snapshot().find(profile => profile.name === name) ?? null
-    return null
+    const key = lookupId(id, name)
+    return key ? profiles.get(key) ?? null : null
   }, [])
 
   return { profiles: rows, getProfile, refresh: refreshTesterProfileCache, invalidate: invalidateTesterProfileCache }

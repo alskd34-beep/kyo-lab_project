@@ -10,6 +10,7 @@ import { Badge } from "@frontend/components/ui/badge"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
 import { CellStack } from "@frontend/components/ui/table-cell-stack"
+import { TesterAvatar } from "@frontend/lib/tester-profiles"
 import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from "@frontend/components/ui/table-sort"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -303,10 +304,13 @@ export default function EquipmentReservationPage() {
                       />
                     </TableCell>
                     <TableCell className="px-3 py-2">
-                      <CellStack
-                        primary={r.userName ?? "이름없음"}
-                        title={r.userName ?? "이름없음"}
-                      />
+                      <div className="flex min-w-0 items-center gap-2">
+                        <TesterAvatar name={r.userName} size="sm" />
+                        <CellStack
+                          primary={r.userName ?? "이름없음"}
+                          title={r.userName ?? "이름없음"}
+                        />
+                      </div>
                     </TableCell>
                     <TableCell className="px-1 py-2">
                       <div className="flex items-center justify-end gap-1.5">

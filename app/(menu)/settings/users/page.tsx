@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 import { ImagePlus, Pencil, Save, Trash2, Upload, UserPlus, X } from 'lucide-react'
 import { Skeleton } from '@frontend/components/ui/skeleton'
 import { useAuth } from '@frontend/lib/auth-context'
-import { TesterAvatar, invalidateTesterProfileCache } from '@frontend/lib/tester-profiles'
+import { TesterAvatar, invalidateTesterProfileCache, primePeopleCacheFromUsers, upsertPersonProfile } from '@frontend/lib/tester-profiles'
 import { useConfirmMessage } from '@frontend/components/common/confirm-message'
 import {
   Dialog,
@@ -133,7 +133,9 @@ export default function UsersAdminPage() {
     const usersRes = await fetch('/api/users', { cache: 'no-store', credentials: 'include' })
 
     if (usersRes.ok) {
-      setUsers((await usersRes.json()).users)
+      const next = (await usersRes.json()).users as UserRow[]
+      setUsers(next)
+      primePeopleCacheFromUsers(next)
     } else {
       setError((await usersRes.json().catch(() => ({}))).error ?? '조회 실패')
     }
@@ -176,7 +178,13 @@ export default function UsersAdminPage() {
 
   const handleSaved = async (savedUser: UserRow) => {
     setEditingUser(null)
-    invalidateTesterProfileCache()
+    upsertPersonProfile({
+      id: savedUser.testerId || `user:${savedUser.id}`,
+      name: savedUser.displayName ?? savedUser.testerName ?? savedUser.username,
+      employeeNo: savedUser.username,
+      userId: savedUser.id,
+      avatarUrl: savedUser.avatarUrl,
+    })
     await load()
     if (savedUser.id === me?.id) await refresh()
   }
