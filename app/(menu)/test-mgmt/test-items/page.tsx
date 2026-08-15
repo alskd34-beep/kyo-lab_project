@@ -574,7 +574,7 @@ export default function TestItemsPage() {
                           </span>
                           {product.isActive ? (
                             <Badge variant="outline" className="gap-1 text-[10px]">
-                              <span className="size-1.5 rounded-full bg-emerald-500" />
+                              <span className="size-1.5 rounded-full bg-indigo-500" />
                               활성
                             </Badge>
                           ) : (

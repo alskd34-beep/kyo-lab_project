@@ -420,7 +420,7 @@ const ProductTableRow = memo(function ProductTableRow({
           />
           {!splitStatus && (
             <StatusLine
-              color={row.isActive ? "bg-emerald-500" : "bg-muted-foreground"}
+              color={row.isActive ? "bg-indigo-500" : "bg-muted-foreground"}
               label={row.isActive ? "활성" : "비활성"}
             />
           )}
@@ -429,7 +429,7 @@ const ProductTableRow = memo(function ProductTableRow({
       {splitStatus && (
         <TableCell className="px-3 py-2">
           <StatusLine
-            color={row.isActive ? "bg-emerald-500" : "bg-muted-foreground"}
+            color={row.isActive ? "bg-indigo-500" : "bg-muted-foreground"}
             label={row.isActive ? "활성" : "비활성"}
           />
         </TableCell>
@@ -478,7 +478,7 @@ const ProductCard = memo(function ProductCard({
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="font-mono text-[11px] text-muted-foreground">{row.productCode}</span>
             <Badge variant="outline" className="gap-1.5 text-[10px]">
-              <span className={cn("size-1.5 rounded-full", row.isActive ? "bg-emerald-500" : "bg-muted-foreground")} />
+              <span className={cn("size-1.5 rounded-full", row.isActive ? "bg-indigo-500" : "bg-muted-foreground")} />
               {row.isActive ? "활성" : "비활성"}
             </Badge>
             <DifficultyBadge difficulty={row.difficulty} />
@@ -1037,7 +1037,7 @@ export function ProductTestWorkspace() {
               <span className="text-lg font-semibold tabular-nums text-foreground">
                 {summary.total}
                 <span className="ml-2 text-[11px] font-normal text-muted-foreground">
-                  활성 <span className="font-semibold text-emerald-600">{summary.active}</span>
+                  활성 <span className="font-semibold text-indigo-600">{summary.active}</span>
                   {" · "}
                   비활성 {summary.total - summary.active}
                 </span>

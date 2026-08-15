@@ -53,7 +53,7 @@ const STATUS_LABEL: Record<EquipmentStatus, string> = {
 }
 
 const STATUS_DOT: Record<EquipmentStatus, string> = {
-  active:         "bg-emerald-500",
+  active:         "bg-indigo-500",
   calibrating:    "bg-amber-500",
   out_of_service: "bg-red-500",
 }

@@ -410,7 +410,7 @@ function RoleBadge({ role }: { role: UserRow['role'] }) {
 function StatusBadge({ isActive }: { isActive: boolean }) {
   return (
     <span className={`rounded-full px-2 py-0.5 text-[11px] ${
-      isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
+      isActive ? 'bg-indigo-50 text-indigo-700' : 'bg-red-50 text-red-700'
     }`}>
       {isActive ? '활성' : '비활성'}
     </span>

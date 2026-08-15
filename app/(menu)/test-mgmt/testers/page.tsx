@@ -459,11 +459,11 @@ export default function TestersPage() {
             </span>
           </span>
         </Card>
-        <Card className="gap-0.5 border-l-4 border-l-emerald-500 px-3 py-2">
+        <Card className="gap-0.5 border-l-4 border-l-indigo-500 px-3 py-2">
           <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
             단독 가능
           </span>
-          <span className="text-lg font-semibold tabular-nums text-emerald-600">
+          <span className="text-lg font-semibold tabular-nums text-indigo-600">
             {summary.solo}
           </span>
         </Card>
@@ -516,7 +516,7 @@ export default function TestersPage() {
                           <span
                             className={cn(
                               "size-1.5 rounded-full",
-                              tester.isActive ? "bg-emerald-500" : "bg-muted-foreground"
+                              tester.isActive ? "bg-indigo-500" : "bg-muted-foreground"
                             )}
                           />
                           {tester.isActive ? "활성" : "비활성"}
@@ -541,8 +541,8 @@ export default function TestersPage() {
                   {/* 가능한 항목만 노출 — '불가'는 표시하지 않는다 */}
                   <div className="flex flex-wrap items-center gap-1.5 border-t pt-2">
                     {tester.canSolo && (
-                      <Badge variant="outline" className="gap-1.5 border-emerald-200 text-[10px] text-emerald-700">
-                        <span className="size-1.5 rounded-full bg-emerald-500" />
+                      <Badge variant="outline" className="gap-1.5 border-indigo-200 text-[10px] text-indigo-700">
+                        <span className="size-1.5 rounded-full bg-indigo-500" />
                         단독 가능
                       </Badge>
                     )}
@@ -629,7 +629,7 @@ export default function TestersPage() {
                       <TableCell className="px-3 py-2">
                         {/* 가능한 항목만 노출 — '불가'는 표시하지 않는다 */}
                         <div className="min-w-0">
-                          {tester.canSolo && <StatusLine color="bg-emerald-500" label="단독 가능" />}
+                          {tester.canSolo && <StatusLine color="bg-indigo-500" label="단독 가능" />}
                           {tester.canDuo && <StatusLine color="bg-amber-500" label="2인 가능" />}
                           {!tester.canSolo && !tester.canDuo && (
                             <span className="text-xs text-muted-foreground/50">—</span>
@@ -642,7 +642,7 @@ export default function TestersPage() {
                           className={cn(
                             "rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors hover:bg-muted/50",
                             tester.isActive
-                              ? "border-emerald-200 text-emerald-700"
+                              ? "border-indigo-200 text-indigo-700"
                               : "border-input text-muted-foreground"
                           )}
                         >

@@ -359,7 +359,7 @@ export default function TestMasterPage() {
         </Card>
         <Card className="gap-0.5 px-3 py-2">
           <span className="text-[10px] font-medium text-muted-foreground">활성 항목</span>
-          <span className="text-lg font-semibold tabular-nums text-emerald-600">{summary.active}</span>
+          <span className="text-lg font-semibold tabular-nums text-indigo-600">{summary.active}</span>
         </Card>
         <Card className="gap-0.5 px-3 py-2">
           <span className="text-[10px] font-medium text-muted-foreground">평균 예상시간</span>
@@ -453,7 +453,7 @@ export default function TestMasterPage() {
                   <div className="flex flex-wrap items-center gap-1.5">
                     <CategoryBadge category={row.category} />
                     <Badge variant="outline" className={cn("gap-1.5", row.isActive ? "" : "text-muted-foreground")}>
-                      <span className={cn("size-1.5 rounded-full", row.isActive ? "bg-emerald-500" : "bg-muted-foreground")} />
+                      <span className={cn("size-1.5 rounded-full", row.isActive ? "bg-indigo-500" : "bg-muted-foreground")} />
                       {row.isActive ? "활성" : "비활성"}
                     </Badge>
                   </div>
@@ -510,7 +510,7 @@ export default function TestMasterPage() {
                   className={cn(
                     "rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors",
                     row.isActive
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                      ? "border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
                       : "border-input bg-background text-muted-foreground hover:bg-muted/50",
                   )}
                 >
@@ -598,7 +598,7 @@ export default function TestMasterPage() {
                         className={cn(
                           "mt-0.5 block max-w-full truncate rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
                           row.isActive
-                            ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                            ? "border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
                             : "border-input bg-background text-muted-foreground hover:bg-muted/50",
                         )}
                       >
