@@ -229,9 +229,13 @@ interface ProductColumn {
 }
 
 /**
- * 컬럼 구성 2단계. 중간 단계 없이, 표 컨테이너가 `COLUMN_BREAKPOINTS` 이상으로
- * 넓어지면 한 번에 전부 펼치고 그 밑으로는 전부 묶는다.
- * 인덱스 = `useColumnExpandLevel` 이 돌려주는 단계 값(0 또는 1).
+ * 컬럼 구성 3단계. 인덱스 = `useColumnExpandLevel` 이 돌려주는 단계 값.
+ *
+ * 0 → 1 은 "묶음 → 펼침" 자체를 바꾼다(컬럼 개수가 달라짐).
+ * 1 → 2 는 이미 펼쳐진 8개 컬럼의 비율만 바꾼다 — 실제 품목 데이터(718건) 기준
+ * 품목명·품목명2·분류·규격 각 필드의 99번째 백분위 렌더 폭을 측정해 정한 비율이라,
+ * 레벨 2 폭(1400px)에서는 표에 있는 대부분의 값이 잘리지 않고 그대로 보인다.
+ * (극단적으로 긴 이상치 한두 건만 더 넓어질 때까지 말줄임이 남는다.)
  */
 const COLUMN_LEVELS: ProductColumn[][] = [
   // 0 — 전부 묶음 (좁은 화면)
@@ -242,7 +246,7 @@ const COLUMN_LEVELS: ProductColumn[][] = [
     { key: "status", width: "w-[18%]", def: COL_STATUS_MERGED },
     { key: "actions", width: "w-[6%]" },
   ],
-  // 1 — 전부 펼침 (넓은 화면 — 여유가 있으면 굳이 묶어 둘 이유가 없다)
+  // 1 — 전부 펼침, 균형 비율 (여유가 있으면 굳이 묶어 둘 이유가 없다)
   [
     { key: "code", width: "w-[11%]", def: COL_CODE },
     { key: "name", width: "w-[20%]", def: COL_NAME },
@@ -253,10 +257,21 @@ const COLUMN_LEVELS: ProductColumn[][] = [
     { key: "status", width: "w-[10%]", def: COL_ACTIVE },
     { key: "actions", width: "w-[6%]" },
   ],
+  // 2 — 전부 펼침, 실측 기반 비율 (더 넓은 화면 — 긴 품목명도 잘리지 않도록)
+  [
+    { key: "code", width: "w-[8%]", def: COL_CODE },
+    { key: "name", width: "w-[30%]", def: COL_NAME },
+    { key: "nameAlt", width: "w-[23%]", def: COL_NAME_ALT },
+    { key: "class", width: "w-[10%]", def: COL_CLASS },
+    { key: "spec", width: "w-[12%]", def: COL_SPEC },
+    { key: "difficulty", width: "w-[8%]", def: COL_DIFFICULTY },
+    { key: "status", width: "w-[5%]", def: COL_ACTIVE },
+    { key: "actions", width: "w-[4%]" },
+  ],
 ]
 
-/** 표 컨테이너 너비(px) 기준 전환점 — 이 이상이면 전부 펼침 */
-const COLUMN_BREAKPOINTS = [1180]
+/** 표 컨테이너 너비(px) 기준 전환점 — [묶음→펼침, 펼침→실측 비율] */
+const COLUMN_BREAKPOINTS = [1180, 1400]
 
 const DIFF_RANK: Record<string, number> = { High: 3, Medium: 2, Low: 1 }
 
