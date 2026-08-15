@@ -7,10 +7,19 @@ import {
 } from "lucide-react"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import { cn } from "@frontend/lib/utils"
-import { useLockBodyScroll } from "@frontend/hooks/use-lock-body-scroll"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
 import { Badge } from "@frontend/components/ui/badge"
+import { Input } from "@frontend/components/ui/input"
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@frontend/components/ui/dialog"
 import { useConfirmMessage } from "@frontend/components/common/confirm-message"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -231,6 +240,7 @@ export default function ConcurrentItemsPage() {
 
       {editTarget && (
         <FamilyModal
+          open
           family={editTarget === "new" ? null : editTarget}
           onClose={() => setEditTarget(null)}
           onSaved={() => { setEditTarget(null); flash("저장되었습니다."); void load() }}
@@ -241,10 +251,9 @@ export default function ConcurrentItemsPage() {
 }
 
 // ─── 추가/수정 모달 ───────────────────────────────────────────────────────────
-function FamilyModal({ family, onClose, onSaved }: {
-  family: FamilyRow | null; onClose: () => void; onSaved: () => void
+function FamilyModal({ open, family, onClose, onSaved }: {
+  open: boolean; family: FamilyRow | null; onClose: () => void; onSaved: () => void
 }) {
-  useLockBodyScroll()
   const [name, setName] = useState(family?.name ?? "")
   const [note, setNote] = useState(family?.note ?? "")
   const [members, setMembers] = useState<FamilyMember[]>(family?.members ?? [])
@@ -298,20 +307,20 @@ function FamilyModal({ family, onClose, onSaved }: {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-xl border bg-card shadow-xl" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between border-b px-4 py-3">
-          <h2 className="text-sm font-bold text-foreground">{family ? "동시분석 품목군 수정" : "새 동시분석 품목군"}</h2>
-          <button onClick={onClose} className="rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><X className="size-4" /></button>
-        </div>
-        <div className="flex flex-col gap-3 px-4 py-4">
+    <Dialog open={open} onOpenChange={(next) => { if (!next && !saving) onClose() }}>
+      <DialogContent size="lg">
+        <DialogHeader>
+          <DialogTitle>{family ? "동시분석 품목군 수정" : "새 동시분석 품목군"}</DialogTitle>
+          <DialogDescription>같은 시험에 묶을 품목을 2개 이상 구성합니다.</DialogDescription>
+        </DialogHeader>
+        <DialogBody className="grid gap-3">
           <div>
-            <label className="mb-1 block text-xs font-semibold text-foreground">품목군 이름 <span className="text-red-500">*</span></label>
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="예: 네비레트엠 계열" className={inputCls} />
+            <label className="mb-1 block text-xs font-semibold text-foreground">품목군 이름 <span className="text-destructive">*</span></label>
+            <Input value={name} onChange={e => setName(e.target.value)} placeholder="예: 네비레트엠 계열" />
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold text-foreground">비고</label>
-            <input value={note} onChange={e => setNote(e.target.value)} placeholder="(선택)" className={inputCls} />
+            <Input value={note} onChange={e => setNote(e.target.value)} placeholder="(선택)" />
           </div>
 
           {/* 선택된 멤버 */}
@@ -358,20 +367,19 @@ function FamilyModal({ family, onClose, onSaved }: {
           </div>
 
           {err && (
-            <p className="flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
+            <p className="flex items-center gap-1.5 rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
               <AlertCircle className="size-3.5" />{err}
             </p>
           )}
-
-          <div className="mt-1 flex justify-end gap-2">
-            <Button variant="outline" size="lg" onClick={onClose}>취소</Button>
-            <Button size="lg" onClick={save} disabled={saving}>
-              {saving && <Loader2 className="animate-spin" />}저장
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>취소</Button>
+          <Button onClick={save} disabled={saving}>
+            {saving && <Loader2 className="animate-spin" />}저장
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

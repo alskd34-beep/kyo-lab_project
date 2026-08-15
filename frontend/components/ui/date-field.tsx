@@ -11,18 +11,23 @@
  */
 
 import { useEffect, useRef, useState } from "react"
-import { format, parse, isValid } from "date-fns"
+import { format, isValid, parse } from "date-fns"
+import { ko } from "date-fns/locale"
 import { Calendar as CalendarIcon } from "lucide-react"
+
+import { cn } from "@frontend/lib/utils"
 import { Button } from "@frontend/components/ui/button"
 import { Calendar } from "@frontend/components/ui/calendar"
+import { Input } from "@frontend/components/ui/input"
 import {
   Popover,
   PopoverContent,
+  PopoverDescription,
+  PopoverHeader,
+  PopoverTitle,
   PopoverTrigger,
 } from "@frontend/components/ui/popover"
 
-// ─── 마스킹 유틸 ──────────────────────────────────────────────────────────────
-/** 숫자만 추출 후 YYYY.MM.DD 마스크 적용 */
 function applyMask(raw: string): string {
   const d = raw.replace(/\D/g, "").slice(0, 8)
   if (d.length <= 4) return d
@@ -30,7 +35,6 @@ function applyMask(raw: string): string {
   return `${d.slice(0, 4)}.${d.slice(4, 6)}.${d.slice(6)}`
 }
 
-/** 마스킹된 값(YYYY.MM.DD) → ISO(yyyy-MM-dd). 불완전하거나 잘못된 날짜면 null */
 function maskedToIso(masked: string): string | null {
   const d = masked.replace(/\D/g, "")
   if (d.length !== 8) return null
@@ -39,13 +43,11 @@ function maskedToIso(masked: string): string | null {
   return isValid(date) ? iso : null
 }
 
-/** ISO → 마스킹 표시(YYYY.MM.DD) */
 function isoToMasked(iso: string): string {
   if (!iso) return ""
   return applyMask(iso.replace(/-/g, ""))
 }
 
-// ─── Props ───────────────────────────────────────────────────────────────────
 interface DateFieldProps {
   label?: string
   helper?: string
@@ -53,13 +55,10 @@ interface DateFieldProps {
   onChange: (value: string) => void
   placeholder?: string
   disabled?: boolean
-  /** "sm" = h-8 text-xs  /  "md"(기본) = h-10 text-sm */
   size?: "sm" | "md"
-  /** 라벨 없이 입력 행만 렌더링 */
   noLabel?: boolean
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
 export function DateField({
   label,
   helper,
@@ -71,14 +70,9 @@ export function DateField({
   noLabel = false,
 }: DateFieldProps) {
   const [open, setOpen] = useState(false)
-  // 표시용 마스크 문자열 (입력 중 중간 상태 유지)
   const [inputVal, setInputVal] = useState(() => isoToMasked(value))
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const heightCls = size === "sm" ? "h-8" : "h-10"
-  const textCls   = size === "sm" ? "text-xs" : "text-sm"
-
-  // ── 달력에서 선택 ──────────────────────────────────────────────────────────
   const handleCalendarSelect = (date: Date | undefined) => {
     const iso = date ? format(date, "yyyy-MM-dd") : ""
     onChange(iso)
@@ -86,7 +80,6 @@ export function DateField({
     setOpen(false)
   }
 
-  // ── 키보드 직접 입력 ───────────────────────────────────────────────────────
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const masked = applyMask(e.target.value)
     setInputVal(masked)
@@ -95,7 +88,6 @@ export function DateField({
     else if (masked === "") onChange("")
   }
 
-  // 붙여넣기: 숫자 8자리 붙여넣으면 즉시 확정
   const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
     e.preventDefault()
     const pasted = e.clipboardData.getData("text")
@@ -105,15 +97,12 @@ export function DateField({
     if (iso) onChange(iso)
   }
 
-  // 포커스 해제 시: 불완전한 입력이면 기존 value 로 복원
   const handleBlur = () => {
     const iso = maskedToIso(inputVal)
     if (!iso) setInputVal(isoToMasked(value))
   }
 
-  // 외부 value 변경 시 표시 동기화 (단, 포커스 중엔 유지)
   useEffect(() => {
-    // ref·activeElement 접근은 렌더 중이 아닌 effect 안에서 수행
     const isFocused = document.activeElement === inputRef.current
     if (isFocused) return
     const expected = isoToMasked(value)
@@ -123,10 +112,9 @@ export function DateField({
     }
   }, [value, inputVal])
 
-  // ── 입력 행 ───────────────────────────────────────────────────────────────
   const inputRow = (
-    <div className={`relative flex w-full items-center rounded-lg border border-slate-200 bg-white ${heightCls} focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100`}>
-      <input
+    <div className="relative">
+      <Input
         ref={inputRef}
         type="text"
         inputMode="numeric"
@@ -136,49 +124,49 @@ export function DateField({
         onBlur={handleBlur}
         placeholder={placeholder}
         disabled={disabled}
-        className={`flex-1 bg-transparent pl-3 pr-0 ${textCls} text-slate-800 placeholder:text-slate-400 outline-none disabled:cursor-not-allowed disabled:opacity-50`}
+        className={cn(
+          "pr-9 tabular-nums",
+          size === "sm" && "h-8 text-xs",
+        )}
       />
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon-sm"
             disabled={disabled}
-            className={`flex ${size === "sm" ? "w-8" : "w-9"} shrink-0 items-center justify-center self-stretch rounded-r-lg text-slate-400 hover:text-blue-500 disabled:cursor-not-allowed disabled:opacity-50`}
+            className="absolute top-1/2 right-1 -translate-y-1/2 text-muted-foreground"
           >
-            <CalendarIcon size={size === "sm" ? 13 : 15} />
-          </button>
+            <CalendarIcon />
+            <span className="sr-only">달력 열기</span>
+          </Button>
         </PopoverTrigger>
-        <PopoverContent
-          align="start"
-          sideOffset={8}
-          className="w-auto min-w-[17rem] rounded-2xl border border-slate-100 bg-white p-0 shadow-2xl"
-        >
+        <PopoverContent align="start" className="w-auto p-0">
           {(label || helper) && (
-            <div className="flex items-start justify-between gap-3 px-4 pt-3 pb-1">
+            <PopoverHeader className="flex-row items-start justify-between gap-3 px-3 pt-3">
               <div>
-                {label && <p className="text-sm font-semibold text-slate-800">{label}</p>}
-                <p className="text-[11px] text-slate-500">
+                {label && <PopoverTitle>{label}</PopoverTitle>}
+                <PopoverDescription>
                   {helper ?? "날짜를 선택하면 바로 반영됩니다."}
-                </p>
+                </PopoverDescription>
               </div>
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={() => {
-                  handleCalendarSelect(new Date())
-                }}
-                className="h-8 px-2.5 text-xs text-slate-600"
+                onClick={() => handleCalendarSelect(new Date())}
               >
                 오늘
               </Button>
-            </div>
+            </PopoverHeader>
           )}
           <Calendar
             mode="single"
+            locale={ko}
             selected={value ? parse(value, "yyyy-MM-dd", new Date()) : undefined}
             onSelect={handleCalendarSelect}
-            className="shadow-none"
+            defaultMonth={value ? parse(value, "yyyy-MM-dd", new Date()) : undefined}
           />
         </PopoverContent>
       </Popover>
@@ -188,12 +176,12 @@ export function DateField({
   if (noLabel) return inputRow
 
   return (
-    <div>
+    <div className="grid gap-1.5">
       {label && (
-        <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+        <label className="text-xs font-medium text-foreground">
           {label}
           {helper && (
-            <span className="ml-1 text-[10px] font-normal text-slate-400">{helper}</span>
+            <span className="ml-1 font-normal text-muted-foreground">{helper}</span>
           )}
         </label>
       )}

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react"
+import { useCallback, useDeferredValue, useEffect, useMemo, useState, type ChangeEvent } from "react"
 import {
   AlertTriangle,
   Box,
@@ -14,11 +14,13 @@ import {
 } from "lucide-react"
 
 import { cn } from "@frontend/lib/utils"
+import { useIsMobile } from "@frontend/hooks/use-mobile"
 import { Badge } from "@frontend/components/ui/badge"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -117,6 +119,13 @@ const DIFFICULTY_OPTIONS = [
 ]
 
 const NONE_SENTINEL = "__none__"
+
+/**
+ * 정렬용 콜레이터.
+ * String.localeCompare(v, "ko") 는 호출마다 콜레이터를 새로 만들어 목록이 커지면 급격히 느려진다.
+ * (품목 700건 정렬 시 비교 6,800여 회) 한 번 만들어 재사용한다.
+ */
+const KO_COLLATOR = new Intl.Collator("ko")
 
 const DIFF_DOT: Record<string, string> = {
   High: "bg-red-500",
@@ -266,6 +275,11 @@ export function ProductTestWorkspace() {
   const [classifications, setClassifications] = useState<LookupOptionRow[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
+  // 입력은 즉시 반영하되 무거운 목록 재계산·재렌더는 뒤로 미뤄 타이핑이 끊기지 않게 한다.
+  const deferredSearch = useDeferredValue(search)
+  // 데스크톱 테이블과 모바일 카드는 CSS(hidden/md:block)로만 감추면 양쪽 DOM 이 모두 생성되므로
+  // 실제로 보이는 쪽만 마운트한다.
+  const isMobile = useIsMobile()
 
   const [addOpen, setAddOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
@@ -317,7 +331,7 @@ export function ProductTestWorkspace() {
   }
 
   const sorted = useMemo(() => {
-    const q = search.trim().toLowerCase()
+    const q = deferredSearch.trim().toLowerCase()
     const filtered = q
       ? rows.filter(
           (r) =>
@@ -329,9 +343,9 @@ export function ProductTestWorkspace() {
     return [...filtered].sort((a, b) => {
       const va = sortField === "productCode" ? a.productCode : a.name
       const vb = sortField === "productCode" ? b.productCode : b.name
-      return sortDir === "asc" ? va.localeCompare(vb, "ko") : vb.localeCompare(va, "ko")
+      return sortDir === "asc" ? KO_COLLATOR.compare(va, vb) : KO_COLLATOR.compare(vb, va)
     })
-  }, [rows, search, sortField, sortDir])
+  }, [rows, deferredSearch, sortField, sortDir])
 
   const summary = useMemo(() => {
     const total = rows.length
@@ -578,6 +592,7 @@ export function ProductTestWorkspace() {
       )}
 
       {/* 데스크톱 테이블 */}
+      {!isMobile && (
       <Card className="hidden gap-0 overflow-hidden py-0 md:block">
         <Table className="min-w-[880px]">
           <TableHeader>
@@ -667,8 +682,10 @@ export function ProductTestWorkspace() {
           </TableBody>
         </Table>
       </Card>
+      )}
 
       {/* 모바일 카드 */}
+      {isMobile && (
       <div className="flex flex-col gap-2 md:hidden">
         {loading
           ? Array.from({ length: 4 }).map((_, i) => (
@@ -732,19 +749,19 @@ export function ProductTestWorkspace() {
             ))
         }
       </div>
+      )}
 
       {/* 품목 추가 Dialog */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden p-0 sm:max-w-xl">
-          <DialogHeader className="border-b px-4 py-4 pr-12 text-left sm:px-5">
-            <DialogTitle className="text-lg font-semibold text-foreground">품목 추가</DialogTitle>
-            <DialogDescription className="mt-1 text-xs text-muted-foreground">
+        <DialogContent size="lg">
+          <DialogHeader>
+            <DialogTitle>품목 추가</DialogTitle>
+            <DialogDescription>
               새 시험 품목을 등록합니다.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="max-h-[65dvh] overflow-y-auto bg-muted/30 px-4 py-4 sm:px-5">
-            <div className="grid gap-4">
+          <DialogBody className="grid gap-4">
               <section className="rounded-lg border bg-card p-4 shadow-sm">
                 <h3 className="mb-3 border-b pb-2 text-sm font-semibold text-foreground">식별 정보</h3>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -795,10 +812,9 @@ export function ProductTestWorkspace() {
                   {error}
                 </div>
               )}
-            </div>
-          </div>
+          </DialogBody>
 
-          <DialogFooter className="border-t bg-card px-4 py-4 sm:px-5">
+          <DialogFooter>
             <Button variant="outline" onClick={() => setAddOpen(false)}>취소</Button>
             <Button onClick={() => void handleAdd()} disabled={saving}>
               <Save />
@@ -863,32 +879,20 @@ export function ProductTestWorkspace() {
         open={!!deleteTarget}
         onOpenChange={(open) => { if (!open && !deleting) setDeleteTarget(null) }}
       >
-        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden p-0 sm:max-w-md">
-          <DialogHeader className="border-b bg-destructive/5 px-4 py-4 pr-12 text-left sm:px-5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-destructive text-destructive-foreground shadow-sm">
-                <AlertTriangle size={20} />
-              </div>
-              <div className="min-w-0">
-                <DialogTitle className="text-lg font-semibold text-foreground">품목 삭제</DialogTitle>
-                <DialogDescription className="mt-1 text-xs text-destructive">
-                  연결된 시험 기준이 있으면 삭제가 거부될 수 있습니다.
-                </DialogDescription>
-              </div>
-            </div>
+        <DialogContent size="sm">
+          <DialogHeader>
+            <DialogTitle>품목 삭제</DialogTitle>
+            <DialogDescription>
+              연결된 시험 기준이 있으면 삭제가 거부될 수 있습니다. 이 작업은 되돌릴 수 없습니다.
+            </DialogDescription>
           </DialogHeader>
 
-          <div className="px-4 py-4 sm:px-5">
-            <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-4">
-              <p className="text-sm font-semibold text-foreground">{deleteTarget?.name}</p>
-              <p className="mt-1 font-mono text-xs text-destructive">{deleteTarget?.productCode}</p>
-              <p className="mt-3 text-sm text-muted-foreground">
-                이 품목을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.
-              </p>
-            </div>
+          <div className="rounded-lg border bg-muted/50 p-3">
+            <p className="text-sm font-medium">{deleteTarget?.name}</p>
+            <p className="mt-0.5 font-mono text-xs text-muted-foreground">{deleteTarget?.productCode}</p>
           </div>
 
-          <DialogFooter className="border-t bg-card px-4 py-4 sm:px-5">
+          <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>취소</Button>
             <Button variant="destructive" onClick={() => void confirmDelete()} disabled={deleting}>
               <Trash2 />

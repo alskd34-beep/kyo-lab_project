@@ -25,7 +25,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@frontend/components/ui/table"
 import {
-  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+  Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@frontend/components/ui/dialog"
 
 interface ProductRow {
@@ -574,7 +574,7 @@ export default function PretestChecklistPage() {
 
       {/* 유사 품목 선택 모달 */}
       <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent size="lg">
           <DialogHeader>
             <DialogTitle>유사 품목에도 적용</DialogTitle>
             <DialogDescription>
@@ -584,6 +584,7 @@ export default function PretestChecklistPage() {
             </DialogDescription>
           </DialogHeader>
 
+          <DialogBody className="grid gap-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <label className="flex cursor-pointer items-center gap-1.5 text-xs text-foreground">
               <input
@@ -644,6 +645,7 @@ export default function PretestChecklistPage() {
               </ul>
             )}
           </div>
+          </DialogBody>
 
           <DialogFooter className="sm:items-center sm:justify-between">
             <span className="text-xs text-muted-foreground sm:mr-auto">

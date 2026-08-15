@@ -2,9 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
+import { Badge } from '@frontend/components/ui/badge'
 import { Card, CardContent } from '@frontend/components/ui/card'
+import { Skeleton } from '@frontend/components/ui/skeleton'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@frontend/components/ui/table'
 import { Avatar, AvatarFallback } from '@frontend/components/ui/avatar'
+import { cn } from '@frontend/lib/utils'
 import type { BatchSummary, BatchStatus, DashboardStats } from '@shared/pqm'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -43,19 +46,19 @@ const DEMO_TESTERS: Tester[] = [
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const STATUS_CONFIG: Record<BatchStatus, { label: string; cls: string }> = {
-  pending:     { label: '대기중', cls: 'bg-slate-100 text-slate-600' },
-  in_progress: { label: '진행중', cls: 'bg-violet-50 text-violet-700' },
-  completed:   { label: '완료',   cls: 'bg-emerald-50 text-emerald-700' },
-  on_hold:     { label: '보류',   cls: 'bg-amber-50 text-amber-700' },
-  cancelled:   { label: '취소',   cls: 'bg-red-50 text-red-600' },
+const STATUS_CONFIG: Record<BatchStatus, { label: string; dot: string }> = {
+  pending:     { label: '대기중', dot: 'bg-muted-foreground' },
+  in_progress: { label: '진행중', dot: 'bg-violet-500' },
+  completed:   { label: '완료',   dot: 'bg-emerald-500' },
+  on_hold:     { label: '보류',   dot: 'bg-amber-500' },
+  cancelled:   { label: '취소',   dot: 'bg-destructive' },
 }
 
 function dDayColor(dDayQc: number | null): string {
-  if (dDayQc === null || dDayQc < 0) return 'text-slate-400'
-  if (dDayQc === 0) return 'text-red-600 font-bold'
-  if (dDayQc <= 3)  return 'text-red-500 font-semibold'
-  if (dDayQc <= 7)  return 'text-amber-600 font-semibold'
+  if (dDayQc === null || dDayQc < 0) return 'text-muted-foreground'
+  if (dDayQc === 0) return 'font-semibold text-destructive'
+  if (dDayQc <= 3)  return 'font-medium text-destructive'
+  if (dDayQc <= 7)  return 'font-medium text-amber-600'
   return 'text-emerald-600'
 }
 
@@ -72,10 +75,10 @@ type SortField = 'product_name' | 'batch_no' | 'qc_completion_deadline' | 'dDayQ
 type SortDir   = 'asc' | 'desc'
 
 function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: SortField | null; sortDir: SortDir }) {
-  if (sortField !== field) return <ChevronDown className="ml-1 inline h-3 w-3 opacity-30" />
+  if (sortField !== field) return <span className="ml-1 opacity-40"><ChevronDown size={11} /></span>
   return sortDir === 'asc'
-    ? <ChevronUp   className="ml-1 inline h-3 w-3 text-slate-600" />
-    : <ChevronDown className="ml-1 inline h-3 w-3 text-slate-600" />
+    ? <ChevronUp size={11} className="ml-1 text-primary" />
+    : <ChevronDown size={11} className="ml-1 text-primary" />
 }
 
 export default function HomePage() {
@@ -162,116 +165,135 @@ export default function HomePage() {
   }, [loadHomeData])
 
   const KPI_CARDS = [
-    { label: '전체 배치',  value: stats.totalBatches, unit: '건', sub: '총 생산배치 수',   accent: 'text-slate-800',   bg: 'bg-white',         border: 'border-slate-200' },
-    { label: '대기중',     value: stats.pending,       unit: '건', sub: '시험 대기',        accent: 'text-slate-600',   bg: 'bg-slate-50/60',   border: 'border-slate-200' },
-    { label: '진행중',     value: stats.inProgress,    unit: '건', sub: 'QC 시험 진행',     accent: 'text-violet-600',  bg: 'bg-violet-50/60',  border: 'border-violet-100' },
-    { label: 'QC완료',    value: stats.completed,     unit: '건', sub: '이번달 완료',       accent: 'text-emerald-600', bg: 'bg-emerald-50/60', border: 'border-emerald-100' },
-    { label: 'D-7 임박',  value: stats.dueSoon7,      unit: '건', sub: '기한 임박 배치',   accent: 'text-amber-600',   bg: 'bg-amber-50/60',   border: 'border-amber-100' },
-    { label: '기한초과',   value: stats.overdueCount,  unit: '건', sub: 'QC완료예정일 초과', accent: 'text-red-600',     bg: 'bg-red-50/60',     border: 'border-red-100' },
+    { label: '전체 배치', value: stats.totalBatches, unit: '건', sub: '총 생산배치 수',     accent: 'text-foreground',  bar: 'border-l-primary' },
+    { label: '대기중',    value: stats.pending,      unit: '건', sub: '시험 대기',          accent: 'text-foreground',  bar: 'border-l-muted-foreground' },
+    { label: '진행중',    value: stats.inProgress,   unit: '건', sub: 'QC 시험 진행',       accent: 'text-violet-600',  bar: 'border-l-violet-500' },
+    { label: 'QC완료',    value: stats.completed,    unit: '건', sub: '이번달 완료',        accent: 'text-emerald-600', bar: 'border-l-emerald-500' },
+    { label: 'D-7 임박',  value: stats.dueSoon7,     unit: '건', sub: '기한 임박 배치',     accent: 'text-amber-600',   bar: 'border-l-amber-500' },
+    { label: '기한초과',  value: stats.overdueCount, unit: '건', sub: 'QC완료예정일 초과', accent: 'text-destructive', bar: 'border-l-destructive' },
   ]
 
   const statRows = [
-    { label: '대기중', key: 'pending' as const,    color: 'bg-slate-400' },
+    { label: '대기중', key: 'pending' as const,    color: 'bg-muted-foreground' },
     { label: '진행중', key: 'inProgress' as const, color: 'bg-violet-500' },
     { label: '완료',   key: 'completed' as const,  color: 'bg-emerald-500' },
   ]
 
   return (
-    <div className="flex flex-col gap-4 p-3 md:p-5 min-h-0">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 p-4 md:p-6">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <h1 className="text-xl font-semibold text-foreground">홈</h1>
+        <p className="text-sm text-muted-foreground">기한 임박 배치와 오늘 시험 배정을 한눈에 봅니다.</p>
+        {usingDemo && (
+          <Badge variant="outline" className="border-amber-200 text-amber-700">데모 모드</Badge>
+        )}
+      </div>
 
-      {/* ── KPI 카드 행 ──────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
-        {KPI_CARDS.map(kpi => (
-          <Card
-            key={kpi.label}
-            className={`cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md ${kpi.bg} border ${kpi.border} shadow-none rounded-xl py-0`}
-          >
-            <CardContent className="px-3.5 py-3">
-              <p className="text-[10px] font-medium text-slate-500 mb-0.5">{kpi.label}</p>
-              <div className="flex items-baseline gap-0.5">
-                <span className={`text-[22px] font-bold tabular-nums leading-none ${kpi.accent}`}>{kpi.value}</span>
-                <span className="text-xs font-medium text-slate-400 ml-0.5">{kpi.unit}</span>
-              </div>
-              <p className="mt-1 text-[10px] text-slate-400 leading-none">{kpi.sub}</p>
-            </CardContent>
-          </Card>
-        ))}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        {isLoading
+          ? Array.from({ length: 6 }).map((_, i) => (
+              <Card key={i} className="gap-1 border-l-4 border-l-muted px-4 py-4">
+                <Skeleton className="h-3 w-16" />
+                <Skeleton className="h-8 w-12" />
+                <Skeleton className="h-3 w-24" />
+              </Card>
+            ))
+          : KPI_CARDS.map(kpi => (
+              <Card key={kpi.label} className={cn('gap-1 border-l-4 px-4 py-4', kpi.bar)}>
+                <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                  {kpi.label}
+                </span>
+                <span className={cn('text-2xl font-semibold tabular-nums', kpi.accent)}>
+                  {kpi.value}
+                  <span className="ml-1 text-xs font-medium text-muted-foreground">{kpi.unit}</span>
+                </span>
+                <span className="text-[11px] text-muted-foreground">{kpi.sub}</span>
+              </Card>
+            ))}
       </div>
 
       {/* ── 중단: 기한임박 배치 + 상태 요약 ──────────────────────────── */}
       <div className="flex flex-col lg:flex-row gap-4 min-h-0">
 
-        {/* 기한 임박 배치 테이블 (60%) */}
-        <Card className="flex-[3] border border-slate-200 shadow-none rounded-xl bg-white gap-0 overflow-hidden py-0">
-          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+        <Card className="flex-[3] gap-0 overflow-hidden py-0">
+          <div className="flex items-center justify-between border-b px-4 py-3">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-slate-800">기한 임박 배치</span>
-              <span className="inline-flex items-center rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-                D-7 이내
-              </span>
+              <span className="text-sm font-semibold text-foreground">기한 임박 배치</span>
+              <Badge variant="outline" className="border-amber-200 text-amber-700">D-7 이내</Badge>
             </div>
-            {usingDemo && (
-              <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700 border border-amber-200">
-                데모 모드
-              </span>
-            )}
-            {isLoading && <span className="text-[10px] text-slate-400">로딩 중...</span>}
           </div>
           <div className="overflow-x-auto">
-            <Table className="w-full min-w-[640px] text-sm">
+            <Table className="w-full min-w-[640px]">
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="px-3 text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort('product_name')}>품목명<SortIcon field="product_name" sortField={sortField} sortDir={sortDir} /></TableHead>
-                  <TableHead className="px-3 text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort('batch_no')}>제조번호<SortIcon field="batch_no" sortField={sortField} sortDir={sortDir} /></TableHead>
-                  <TableHead className="px-3 text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort('qc_completion_deadline')}>QC완료예정일<SortIcon field="qc_completion_deadline" sortField={sortField} sortDir={sortDir} /></TableHead>
-                  <TableHead className="px-3 text-center text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort('dDayQc')}>D-Day<SortIcon field="dDayQc" sortField={sortField} sortDir={sortDir} /></TableHead>
-                  <TableHead className="px-3 text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort('status')}>상태<SortIcon field="status" sortField={sortField} sortDir={sortDir} /></TableHead>
+                  <TableHead className="cursor-pointer px-3 text-muted-foreground select-none" onClick={() => toggleSort('product_name')}>
+                    <span className="flex items-center">품목명 <SortIcon field="product_name" sortField={sortField} sortDir={sortDir} /></span>
+                  </TableHead>
+                  <TableHead className="cursor-pointer px-3 text-muted-foreground select-none" onClick={() => toggleSort('batch_no')}>
+                    <span className="flex items-center">제조번호 <SortIcon field="batch_no" sortField={sortField} sortDir={sortDir} /></span>
+                  </TableHead>
+                  <TableHead className="cursor-pointer px-3 text-muted-foreground select-none" onClick={() => toggleSort('qc_completion_deadline')}>
+                    <span className="flex items-center">QC완료예정일 <SortIcon field="qc_completion_deadline" sortField={sortField} sortDir={sortDir} /></span>
+                  </TableHead>
+                  <TableHead className="cursor-pointer px-3 text-center text-muted-foreground select-none" onClick={() => toggleSort('dDayQc')}>
+                    <span className="flex items-center justify-center">D-Day <SortIcon field="dDayQc" sortField={sortField} sortDir={sortDir} /></span>
+                  </TableHead>
+                  <TableHead className="cursor-pointer px-3 text-muted-foreground select-none" onClick={() => toggleSort('status')}>
+                    <span className="flex items-center">상태 <SortIcon field="status" sortField={sortField} sortDir={sortDir} /></span>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sortedData.slice(0, 10).map(row => {
-                  const statusCfg = STATUS_CONFIG[row.status]
-                  return (
-                    <TableRow
-                      key={row.id}
-                      className="border-b border-slate-50 hover:bg-slate-50/60 transition-colors cursor-pointer"
-                    >
-                      <TableCell className="px-3 py-2.5">
-                        <span className="font-medium text-foreground text-xs">{row.product_name}</span>
-                      </TableCell>
-                      <TableCell className="px-3 py-2.5">
-                        <span className="font-mono text-xs text-muted-foreground">{row.batch_no}</span>
-                      </TableCell>
-                      <TableCell className="px-3 py-2.5">
-                        <span className="font-mono text-xs text-muted-foreground">{row.qc_completion_deadline}</span>
-                      </TableCell>
-                      <TableCell className="px-3 py-2.5 text-center">
-                        <span className={`text-xs tabular-nums ${dDayColor(row.dDayQc)}`}>
-                          {dDayLabel(row.dDayQc)}
-                        </span>
-                      </TableCell>
-                      <TableCell className="px-3 py-2.5">
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusCfg.cls}`}>
-                          {statusCfg.label}
-                        </span>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
+                {isLoading
+                  ? Array.from({ length: 6 }).map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-32" /></TableCell>
+                        <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-16" /></TableCell>
+                        <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20" /></TableCell>
+                        <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-12" /></TableCell>
+                        <TableCell className="px-3 py-2.5"><Skeleton className="h-5 w-14 rounded-full" /></TableCell>
+                      </TableRow>
+                    ))
+                  : sortedData.slice(0, 10).map(row => {
+                      const statusCfg = STATUS_CONFIG[row.status]
+                      return (
+                        <TableRow key={row.id} className="cursor-pointer hover:bg-muted/40">
+                          <TableCell className="px-3 py-2.5 font-medium text-foreground">
+                            {row.product_name}
+                          </TableCell>
+                          <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">
+                            {row.batch_no}
+                          </TableCell>
+                          <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">
+                            {row.qc_completion_deadline}
+                          </TableCell>
+                          <TableCell className="px-3 py-2.5 text-center">
+                            <span className={cn('text-xs tabular-nums', dDayColor(row.dDayQc))}>
+                              {dDayLabel(row.dDayQc)}
+                            </span>
+                          </TableCell>
+                          <TableCell className="px-3 py-2.5">
+                            <Badge variant="outline" className="gap-1.5">
+                              <span className={cn('size-1.5 rounded-full', statusCfg.dot)} />
+                              {statusCfg.label}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
               </TableBody>
             </Table>
           </div>
         </Card>
 
-        {/* 상태 요약 (40%) */}
-        <Card className="flex-[2] border border-slate-200 shadow-none rounded-xl bg-white py-0">
-          <div className="border-b border-slate-100 px-4 py-3">
-            <span className="text-sm font-semibold text-slate-800">배치 상태 현황</span>
+        <Card className="flex-[2] gap-0 overflow-hidden py-0">
+          <div className="border-b px-4 py-3">
+            <span className="text-sm font-semibold text-foreground">배치 상태 현황</span>
           </div>
           <CardContent className="px-4 py-4">
-            <div className="mb-4 flex items-center gap-2">
-              <span className="text-3xl font-bold text-slate-800 tabular-nums">{stats.totalBatches}</span>
-              <span className="text-sm text-slate-500">건 총 배치</span>
+            <div className="mb-4 flex items-baseline gap-2">
+              <span className="text-3xl font-semibold tabular-nums text-foreground">{stats.totalBatches}</span>
+              <span className="text-sm text-muted-foreground">건 총 배치</span>
             </div>
             <div className="flex flex-col gap-3">
               {statRows.map(row => {
@@ -279,16 +301,16 @@ export default function HomePage() {
                 const pct = stats.totalBatches > 0 ? Math.round((count / stats.totalBatches) * 100) : 0
                 return (
                   <div key={row.key}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-medium text-slate-600">{row.label}</span>
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="text-xs font-medium text-muted-foreground">{row.label}</span>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-slate-800 tabular-nums">{count}건</span>
-                        <span className="text-[10px] text-slate-400 tabular-nums w-7 text-right">{pct}%</span>
+                        <span className="text-xs font-semibold tabular-nums text-foreground">{count}건</span>
+                        <span className="w-7 text-right text-[10px] tabular-nums text-muted-foreground">{pct}%</span>
                       </div>
                     </div>
-                    <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                       <div
-                        className={`h-full rounded-full transition-all ${row.color}`}
+                        className={cn('h-full rounded-full transition-all', row.color)}
                         style={{ width: `${pct}%` }}
                       />
                     </div>
@@ -300,17 +322,16 @@ export default function HomePage() {
         </Card>
       </div>
 
-      {/* ── 오늘의 시험 일정 ──────────────────────────────────────────── */}
-      <Card className="border border-slate-200 shadow-none rounded-xl bg-white py-0">
-        <div className="border-b border-slate-100 px-4 py-3">
-          <span className="text-sm font-semibold text-slate-800">오늘의 시험 배정 현황</span>
+      <Card className="gap-0 overflow-hidden py-0">
+        <div className="border-b px-4 py-3">
+          <span className="text-sm font-semibold text-foreground">오늘의 시험 배정 현황</span>
         </div>
         <CardContent className="px-4 py-3">
-          <div className="flex flex-wrap items-center gap-4">
+          <div className="flex flex-wrap items-center gap-3">
             {DEMO_TESTERS.map(tester => (
               <div
                 key={tester.name}
-                className="flex items-center gap-2.5 rounded-xl border border-slate-100 bg-slate-50/60 px-3.5 py-2.5 hover:bg-slate-100/60 transition-colors cursor-pointer"
+                className="flex items-center gap-2.5 rounded-lg border bg-muted/30 px-3.5 py-2.5"
               >
                 <Avatar className="h-8 w-8 shrink-0">
                   <AvatarFallback className={`text-xs font-bold text-white ${tester.color}`}>
@@ -318,9 +339,9 @@ export default function HomePage() {
                   </AvatarFallback>
                 </Avatar>
                 <div>
-                  <p className="text-xs font-semibold text-slate-800">{tester.name}</p>
-                  <p className="text-[10px] text-slate-500">
-                    오늘 <span className="font-bold text-slate-700">{tester.assignedToday}</span>건 배정
+                  <p className="text-xs font-semibold text-foreground">{tester.name}</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    오늘 <span className="font-semibold text-foreground">{tester.assignedToday}</span>건 배정
                   </p>
                 </div>
               </div>

@@ -20,6 +20,7 @@ import { Card } from "@frontend/components/ui/card"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -866,25 +867,15 @@ export default function TestItemsPage() {
 
       {/* 시험항목 추가 다이얼로그 */}
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden p-0 sm:max-w-2xl">
-          <DialogHeader className="border-b px-4 py-4 pr-12 text-left sm:px-5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                <PackagePlus className="size-5" />
-              </div>
-              <div className="min-w-0">
-                <DialogTitle className="text-base font-semibold text-foreground">
-                  시험항목 추가
-                </DialogTitle>
-                <DialogDescription className="mt-0.5 text-xs text-muted-foreground">
-                  활성 시험항목 중 현재 품목에 연결할 항목을 선택합니다.
-                </DialogDescription>
-              </div>
-            </div>
+        <DialogContent size="xl">
+          <DialogHeader>
+            <DialogTitle>시험항목 추가</DialogTitle>
+            <DialogDescription>
+              활성 시험항목 중 현재 품목에 연결할 항목을 선택합니다.
+            </DialogDescription>
           </DialogHeader>
 
-          <div className="max-h-[65dvh] overflow-y-auto px-4 py-4 sm:px-5">
-            <div className="grid gap-4">
+          <DialogBody className="grid gap-4">
               <div className="relative">
                 <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -1004,10 +995,9 @@ export default function TestItemsPage() {
                   )}
                 </div>
               </Card>
-            </div>
-          </div>
+          </DialogBody>
 
-          <DialogFooter className="border-t px-4 py-3 sm:px-5">
+          <DialogFooter>
             <Button
               variant="outline"
               onClick={() => setAddDialogOpen(false)}
@@ -1033,35 +1023,24 @@ export default function TestItemsPage() {
           if (!open && !unlinkLoading) setUnlinkTarget(null)
         }}
       >
-        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden p-0 sm:max-w-md">
-          <DialogHeader className="border-b px-4 py-4 pr-12 text-left sm:px-5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
-                <AlertTriangle className="size-5" />
-              </div>
-              <div className="min-w-0">
-                <DialogTitle className="text-base font-semibold text-foreground">
-                  연결 해제
-                </DialogTitle>
-                <DialogDescription className="mt-0.5 text-xs text-muted-foreground">
-                  이 품목에서 시험항목 연결을 제거합니다.
-                </DialogDescription>
-              </div>
-            </div>
+        <DialogContent size="sm">
+          <DialogHeader>
+            <DialogTitle>연결 해제</DialogTitle>
+            <DialogDescription>
+              이 품목에서 시험항목 연결을 제거합니다.
+            </DialogDescription>
           </DialogHeader>
 
-          <div className="px-4 py-4 sm:px-5">
-            <div className="rounded-lg border bg-muted/30 p-4">
-              <p className="text-sm font-medium text-foreground">
-                {unlinkTarget?.testItemName}
-              </p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                {selectedProduct?.name}에서 이 시험항목 연결을 해제하시겠습니까?
-              </p>
-            </div>
+          <div className="rounded-lg border bg-muted/50 p-3">
+            <p className="text-sm font-medium">
+              {unlinkTarget?.testItemName}
+            </p>
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              {selectedProduct?.name}에서 이 시험항목 연결을 해제하시겠습니까?
+            </p>
           </div>
 
-          <DialogFooter className="border-t px-4 py-3 sm:px-5">
+          <DialogFooter>
             <Button
               variant="outline"
               onClick={() => setUnlinkTarget(null)}
@@ -1088,29 +1067,19 @@ export default function TestItemsPage() {
           if (!open && !copyLoading) setCopyDialogOpen(false)
         }}
       >
-        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden p-0 sm:max-w-2xl">
-          <DialogHeader className="border-b px-4 py-4 pr-12 text-left sm:px-5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                <Copy className="size-5" />
-              </div>
-              <div className="min-w-0">
-                <DialogTitle className="text-base font-semibold text-foreground">
-                  다른 품목에서 시험항목 복사
-                </DialogTitle>
-                <DialogDescription className="mt-0.5 text-xs text-muted-foreground">
-                  비슷한 품목을 선택하면 그 품목의 시험항목을{" "}
-                  <span className="font-medium text-foreground">
-                    {selectedProduct?.name}
-                  </span>
-                  에 복사합니다. (이미 연결된 항목은 자동 제외)
-                </DialogDescription>
-              </div>
-            </div>
+        <DialogContent size="xl">
+          <DialogHeader>
+            <DialogTitle>다른 품목에서 시험항목 복사</DialogTitle>
+            <DialogDescription>
+              비슷한 품목을 선택하면 그 품목의 시험항목을{" "}
+              <span className="font-medium text-foreground">
+                {selectedProduct?.name}
+              </span>
+              에 복사합니다. (이미 연결된 항목은 자동 제외)
+            </DialogDescription>
           </DialogHeader>
 
-          <div className="max-h-[65dvh] overflow-y-auto px-4 py-4 sm:px-5">
-            <div className="grid gap-4">
+          <DialogBody className="grid gap-4">
               <div>
                 <p className="mb-2 text-sm font-medium text-foreground">
                   1. 복사할 원본 품목 선택
@@ -1246,10 +1215,9 @@ export default function TestItemsPage() {
                   </Card>
                 </div>
               )}
-            </div>
-          </div>
+          </DialogBody>
 
-          <DialogFooter className="border-t px-4 py-3 sm:px-5">
+          <DialogFooter>
             <Button
               variant="outline"
               onClick={() => setCopyDialogOpen(false)}
@@ -1275,36 +1243,25 @@ export default function TestItemsPage() {
           if (!open && !bulkDeleteLoading) setBulkDeleteOpen(false)
         }}
       >
-        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden p-0 sm:max-w-md">
-          <DialogHeader className="border-b px-4 py-4 pr-12 text-left sm:px-5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
-                <AlertTriangle className="size-5" />
-              </div>
-              <div className="min-w-0">
-                <DialogTitle className="text-base font-semibold text-foreground">
-                  선택 항목 일괄 삭제
-                </DialogTitle>
-                <DialogDescription className="mt-0.5 text-xs text-muted-foreground">
-                  선택한 시험항목 연결을 한 번에 제거합니다.
-                </DialogDescription>
-              </div>
-            </div>
+        <DialogContent size="sm">
+          <DialogHeader>
+            <DialogTitle>선택 항목 일괄 삭제</DialogTitle>
+            <DialogDescription>
+              선택한 시험항목 연결을 한 번에 제거합니다.
+            </DialogDescription>
           </DialogHeader>
 
-          <div className="px-4 py-4 sm:px-5">
-            <div className="rounded-lg border bg-muted/30 p-4">
-              <p className="text-sm font-medium text-foreground">
-                {selectedLinked.size}개 시험항목
-              </p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                {selectedProduct?.name}에서 선택한 {selectedLinked.size}개
-                시험항목 연결을 해제하시겠습니까?
-              </p>
-            </div>
+          <div className="rounded-lg border bg-muted/50 p-3">
+            <p className="text-sm font-medium">
+              {selectedLinked.size}개 시험항목
+            </p>
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              {selectedProduct?.name}에서 선택한 {selectedLinked.size}개
+              시험항목 연결을 해제하시겠습니까?
+            </p>
           </div>
 
-          <DialogFooter className="border-t px-4 py-3 sm:px-5">
+          <DialogFooter>
             <Button
               variant="outline"
               onClick={() => setBulkDeleteOpen(false)}

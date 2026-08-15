@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
-import { useLockBodyScroll } from "@frontend/hooks/use-lock-body-scroll"
-import { Wrench, Plus, Trash2, X, Loader2, CheckCircle2, Ban, ChevronDown, ChevronUp } from "lucide-react"
+import { Wrench, Plus, Trash2, Loader2, CheckCircle2, Ban, ChevronDown, ChevronUp } from "lucide-react"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import { DateField } from "@frontend/components/ui/date-field"
 import { cn } from "@frontend/lib/utils"
@@ -14,6 +13,15 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@frontend/components/ui/table"
 import { useConfirmMessage } from "@frontend/components/common/confirm-message"
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@frontend/components/ui/dialog"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 type ReservationStatus = "RESERVED" | "WAITING" | "CANCELLED" | "COMPLETED"
@@ -317,16 +325,17 @@ export default function EquipmentReservationPage() {
       </Card>
 
       {showAdd && (
-        <AddModal
-          equipmentIds={equipmentIds}
-          onClose={() => setShowAdd(false)}
-          onSaved={(status) => {
-            setShowAdd(false)
-            void load()
-            flash(status === "WAITING" ? "대기열에 등록되었습니다." : "예약되었습니다.")
-          }}
-          onError={flash}
-        />
+      <AddModal
+        open
+        equipmentIds={equipmentIds}
+        onClose={() => setShowAdd(false)}
+        onSaved={(status) => {
+          setShowAdd(false)
+          void load()
+          flash(status === "WAITING" ? "대기열에 등록되었습니다." : "예약되었습니다.")
+        }}
+        onError={flash}
+      />
       )}
     </div>
   )
@@ -334,14 +343,14 @@ export default function EquipmentReservationPage() {
 
 // ─── 등록 모달 ────────────────────────────────────────────────────────────────
 function AddModal({
-  equipmentIds, onClose, onSaved, onError,
+  open, equipmentIds, onClose, onSaved, onError,
 }: {
+  open: boolean
   equipmentIds: string[]
   onClose: () => void
   onSaved: (status: ReservationStatus) => void
   onError: (m: string) => void
 }) {
-  useLockBodyScroll()
   const [equipmentId, setEquipmentId] = useState("")
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
@@ -365,16 +374,13 @@ function AddModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl bg-card p-5 shadow-xl border" onClick={e => e.stopPropagation()}>
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-foreground">장비 예약 등록</h2>
-          <Button variant="ghost" size="sm" onClick={onClose} className="h-7 w-7 p-0 text-muted-foreground">
-            <X size={16} />
-          </Button>
-        </div>
-
-        <div className="flex flex-col gap-3">
+    <Dialog open={open} onOpenChange={(next) => { if (!next && !saving) onClose() }}>
+      <DialogContent size="md">
+        <DialogHeader>
+          <DialogTitle>장비 예약 등록</DialogTitle>
+          <DialogDescription>장비와 기간을 지정해 예약합니다. 기간이 겹치면 대기로 등록됩니다.</DialogDescription>
+        </DialogHeader>
+        <DialogBody className="grid gap-3">
           <div>
             <label className="mb-1 block text-xs font-medium text-muted-foreground">장비</label>
             <input
@@ -397,19 +403,14 @@ function AddModal({
           <p className="text-[11px] text-muted-foreground">
             같은 장비에 기간이 겹치는 예약이 있으면 대기(WAITING)로 등록됩니다.
           </p>
-        </div>
-
-        <div className="mt-5 flex justify-end gap-2">
-          <Button variant="outline" size="lg" onClick={onClose}>취소</Button>
-          <Button
-            size="lg"
-            onClick={() => void submit()}
-            disabled={saving}
-          >
-            {saving && <Loader2 size={15} className="animate-spin" />} 등록
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>취소</Button>
+          <Button onClick={() => void submit()} disabled={saving}>
+            {saving && <Loader2 className="animate-spin" />} 등록
           </Button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

@@ -3,7 +3,11 @@
 import { useState, useEffect, useMemo } from 'react'
 import type { StatusKey, TestRow, KpiItem } from '@shared/qc'
 import { Button } from '@frontend/components/ui/button'
-import { Card, CardContent } from '@frontend/components/ui/card'
+import { Badge } from '@frontend/components/ui/badge'
+import { Input } from '@frontend/components/ui/input'
+import { Skeleton } from '@frontend/components/ui/skeleton'
+import { Card } from '@frontend/components/ui/card'
+import { cn } from '@frontend/lib/utils'
 import {
   Table,
   TableBody,
@@ -38,12 +42,12 @@ import {
 // ─── Static Data ──────────────────────────────────────────────────────────────
 const ALL_TABS = ['시험현황', '제품시험', '안정성시험', '일탈관리'] as const
 
-const STATUS_CONFIG: Record<StatusKey, { label: string; cls: string }> = {
-  completed:  { label: '적합완료', cls: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
-  reviewing:  { label: '검토중',   cls: 'bg-blue-50 text-blue-700 border border-blue-200' },
-  pending:    { label: '승인대기', cls: 'bg-amber-50 text-amber-700 border border-amber-200' },
-  fail:       { label: '부적합',   cls: 'bg-red-50 text-red-700 border border-red-200' },
-  inprogress: { label: '진행중',   cls: 'bg-violet-50 text-violet-700 border border-violet-200' },
+const STATUS_CONFIG: Record<StatusKey, { label: string; dot: string }> = {
+  completed:  { label: '적합완료', dot: 'bg-emerald-500' },
+  reviewing:  { label: '검토중',   dot: 'bg-blue-500' },
+  pending:    { label: '승인대기', dot: 'bg-amber-500' },
+  fail:       { label: '부적합',   dot: 'bg-destructive' },
+  inprogress: { label: '진행중',   dot: 'bg-violet-500' },
 }
 
 const KPI_DATA: KpiItem[] = [
@@ -172,10 +176,10 @@ export default function QCDashboard() {
   }
 
   const SortIcon = ({ field }: { field: keyof TestRow }) => {
-    if (sortField !== field) return <ChevronDown size={11} className="text-slate-300 ml-0.5 inline" />
+    if (sortField !== field) return <span className="ml-1 opacity-40"><ChevronDown size={11} /></span>
     return sortDir === 'asc'
-      ? <ChevronUp size={11} className="text-blue-500 ml-0.5 inline" />
-      : <ChevronDown size={11} className="text-blue-500 ml-0.5 inline" />
+      ? <ChevronUp size={11} className="ml-1 text-primary" />
+      : <ChevronDown size={11} className="ml-1 text-primary" />
   }
 
   const sortedData = useMemo(() => {
@@ -212,30 +216,26 @@ export default function QCDashboard() {
       <div className="flex flex-1 flex-col">
 
           {/* ── KPI + Tab header (optionally sticky) ─────────────────────── */}
-          <div className={`bg-white border-b border-slate-200 shadow-sm z-10 ${stickyHeader ? 'sticky top-0' : ''}`}>
-
-            {/* Tabs */}
-            <div className="flex items-center gap-0 px-5 border-b border-slate-100">
-              <div className="flex flex-1 items-center gap-0 overflow-x-auto scrollbar-none">
+          <div className={cn('z-10 border-b bg-background', stickyHeader && 'sticky top-0')}>
+            <div className="flex items-center gap-2 px-4 py-3 md:px-6">
+              <div className="inline-flex h-9 w-fit items-center gap-0.5 overflow-x-auto rounded-lg bg-muted p-0.5 text-muted-foreground">
                 {sortedTabs.map(tab => {
                   const isPinned = pinnedTabs.has(tab)
                   const isActive = activeTab === tab
                   return (
                     <button
                       key={tab}
+                      type="button"
                       onClick={() => setActiveTab(tab)}
-                      className={`
-                        group relative flex shrink-0 items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors
-                        ${isActive
-                          ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600 after:rounded-t-full'
-                          : 'text-slate-500 hover:text-slate-700'}
-                      `}
+                      className={cn(
+                        'group relative flex h-8 shrink-0 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors',
+                        isActive ? 'bg-card text-foreground shadow-sm' : 'hover:text-foreground',
+                      )}
                     >
                       <span>{tab}</span>
                       {tab === '일탈관리' && (
-                        <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-red-100 text-[10px] font-bold text-red-600">3</span>
+                        <Badge variant="destructive" className="h-4 min-w-4 px-1 text-[10px]">3</Badge>
                       )}
-                      {/* Pin / Star toggle */}
                       <span
                         role="button"
                         tabIndex={0}
@@ -248,16 +248,13 @@ export default function QCDashboard() {
                           }
                         }}
                         title={isPinned ? '즐겨찾기 해제' : '즐겨찾기'}
-                        className={`
-                          ml-0.5 inline-flex rounded p-0.5 transition-all cursor-pointer
-                          ${isPinned
-                            ? 'text-amber-400 hover:text-amber-500'
-                            : 'text-transparent group-hover:text-slate-300 hover:!text-amber-400'}
-                        `}
+                        className={cn(
+                          'inline-flex cursor-pointer rounded p-0.5',
+                          isPinned ? 'text-amber-500' : 'text-transparent group-hover:text-muted-foreground',
+                        )}
                       >
                         <Star size={11} fill={isPinned ? 'currentColor' : 'none'} />
                       </span>
-                      {/* Close (X) button */}
                       <span
                         role="button"
                         tabIndex={0}
@@ -270,7 +267,7 @@ export default function QCDashboard() {
                           }
                         }}
                         title="탭 닫기"
-                        className="ml-0.5 inline-flex rounded p-0.5 text-transparent transition-all cursor-pointer group-hover:text-slate-400 hover:!bg-slate-100 hover:!text-slate-700"
+                        className="inline-flex cursor-pointer rounded p-0.5 text-transparent group-hover:text-muted-foreground hover:bg-muted"
                       >
                         <X size={11} />
                       </span>
@@ -278,64 +275,50 @@ export default function QCDashboard() {
                   )
                 })}
               </div>
-              {/* Sticky header toggle — moved here from global header */}
-              <button
+              <Button
+                type="button"
+                variant={stickyHeader ? 'secondary' : 'outline'}
+                size="sm"
                 onClick={() => setStickyHeader(p => !p)}
                 title={stickyHeader ? '헤더 고정 해제' : '헤더 고정'}
-                className={`ml-2 shrink-0 flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition-colors ${
-                  stickyHeader
-                    ? 'border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100'
-                    : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
-                }`}
+                className="ml-auto"
               >
-                {stickyHeader ? <Pin size={11} /> : <PinOff size={11} />}
-                <span>헤더 {stickyHeader ? '고정' : '해제'}</span>
-              </button>
+                {stickyHeader ? <Pin /> : <PinOff />}
+                헤더 {stickyHeader ? '고정' : '해제'}
+              </Button>
             </div>
 
-            {/* KPI Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2.5 px-3 md:px-5 py-3">
+            <div className="grid grid-cols-2 gap-3 px-4 pb-4 sm:grid-cols-3 md:grid-cols-4 md:px-6 lg:grid-cols-7">
               {KPI_DATA.map(kpi => (
-                <Card
-                  key={kpi.label}
-                  className={`cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md ${kpi.bg} border ${kpi.border} shadow-none rounded-xl py-0`}
-                >
-                  <CardContent className="px-3.5 py-3">
-                    <p className="text-[10px] font-medium text-slate-500 mb-0.5">{kpi.label}</p>
-                    <div className="flex items-baseline gap-0.5">
-                      <span className={`text-[22px] font-bold tabular-nums leading-none ${kpi.accent}`}>{kpi.value}</span>
-                      <span className="text-xs font-medium text-slate-400 ml-0.5">{kpi.unit}</span>
-                    </div>
-                    <p className="mt-1 text-[10px] text-slate-400 leading-none">{kpi.sub}</p>
-                  </CardContent>
+                <Card key={kpi.label} className="gap-1 border-l-4 border-l-primary px-4 py-4">
+                  <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{kpi.label}</span>
+                  <span className={cn('text-2xl font-semibold tabular-nums', kpi.accent)}>
+                    {kpi.value}
+                    <span className="ml-1 text-xs font-medium text-muted-foreground">{kpi.unit}</span>
+                  </span>
+                  <span className="text-[11px] text-muted-foreground">{kpi.sub}</span>
                 </Card>
               ))}
             </div>
           </div>
 
           {/* ── Table section ────────────────────────────────────────────── */}
-          <div className="flex-1 p-3 md:p-5">
-            <Card className="border border-slate-200 shadow-none rounded-xl bg-white gap-0 overflow-hidden py-0">
-
-              {/* Toolbar */}
-              <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-4 py-2.5">
-                {/* Date range */}
+          <div className="flex-1 p-4 md:p-6">
+            <Card className="gap-0 overflow-hidden py-0">
+              <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2.5">
                 {isHydrated ? (
                   <Popover>
                     <PopoverTrigger asChild>
-                      <button
-                        type="button"
-                        className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 transition-colors"
-                      >
-                        <CalendarIcon size={13} className="text-slate-400" />
+                      <Button type="button" variant="outline" size="sm">
+                        <CalendarIcon />
                         <span className="tabular-nums">
                           {dateRange?.from ? format(dateRange.from, 'yyyy.MM.dd') : '시작일'}
                         </span>
-                        <span className="text-slate-300">~</span>
+                        <span className="text-muted-foreground">~</span>
                         <span className="tabular-nums">
                           {dateRange?.to ? format(dateRange.to, 'yyyy.MM.dd') : '종료일'}
                         </span>
-                      </button>
+                      </Button>
                     </PopoverTrigger>
                     <PopoverContent align="start" className="w-auto p-0">
                       <Calendar
@@ -349,42 +332,32 @@ export default function QCDashboard() {
                     </PopoverContent>
                   </Popover>
                 ) : (
-                  <button
-                    type="button"
-                    disabled
-                    aria-label="기간 선택 준비 중"
-                    className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-600"
-                  >
-                    <CalendarIcon size={13} className="text-slate-400" />
-                    <span className="tabular-nums">시작일</span>
-                    <span className="text-slate-300">~</span>
-                    <span className="tabular-nums">종료일</span>
-                  </button>
+                  <Button type="button" variant="outline" size="sm" disabled aria-label="기간 선택 준비 중">
+                    <CalendarIcon />
+                    시작일 ~ 종료일
+                  </Button>
                 )}
 
-                {/* Search */}
-                <div className="flex min-w-0 w-full sm:w-auto sm:flex-1 md:max-w-[240px] items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
-                  <Search size={13} className="text-slate-400 shrink-0" />
-                  <input
+                <div className="relative min-w-0 w-full sm:w-auto sm:flex-1 md:max-w-[240px]">
+                  <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
                     type="text"
                     placeholder="제품명, 시험번호, 담당자..."
                     value={searchValue}
                     onChange={e => setSearchValue(e.target.value)}
-                    className="w-full bg-transparent text-xs text-slate-700 outline-none placeholder:text-slate-400"
+                    className="h-8 pl-9"
                   />
                 </div>
 
-                <Button size="sm" className="h-7 bg-blue-600 px-4 text-xs font-medium hover:bg-blue-700 rounded-lg shadow-none">
-                  조회
-                </Button>
+                <Button size="sm">조회</Button>
 
                 <div className="ml-auto flex items-center gap-1.5">
-                  <Button size="sm" variant="outline" className="h-7 gap-1.5 px-3 text-xs text-slate-600 rounded-lg border-slate-200 shadow-none">
-                    <Filter size={12} />
+                  <Button size="sm" variant="outline">
+                    <Filter />
                     필터
                   </Button>
-                  <Button size="sm" variant="outline" className="h-7 gap-1.5 px-3 text-xs text-emerald-600 border-emerald-200 hover:bg-emerald-50 rounded-lg shadow-none">
-                    <Download size={12} />
+                  <Button size="sm" variant="outline">
+                    <Download />
                     Excel
                   </Button>
                 </div>
@@ -434,9 +407,10 @@ export default function QCDashboard() {
                         key={row.id}
                         data-state={isSelected ? 'selected' : undefined}
                         onClick={() => toggleRow(row.id)}
-                        className={`cursor-pointer border-slate-100 text-sm transition-colors ${
-                          isSelected ? 'bg-blue-50/60' : 'hover:bg-slate-50/70'
-                        }`}
+                        className={cn(
+                          'cursor-pointer',
+                          isSelected ? 'bg-primary/5' : 'hover:bg-muted/40',
+                        )}
                       >
                         <TableCell className="px-3 py-2.5">
                           <input
@@ -448,11 +422,7 @@ export default function QCDashboard() {
                           />
                         </TableCell>
                         <TableCell className="px-3 py-2.5">
-                          <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium ${
-                            row.category === '완제품' ? 'bg-slate-100 text-slate-600' : 'bg-sky-50 text-sky-700'
-                          }`}>
-                            {row.category}
-                          </span>
+                          <Badge variant="outline">{row.category}</Badge>
                         </TableCell>
                         <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">{row.type}</TableCell>
                         <TableCell className="px-3 py-2.5">
@@ -476,9 +446,10 @@ export default function QCDashboard() {
                         <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{row.receiveDate}</TableCell>
                         <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{row.dueDate}</TableCell>
                         <TableCell className="px-3 py-2.5">
-                          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${status.cls}`}>
+                          <Badge variant="outline" className="gap-1.5">
+                            <span className={cn('size-1.5 rounded-full', status.dot)} />
                             {status.label}
-                          </span>
+                          </Badge>
                         </TableCell>
                       </TableRow>
                     )
@@ -488,22 +459,20 @@ export default function QCDashboard() {
               </div>
 
               {/* Footer */}
-              <div className="flex items-center justify-between border-t border-slate-100 px-4 py-2.5 bg-slate-50/50">
-                <p className="text-xs text-slate-500">
-                  {isLoading && <span className="mr-2 text-slate-400">로딩 중…</span>}
-                  총 <span className="font-semibold text-slate-700">{filtered.length}</span>건
+              <div className="flex items-center justify-between border-t bg-muted/30 px-4 py-2.5">
+                <p className="text-xs text-muted-foreground">
+                  {isLoading && <span className="mr-2">로딩 중…</span>}
+                  총 <span className="font-semibold text-foreground">{filtered.length}</span>건
                   {selectedRows.size > 0 && (
-                    <span className="ml-2 text-blue-600">
+                    <span className="ml-2 text-primary">
                       · <span className="font-semibold">{selectedRows.size}</span>건 선택됨
                     </span>
                   )}
                   {usingDemo && (
-                    <span className="ml-2 inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700 border border-amber-200">
-                      데모 모드
-                    </span>
+                    <Badge variant="outline" className="ml-2 border-amber-200 text-amber-700">데모 모드</Badge>
                   )}
                 </p>
-                <span className="text-xs text-slate-400">1 / 1 페이지</span>
+                <span className="text-xs text-muted-foreground">1 / 1 페이지</span>
               </div>
             </Card>
           </div>

@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react'
 import { Button } from '@frontend/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@frontend/components/ui/card'
+import { DateRangeField } from '@frontend/components/ui/date-range-field'
 import { Skeleton } from '@frontend/components/ui/skeleton'
 import {
   Table,
@@ -262,27 +263,16 @@ export default function SchedulerPage() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap items-end gap-3">
-              <div className="flex flex-col gap-1.5">
-                <label className={`text-xs font-medium ${TXT_TERTIARY}`}>시작일</label>
-                <input
-                  type="date"
-                  value={weekStart}
-                  onChange={e => setWeekStart(e.target.value)}
+              <div className="min-w-[280px] flex-1">
+                <DateRangeField
+                  label="대상 기간"
+                  startDate={weekStart}
+                  endDate={weekEnd}
+                  onChange={(start, end) => {
+                    setWeekStart(start)
+                    setWeekEnd(end)
+                  }}
                   disabled={loading}
-                  className={`h-9 rounded-lg border ${BORDER} bg-white dark:bg-slate-800 px-3 text-sm tabular-nums outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 disabled:bg-slate-50 dark:disabled:bg-slate-900 ${TXT_PRIMARY} [color-scheme:light] dark:[color-scheme:dark]`}
-                />
-              </div>
-
-              <div className={`flex h-9 items-end pb-2 ${TXT_MUTED}`}>~</div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className={`text-xs font-medium ${TXT_TERTIARY}`}>종료일</label>
-                <input
-                  type="date"
-                  value={weekEnd}
-                  onChange={e => setWeekEnd(e.target.value)}
-                  disabled={loading}
-                  className={`h-9 rounded-lg border ${BORDER} bg-white dark:bg-slate-800 px-3 text-sm tabular-nums outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 disabled:bg-slate-50 dark:disabled:bg-slate-900 ${TXT_PRIMARY} [color-scheme:light] dark:[color-scheme:dark]`}
                 />
               </div>
 

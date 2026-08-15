@@ -1,0 +1,12 @@
+# 기본은 Git 자동 판별에 맡긴다
+* text=auto
+
+# Windows 배치 파일은 반드시 CRLF.
+# LF 로 저장되면 cmd.exe 파서가 한글(멀티바이트) 줄에서 오프셋이 어긋나
+# if / for 블록이 깨지면서 실행이 실패한다.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 셸 스크립트는 반드시 LF. CRLF 면 셔뱅이 깨져 macOS/Linux 에서 실행되지 않는다.
+*.sh       text eol=lf
+*.command  text eol=lf

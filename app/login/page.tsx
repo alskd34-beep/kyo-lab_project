@@ -3,7 +3,10 @@
 import { Suspense, useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@frontend/lib/auth-context'
-import { FlaskConical, Lock, User as UserIcon, Eye, EyeOff } from 'lucide-react'
+import { FlaskConical, Lock, User as UserIcon, Eye, EyeOff, Loader2 } from 'lucide-react'
+import { Button } from '@frontend/components/ui/button'
+import { Card } from '@frontend/components/ui/card'
+import { Input } from '@frontend/components/ui/input'
 
 const LS_SAVED_ID    = 'kd-saved-id'
 const LS_AUTO_LOGIN  = 'kd-auto-login'
@@ -91,94 +94,93 @@ function LoginForm() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-white p-4">
-      <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 shadow-xl">
+    <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
+      <Card className="w-full max-w-sm gap-0 p-6 shadow-sm">
         <div className="mb-6 flex flex-col items-center gap-2">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-emerald-600 text-white">
-            <FlaskConical size={22} />
+          <div className="flex size-11 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+            <FlaskConical size={20} />
           </div>
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">광동제약</p>
-          <h1 className="text-base font-semibold text-slate-800">QC 시험 관리 시스템</h1>
+          <p className="text-[11px] font-medium tracking-widest text-muted-foreground uppercase">광동제약</p>
+          <h1 className="text-base font-semibold text-foreground">QC 시험 관리 시스템</h1>
         </div>
 
-        <form onSubmit={submit} className="space-y-3">
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-slate-600">아이디</span>
-            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition">
-              <UserIcon size={14} className="text-slate-400" />
-              <input
+        <form onSubmit={submit} className="grid gap-3">
+          <label className="grid gap-1.5">
+            <span className="text-xs font-medium text-foreground">아이디</span>
+            <div className="relative">
+              <UserIcon className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
                 type="text"
                 value={username}
                 onChange={e => setUsername(e.target.value)}
                 autoComplete="username"
                 autoFocus
-                className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400"
+                className="pl-9"
                 placeholder="kyo-admin"
               />
             </div>
           </label>
 
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-slate-600">비밀번호</span>
-            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition">
-              <Lock size={14} className="text-slate-400" />
-              <input
+          <label className="grid gap-1.5">
+            <span className="text-xs font-medium text-foreground">비밀번호</span>
+            <div className="relative">
+              <Lock className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
                 type={showPw ? 'text' : 'password'}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 autoComplete="current-password"
-                className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400"
+                className="pr-9 pl-9"
                 placeholder="••••••••"
               />
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon-sm"
                 onClick={() => setShowPw(s => !s)}
                 title={showPw ? '비밀번호 숨기기' : '비밀번호 보기'}
-                className="shrink-0 rounded p-0.5 text-slate-400 hover:text-slate-600 transition-colors"
+                className="absolute top-1/2 right-1.5 -translate-y-1/2 text-muted-foreground"
               >
-                {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
-              </button>
+                {showPw ? <EyeOff /> : <Eye />}
+              </Button>
             </div>
           </label>
 
           <div className="flex items-center gap-4 pt-1">
-            <label className="flex items-center gap-1.5 cursor-pointer select-none">
+            <label className="flex cursor-pointer items-center gap-1.5 select-none">
               <input
                 type="checkbox"
                 checked={rememberId}
                 onChange={e => setRememberId(e.target.checked)}
-                className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-400"
+                className="cb-custom"
               />
-              <span className="text-xs text-slate-600">아이디 저장</span>
+              <span className="text-xs text-muted-foreground">아이디 저장</span>
             </label>
-            <label className="flex items-center gap-1.5 cursor-pointer select-none">
+            <label className="flex cursor-pointer items-center gap-1.5 select-none">
               <input
                 type="checkbox"
                 checked={autoLogin}
                 onChange={e => setAutoLogin(e.target.checked)}
-                className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-400"
+                className="cb-custom"
               />
-              <span className="text-xs text-slate-600">자동 로그인</span>
+              <span className="text-xs text-muted-foreground">자동 로그인</span>
             </label>
           </div>
 
           {error && (
-            <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">{error}</p>
+            <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">{error}</p>
           )}
 
-          <button
-            type="submit"
-            disabled={busy || !username || !password}
-            className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700 active:scale-[0.99] disabled:opacity-50"
-          >
+          <Button type="submit" disabled={busy || !username || !password} className="w-full">
+            {busy && <Loader2 className="animate-spin" />}
             {busy ? '로그인 중…' : '로그인'}
-          </button>
+          </Button>
         </form>
 
-        <p className="mt-5 text-center text-[11px] text-slate-400">
+        <p className="mt-5 text-center text-[11px] text-muted-foreground">
           기본 관리자 계정: <span className="font-mono">kyo-admin / kyo-admin</span>
         </p>
-      </div>
+      </Card>
     </div>
   )
 }
@@ -186,7 +188,7 @@ function LoginForm() {
 // useSearchParams()는 CSR 바일아웃 → 정적 프리렌더를 위해 Suspense 경계로 감싼다
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-white p-4" />}>
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-muted/40 p-4" />}>
       <LoginForm />
     </Suspense>
   )

@@ -39,6 +39,7 @@ import {
   TableCell,
 } from '@frontend/components/ui/table'
 import { Skeleton } from '@frontend/components/ui/skeleton'
+import { DateRangeField } from '@frontend/components/ui/date-range-field'
 import {
   planWeekly,
   type PctItem,
@@ -253,25 +254,16 @@ export default function WeeklyPlanPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex flex-wrap items-end gap-3">
-              <div className="flex flex-col gap-1.5">
-                <label className={`text-xs font-medium ${TXT_TERTIARY}`}>주간 시작일</label>
-                <input
-                  type="date"
-                  value={weekStart}
-                  onChange={e => setWeekStart(e.target.value)}
+              <div className="min-w-[280px] flex-1">
+                <DateRangeField
+                  label="주간 기간"
+                  startDate={weekStart}
+                  endDate={weekEnd}
+                  onChange={(start, end) => {
+                    setWeekStart(start)
+                    setWeekEnd(end)
+                  }}
                   disabled={loading}
-                  className={`h-9 rounded-lg border ${BORDER} bg-white dark:bg-slate-800 px-3 text-sm tabular-nums outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 ${TXT_PRIMARY} [color-scheme:light] dark:[color-scheme:dark]`}
-                />
-              </div>
-              <div className={`flex h-9 items-end pb-2 ${TXT_MUTED}`}>~</div>
-              <div className="flex flex-col gap-1.5">
-                <label className={`text-xs font-medium ${TXT_TERTIARY}`}>주간 종료일</label>
-                <input
-                  type="date"
-                  value={weekEnd}
-                  onChange={e => setWeekEnd(e.target.value)}
-                  disabled={loading}
-                  className={`h-9 rounded-lg border ${BORDER} bg-white dark:bg-slate-800 px-3 text-sm tabular-nums outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 ${TXT_PRIMARY} [color-scheme:light] dark:[color-scheme:dark]`}
                 />
               </div>
               <Button

@@ -7,7 +7,6 @@ import {
   ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Lock, LockOpen, Search, CalendarDays, Users, ListChecks, Layers,
 } from "lucide-react"
 import { cn } from "@frontend/lib/utils"
-import { useLockBodyScroll } from "@frontend/hooks/use-lock-body-scroll"
 import { AssigneeDetailModal } from "@frontend/components/schedule/assignee-detail-modal"
 import { TesterAvatar, TesterOptionLabel, primeTesterProfileCache } from "@frontend/lib/tester-profiles"
 import { Button } from "@frontend/components/ui/button"
@@ -23,6 +22,23 @@ import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@frontend/components/ui/popover"
 import { Skeleton } from "@frontend/components/ui/skeleton"
+import { DateField } from "@frontend/components/ui/date-field"
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@frontend/components/ui/dialog"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@frontend/components/ui/sheet"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 interface OrderRow {
@@ -565,6 +581,120 @@ export default function OrdersPage() {
   }
 
   // 단일 오더 행 렌더 (트리 들여쓰기 옵션)
+  const renderOrderCard = (r: OrderRow, indented = false) => {
+    const dueSoon = isDueSoon(r.dueDate, r.status)
+    return (
+      <article
+        key={r.id}
+        onClick={isAdmin ? () => setEditTarget(r) : undefined}
+        className={cn(
+          "rounded-lg border bg-card p-3 shadow-xs transition-colors",
+          isAdmin && "cursor-pointer active:bg-muted/50",
+          dueSoon && "border-orange-200 bg-orange-50/60",
+          r.locked && "border-amber-200 bg-amber-50/40",
+          selected.has(r.id) && "border-primary/40 bg-primary/5 ring-1 ring-primary/20",
+        )}
+      >
+        <div className="flex items-start gap-2.5">
+          <div className="pt-0.5" onClick={e => e.stopPropagation()}>
+            <input
+              type="checkbox"
+              className="cb-custom"
+              checked={selected.has(r.id)}
+              disabled={!isAdmin}
+              onChange={() => setSelected(prev => {
+                const next = new Set(prev)
+                if (next.has(r.id)) next.delete(r.id)
+                else next.add(r.id)
+                return next
+              })}
+              title="선택"
+              aria-label="선택"
+            />
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {indented && <span aria-hidden="true" className="text-muted-foreground/60">↳</span>}
+              <p className="min-w-0 flex-1 text-sm font-semibold text-foreground">{r.productName}</p>
+              <SourceBadge source={r.source} />
+              {r.source === "auto" && !r.productSynced && (
+                <Badge variant="outline" className="border-amber-200 text-amber-700">미동기화</Badge>
+              )}
+              {r.isUrgent && <Badge variant="outline" className="border-red-200 text-red-700">긴급</Badge>}
+            </div>
+            <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+              <span className="font-mono">품목코드 {r.productCode}</span>
+              <span aria-hidden="true" className="text-border">·</span>
+              <span className="font-mono">제조번호 {r.batchNo}</span>
+            </div>
+          </div>
+
+          <Button
+            variant="ghost" size="icon-sm"
+            onClick={(e) => { e.stopPropagation(); setHistoryTarget(r) }}
+            title="수정이력"
+            className="-mr-1 -mt-1 shrink-0 text-muted-foreground"
+          >
+            <History />
+          </Button>
+        </div>
+
+        <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 border-t pt-3 text-xs">
+          <div className="min-w-0">
+            <dt className="text-muted-foreground">제형</dt>
+            <dd className="mt-0.5 truncate font-medium text-foreground">{r.dosageForm ?? "-"}</dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-muted-foreground">진행방법</dt>
+            <dd className="mt-0.5 truncate font-medium text-foreground">{r.method}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">포장일</dt>
+            <dd className="mt-0.5 font-medium text-foreground">{r.packagingDate ?? "-"}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">완료예정</dt>
+            <dd className={cn("mt-0.5 font-medium text-foreground", dueSoon && "font-semibold text-orange-700")}>
+              {r.dueDate ?? "-"}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">공수</dt>
+            <dd className="mt-0.5 font-medium text-foreground">{r.workdays != null ? `${r.workdays}일` : "-"}</dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-muted-foreground">담당자</dt>
+            <dd className="mt-0.5 truncate font-medium text-foreground">
+              {r.assigneeName && r.assigneeTesterId
+                ? <button
+                    onClick={(e) => { e.stopPropagation(); setAssigneeTarget({ id: r.assigneeTesterId!, name: r.assigneeName! }) }}
+                    title={`${r.assigneeName} 담당 오더 보기`}
+                    className="inline-flex max-w-full items-center gap-1.5 hover:text-primary"
+                  >
+                    <TesterAvatar testerId={r.assigneeTesterId} name={r.assigneeName} size="sm" />
+                    <span className="truncate underline-offset-2 hover:underline">{r.assigneeName}</span>
+                  </button>
+                : <span className="text-muted-foreground">미배정</span>}
+            </dd>
+          </div>
+        </dl>
+
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-2.5">
+          <div className="flex items-center gap-1">
+            <StatusBadge status={r.status} />
+            {r.locked && (
+              <Badge variant="outline" className="gap-0.5 border-amber-200 text-amber-700">
+                <Lock className="size-2.5" />확정
+              </Badge>
+            )}
+          </div>
+          {isAdmin && <span className="text-[11px] text-muted-foreground">카드를 눌러 수정</span>}
+        </div>
+      </article>
+    )
+  }
+
   const renderOrderRow = (r: OrderRow, indented = false) => {
     const dueSoon = isDueSoon(r.dueDate, r.status)
     return (
@@ -848,6 +978,31 @@ export default function OrdersPage() {
                 {/* 테이블 */}
                 {!isCollapsed && (
                   <div className="border-t">
+                      <div className="space-y-2 p-3 md:hidden">
+                        {buildRowTree(g.key, sortRowsBy(g.rows)).map(item => {
+                          if (item.type === "single") return renderOrderCard(item.row)
+                          const fc = famCollapsed.has(item.familyId)
+                          return (
+                            <div key={item.familyId} className="rounded-lg border border-primary/20 bg-primary/5 p-2.5">
+                              <button onClick={() => toggleFamily(item.familyId)} className="flex w-full items-center gap-2 text-left">
+                                {fc
+                                  ? <ChevronRight className="size-4 text-muted-foreground" />
+                                  : <ChevronDown className="size-4 text-muted-foreground" />}
+                                <Layers className="size-3.5 text-primary" />
+                                <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">{item.familyName}</span>
+                                <Badge variant="secondary">동시분석 {item.rows.length}건</Badge>
+                              </button>
+                              {!fc && (
+                                <div className="mt-2 flex flex-col gap-2 border-t border-primary/15 pt-2">
+                                  {item.rows.map(r => renderOrderCard(r, true))}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+
+                      <div className="hidden md:block">
                     <Table className="min-w-[920px]">
                       <TableHeader>
                         <TableRow className="hover:bg-transparent">
@@ -890,7 +1045,8 @@ export default function OrdersPage() {
                         })}
                       </TableBody>
                     </Table>
-                  </div>
+                      </div>
+                    </div>
                 )}
               </Card>
             )
@@ -1119,8 +1275,8 @@ function CreateModal({ testers, onClose, onCreated }: {
         <Field label="제조번호"><input value={form.batchNo} onChange={e => setForm({ ...form, batchNo: e.target.value })} className={cn(inputCls, "font-mono")} /></Field>
         <Field label="품목명" full><input value={form.productName} onChange={e => setForm({ ...form, productName: e.target.value })} className={inputCls} /></Field>
         <Field label="제형"><input value={form.dosageForm} onChange={e => setForm({ ...form, dosageForm: e.target.value })} placeholder="예: 내용고형제 (선택)" className={inputCls} /></Field>
-        <Field label="포장일"><input type="date" value={form.packagingDate} onChange={e => setForm({ ...form, packagingDate: e.target.value })} className={inputCls} /></Field>
-        <Field label="완료예정일"><input type="date" value={form.dueDate} onChange={e => setForm({ ...form, dueDate: e.target.value })} className={inputCls} /></Field>
+        <Field label="포장일"><DateField noLabel value={form.packagingDate} onChange={v => setForm({ ...form, packagingDate: v })} /></Field>
+        <Field label="완료예정일"><DateField noLabel value={form.dueDate} onChange={v => setForm({ ...form, dueDate: v })} /></Field>
         <Field label="긴급">
           <Select value={form.isUrgent ? "긴급" : "일반"} onValueChange={v => setForm({ ...form, isUrgent: v === "긴급" })}>
             <SelectTrigger className="!h-9 w-full px-3"><SelectValue /></SelectTrigger>
@@ -1248,8 +1404,8 @@ function EditModal({ order, testers, onClose, onSaved }: {
         <Field label="제조번호"><input value={form.batchNo} disabled={isAutoOrder} onChange={e => setForm({ ...form, batchNo: e.target.value })} className={cn(inputCls, "font-mono disabled:bg-muted disabled:text-muted-foreground")} /></Field>
         <Field label="품목명" full><input value={form.productName} disabled={isAutoOrder} onChange={e => setForm({ ...form, productName: e.target.value })} className={cn(inputCls, "disabled:bg-muted disabled:text-muted-foreground")} /></Field>
         <Field label="제형"><input value={form.dosageForm} onChange={e => setForm({ ...form, dosageForm: e.target.value })} placeholder="예: 내용고형제 (선택)" className={inputCls} /></Field>
-        <Field label="포장일"><input type="date" value={form.packagingDate} onChange={e => setForm({ ...form, packagingDate: e.target.value })} className={inputCls} /></Field>
-        <Field label="완료예정일"><input type="date" value={form.dueDate} onChange={e => setForm({ ...form, dueDate: e.target.value })} className={inputCls} /></Field>
+        <Field label="포장일"><DateField noLabel value={form.packagingDate} onChange={v => setForm({ ...form, packagingDate: v })} /></Field>
+        <Field label="완료예정일"><DateField noLabel value={form.dueDate} onChange={v => setForm({ ...form, dueDate: v })} /></Field>
         <Field label="긴급">
           <Select value={form.isUrgent ? "긴급" : "일반"} onValueChange={v => setForm({ ...form, isUrgent: v === "긴급" })}>
             <SelectTrigger className="!h-9 w-full px-3"><SelectValue /></SelectTrigger>
@@ -1570,35 +1726,30 @@ function Field({ label, full, children }: { label: string; full?: boolean; child
 }
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  useLockBodyScroll()
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-xl border bg-card shadow-xl" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between border-b px-4 py-3">
-          <h2 className="text-sm font-bold text-foreground">{title}</h2>
-          <button onClick={onClose} className="rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><X className="size-4" /></button>
-        </div>
-        <div className="px-4 py-4">{children}</div>
-      </div>
-    </div>
+    <Dialog open onOpenChange={(next) => { if (!next) onClose() }}>
+      <DialogContent size="lg">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription className="sr-only">{title}</DialogDescription>
+        </DialogHeader>
+        <DialogBody>{children}</DialogBody>
+      </DialogContent>
+    </Dialog>
   )
 }
 
 // ─── 우측 슬라이드오버(드로어) — 수정 모달용 ─────────────────────────────────────
 function SlideOver({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  useLockBodyScroll()
   return (
-    <div className="fixed inset-0 z-50 bg-black/40" onClick={onClose}>
-      <div
-        className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col border-l bg-card shadow-xl duration-300 animate-in slide-in-from-right"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between border-b px-4 py-3">
-          <h2 className="text-sm font-bold text-foreground">{title}</h2>
-          <button onClick={onClose} className="rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><X className="size-4" /></button>
-        </div>
+    <Sheet open onOpenChange={(next) => { if (!next) onClose() }}>
+      <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
+        <SheetHeader className="border-b">
+          <SheetTitle>{title}</SheetTitle>
+          <SheetDescription className="sr-only">{title}</SheetDescription>
+        </SheetHeader>
         <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4">{children}</div>
-      </div>
-    </div>
+      </SheetContent>
+    </Sheet>
   )
 }

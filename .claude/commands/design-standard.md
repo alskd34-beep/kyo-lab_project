@@ -262,7 +262,7 @@ function SortIcon({ field }: { field: typeof sortField }) {
 ### Dialog Footer (추가)
 
 ```tsx
-<DialogFooter className="border-t bg-card px-4 py-4 sm:px-5">
+<DialogFooter>
   <Button variant="outline" onClick={() => setAddOpen(false)}>취소</Button>
   <Button onClick={() => void handleAdd()} disabled={saving}>
     <Save />
@@ -274,7 +274,7 @@ function SortIcon({ field }: { field: typeof sortField }) {
 ### Dialog Footer (삭제 확인)
 
 ```tsx
-<DialogFooter className="border-t bg-card px-4 py-4 sm:px-5">
+<DialogFooter>
   <Button variant="outline" onClick={() => setDeleteOpen(false)}>취소</Button>
   <Button variant="destructive" onClick={() => void handleDelete()} disabled={saving}>
     <Trash2 />
@@ -284,7 +284,7 @@ function SortIcon({ field }: { field: typeof sortField }) {
 ```
 
 규칙:
-- Footer: `border-t bg-card px-5 py-4`
+- DialogFooter 기본 스타일(테두리·muted 배경)을 그대로 사용한다. 여백 className을 다시 덮어쓰지 않는다.
 - 좌: `variant="outline"` 취소 버튼
 - 우: 기본(primary) 또는 `variant="destructive"` 실행 버튼
 - 실행 버튼: 아이콘(`<Save />`, `<Trash2 />`) + 텍스트
@@ -296,32 +296,20 @@ function SortIcon({ field }: { field: typeof sortField }) {
 
 ```tsx
 <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-  <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden p-0 sm:max-w-md">
-    <DialogHeader className="border-b bg-destructive/5 px-4 py-4 pr-12 text-left sm:px-5">
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-destructive text-destructive-foreground shadow-sm">
-          <AlertTriangle size={20} />
-        </div>
-        <div className="min-w-0">
-          <DialogTitle className="text-lg font-semibold text-foreground">항목 삭제</DialogTitle>
-          <DialogDescription className="mt-1 text-xs text-destructive">
-            관련 데이터도 함께 삭제됩니다.
-          </DialogDescription>
-        </div>
-      </div>
+  <DialogContent size="sm">
+    <DialogHeader>
+      <DialogTitle>항목 삭제</DialogTitle>
+      <DialogDescription>
+        관련 데이터도 함께 삭제됩니다. 이 작업은 되돌릴 수 없습니다.
+      </DialogDescription>
     </DialogHeader>
 
-    <div className="px-4 py-4 sm:px-5">
-      <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-4">
-        <p className="text-sm font-semibold text-foreground">{selected?.name}</p>
-        <p className="mt-1 font-mono text-xs text-destructive">{selected?.code}</p>
-        <p className="mt-3 text-sm text-muted-foreground">
-          이 항목을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.
-        </p>
-      </div>
+    <div className="rounded-lg border bg-muted/50 p-3">
+      <p className="text-sm font-medium">{selected?.name}</p>
+      <p className="mt-0.5 font-mono text-xs text-muted-foreground">{selected?.code}</p>
     </div>
 
-    <DialogFooter className="border-t bg-card px-4 py-4 sm:px-5">
+    <DialogFooter>
       <Button variant="outline" onClick={() => setDeleteOpen(false)}>취소</Button>
       <Button variant="destructive" onClick={() => void handleDelete()} disabled={saving}>
         <Trash2 />
@@ -338,26 +326,22 @@ function SortIcon({ field }: { field: typeof sortField }) {
 
 ```tsx
 <Dialog open={addOpen} onOpenChange={setAddOpen}>
-  <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden p-0 sm:max-w-xl">
-    <DialogHeader className="border-b px-4 py-4 pr-12 text-left sm:px-5">
-      <DialogTitle className="text-lg font-semibold text-foreground">항목 추가</DialogTitle>
-      <DialogDescription className="mt-1 text-xs text-muted-foreground">
-        새 항목을 등록합니다.
-      </DialogDescription>
+  <DialogContent size="lg">
+    <DialogHeader>
+      <DialogTitle>항목 추가</DialogTitle>
+      <DialogDescription>새 항목을 등록합니다.</DialogDescription>
     </DialogHeader>
 
-    <div className="max-h-[65dvh] overflow-y-auto bg-muted/30 px-4 py-4 sm:px-5">
-      <div className="grid gap-4">
-        <section className="rounded-lg border bg-card p-3 shadow-sm sm:p-4">
-          <div className="mb-3 border-b pb-3">
-            <h3 className="text-sm font-semibold text-foreground">기본 정보</h3>
-          </div>
-          {/* 입력 필드들 */}
-        </section>
-      </div>
-    </div>
+    <DialogBody className="grid gap-4">
+      <section className="rounded-lg border bg-card p-3 shadow-sm sm:p-4">
+        <div className="mb-3 border-b pb-3">
+          <h3 className="text-sm font-semibold text-foreground">기본 정보</h3>
+        </div>
+        {/* 입력 필드들 */}
+      </section>
+    </DialogBody>
 
-    <DialogFooter className="border-t bg-card px-4 py-4 sm:px-5">
+    <DialogFooter>
       <Button variant="outline" onClick={() => setAddOpen(false)}>취소</Button>
       <Button onClick={() => void handleAdd()} disabled={saving}>
         <Save />
@@ -410,6 +394,7 @@ import {
 } from "@frontend/components/ui/sheet"
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -683,12 +668,11 @@ import {
 
 **용도:** 추가 폼, 삭제 확인 — 수정은 반드시 Sheet 사용
 
-**이 프로젝트 규칙:**
-- `DialogContent`: `className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden p-0 sm:max-w-xl"`
-- `DialogHeader`: `className="border-b px-4 py-4 pr-12 text-left sm:px-5"`
-- 삭제 확인 헤더: `className="border-b bg-destructive/5 ..."`
-- 스크롤 영역: `className="max-h-[65dvh] overflow-y-auto bg-muted/30 px-4 py-4 sm:px-5"`
-- 키 props: `showCloseButton={false}` — 닫기 버튼 숨김
+**이 프로젝트 규칙 (shadcn radix-nova):**
+- `DialogContent`는 `size`로 폭을 정한다: `sm` 확인 / `md` 기본 / `lg` 폼 / `xl` 넓은 선택 / `full` 전체화면
+- 긴 폼은 `DialogBody`에 넣는다 (내부 스크롤)
+- Header/Footer className으로 패딩·보더를 다시 덮어쓰지 않는다
+- 닫기 버튼은 기본 표시. 숨길 때만 `showCloseButton={false}`
 
 → [Section 4/5 전체 패턴 참조](#4-삭제-확인-dialog)
 

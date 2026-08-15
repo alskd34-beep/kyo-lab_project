@@ -19,6 +19,7 @@ import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -646,18 +647,17 @@ export default function TestMasterPage() {
 
       {/* 추가/수정 다이얼로그 */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-h-[90vh] w-[calc(100%-2rem)] gap-0 overflow-hidden p-0 sm:max-w-xl">
-          <DialogHeader className="border-b px-4 py-4 pr-12 text-left sm:px-5">
-            <DialogTitle className="text-lg font-semibold text-foreground">
+        <DialogContent size="lg">
+          <DialogHeader>
+            <DialogTitle>
               {editTarget ? "시험항목 수정" : "시험항목 추가"}
             </DialogTitle>
-            <DialogDescription className="mt-1 text-xs text-muted-foreground">
+            <DialogDescription>
               시험항목 기본 정보와 2인시험 여부를 관리합니다.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="max-h-[65dvh] overflow-y-auto px-4 py-4 sm:px-5">
-            <div className="grid gap-4">
+          <DialogBody className="grid gap-4">
               <section className="rounded-lg border bg-card p-3 sm:p-4">
                 <div className="mb-3 border-b pb-3">
                   <h3 className="text-sm font-semibold text-foreground">기본 정보</h3>
@@ -740,10 +740,9 @@ export default function TestMasterPage() {
                   {error}
                 </div>
               )}
-            </div>
-          </div>
+          </DialogBody>
 
-          <DialogFooter className="border-t px-4 py-4 sm:px-5">
+          <DialogFooter>
             <Button
               variant="outline"
               onClick={() => setDialogOpen(false)}
@@ -761,36 +760,19 @@ export default function TestMasterPage() {
 
       {/* 삭제 확인 다이얼로그 */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent className="max-h-[90vh] w-[calc(100%-2rem)] gap-0 overflow-hidden p-0 sm:max-w-md">
-          <DialogHeader className="border-b px-4 py-4 pr-12 text-left sm:px-5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
-                <AlertTriangle className="size-4" />
-              </div>
-              <div className="min-w-0">
-                <DialogTitle className="text-lg font-semibold text-foreground">
-                  시험항목 삭제
-                </DialogTitle>
-                <DialogDescription className="mt-0.5 text-xs text-muted-foreground">
-                  삭제 후에는 목록에서 즉시 제거됩니다.
-                </DialogDescription>
-              </div>
-            </div>
+        <DialogContent size="sm">
+          <DialogHeader>
+            <DialogTitle>시험항목 삭제</DialogTitle>
+            <DialogDescription>
+              삭제 후에는 목록에서 즉시 제거됩니다. 연결된 품목 시험 기준이 있으면 영향이 있을 수 있습니다.
+            </DialogDescription>
           </DialogHeader>
 
-          <div className="px-4 py-4 sm:px-5">
-            <div className="rounded-lg border bg-muted/50 p-4">
-              <p className="text-sm font-semibold text-foreground">
-                {deleteTarget?.name}
-              </p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                이 시험항목을 삭제하시겠습니까? 연결된 품목 시험 기준이 있으면
-                영향이 있을 수 있습니다.
-              </p>
-            </div>
+          <div className="rounded-lg border bg-muted/50 p-3">
+            <p className="text-sm font-medium">{deleteTarget?.name}</p>
           </div>
 
-          <DialogFooter className="border-t px-4 py-4 sm:px-5">
+          <DialogFooter>
             <Button
               variant="outline"
               onClick={() => setDeleteOpen(false)}

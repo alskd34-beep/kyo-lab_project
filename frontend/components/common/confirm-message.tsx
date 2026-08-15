@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@frontend/components/ui/dialog"
+import { Button } from "@frontend/components/ui/button"
 import { cn } from "@frontend/lib/utils"
 
 export type ConfirmMessageVariant = "default" | "warning" | "danger"
@@ -40,22 +41,22 @@ interface ConfirmMessageDialogProps extends ConfirmMessageInput {
 
 const VARIANT_STYLE: Record<
   ConfirmMessageVariant,
-  { icon: typeof Info; iconClassName: string; buttonClassName: string }
+  { icon: typeof Info; iconClassName: string; buttonVariant: "default" | "destructive" }
 > = {
   default: {
     icon: Info,
-    iconClassName: "bg-blue-50 text-blue-600 ring-blue-100",
-    buttonClassName: "bg-blue-600 hover:bg-blue-700 focus-visible:ring-blue-300",
+    iconClassName: "bg-primary/10 text-primary",
+    buttonVariant: "default",
   },
   warning: {
     icon: AlertTriangle,
-    iconClassName: "bg-amber-50 text-amber-600 ring-amber-100",
-    buttonClassName: "bg-amber-500 hover:bg-amber-600 focus-visible:ring-amber-300",
+    iconClassName: "bg-amber-50 text-amber-600",
+    buttonVariant: "default",
   },
   danger: {
     icon: AlertTriangle,
-    iconClassName: "bg-red-50 text-red-600 ring-red-100",
-    buttonClassName: "bg-red-600 hover:bg-red-700 focus-visible:ring-red-300",
+    iconClassName: "bg-destructive/10 text-destructive",
+    buttonVariant: "destructive",
   },
 }
 
@@ -76,11 +77,16 @@ export function ConfirmMessageDialog({
 
   return (
     <Dialog open={open} onOpenChange={nextOpen => !pending && onOpenChange(nextOpen)}>
-      <DialogContent overlayClassName="z-[110]" className="z-[120] max-w-sm gap-5">
-        <DialogHeader className="items-center text-center sm:items-start sm:text-left">
+      <DialogContent
+        size="sm"
+        overlayClassName="z-[110]"
+        className="z-[120]"
+        showCloseButton={!pending}
+      >
+        <DialogHeader>
           <div
             className={cn(
-              "mb-1 flex size-11 items-center justify-center rounded-full ring-8",
+              "mb-1 flex size-10 items-center justify-center rounded-lg",
               style.iconClassName,
             )}
           >
@@ -91,32 +97,29 @@ export function ConfirmMessageDialog({
         </DialogHeader>
 
         {error && (
-          <p role="alert" className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {error}
           </p>
         )}
 
         <DialogFooter>
-          <button
+          <Button
             type="button"
+            variant="outline"
             onClick={() => onOpenChange(false)}
             disabled={pending}
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 disabled:opacity-50"
           >
             {cancelLabel}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant={style.buttonVariant}
             onClick={() => void onConfirm()}
             disabled={pending}
-            className={cn(
-              "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white transition-colors focus-visible:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50",
-              style.buttonClassName,
-            )}
           >
-            {pending && <Loader2 className="size-4 animate-spin" />}
+            {pending && <Loader2 className="animate-spin" />}
             {pending ? "처리 중..." : confirmLabel}
-          </button>
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

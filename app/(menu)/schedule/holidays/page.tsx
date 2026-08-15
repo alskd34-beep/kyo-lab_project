@@ -2,10 +2,25 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
-import { useLockBodyScroll } from "@frontend/hooks/use-lock-body-scroll"
-import { CalendarDays, Plus, Trash2, X, Loader2, ChevronLeft, ChevronRight, Download } from "lucide-react"
+import { CalendarDays, Plus, Trash2, Loader2, ChevronLeft, ChevronRight, Download } from "lucide-react"
 import { DateField } from "@frontend/components/ui/date-field"
 import { Skeleton } from "@frontend/components/ui/skeleton"
+import { Badge } from "@frontend/components/ui/badge"
+import { Button } from "@frontend/components/ui/button"
+import { Card } from "@frontend/components/ui/card"
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@frontend/components/ui/table"
+import { Input } from "@frontend/components/ui/input"
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@frontend/components/ui/dialog"
 import { useConfirmMessage } from "@frontend/components/common/confirm-message"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -168,71 +183,76 @@ export default function HolidaysPage() {
         </button>
       </div>
 
-      {/* Holiday list */}
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <div className="border-b border-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700">
+      <Card className="gap-0 overflow-hidden py-0">
+        <div className="border-b px-4 py-3 text-sm font-semibold text-foreground">
           {year}년 공휴일 ({rows.length}일)
         </div>
-        {loading ? (
-          <div className="divide-y divide-slate-100">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-3 px-4 py-3">
-                <Skeleton className="h-4 w-28 shrink-0" />
-                <Skeleton className="h-4 flex-1" />
-              </div>
-            ))}
-          </div>
-        ) : rows.length === 0 ? (
-          <div className="py-10 text-center text-sm text-slate-400">
-            {year}년에 등록된 공휴일이 없습니다.
-          </div>
-        ) : (
-          <div className="divide-y divide-slate-100">
-            {rows.map(r => (
-              <div key={r.date} className="flex items-center gap-3 px-4 py-3">
-                <span className="w-28 shrink-0 font-mono text-sm font-medium text-slate-800">
-                  {r.date}
-                </span>
-                <span className="flex-1 text-sm text-slate-600">{r.description || "—"}</span>
-                <span
-                  className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                    r.source === "api"
-                      ? "bg-blue-50 text-blue-700"
-                      : "bg-slate-100 text-slate-500"
-                  }`}
-                >
-                  {r.source === "api" ? "API" : "수동"}
-                </span>
-                {isAdmin && (
-                  <button
-                    onClick={() => void remove(r.date)}
-                    disabled={busy === r.date}
-                    className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-                    title="삭제"
-                  >
-                    {busy === r.date
-                      ? <Loader2 size={14} className="animate-spin" />
-                      : <Trash2 size={14} />
-                    }
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+        <Table>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead>날짜</TableHead>
+              <TableHead>설명</TableHead>
+              <TableHead>구분</TableHead>
+              {isAdmin && <TableHead className="text-center">관리</TableHead>}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading
+              ? Array.from({ length: 6 }).map((_, i) => (
+                  <TableRow key={i}>
+                    <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-full" /></TableCell>
+                    <TableCell><Skeleton className="h-5 w-12 rounded-full" /></TableCell>
+                    {isAdmin && <TableCell><Skeleton className="mx-auto h-6 w-6 rounded" /></TableCell>}
+                  </TableRow>
+                ))
+              : rows.length === 0
+                ? (
+                    <TableRow className="hover:bg-transparent">
+                      <TableCell colSpan={isAdmin ? 4 : 3} className="py-16 text-center text-sm text-muted-foreground">
+                        {year}년에 등록된 공휴일이 없습니다.
+                      </TableCell>
+                    </TableRow>
+                  )
+                : rows.map(r => (
+                    <TableRow key={r.date}>
+                      <TableCell className="font-mono text-xs text-muted-foreground">{r.date}</TableCell>
+                      <TableCell className="font-medium text-foreground">{r.description || "—"}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{r.source === "api" ? "API" : "수동"}</Badge>
+                      </TableCell>
+                      {isAdmin && (
+                        <TableCell className="text-center">
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => void remove(r.date)}
+                            disabled={busy === r.date}
+                            className="text-destructive hover:text-destructive"
+                            title="삭제"
+                          >
+                            {busy === r.date ? <Loader2 className="animate-spin" /> : <Trash2 className="size-3.5" />}
+                          </Button>
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  ))}
+          </TableBody>
+        </Table>
+      </Card>
 
       {/* Add modal */}
       {showAdd && (
-        <AddModal
-          onClose={() => setShowAdd(false)}
-          onSaved={() => {
-            setShowAdd(false)
-            void load()
-            flash("공휴일이 추가되었습니다.")
-          }}
-          onError={(m) => flash(m, "err")}
-        />
+      <AddModal
+        open
+        onClose={() => setShowAdd(false)}
+        onSaved={() => {
+          setShowAdd(false)
+          void load()
+          flash("공휴일이 추가되었습니다.")
+        }}
+        onError={(m) => flash(m, "err")}
+      />
       )}
     </div>
   )
@@ -240,15 +260,16 @@ export default function HolidaysPage() {
 
 // ─── 추가 모달 ────────────────────────────────────────────────────────────────
 function AddModal({
+  open,
   onClose,
   onSaved,
   onError,
 }: {
+  open: boolean
   onClose: () => void
   onSaved: () => void
   onError: (m: string) => void
 }) {
-  useLockBodyScroll()
   const [date, setDate] = useState("")
   const [description, setDescription] = useState("")
   const [saving, setSaving] = useState(false)
@@ -275,53 +296,31 @@ function AddModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-sm rounded-xl bg-white p-5 shadow-xl"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-base font-bold text-slate-900">공휴일 추가</h2>
-          <button
-            onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="flex flex-col gap-3">
+    <Dialog open={open} onOpenChange={(next) => { if (!next && !saving) onClose() }}>
+      <DialogContent size="sm">
+        <DialogHeader>
+          <DialogTitle>공휴일 추가</DialogTitle>
+          <DialogDescription>날짜와 설명을 입력해 공휴일을 등록합니다.</DialogDescription>
+        </DialogHeader>
+        <DialogBody className="grid gap-3">
           <DateField label="날짜" value={date} onChange={setDate} />
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600">설명</label>
-            <input
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">설명</label>
+            <Input
               value={description}
               onChange={e => setDescription(e.target.value)}
               placeholder="예) 설날, 어린이날"
-              className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm focus:border-blue-400 focus:outline-none"
             />
           </div>
-        </div>
-
-        <div className="mt-5 flex justify-end gap-2">
-          <button
-            onClick={onClose}
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
-          >
-            취소
-          </button>
-          <button
-            onClick={() => void submit()}
-            disabled={saving}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-          >
-            {saving && <Loader2 size={15} className="animate-spin" />} 추가
-          </button>
-        </div>
-      </div>
-    </div>
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>취소</Button>
+          <Button onClick={() => void submit()} disabled={saving}>
+            {saving && <Loader2 className="animate-spin" />}
+            추가
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

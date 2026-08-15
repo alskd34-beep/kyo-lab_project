@@ -2,15 +2,37 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
-import { useLockBodyScroll } from "@frontend/hooks/use-lock-body-scroll"
 import {
-  CalendarDays, Plus, Trash2, X, Loader2, Check, ChevronLeft, ChevronRight, CheckCircle2,
+  CalendarDays, Plus, Trash2, Loader2, Check, ChevronLeft, ChevronRight, CheckCircle2,
   Sparkles, Lightbulb, Ban, AlertTriangle, Users, FlaskConical,
 } from "lucide-react"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import { DateRangeField } from "@frontend/components/ui/date-range-field"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@frontend/components/ui/select"
 import { useConfirmMessage } from "@frontend/components/common/confirm-message"
+import { Badge } from "@frontend/components/ui/badge"
+import { Button } from "@frontend/components/ui/button"
+import { Card } from "@frontend/components/ui/card"
+import { Input } from "@frontend/components/ui/input"
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@frontend/components/ui/table"
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@frontend/components/ui/dialog"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@frontend/components/ui/sheet"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 type ScheduleType = "ANNUAL" | "HALF_DAY" | "BUSINESS_TRIP"
@@ -283,11 +305,10 @@ export default function VacationPage() {
         </div>
       </div>
 
-      {/* Calendar (Monday 스타일 연속 막대) */}
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="grid grid-cols-7 border-b border-slate-100 bg-slate-50 text-center text-[11px] font-semibold text-slate-500">
+      <Card className="gap-0 overflow-hidden py-0">
+        <div className="grid grid-cols-7 border-b bg-muted/40 text-center text-[11px] font-medium text-muted-foreground">
           {["일", "월", "화", "수", "목", "금", "토"].map((d, i) => (
-            <div key={d} className={`py-2 ${i === 0 ? "text-red-400" : i === 6 ? "text-blue-400" : ""}`}>{d}</div>
+            <div key={d} className={`py-2 ${i === 0 ? "text-destructive/70" : i === 6 ? "text-primary" : ""}`}>{d}</div>
           ))}
         </div>
 
@@ -389,40 +410,57 @@ export default function VacationPage() {
             })}
           </div>
         )}
-      </div>
+      </Card>
 
-      {/* 이번 화면 일정 목록 (컴팩트) */}
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-700">
+      <Card className="gap-0 overflow-hidden py-0">
+        <div className="border-b px-4 py-3 text-sm font-semibold text-foreground">
           표시 기간 일정 ({rows.length})
         </div>
-        {rows.length === 0 ? (
-          <div className="py-8 text-center text-sm text-slate-400">등록된 휴가/출장이 없습니다. 캘린더의 빈 날짜를 클릭해 등록하세요.</div>
-        ) : (
-          <div className="divide-y divide-slate-100">
-            {rows.map(r => (
-              <button
+        <Table>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead>유형</TableHead>
+              <TableHead>이름</TableHead>
+              <TableHead>기간</TableHead>
+              <TableHead>메모</TableHead>
+              <TableHead>확인</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.length === 0 ? (
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={5} className="py-16 text-center text-sm text-muted-foreground">
+                  등록된 휴가/출장이 없습니다. 캘린더의 빈 날짜를 클릭해 등록하세요.
+                </TableCell>
+              </TableRow>
+            ) : rows.map(r => (
+              <TableRow
                 key={r.id}
+                className="cursor-pointer"
                 onClick={() => setDetail(r)}
-                className="flex w-full flex-wrap items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-50"
               >
-                <span className={`rounded-md border px-2 py-0.5 text-xs font-semibold ${TYPE_CLS[r.type]}`}>{TYPE_LABEL[r.type]}</span>
-                <span className="text-sm font-medium text-slate-800">{r.userName ?? "이름없음"}</span>
-                <span className="text-sm text-slate-500">{r.startDate} ~ {r.endDate}</span>
-                {r.memo && <span className="text-xs text-slate-400">{r.memo}</span>}
-                {r.managerChecked && (
-                  <span className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
-                    <CheckCircle2 size={14} /> 확인됨
-                  </span>
-                )}
-              </button>
+                <TableCell>
+                  <Badge variant="outline">{TYPE_LABEL[r.type]}</Badge>
+                </TableCell>
+                <TableCell className="font-medium text-foreground">{r.userName ?? "이름없음"}</TableCell>
+                <TableCell className="font-mono text-xs text-muted-foreground">{r.startDate} ~ {r.endDate}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{r.memo || "—"}</TableCell>
+                <TableCell>
+                  {r.managerChecked && (
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
+                      <CheckCircle2 size={14} /> 확인됨
+                    </span>
+                  )}
+                </TableCell>
+              </TableRow>
             ))}
-          </div>
-        )}
-      </div>
+          </TableBody>
+        </Table>
+      </Card>
 
       {addDefaults && (
         <AddModal
+          open
           isAdmin={isAdmin}
           users={users}
           defaults={addDefaults}
@@ -457,20 +495,16 @@ export default function VacationPage() {
 
 // ─── 우측 슬라이드 패널 ──────────────────────────────────────────────────────────
 function RightDrawer({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
-  useLockBodyScroll()
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40" onClick={onClose}>
-      <div
-        className="flex h-full w-full max-w-md flex-col overflow-y-auto overscroll-contain bg-white shadow-xl"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-4 py-3">
-          <span className="text-sm font-bold text-slate-900">일정 상세 · 가능 품목</span>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
-        </div>
+    <Sheet open onOpenChange={(next) => { if (!next) onClose() }}>
+      <SheetContent side="right" className="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-md">
+        <SheetHeader className="border-b">
+          <SheetTitle>일정 상세 · 가능 품목</SheetTitle>
+          <SheetDescription>휴가·출장 일정과 가능한 품목을 확인합니다.</SheetDescription>
+        </SheetHeader>
         <div className="flex flex-col gap-4 p-4">{children}</div>
-      </div>
-    </div>
+      </SheetContent>
+    </Sheet>
   )
 }
 
@@ -731,8 +765,9 @@ function Group({
 
 // ─── 등록 모달 ────────────────────────────────────────────────────────────────
 function AddModal({
-  isAdmin, users, defaults, onClose, onSaved, onError,
+  open, isAdmin, users, defaults, onClose, onSaved, onError,
 }: {
+  open: boolean
   isAdmin: boolean
   users: UserOption[]
   defaults: { start: string; end: string }
@@ -740,7 +775,6 @@ function AddModal({
   onSaved: () => void
   onError: (m: string) => void
 }) {
-  useLockBodyScroll()
   const [userId, setUserId] = useState("")
   const [type, setType] = useState<ScheduleType>("ANNUAL")
   const [startDate, setStartDate] = useState(defaults.start)
@@ -767,14 +801,13 @@ function AddModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl" onClick={e => e.stopPropagation()}>
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-base font-bold text-slate-900">휴가 / 출장 등록</h2>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
-        </div>
-
-        <div className="flex flex-col gap-3">
+    <Dialog open={open} onOpenChange={(next) => { if (!next && !saving) onClose() }}>
+      <DialogContent size="md">
+        <DialogHeader>
+          <DialogTitle>휴가 / 출장 등록</DialogTitle>
+          <DialogDescription>기간과 유형을 지정해 일정을 등록합니다.</DialogDescription>
+        </DialogHeader>
+        <DialogBody className="grid gap-3">
           {isAdmin && (
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-600">대상자</label>
@@ -818,27 +851,21 @@ function AddModal({
           />
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600">메모</label>
-            <input
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">메모</label>
+            <Input
               value={memo}
               onChange={e => setMemo(e.target.value)}
               placeholder="선택 입력"
-              className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm"
             />
           </div>
-        </div>
-
-        <div className="mt-5 flex justify-end gap-2">
-          <button onClick={onClose} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">취소</button>
-          <button
-            onClick={() => void submit()}
-            disabled={saving}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-          >
-            {saving && <Loader2 size={15} className="animate-spin" />} 등록
-          </button>
-        </div>
-      </div>
-    </div>
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>취소</Button>
+          <Button onClick={() => void submit()} disabled={saving}>
+            {saving && <Loader2 className="animate-spin" />} 등록
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

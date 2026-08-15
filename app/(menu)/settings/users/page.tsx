@@ -8,12 +8,15 @@ import { TesterAvatar, invalidateTesterProfileCache } from '@frontend/lib/tester
 import { useConfirmMessage } from '@frontend/components/common/confirm-message'
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@frontend/components/ui/dialog'
+import { Button } from '@frontend/components/ui/button'
+import { Input } from '@frontend/components/ui/input'
 import {
   Select,
   SelectContent,
@@ -488,18 +491,18 @@ function EditUserDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="mx-4 w-[calc(100%-2rem)] max-h-[90vh] overflow-y-auto sm:max-w-xl">
+      <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>사용자 수정</DialogTitle>
           <DialogDescription>
             {user.username} 계정 정보를 수정합니다.
             {user.customerNo != null && (
-              <span className="ml-2 font-mono text-[11px] text-slate-400">고객번호 {fmtCustomerNo(user.customerNo)}</span>
+              <span className="ml-2 font-mono text-[11px] text-muted-foreground">고객번호 {fmtCustomerNo(user.customerNo)}</span>
             )}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-5 md:grid-cols-[140px_1fr]">
+        <DialogBody className="grid gap-5 md:grid-cols-[140px_1fr]">
           <div className="flex flex-col items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
             <TesterAvatar
               testerId={user.testerId}
@@ -573,27 +576,26 @@ function EditUserDialog({
                 onChange={e => setPassword(e.target.value)}
               />
             </label>
-            {err && <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">{err}</p>}
+            {err && <p className="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">{err}</p>}
           </div>
-        </div>
+        </DialogBody>
 
         <DialogFooter>
-          <button
+          <Button
             type="button"
+            variant="outline"
             onClick={() => onOpenChange(false)}
-            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 hover:bg-slate-50"
           >
             취소
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={save}
             disabled={busy}
-            className="inline-flex items-center justify-center gap-1.5 rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
           >
-            <Save size={13} />
+            <Save />
             저장
-          </button>
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

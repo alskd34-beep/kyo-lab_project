@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import {
-  AlertTriangle,
   ChevronDown,
   ChevronUp,
   Grid2x2,
@@ -19,6 +18,7 @@ import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -855,18 +855,15 @@ export default function TestersPage() {
 
       {/* Add Dialog */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden p-0 sm:max-w-xl">
-          <DialogHeader className="border-b px-4 py-4 pr-12 text-left sm:px-5">
-            <DialogTitle className="text-lg font-semibold text-foreground">
-              시험자 추가
-            </DialogTitle>
-            <DialogDescription className="mt-1 text-xs text-muted-foreground">
+        <DialogContent size="lg">
+          <DialogHeader>
+            <DialogTitle>시험자 추가</DialogTitle>
+            <DialogDescription>
               시험자 기본 정보와 시험 가능 범위를 등록합니다.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="max-h-[65dvh] overflow-y-auto bg-muted/30 px-4 py-4 sm:px-5">
-            <div className="grid gap-4">
+          <DialogBody className="grid gap-4">
               <section className="rounded-lg border bg-card p-3 shadow-sm sm:p-4">
                 <div className="mb-3 border-b pb-3">
                   <h3 className="text-sm font-semibold text-foreground">기본 정보</h3>
@@ -946,10 +943,9 @@ export default function TestersPage() {
                   {error}
                 </div>
               )}
-            </div>
-          </div>
+          </DialogBody>
 
-          <DialogFooter className="border-t bg-card px-4 py-4 sm:px-5">
+          <DialogFooter>
             <Button
               variant="outline"
               onClick={() => setAddOpen(false)}
@@ -1047,38 +1043,22 @@ export default function TestersPage() {
 
       {/* Delete Dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100%-2rem)] gap-0 overflow-hidden p-0 sm:max-w-md">
-          <DialogHeader className="border-b bg-destructive/5 px-4 py-4 pr-12 text-left sm:px-5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-destructive text-destructive-foreground shadow-sm">
-                <AlertTriangle size={20} />
-              </div>
-              <div className="min-w-0">
-                <DialogTitle className="text-lg font-semibold text-foreground">
-                  시험자 삭제
-                </DialogTitle>
-                <DialogDescription className="mt-1 text-xs text-destructive">
-                  역량 데이터도 함께 삭제됩니다.
-                </DialogDescription>
-              </div>
-            </div>
+        <DialogContent size="sm">
+          <DialogHeader>
+            <DialogTitle>시험자 삭제</DialogTitle>
+            <DialogDescription>
+              역량 데이터도 함께 삭제됩니다. 이 작업은 되돌릴 수 없습니다.
+            </DialogDescription>
           </DialogHeader>
 
-          <div className="px-4 py-4 sm:px-5">
-            <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-4">
-              <p className="text-sm font-semibold text-foreground">
-                {selected?.name}
-              </p>
-              <p className="mt-1 font-mono text-xs text-destructive">
-                {selected?.employeeNo}
-              </p>
-              <p className="mt-3 text-sm text-muted-foreground">
-                이 시험자를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.
-              </p>
-            </div>
+          <div className="rounded-lg border bg-muted/50 p-3">
+            <p className="text-sm font-medium">{selected?.name}</p>
+            <p className="mt-0.5 font-mono text-xs text-muted-foreground">
+              {selected?.employeeNo}
+            </p>
           </div>
 
-          <DialogFooter className="border-t bg-card px-4 py-4 sm:px-5">
+          <DialogFooter>
             <Button
               variant="outline"
               onClick={() => setDeleteOpen(false)}

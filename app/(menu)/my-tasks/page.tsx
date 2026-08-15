@@ -4,9 +4,21 @@ import { useCallback, useEffect, useState } from "react"
 import {
   Play, CheckCircle2, Circle, Loader2, AlertTriangle, Clock, XCircle, ShieldAlert, ClipboardList,
 } from "lucide-react"
+import { cn } from "@frontend/lib/utils"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import { DateField } from "@frontend/components/ui/date-field"
-import { useLockBodyScroll } from "@frontend/hooks/use-lock-body-scroll"
+import { Badge } from "@frontend/components/ui/badge"
+import { Button } from "@frontend/components/ui/button"
+import { Card } from "@frontend/components/ui/card"
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@frontend/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@frontend/components/ui/select"
 
 interface JobItem {
@@ -69,32 +81,31 @@ function ReadinessModal({
   onCancel: () => void
   confirming: boolean
 }) {
-  useLockBodyScroll()
   const blocked = result.checks.filter(c => c.blocked)
   const warnings = result.checks.filter(c => c.warning && !c.blocked)
   const notes = result.pretestNotes ?? []
   const isBlocked = !result.ok && blocked.length > 0
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white shadow-xl">
-        <div className={`rounded-t-2xl px-5 py-4 ${isBlocked ? "bg-red-50" : "bg-amber-50"}`}>
-          <div className="flex items-center gap-2">
-            {isBlocked
-              ? <XCircle className="text-red-500" size={20} />
-              : <ShieldAlert className="text-amber-500" size={20} />}
-            <h2 className={`text-sm font-bold ${isBlocked ? "text-red-800" : "text-amber-800"}`}>
-              {isBlocked ? "장비 검증 실패 — 시작 불가" : "시작 전 확인 — 확인 후 시작 가능"}
-            </h2>
+    <Dialog open onOpenChange={(next) => { if (!next && !confirming) onCancel() }}>
+      <DialogContent size="md">
+        <DialogHeader>
+          <div className={cn(
+            "mb-1 flex size-10 items-center justify-center rounded-lg",
+            isBlocked ? "bg-destructive/10 text-destructive" : "bg-amber-50 text-amber-600",
+          )}>
+            {isBlocked ? <XCircle className="size-5" /> : <ShieldAlert className="size-5" />}
           </div>
-          <p className={`mt-1 text-xs ${isBlocked ? "text-red-700" : "text-amber-700"}`}>
+          <DialogTitle>
+            {isBlocked ? "장비 검증 실패 — 시작 불가" : "시작 전 확인 — 확인 후 시작 가능"}
+          </DialogTitle>
+          <DialogDescription>
             {isBlocked
               ? "아래 장비 문제를 해결한 후 다시 시도하세요."
               : "장비 경고·시험 전 확인사항을 확인하고 계속 진행할 수 있습니다."}
-          </p>
-        </div>
-
-        <div className="max-h-72 overflow-y-auto overscroll-contain px-5 py-3">
+          </DialogDescription>
+        </DialogHeader>
+        <DialogBody className="grid gap-3">
           {blocked.length > 0 && (
             <ul className="flex flex-col gap-2">
               {blocked.map(c => (
@@ -150,28 +161,18 @@ function ReadinessModal({
               </ul>
             </div>
           )}
-        </div>
-
-        <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
-          <button
-            onClick={onCancel}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            취소
-          </button>
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel} disabled={confirming}>취소</Button>
           {!isBlocked && (
-            <button
-              onClick={onConfirm}
-              disabled={confirming}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-            >
-              {confirming ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+            <Button onClick={onConfirm} disabled={confirming}>
+              {confirming ? <Loader2 className="animate-spin" /> : <Play />}
               확인 후 시작
-            </button>
+            </Button>
           )}
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -413,7 +414,7 @@ export default function MyTasksPage() {
   }
 
   if (loading) return (
-    <div className="flex flex-col gap-4 p-3 md:p-5">
+    <div className="flex flex-col gap-4 p-4 md:p-6">
       {/* 헤더 */}
       <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
         <Skeleton className="h-5 w-24" />
@@ -478,7 +479,7 @@ export default function MyTasksPage() {
 
   if (!linked) {
     return (
-      <div className="p-3 md:p-5">
+      <div className="p-4 md:p-6">
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-6 text-center">
           <AlertTriangle className="mx-auto mb-2 text-amber-500" size={24} />
           <p className="text-sm font-semibold text-amber-800">계정에 시험자(담당자)가 연결되어 있지 않습니다.</p>
@@ -499,51 +500,52 @@ export default function MyTasksPage() {
         />
       )}
 
-      <div className="flex flex-col gap-4 p-3 md:p-5">
-        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-          <h1 className="text-base font-bold text-slate-900 sm:text-lg">내 작업</h1>
-          <p className="mt-1 text-xs font-medium text-slate-600">배정된 오더를 시작하고 시험항목별로 진행 상황을 기록합니다.</p>
+      <div className="flex min-w-0 flex-1 flex-col gap-4 p-4 md:p-6">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <h1 className="text-xl font-semibold text-foreground">내 작업</h1>
+          <p className="text-sm text-muted-foreground">배정된 오더를 시작하고 시험항목별로 진행 상황을 기록합니다.</p>
         </div>
 
         {msg && (
-          <div className={`rounded-lg border px-3 py-2 text-sm font-medium ${
+          <div className={cn(
+            "rounded-lg border px-3 py-2 text-sm font-medium",
             msgType === "error"
-              ? "border-red-200 bg-red-50 text-red-700"
-              : "border-blue-200 bg-blue-50 text-blue-700"
-          }`}>{msg}</div>
+              ? "border-destructive/20 bg-destructive/10 text-destructive"
+              : "border-primary/20 bg-primary/5 text-foreground",
+          )}>{msg}</div>
         )}
 
         {/* ① 배정완료 · 시작 대기 */}
         <section>
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-1">
-            <h2 className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            <h2 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
               ① 배정완료 · 시작 대기 ({pending.length})
             </h2>
             {pending.length > 0 && (
               <div className="flex items-center gap-2">
-                <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-slate-600">
+                <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-muted-foreground">
                   <input
                     type="checkbox"
                     checked={allSelected}
                     onChange={toggleAll}
                     disabled={bulkBusy}
-                    className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                    className="cb-custom"
                   />
                   전체 선택
                 </label>
-                <button
+                <Button
+                  size="sm"
                   onClick={() => void startSelected()}
                   disabled={selected.size === 0 || bulkBusy || busy !== null}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-blue-600 px-3 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
                 >
-                  {bulkBusy ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+                  {bulkBusy ? <Loader2 className="animate-spin" /> : <Play />}
                   선택 실행 ({selected.size})
-                </button>
+                </Button>
               </div>
             )}
           </div>
           {pending.length === 0 ? (
-            <p className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-400">대기 중인 오더가 없습니다.</p>
+            <Card className="items-center py-6 text-center text-sm text-muted-foreground">대기 중인 오더가 없습니다.</Card>
           ) : (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {pending.map(o => {
@@ -551,7 +553,7 @@ export default function MyTasksPage() {
                 const isBusy = busy === o.id
                 const isChecked = selected.has(o.id)
                 return (
-                  <div key={o.id} className={`rounded-xl border bg-white p-3 shadow-sm transition-colors ${isChecked ? "border-blue-400 ring-1 ring-blue-300" : "border-slate-200"}`}>
+                  <Card key={o.id} className={cn("gap-0 px-3 py-3", isChecked && "ring-2 ring-primary/30")}>
                     <div className="flex items-start gap-2">
                       <input
                         type="checkbox"
@@ -559,36 +561,36 @@ export default function MyTasksPage() {
                         onChange={() => toggleOne(o.id)}
                         disabled={bulkBusy}
                         aria-label={`${o.productName} ${o.batchNo} 선택`}
-                        className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                        className="cb-custom mt-0.5"
                       />
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-slate-900">{o.productName}</p>
-                        <p className="font-mono text-xs text-slate-500">{o.batchNo}</p>
+                        <p className="truncate text-sm font-semibold text-foreground">{o.productName}</p>
+                        <p className="font-mono text-xs text-muted-foreground">{o.batchNo}</p>
                       </div>
-                      {o.isUrgent && <span className="shrink-0 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700">긴급</span>}
+                      {o.isUrgent && <Badge variant="destructive">긴급</Badge>}
                     </div>
-                    <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
+                    <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
                       <span>{o.method}</span>
                       {o.dueDate && (
                         <span>
                           · 완료예정 {o.dueDate}
                           {dd != null && dd <= 7 && (
-                            <span className="ml-1 font-semibold text-red-600">
+                            <span className="ml-1 font-semibold text-destructive">
                               D{dd >= 0 ? `-${dd}` : `+${-dd}`}
                             </span>
                           )}
                         </span>
                       )}
                     </div>
-                    <button
+                    <Button
+                      className="mt-3 w-full"
                       onClick={() => start(o.id)}
                       disabled={busy !== null || bulkBusy}
-                      className="mt-3 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                     >
-                      {isBusy ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} />}
+                      {isBusy ? <Loader2 className="animate-spin" /> : <Play />}
                       작업 시작
-                    </button>
-                  </div>
+                    </Button>
+                  </Card>
                 )
               })}
             </div>
@@ -598,18 +600,18 @@ export default function MyTasksPage() {
         {/* ② 진행 중 */}
         <section>
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-1">
-            <h2 className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            <h2 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
               ② 진행 중 ({activeJobs.length})
             </h2>
             {activeJobs.length > 0 && (
               <div className="flex items-center gap-2">
-                <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-slate-600">
+                <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-muted-foreground">
                   <input
                     type="checkbox"
                     checked={allJobsSelected}
                     onChange={toggleAllJobs}
                     disabled={jobBulkBusy}
-                    className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                    className="cb-custom"
                   />
                   전체 선택
                 </label>
@@ -621,19 +623,19 @@ export default function MyTasksPage() {
                     {STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                <button
+                <Button
+                  size="sm"
                   onClick={() => void applyBulkStatus()}
                   disabled={selectedJobs.size === 0 || jobBulkBusy}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-blue-600 px-3 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
                 >
-                  {jobBulkBusy ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                  {jobBulkBusy ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}
                   선택 적용 ({selectedJobs.size})
-                </button>
+                </Button>
               </div>
             )}
           </div>
           {activeJobs.length === 0 ? (
-            <p className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-400">진행 중인 작업이 없습니다.</p>
+            <Card className="items-center py-6 text-center text-sm text-muted-foreground">진행 중인 작업이 없습니다.</Card>
           ) : (
             <div className="flex flex-col gap-3">
               {activeJobs.map(job => renderJobCard(job, true))}
@@ -643,11 +645,11 @@ export default function MyTasksPage() {
 
         {/* ③ 종료 (완료) */}
         <section>
-          <h2 className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          <h2 className="mb-2 px-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
             ③ 종료 · 완료 ({doneJobs.length})
           </h2>
           {doneJobs.length === 0 ? (
-            <p className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-400">완료된 작업이 없습니다.</p>
+            <Card className="items-center py-6 text-center text-sm text-muted-foreground">완료된 작업이 없습니다.</Card>
           ) : (
             <div className="flex flex-col gap-3">
               {doneJobs.map(job => renderJobCard(job))}
@@ -663,9 +665,8 @@ export default function MyTasksPage() {
     const dd = dDay(job.dueDate)
     const isDone = job.status === "완료"
     return (
-      <div key={job.id} className={`rounded-xl border shadow-sm ${isDone ? "border-emerald-200 bg-emerald-50/30" : "border-slate-200 bg-white"}`}>
-        {/* 헤더 */}
-        <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 md:flex-row md:items-center md:justify-between">
+      <Card key={job.id} className={cn("gap-0 overflow-hidden py-0", isDone && "border-emerald-200")}>
+        <div className="flex flex-col gap-3 border-b px-4 py-3 md:flex-row md:items-center md:justify-between">
           <div className="flex min-w-0 items-start gap-2">
             {selectable && (
               <input
@@ -674,27 +675,27 @@ export default function MyTasksPage() {
                 onChange={() => toggleJob(job.id)}
                 disabled={jobBulkBusy}
                 aria-label={`QC ${job.qcNo} 선택`}
-                className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                className="cb-custom mt-1"
               />
             )}
             <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="font-mono text-sm font-bold text-blue-700">QC {job.qcNo}</span>
-              {job.isUrgent && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700">긴급</span>}
+              <span className="font-mono text-sm font-semibold text-primary">QC {job.qcNo}</span>
+              {job.isUrgent && <Badge variant="destructive">긴급</Badge>}
               {dd != null && dd <= 7 && !isDone && (
-                <span className="inline-flex items-center gap-0.5 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700">
+                <Badge variant="outline" className="gap-1 border-destructive/30 text-destructive">
                   <Clock size={10} />D{dd >= 0 ? `-${dd}` : `+${-dd}`}
-                </span>
+                </Badge>
               )}
             </div>
-            <p className="mt-0.5 truncate text-sm font-semibold text-slate-900">
-              {job.productName} <span className="font-mono text-xs font-normal text-slate-500">/ {job.batchNo}</span>
+            <p className="mt-0.5 truncate text-sm font-semibold text-foreground">
+              {job.productName} <span className="font-mono text-xs font-normal text-muted-foreground">/ {job.batchNo}</span>
             </p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 md:justify-end">
             <div className="flex shrink-0 items-center gap-1.5">
-              <span className="text-xs text-slate-500">시작</span>
+              <span className="text-xs text-muted-foreground">시작</span>
               <div className="w-32">
                 <DateField
                   size="sm"
@@ -706,7 +707,7 @@ export default function MyTasksPage() {
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
-              <span className="text-xs text-slate-500">종료</span>
+              <span className="text-xs text-muted-foreground">종료</span>
               <div className="w-32">
                 <DateField
                   size="sm"
@@ -734,10 +735,10 @@ export default function MyTasksPage() {
         {/* 항목 체크리스트 */}
         <div className="px-4 py-3">
           <div className="mb-2 flex items-center justify-between text-xs">
-            <span className="font-semibold text-slate-600">시험항목 진행 {cleared}/{job.items.length}</span>
+            <span className="font-semibold text-muted-foreground">시험항목 진행 {cleared}/{job.items.length}</span>
           </div>
           {job.items.length === 0 ? (
-            <p className="py-2 text-xs text-slate-400">등록된 시험항목이 없습니다. (품목-시험항목 매핑 확인 필요)</p>
+            <p className="py-2 text-xs text-muted-foreground">등록된 시험항목이 없습니다. (품목-시험항목 매핑 확인 필요)</p>
           ) : (
             <ul className="flex flex-col gap-1">
               {job.items.map(it => {
@@ -745,13 +746,16 @@ export default function MyTasksPage() {
                 return (
                   <li
                     key={it.id}
-                    className={`flex items-center justify-between rounded-lg border px-3 py-2 ${done ? "border-emerald-200 bg-emerald-50/60" : "border-slate-200 bg-white"}`}
+                    className={cn(
+                      "flex items-center justify-between rounded-lg border px-3 py-2",
+                      done && "border-emerald-200 bg-emerald-50/60",
+                    )}
                   >
                     <div className="flex items-center gap-2">
                       {done
                         ? <CheckCircle2 size={16} className="text-emerald-500" />
-                        : <Circle size={16} className="text-slate-300" />}
-                      <span className={`text-sm ${done ? "font-medium text-emerald-800" : "text-slate-700"}`}>
+                        : <Circle size={16} className="text-muted-foreground" />}
+                      <span className={cn("text-sm", done ? "font-medium text-emerald-800" : "text-foreground")}>
                         {it.testItemName}
                       </span>
                     </div>
@@ -762,13 +766,13 @@ export default function MyTasksPage() {
                       </span>
                     ) : (
                       !isDone && (
-                        <button
+                        <Button
+                          size="sm"
                           onClick={() => clearItem(job.id, it.id)}
                           disabled={busy !== null}
-                          className="inline-flex h-7 items-center gap-1 rounded-md bg-blue-600 px-2.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                         >
-                          {busy === it.id ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}완료
-                        </button>
+                          {busy === it.id ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}완료
+                        </Button>
                       )
                     )}
                   </li>
@@ -777,7 +781,7 @@ export default function MyTasksPage() {
             </ul>
           )}
         </div>
-      </div>
+      </Card>
     )
   }
 }

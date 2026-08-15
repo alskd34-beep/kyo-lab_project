@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
-import { useLockBodyScroll } from "@frontend/hooks/use-lock-body-scroll"
-import { ClipboardList, Plus, Pencil, Trash2, X, Loader2, AlertTriangle, AlertCircle, ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react"
+import { ClipboardList, Plus, Pencil, Trash2, Loader2, AlertTriangle, AlertCircle, ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react"
 import { DateField } from "@frontend/components/ui/date-field"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
@@ -17,6 +16,15 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@frontend/components/ui/select"
 import { useConfirmMessage } from "@frontend/components/common/confirm-message"
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@frontend/components/ui/dialog"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -315,29 +323,21 @@ export default function EquipmentMasterPage() {
         )}
       </Card>
 
-      {/* 추가 모달 */}
-      {showAdd && (
+      {(showAdd || editTarget) && (
         <EquipmentModal
-          mode="add"
-          onClose={() => setShowAdd(false)}
-          onSaved={() => {
+          key={editTarget?.id ?? "add"}
+          open
+          mode={editTarget ? "edit" : "add"}
+          initial={editTarget ?? undefined}
+          onClose={() => {
             setShowAdd(false)
-            flash("장비가 등록되었습니다.")
-            void load()
-          }}
-          onError={(m) => flash(m, "error")}
-        />
-      )}
-
-      {/* 수정 모달 */}
-      {editTarget && (
-        <EquipmentModal
-          mode="edit"
-          initial={editTarget}
-          onClose={() => setEditTarget(null)}
-          onSaved={() => {
             setEditTarget(null)
-            flash("수정되었습니다.")
+          }}
+          onSaved={() => {
+            const wasEdit = !!editTarget
+            setShowAdd(false)
+            setEditTarget(null)
+            flash(wasEdit ? "수정되었습니다." : "장비가 등록되었습니다.")
             void load()
           }}
           onError={(m) => flash(m, "error")}
@@ -350,6 +350,7 @@ export default function EquipmentMasterPage() {
 // ─── 장비 등록/수정 모달 ──────────────────────────────────────────────────────
 
 interface ModalProps {
+  open: boolean
   mode: "add" | "edit"
   initial?: EquipmentMasterRow
   onClose: () => void
@@ -359,8 +360,7 @@ interface ModalProps {
 
 const inputCls = "h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
 
-function EquipmentModal({ mode, initial, onClose, onSaved, onError }: ModalProps) {
-  useLockBodyScroll()
+function EquipmentModal({ open, mode, initial, onClose, onSaved, onError }: ModalProps) {
   const [code,               setCode]               = useState(initial?.code ?? "")
   const [name,               setName]               = useState(initial?.name ?? "")
   const [category,           setCategory]           = useState(initial?.category ?? "")
@@ -416,28 +416,15 @@ function EquipmentModal({ mode, initial, onClose, onSaved, onError }: ModalProps
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-xl border bg-card shadow-xl"
-        onClick={e => e.stopPropagation()}
-      >
-        {/* 모달 헤더 */}
-        <div className="flex items-center justify-between border-b px-4 py-3">
-          <h2 className="text-sm font-bold text-foreground">
-            {mode === "add" ? "장비 등록" : "장비 수정"}
-          </h2>
-          <button
-            onClick={onClose}
-            className="rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
-
-        <div className="flex flex-col gap-4 px-4 py-4">
+    <Dialog open={open} onOpenChange={(next) => { if (!next && !saving) onClose() }}>
+      <DialogContent size="lg">
+        <DialogHeader>
+          <DialogTitle>{mode === "add" ? "장비 등록" : "장비 수정"}</DialogTitle>
+          <DialogDescription>
+            장비 코드와 검교정 정보를 입력합니다.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogBody className="grid gap-4">
           {/* 코드 / 장비명 */}
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -526,17 +513,15 @@ function EquipmentModal({ mode, initial, onClose, onSaved, onError }: ModalProps
               className={`${inputCls} py-2 resize-none`}
             />
           </div>
-        </div>
-
-        {/* 버튼 */}
-        <div className="flex justify-end gap-2 border-t px-4 py-3">
-          <Button variant="outline" size="lg" onClick={onClose}>취소</Button>
-          <Button size="lg" onClick={() => void submit()} disabled={saving}>
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>취소</Button>
+          <Button onClick={() => void submit()} disabled={saving}>
             {saving && <Loader2 className="animate-spin" />}
             {mode === "add" ? "등록" : "저장"}
           </Button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

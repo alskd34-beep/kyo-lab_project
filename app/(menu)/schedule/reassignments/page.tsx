@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
 import { cn } from "@frontend/lib/utils"
 import { Badge } from "@frontend/components/ui/badge"
+import { Button } from "@frontend/components/ui/button"
+import { DateRangeField } from "@frontend/components/ui/date-range-field"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@frontend/components/ui/table"
 import {
@@ -237,30 +239,25 @@ export default function ReassignmentsPage() {
             ))}
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 text-xs font-semibold text-slate-600">
-              <CalendarDays className="size-3.5" />
-              조회기간
-            </span>
-            <input
-              type="date"
-              value={fromDate}
-              onChange={e => setFromDate(e.target.value)}
-              className="h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm text-slate-900 focus-visible:border-blue-600 focus-visible:ring-2 focus-visible:ring-blue-200 focus-visible:outline-none"
-            />
-            <span className="text-xs text-slate-400">~</span>
-            <input
-              type="date"
-              value={toDate}
-              onChange={e => setToDate(e.target.value)}
-              className="h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm text-slate-900 focus-visible:border-blue-600 focus-visible:ring-2 focus-visible:ring-blue-200 focus-visible:outline-none"
-            />
-            <button
+            <div className="min-w-[280px] flex-1">
+              <DateRangeField
+                label="조회기간"
+                startDate={fromDate}
+                endDate={toDate}
+                onChange={(start, end) => {
+                  setFromDate(start)
+                  setToDate(end)
+                }}
+              />
+            </div>
+            <Button
               type="button"
+              variant="outline"
               onClick={() => { setFromDate(daysAgoDate(30)); setToDate(todayDate()) }}
-              className="h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
             >
+              <CalendarDays />
               최근 30일
-            </button>
+            </Button>
           </div>
         </div>
         <div className="relative w-full lg:w-80">

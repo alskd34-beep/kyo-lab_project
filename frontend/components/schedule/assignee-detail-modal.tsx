@@ -17,8 +17,13 @@ import {
 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@frontend/components/ui/select'
 import { cn } from "@frontend/lib/utils"
-import { useLockBodyScroll } from "@frontend/hooks/use-lock-body-scroll"
 import { TesterAvatar } from "@frontend/lib/tester-profiles"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@frontend/components/ui/dialog"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface OrderRow {
@@ -79,7 +84,6 @@ const maxDue = (rows: OrderRow[]) => rows.map(r => r.dueDate).filter(Boolean).so
 
 // ─── Component ──────────────────────────────────────────────────────────────────
 export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetail, onReassign, subtitle }: Props) {
-  useLockBodyScroll()
   const [allRows, setAllRows] = useState<OrderRow[]>([])
   const [families, setFamilies] = useState<Family[]>([])
   const [loading, setLoading] = useState(true)
@@ -170,11 +174,11 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
   const toggle = (k: string) => setCollapsed(p => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); return n })
 
   return (
-    <div className="fixed inset-0 z-50 flex bg-slate-900/50 p-3 md:p-6" onClick={onClose}>
-      <div
-        className="flex h-full w-full overflow-hidden rounded-2xl bg-slate-50 shadow-2xl ring-1 ring-slate-200"
-        onClick={e => e.stopPropagation()}
-      >
+    <Dialog open onOpenChange={(next) => { if (!next) onClose() }}>
+      <DialogContent size="full" className="gap-0 overflow-hidden p-0" showCloseButton={false}>
+        <DialogTitle className="sr-only">{testerName} 배정 현황</DialogTitle>
+        <DialogDescription className="sr-only">담당자가 맡은 QC 과제를 계열별로 확인합니다.</DialogDescription>
+        <div className="flex h-full w-full overflow-hidden bg-muted/30">
         {/* ── 좌측: 배정 현황 ─────────────────────────────────────────────── */}
         <div className="flex min-w-0 flex-1 flex-col overflow-y-auto overscroll-contain p-4 md:p-5">
           {/* 헤더 */}
@@ -378,7 +382,8 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
           </div>
         </aside>
       </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 
