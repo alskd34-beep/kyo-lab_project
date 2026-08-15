@@ -12,6 +12,8 @@ import {
   TableHeader,
   TableRow,
 } from '@frontend/components/ui/table'
+import { CellStack } from '@frontend/components/ui/table-cell-stack'
+import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from '@frontend/components/ui/table-sort'
 import { Avatar, AvatarFallback } from '@frontend/components/ui/avatar'
 import { Calendar } from '@frontend/components/ui/calendar'
 import {
@@ -31,8 +33,6 @@ import {
   Pin,
   PinOff,
   X,
-  ChevronDown,
-  ChevronUp,
 } from 'lucide-react'
 
 // ─── Static Data ──────────────────────────────────────────────────────────────
@@ -66,7 +66,43 @@ const AVATAR_COLORS: Record<string, string> = {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type SortField = keyof Pick<TestRow, 'category' | 'type' | 'product' | 'testNo' | 'items' | 'contractor' | 'manager' | 'receiveDate' | 'dueDate' | 'status'>
-type SortDir = 'asc' | 'desc'
+
+const SORT_COLUMNS: SortColumnDef<SortField>[] = [
+  {
+    key: 'product',
+    label: '품목',
+    fields: [
+      { id: 'product', label: '제품명' },
+      { id: 'type', label: '유형' },
+      { id: 'category', label: '구분' },
+    ],
+  },
+  {
+    key: 'test',
+    label: '시험',
+    fields: [
+      { id: 'testNo', label: '시험번호' },
+      { id: 'items', label: '시험항목' },
+    ],
+  },
+  {
+    key: 'owner',
+    label: '담당',
+    fields: [
+      { id: 'manager', label: '담당자' },
+      { id: 'contractor', label: '수탁사' },
+    ],
+  },
+  {
+    key: 'schedule',
+    label: '일정',
+    fields: [
+      { id: 'receiveDate', label: '접수일' },
+      { id: 'dueDate', label: '완료예정일' },
+    ],
+  },
+  sortCol('status', '진행상태'),
+]
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function TestStatusPage() {
@@ -87,7 +123,7 @@ export default function TestStatusPage() {
   const [tableData, setTableData]         = useState<TestRow[]>([])
   const [isLoading, setIsLoading]         = useState(true)
   const [loadError, setLoadError]         = useState<string | null>(null)
-  const [sortField, setSortField]         = useState<SortField | null>(null)
+  const [sortField, setSortField]         = useState<SortField>('dueDate')
   const [sortDir, setSortDir]             = useState<SortDir>('asc')
 
   // ─── Fetch from API — 실제 DB 데이터만 표시한다(데모/목업 폴백 없음) ────────
@@ -144,32 +180,18 @@ export default function TestStatusPage() {
   // 검색·기간 필터는 서버(/api/tests)에서 이미 적용되어 내려온다.
   const filtered = tableData
 
-  const toggleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))
-    } else {
-      setSortField(field)
-      setSortDir('asc')
-    }
+  const pickSort = (field: SortField, dir: SortDir) => {
+    setSortField(field)
+    setSortDir(dir)
   }
 
-  const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortField !== field) return <ChevronDown size={12} className="text-slate-300" />
-    return sortDir === 'asc'
-      ? <ChevronUp size={12} className="text-blue-500" />
-      : <ChevronDown size={12} className="text-blue-500" />
-  }
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- sortField/sortDir/filtered는 렌더 내 값이므로 useMemo 의존성으로 충분
   const sortedData = useMemo(() => {
-    if (!sortField) return filtered
     return [...filtered].sort((a, b) => {
       const av = a[sortField]
       const bv = b[sortField]
       const cmp = av.localeCompare(bv, 'ko')
       return sortDir === 'asc' ? cmp : -cmp
     })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtered, sortField, sortDir])
 
   const kpis = useMemo(() => buildKpis(sortedData), [sortedData])
@@ -425,8 +447,16 @@ export default function TestStatusPage() {
               </div>
 
               {/* Table (desktop) */}
-              <div className="hidden md:block overflow-x-auto">
-              <Table className="min-w-[640px]">
+              <div className="hidden md:block">
+              <Table>
+                <colgroup>
+                  <col className="w-[4%]" />
+                  <col className="w-[26%]" />
+                  <col className="w-[22%]" />
+                  <col className="w-[18%]" />
+                  <col className="w-[16%]" />
+                  <col className="w-[14%]" />
+                </colgroup>
                 <TableHeader>
                   <TableRow className="bg-slate-50/80 hover:bg-transparent border-slate-100">
                     <TableHead className="w-10 px-3">
@@ -437,27 +467,14 @@ export default function TestStatusPage() {
                         className="cb-custom"
                       />
                     </TableHead>
-                    {([
-                      ['구분',      'category'   ],
-                      ['유형',      'type'       ],
-                      ['제품명',    'product'    ],
-                      ['시험번호',  'testNo'     ],
-                      ['시험항목',  'items'      ],
-                      ['수탁사',    'contractor' ],
-                      ['담당자',    'manager'    ],
-                      ['접수일',    'receiveDate'],
-                      ['완료예정일','dueDate'    ],
-                      ['진행상태',  'status'     ],
-                    ] as [string, SortField][]).map(([label, field]) => (
-                      <TableHead
-                        key={field}
-                        className="px-3 text-muted-foreground font-semibold cursor-pointer select-none"
-                        onClick={() => toggleSort(field)}
-                      >
-                        <span className="inline-flex items-center gap-0.5">
-                          {label}
-                          <SortIcon field={field} />
-                        </span>
+                    {SORT_COLUMNS.map((col) => (
+                      <TableHead key={col.key} className="px-3 py-2">
+                        <SortColumnHeader
+                          col={col}
+                          sortField={sortField}
+                          sortDir={sortDir}
+                          onPick={pickSort}
+                        />
                       </TableHead>
                     ))}
                   </TableRow>
@@ -465,7 +482,7 @@ export default function TestStatusPage() {
                 <TableBody>
                   {(isLoading || sortedData.length === 0) && (
                     <TableRow className="hover:bg-transparent border-slate-100">
-                      <TableCell colSpan={11} className="py-14 text-center text-sm text-slate-500">
+                      <TableCell colSpan={6} className="py-14 text-center text-sm text-slate-500">
                         {isLoading
                           ? '불러오는 중…'
                           : loadError
@@ -486,7 +503,7 @@ export default function TestStatusPage() {
                           isSelected ? 'bg-blue-50/60' : 'hover:bg-slate-50/70'
                         }`}
                       >
-                        <TableCell className="px-3 py-2.5">
+                        <TableCell className="px-3 py-2">
                           <input
                             type="checkbox"
                             checked={isSelected}
@@ -495,35 +512,47 @@ export default function TestStatusPage() {
                             className="cb-custom"
                           />
                         </TableCell>
-                        <TableCell className="px-3 py-2.5">
-                          <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium ${
-                            row.category === '완제품' ? 'bg-slate-100 text-slate-600' : 'bg-sky-50 text-sky-700'
-                          }`}>
-                            {row.category}
-                          </span>
+                        <TableCell className="px-3 py-2">
+                          <CellStack
+                            primary={row.product}
+                            secondary={`${row.category} · ${row.type}`}
+                            primaryClass="font-medium text-foreground"
+                            title={`${row.product} / ${row.category} / ${row.type}`}
+                          />
                         </TableCell>
-                        <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">{row.type}</TableCell>
-                        <TableCell className="px-3 py-2.5">
-                          <span className="text-sm font-medium text-foreground">{row.product}</span>
+                        <TableCell className="px-3 py-2">
+                          <CellStack
+                            primary={row.testNo}
+                            secondary={row.items}
+                            primaryClass="font-mono text-xs text-foreground"
+                            title={`${row.testNo} / ${row.items}`}
+                          />
                         </TableCell>
-                        <TableCell className="px-3 py-2.5">
-                          <span className="font-mono text-xs text-muted-foreground">{row.testNo}</span>
+                        <TableCell className="px-3 py-2">
+                          <CellStack
+                            primary={
+                              <span className="flex min-w-0 items-center gap-1.5">
+                                <Avatar className="h-5 w-5 shrink-0">
+                                  <AvatarFallback className={`text-[10px] font-bold text-white ${AVATAR_COLORS[row.managerInit] ?? 'bg-slate-400'}`}>
+                                    {row.managerInit}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <span className="truncate">{row.manager}</span>
+                              </span>
+                            }
+                            secondary={row.contractor}
+                            title={`${row.manager} / ${row.contractor}`}
+                          />
                         </TableCell>
-                        <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">{row.items}</TableCell>
-                        <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">{row.contractor}</TableCell>
-                        <TableCell className="px-3 py-2.5">
-                          <div className="flex items-center gap-1.5">
-                            <Avatar className="h-6 w-6 shrink-0">
-                              <AvatarFallback className={`text-[10px] font-bold text-white ${AVATAR_COLORS[row.managerInit] ?? 'bg-slate-400'}`}>
-                                {row.managerInit}
-                              </AvatarFallback>
-                            </Avatar>
-                            <span className="text-xs text-muted-foreground">{row.manager}</span>
-                          </div>
+                        <TableCell className="px-3 py-2">
+                          <CellStack
+                            primary={row.receiveDate}
+                            secondary={`완료 ${row.dueDate}`}
+                            primaryClass="font-mono text-xs text-foreground"
+                            title={`${row.receiveDate} / ${row.dueDate}`}
+                          />
                         </TableCell>
-                        <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{row.receiveDate}</TableCell>
-                        <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{row.dueDate}</TableCell>
-                        <TableCell className="px-3 py-2.5">
+                        <TableCell className="px-3 py-2">
                           <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${status.cls}`}>
                             {status.label}
                           </span>

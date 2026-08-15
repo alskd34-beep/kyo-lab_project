@@ -16,6 +16,8 @@ import {
   TableHeader,
   TableRow,
 } from '@frontend/components/ui/table'
+import { CellStack } from '@frontend/components/ui/table-cell-stack'
+import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from '@frontend/components/ui/table-sort'
 import { Avatar, AvatarFallback } from '@frontend/components/ui/avatar'
 import { Calendar } from '@frontend/components/ui/calendar'
 import {
@@ -35,8 +37,6 @@ import {
   Pin,
   PinOff,
   X,
-  ChevronDown,
-  ChevronUp,
 } from 'lucide-react'
 
 // ─── Static Data ──────────────────────────────────────────────────────────────
@@ -76,6 +76,45 @@ const AVATAR_COLORS: Record<string, string> = {
   최: 'bg-amber-500', 정: 'bg-rose-500',
 }
 
+type SortField = 'category' | 'type' | 'product' | 'testNo' | 'items' | 'contractor' | 'manager' | 'receiveDate' | 'dueDate' | 'status'
+
+const SORT_COLUMNS: SortColumnDef<SortField>[] = [
+  {
+    key: 'product',
+    label: '품목',
+    fields: [
+      { id: 'product', label: '제품명' },
+      { id: 'type', label: '유형' },
+      { id: 'category', label: '구분' },
+    ],
+  },
+  {
+    key: 'test',
+    label: '시험',
+    fields: [
+      { id: 'testNo', label: '시험번호' },
+      { id: 'items', label: '시험항목' },
+    ],
+  },
+  {
+    key: 'owner',
+    label: '담당',
+    fields: [
+      { id: 'manager', label: '담당자' },
+      { id: 'contractor', label: '수탁사' },
+    ],
+  },
+  {
+    key: 'schedule',
+    label: '일정',
+    fields: [
+      { id: 'receiveDate', label: '접수일' },
+      { id: 'dueDate', label: '완료예정일' },
+    ],
+  },
+  sortCol('status', '진행상태'),
+]
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function QCDashboard() {
   const [activeTab, setActiveTab]         = useState<string>('시험현황')
@@ -86,8 +125,8 @@ export default function QCDashboard() {
   const [searchValue, setSearchValue]     = useState('')
   const [dateRange, setDateRange]         = useState<DateRange | undefined>(undefined)
   const [isHydrated, setIsHydrated]       = useState(false)
-  const [sortField, setSortField]         = useState<keyof TestRow | null>(null)
-  const [sortDir, setSortDir]             = useState<'asc' | 'desc'>('asc')
+  const [sortField, setSortField]         = useState<SortField>('dueDate')
+  const [sortDir, setSortDir]             = useState<SortDir>('asc')
 
   useEffect(() => {
     // 서버·클라이언트 타임존 차이로 인한 하이드레이션 불일치를 피하려 마운트 후(클라이언트)에만 기본 기간 설정
@@ -166,24 +205,12 @@ export default function QCDashboard() {
       )
     : tableData
 
-  const toggleSort = (field: keyof TestRow) => {
-    if (sortField === field) {
-      setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))
-    } else {
-      setSortField(field)
-      setSortDir('asc')
-    }
-  }
-
-  const SortIcon = ({ field }: { field: keyof TestRow }) => {
-    if (sortField !== field) return <span className="ml-1 opacity-40"><ChevronDown size={11} /></span>
-    return sortDir === 'asc'
-      ? <ChevronUp size={11} className="ml-1 text-primary" />
-      : <ChevronDown size={11} className="ml-1 text-primary" />
+  const pickSort = (field: SortField, dir: SortDir) => {
+    setSortField(field)
+    setSortDir(dir)
   }
 
   const sortedData = useMemo(() => {
-    if (!sortField) return filtered
     return [...filtered].sort((a, b) => {
       const av = String(a[sortField] ?? '')
       const bv = String(b[sortField] ?? '')
@@ -363,9 +390,15 @@ export default function QCDashboard() {
                 </div>
               </div>
 
-              {/* Table */}
-              <div className="overflow-x-auto">
-              <Table className="min-w-[640px]">
+              <Table>
+                <colgroup>
+                  <col className="w-[4%]" />
+                  <col className="w-[26%]" />
+                  <col className="w-[22%]" />
+                  <col className="w-[18%]" />
+                  <col className="w-[16%]" />
+                  <col className="w-[14%]" />
+                </colgroup>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
                     <TableHead className="w-10 px-3">
@@ -376,24 +409,14 @@ export default function QCDashboard() {
                         className="cb-custom"
                       />
                     </TableHead>
-                    {([
-                      ['구분',     'category'   ],
-                      ['유형',     'type'       ],
-                      ['제품명',   'product'    ],
-                      ['시험번호', 'testNo'     ],
-                      ['시험항목', 'items'      ],
-                      ['수탁사',   'contractor' ],
-                      ['담당자',   'manager'    ],
-                      ['접수일',   'receiveDate'],
-                      ['완료예정일','dueDate'   ],
-                      ['진행상태', 'status'     ],
-                    ] as [string, keyof TestRow][]).map(([label, field]) => (
-                      <TableHead
-                        key={field}
-                        onClick={() => toggleSort(field)}
-                        className="px-3 text-muted-foreground cursor-pointer select-none hover:text-foreground"
-                      >
-                        {label}<SortIcon field={field} />
+                    {SORT_COLUMNS.map((col) => (
+                      <TableHead key={col.key} className="px-3 py-2">
+                        <SortColumnHeader
+                          col={col}
+                          sortField={sortField}
+                          sortDir={sortDir}
+                          onPick={pickSort}
+                        />
                       </TableHead>
                     ))}
                   </TableRow>
@@ -412,7 +435,7 @@ export default function QCDashboard() {
                           isSelected ? 'bg-primary/5' : 'hover:bg-muted/40',
                         )}
                       >
-                        <TableCell className="px-3 py-2.5">
+                        <TableCell className="px-3 py-2">
                           <input
                             type="checkbox"
                             checked={isSelected}
@@ -421,31 +444,47 @@ export default function QCDashboard() {
                             className="cb-custom"
                           />
                         </TableCell>
-                        <TableCell className="px-3 py-2.5">
-                          <Badge variant="outline">{row.category}</Badge>
+                        <TableCell className="px-3 py-2">
+                          <CellStack
+                            primary={row.product}
+                            secondary={`${row.category} · ${row.type}`}
+                            primaryClass="font-medium text-foreground"
+                            title={`${row.product} / ${row.category} / ${row.type}`}
+                          />
                         </TableCell>
-                        <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">{row.type}</TableCell>
-                        <TableCell className="px-3 py-2.5">
-                          <span className="font-medium text-foreground">{row.product}</span>
+                        <TableCell className="px-3 py-2">
+                          <CellStack
+                            primary={row.testNo}
+                            secondary={row.items}
+                            primaryClass="font-mono text-xs text-foreground"
+                            title={`${row.testNo} / ${row.items}`}
+                          />
                         </TableCell>
-                        <TableCell className="px-3 py-2.5">
-                          <span className="font-mono text-xs text-muted-foreground">{row.testNo}</span>
+                        <TableCell className="px-3 py-2">
+                          <CellStack
+                            primary={
+                              <span className="flex min-w-0 items-center gap-1.5">
+                                <Avatar className="h-5 w-5 shrink-0">
+                                  <AvatarFallback className={`text-[10px] font-bold text-white ${AVATAR_COLORS[row.managerInit] ?? 'bg-slate-400'}`}>
+                                    {row.managerInit}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <span className="truncate">{row.manager}</span>
+                              </span>
+                            }
+                            secondary={row.contractor}
+                            title={`${row.manager} / ${row.contractor}`}
+                          />
                         </TableCell>
-                        <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">{row.items}</TableCell>
-                        <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">{row.contractor}</TableCell>
-                        <TableCell className="px-3 py-2.5">
-                          <div className="flex items-center gap-1.5">
-                            <Avatar className="h-6 w-6 shrink-0">
-                              <AvatarFallback className={`text-[10px] font-bold text-white ${AVATAR_COLORS[row.managerInit] ?? 'bg-slate-400'}`}>
-                                {row.managerInit}
-                              </AvatarFallback>
-                            </Avatar>
-                            <span className="text-xs text-muted-foreground">{row.manager}</span>
-                          </div>
+                        <TableCell className="px-3 py-2">
+                          <CellStack
+                            primary={row.receiveDate}
+                            secondary={`완료 ${row.dueDate}`}
+                            primaryClass="font-mono text-xs text-foreground"
+                            title={`${row.receiveDate} / ${row.dueDate}`}
+                          />
                         </TableCell>
-                        <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{row.receiveDate}</TableCell>
-                        <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{row.dueDate}</TableCell>
-                        <TableCell className="px-3 py-2.5">
+                        <TableCell className="px-3 py-2">
                           <Badge variant="outline" className="gap-1.5">
                             <span className={cn('size-1.5 rounded-full', status.dot)} />
                             {status.label}
@@ -456,7 +495,6 @@ export default function QCDashboard() {
                   })}
                 </TableBody>
               </Table>
-              </div>
 
               {/* Footer */}
               <div className="flex items-center justify-between border-t bg-muted/30 px-4 py-2.5">

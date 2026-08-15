@@ -144,19 +144,19 @@ export default function ProdStatusPage() {
   ]
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-4 p-4 md:p-6">
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden p-4 md:p-6">
       {/* KPI */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid shrink-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         {kpiCards.map((card) => {
           const Icon = card.icon
           return (
-            <Card key={card.label} className="gap-1 px-4 py-4">
-              <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                <Icon className="size-3.5" />{card.label}
+            <Card key={card.label} className="gap-0.5 px-3 py-2">
+              <span className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
+                <Icon className="size-3" />{card.label}
               </span>
               {loading
-                ? <Skeleton className="h-8 w-12" />
-                : <span className={cn("text-2xl font-semibold tabular-nums", card.valueCls)}>{card.value}</span>}
+                ? <Skeleton className="h-5 w-10" />
+                : <span className={cn("text-lg font-semibold tabular-nums", card.valueCls)}>{card.value}</span>}
             </Card>
           )
         })}
@@ -217,7 +217,7 @@ export default function ProdStatusPage() {
 
       {/* 작업자 카드 그리드 */}
       {loading ? (
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
+        <div className="grid min-h-0 flex-1 grid-cols-1 content-start gap-3 overflow-y-auto lg:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
             <Card key={i} className="gap-3 px-4 py-4">
               <div className="flex items-center justify-between">
@@ -234,7 +234,7 @@ export default function ProdStatusPage() {
           {onlyWorking ? "진행 중이거나 대기 중인 작업이 있는 작업자가 없습니다." : "작업자가 없습니다."}
         </Card>
       ) : !error ? (
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
+        <div className="grid min-h-0 flex-1 grid-cols-1 content-start gap-3 overflow-y-auto lg:grid-cols-2 xl:grid-cols-3">
           {workers.map((w) => (
             <Card key={w.testerId} className="gap-0 overflow-hidden py-0">
               {/* 카드 헤더 */}

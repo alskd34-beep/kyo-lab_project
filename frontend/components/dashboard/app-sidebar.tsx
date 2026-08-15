@@ -20,6 +20,7 @@ import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarHeader, SidebarMenu, SidebarMenuBadge, SidebarMenuButton,
   SidebarMenuItem, SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem,
+  useSidebar,
 } from "@frontend/components/ui/sidebar"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -188,7 +189,17 @@ const PATH_MAP: Record<string, string> = {
 export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname() ?? ""
   const { user, logout } = useAuth()
+  const { isMobile, setOpenMobile } = useSidebar()
   const isAdmin = user?.role === "admin"
+
+  /**
+   * 반응형(모바일)에서는 사이드바가 Sheet 로 덮여 있어, 메뉴를 골라 이동해도
+   * 열린 채로 화면을 가린다. 이동이 일어나는 링크에서만 닫는다.
+   * (하위 메뉴를 펼치는 CollapsibleTrigger 는 이동이 아니므로 제외)
+   */
+  const closeOnMobile = () => {
+    if (isMobile) setOpenMobile(false)
+  }
   const name = user?.displayName ?? user?.username ?? "게스트"
   const initial = name.charAt(0)
 
@@ -215,7 +226,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild className="data-[slot=sidebar-menu-button]:!p-1.5">
-              <Link href="/home">
+              <Link href="/home" onClick={closeOnMobile}>
                 <span className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">KD</span>
                 <div className="grid flex-1 text-left leading-tight">
                   <span className="truncate font-bold">QC 관리</span>
@@ -240,7 +251,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                     return (
                       <SidebarMenuItem key={item.id}>
                         <SidebarMenuButton asChild tooltip={item.label} isActive={active}>
-                          <Link href={PATH_MAP[item.id] ?? "#"}>
+                          <Link href={PATH_MAP[item.id] ?? "#"} onClick={closeOnMobile}>
                             <Icon />
                             <span>{item.label}</span>
                           </Link>
@@ -267,7 +278,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                               return (
                                 <SidebarMenuSubItem key={sub.id}>
                                   <SidebarMenuSubButton asChild isActive={subIsActive}>
-                                    <Link href={subHref(sub.id)}>
+                                    <Link href={subHref(sub.id)} onClick={closeOnMobile}>
                                       {/* 개발 완료 표시: 완료(live)=초록 점, 미완료=회색 점 */}
                                       <span
                                         title={sub.live ? "개발 완료" : "개발 예정"}
@@ -320,11 +331,11 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
               </DropdownMenuTrigger>
               <DropdownMenuContent side="right" align="end" sideOffset={8} className="min-w-56 rounded-lg">
                 <DropdownMenuItem asChild>
-                  <Link href="/settings/sys-settings">비밀번호 변경</Link>
+                  <Link href="/settings/sys-settings" onClick={closeOnMobile}>비밀번호 변경</Link>
                 </DropdownMenuItem>
                 {isAdmin && (
                   <DropdownMenuItem asChild>
-                    <Link href="/settings/users">사용자 관리</Link>
+                    <Link href="/settings/users" onClick={closeOnMobile}>사용자 관리</Link>
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuSeparator />

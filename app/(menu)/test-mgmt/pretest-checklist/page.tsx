@@ -8,9 +8,6 @@ import {
   Trash2,
   PackageOpen,
   User as UserIcon,
-  ChevronDown,
-  ChevronUp,
-  ChevronsUpDown,
   Copy,
   X,
 } from "lucide-react"
@@ -21,6 +18,8 @@ import { Badge } from "@frontend/components/ui/badge"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
 import { Input } from "@frontend/components/ui/input"
+import { CellStack } from "@frontend/components/ui/table-cell-stack"
+import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from "@frontend/components/ui/table-sort"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@frontend/components/ui/table"
@@ -45,6 +44,29 @@ interface NoteRow {
   createdByName: string | null
   createdAt: string
 }
+
+type NoteSortField = "occurredAt" | "content" | "remark" | "issueLot" | "createdByName" | "createdAt"
+
+const NOTE_SORT_COLUMNS: SortColumnDef<NoteSortField>[] = [
+  sortCol("occurredAt", "일시"),
+  {
+    key: "note",
+    label: "확인사항",
+    fields: [
+      { id: "content", label: "확인사항" },
+      { id: "remark", label: "특이사항" },
+    ],
+  },
+  sortCol("issueLot", "이슈 로트"),
+  {
+    key: "author",
+    label: "작성",
+    fields: [
+      { id: "createdByName", label: "작성자" },
+      { id: "createdAt", label: "작성시각" },
+    ],
+  },
+]
 
 const fmtDT = (iso: string | null) =>
   iso ? iso.slice(0, 16).replace("T", " ") : "—"
@@ -75,6 +97,21 @@ function brandToken(name: string): string {
 }
 
 /** 두 품목명이 유사(같은 브랜드 계열)한지 판정 */
+/** 실패 응답을 사용자에게 보여줄 한국어 메시지로 변환 (원문 JSON 노출 방지) */
+async function resError(res: Response, fallback = "요청에 실패했습니다."): Promise<string> {
+  if (res.status === 401) return "세션이 만료되었습니다. 다시 로그인해 주세요."
+  const text = await res.text().catch(() => "")
+  try {
+    const body = JSON.parse(text) as { error?: string }
+    if (body.error) return body.error
+  } catch {
+    /* JSON이 아니면 원문을 그대로 사용 */
+  }
+  return text || fallback
+}
+
+const msgOf = (e: unknown) => (e instanceof Error ? e.message : String(e))
+
 function isSimilarName(a: string, b: string): boolean {
   const ta = brandToken(a)
   const tb = brandToken(b)
@@ -99,8 +136,13 @@ export default function PretestChecklistPage() {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pickerSearch, setPickerSearch] = useState("")
   const [similarOnly, setSimilarOnly] = useState(true)
-  const [sortField, setSortField] = useState<keyof NoteRow>("occurredAt")
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
+  const [sortField, setSortField] = useState<NoteSortField>("occurredAt")
+  const [sortDir, setSortDir] = useState<SortDir>("desc")
+
+  const pickSort = (field: NoteSortField, dir: SortDir) => {
+    setSortField(field)
+    setSortDir(dir)
+  }
 
   // 입력 폼 (발생 일시는 등록 시점으로 자동 기록)
   const [content, setContent] = useState("")
@@ -122,22 +164,22 @@ export default function PretestChecklistPage() {
   async function loadProducts() {
     try {
       const res = await fetch("/api/products")
-      if (!res.ok) throw new Error(await res.text())
+      if (!res.ok) throw new Error(await resError(res, "품목 목록을 불러오지 못했습니다."))
       const data = (await res.json()) as { rows: ProductRow[] }
       setProducts(data.rows)
     } catch (e) {
-      setError(String(e))
+      setError(msgOf(e))
     }
   }
 
   async function loadNotes(productId: string) {
     try {
       const res = await fetch(`/api/product-pretest-notes?productId=${productId}`)
-      if (!res.ok) throw new Error(await res.text())
+      if (!res.ok) throw new Error(await resError(res, "확인사항을 불러오지 못했습니다."))
       const data = (await res.json()) as { rows: NoteRow[] }
       setNotes(data.rows)
     } catch (e) {
-      setError(String(e))
+      setError(msgOf(e))
     }
   }
 
@@ -203,23 +245,6 @@ export default function PretestChecklistPage() {
     })
   }
 
-  function toggleSort(field: keyof NoteRow) {
-    if (sortField === field) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"))
-    } else {
-      setSortField(field)
-      setSortDir("asc")
-    }
-  }
-
-  function SortIcon({ field }: { field: keyof NoteRow }) {
-    if (sortField !== field)
-      return <ChevronsUpDown className="ml-1 inline size-3 opacity-40" />
-    return sortDir === "asc"
-      ? <ChevronUp className="ml-1 inline size-3" />
-      : <ChevronDown className="ml-1 inline size-3" />
-  }
-
   function resetForm() {
     setContent("")
     setRemark("")
@@ -245,10 +270,7 @@ export default function PretestChecklistPage() {
           issueLot: issueLot.trim() || null,
         }),
       })
-      if (!res.ok) {
-        const d = await res.json()
-        throw new Error(d.error ?? "추가 실패")
-      }
+      if (!res.ok) throw new Error(await resError(res, "확인사항 등록에 실패했습니다."))
       const d = (await res.json()) as { count?: number }
       const count = d.count ?? productIds.length
       setOkMsg(
@@ -260,7 +282,7 @@ export default function PretestChecklistPage() {
       setExtraIds(new Set())
       await loadNotes(selected.id)
     } catch (e) {
-      setError(String(e))
+      setError(msgOf(e))
     } finally {
       setBusy(false)
     }
@@ -274,13 +296,10 @@ export default function PretestChecklistPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id }),
       })
-      if (!res.ok) {
-        const d = await res.json()
-        throw new Error(d.error ?? "삭제 실패")
-      }
+      if (!res.ok) throw new Error(await resError(res, "삭제에 실패했습니다."))
       if (selected) await loadNotes(selected.id)
     } catch (e) {
-      setError(String(e))
+      setError(msgOf(e))
     } finally {
       setBusy(false)
     }
@@ -483,70 +502,59 @@ export default function PretestChecklistPage() {
 
                 {/* 목록 테이블 */}
                 <Card className="gap-0 overflow-hidden py-0">
-                  <Table className="min-w-[760px]">
+                  <Table>
+                    <colgroup>
+                      <col className="w-[16%]" />
+                      <col />
+                      <col className="w-[14%]" />
+                      <col className="w-[18%]" />
+                      <col className="w-[8%]" />
+                    </colgroup>
                     <TableHeader>
                       <TableRow className="hover:bg-transparent">
-                        <TableHead
-                          className="cursor-pointer select-none px-3 text-muted-foreground whitespace-nowrap"
-                          onClick={() => toggleSort("occurredAt")}
-                        >
-                          일시<SortIcon field="occurredAt" />
-                        </TableHead>
-                        <TableHead
-                          className="cursor-pointer select-none px-3 text-muted-foreground"
-                          onClick={() => toggleSort("content")}
-                        >
-                          확인사항<SortIcon field="content" />
-                        </TableHead>
-                        <TableHead className="px-3 text-muted-foreground">특이사항</TableHead>
-                        <TableHead
-                          className="cursor-pointer select-none px-3 text-muted-foreground whitespace-nowrap"
-                          onClick={() => toggleSort("issueLot")}
-                        >
-                          이슈 로트<SortIcon field="issueLot" />
-                        </TableHead>
-                        <TableHead
-                          className="cursor-pointer select-none px-3 text-muted-foreground whitespace-nowrap"
-                          onClick={() => toggleSort("createdByName")}
-                        >
-                          작성자<SortIcon field="createdByName" />
-                        </TableHead>
-                        <TableHead
-                          className="cursor-pointer select-none px-3 text-muted-foreground whitespace-nowrap"
-                          onClick={() => toggleSort("createdAt")}
-                        >
-                          작성시각<SortIcon field="createdAt" />
-                        </TableHead>
+                        {NOTE_SORT_COLUMNS.map((col) => (
+                          <TableHead key={col.key} className="px-3 text-muted-foreground">
+                            <SortColumnHeader
+                              col={col}
+                              sortField={sortField}
+                              sortDir={sortDir}
+                              onPick={pickSort}
+                            />
+                          </TableHead>
+                        ))}
                         <TableHead className="w-14 px-3 text-center text-muted-foreground">삭제</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {notes.length === 0 ? (
                         <TableRow className="hover:bg-transparent">
-                          <TableCell colSpan={7} className="py-12 text-center text-sm text-muted-foreground">
+                          <TableCell colSpan={5} className="py-12 text-center text-sm text-muted-foreground">
                             등록된 시험 전 확인사항이 없습니다. 위 입력란에서 등록하세요.
                           </TableCell>
                         </TableRow>
                       ) : (
                         sortedNotes.map((n) => (
-                          <TableRow key={n.id} className="align-top">
-                            <TableCell className="px-3 py-2.5 font-mono text-xs whitespace-nowrap text-muted-foreground">
-                              {fmtDT(n.occurredAt)}
+                          <TableRow key={n.id}>
+                            <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">
+                              <span className="block truncate" title={fmtDT(n.occurredAt)}>{fmtDT(n.occurredAt)}</span>
                             </TableCell>
-                            <TableCell className="px-3 py-2.5 font-medium whitespace-pre-wrap text-foreground">
-                              {n.content}
+                            <TableCell className="px-3 py-2.5">
+                              <CellStack
+                                primary={n.content}
+                                secondary={n.remark || undefined}
+                                primaryClass="font-medium text-foreground"
+                                title={[n.content, n.remark].filter(Boolean).join(" / ")}
+                              />
                             </TableCell>
-                            <TableCell className="px-3 py-2.5 whitespace-pre-wrap text-muted-foreground">
-                              {n.remark || <span className="text-muted-foreground/40">—</span>}
+                            <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">
+                              <span className="block truncate">{n.issueLot || "—"}</span>
                             </TableCell>
-                            <TableCell className="px-3 py-2.5 font-mono text-xs whitespace-nowrap text-muted-foreground">
-                              {n.issueLot || <span className="text-muted-foreground/40">—</span>}
-                            </TableCell>
-                            <TableCell className="px-3 py-2.5 whitespace-nowrap text-xs text-muted-foreground">
-                              {n.createdByName || <span className="text-muted-foreground/40">—</span>}
-                            </TableCell>
-                            <TableCell className="px-3 py-2.5 font-mono text-[11px] whitespace-nowrap text-muted-foreground">
-                              {fmtDT(n.createdAt)}
+                            <TableCell className="px-3 py-2.5">
+                              <CellStack
+                                primary={n.createdByName || "—"}
+                                secondary={fmtDT(n.createdAt)}
+                                title={`${n.createdByName || "—"} / ${fmtDT(n.createdAt)}`}
+                              />
                             </TableCell>
                             <TableCell className="px-3 py-2.5 text-center">
                               <Button

@@ -576,7 +576,7 @@ export default function MonthlySchedulePage() {
                   </p>
                 ) : (
                   <div className="overflow-x-auto">
-                    <Table className="w-full min-w-[640px] border-collapse text-xs">
+                    <Table layout="wide" className="w-full min-w-[640px] border-collapse text-xs">
                       <TableHeader>
                         <TableRow className="bg-slate-100 dark:bg-slate-800/60">
                           <TableHead

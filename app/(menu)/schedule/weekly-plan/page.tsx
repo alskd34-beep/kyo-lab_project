@@ -27,9 +27,9 @@ import {
   FlaskConical,
   Beaker,
   Info,
-  ChevronDown,
-  ChevronUp,
 } from 'lucide-react'
+import { CellStack } from '@frontend/components/ui/table-cell-stack'
+import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from '@frontend/components/ui/table-sort'
 import {
   Table,
   TableHeader,
@@ -200,32 +200,31 @@ export default function WeeklyPlanPage() {
 
   // ─── 미배정 테이블 정렬 ──────────────────────────────────────────────────────
   type UnassignedField = 'productName' | 'productCode' | 'batchNo' | 'reason'
+  const UNASSIGNED_COLUMNS: SortColumnDef<UnassignedField>[] = [
+    {
+      key: 'product',
+      label: '품목',
+      fields: [
+        { id: 'productName', label: '품목명' },
+        { id: 'productCode', label: '품목코드' },
+        { id: 'batchNo', label: '제조번호' },
+      ],
+    },
+    sortCol('reason', '사유'),
+  ]
   const [sortField, setSortField] = useState<UnassignedField>('productName')
-  const [sortDir,   setSortDir]   = useState<'asc' | 'desc'>('asc')
+  const [sortDir,   setSortDir]   = useState<SortDir>('asc')
 
-  const toggleSort = (field: UnassignedField) => {
-    if (sortField === field) {
-      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    } else {
-      setSortField(field)
-      setSortDir('asc')
-    }
+  const pickSort = (field: UnassignedField, dir: SortDir) => {
+    setSortField(field)
+    setSortDir(dir)
   }
 
   const sortedUnassigned = useMemo(() => {
     if (!result) return []
-    return [...result.unassigned].sort((a, b) => {
-      const cmp = a[sortField].localeCompare(b[sortField], 'ko')
-      return sortDir === 'asc' ? cmp : -cmp
-    })
+    const mul = sortDir === 'asc' ? 1 : -1
+    return [...result.unassigned].sort((a, b) => a[sortField].localeCompare(b[sortField], 'ko') * mul)
   }, [result, sortField, sortDir])
-
-  const SortIcon = ({ field }: { field: UnassignedField }) => {
-    if (sortField !== field) return <ChevronDown size={12} className="ml-1 opacity-30" />
-    return sortDir === 'asc'
-      ? <ChevronUp size={12} className="ml-1 text-blue-600 dark:text-blue-400" />
-      : <ChevronDown size={12} className="ml-1 text-blue-600 dark:text-blue-400" />
-  }
 
   return (
     <div className="p-6">
@@ -531,30 +530,39 @@ export default function WeeklyPlanPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <Table className="w-full text-sm">
+                  <Table className="text-sm">
+                    <colgroup>
+                      <col className="w-[42%]" />
+                      <col className="w-[58%]" />
+                    </colgroup>
                     <TableHeader>
                       <TableRow className="hover:bg-transparent border-b border-amber-100 dark:border-amber-900">
-                        <TableHead className="cursor-pointer select-none px-3 text-left text-muted-foreground" onClick={() => toggleSort('productName')}>
-                          <span className="inline-flex items-center">품목명<SortIcon field="productName" /></span>
-                        </TableHead>
-                        <TableHead className="cursor-pointer select-none px-3 text-left text-muted-foreground" onClick={() => toggleSort('productCode')}>
-                          <span className="inline-flex items-center">코드<SortIcon field="productCode" /></span>
-                        </TableHead>
-                        <TableHead className="cursor-pointer select-none px-3 text-left text-muted-foreground" onClick={() => toggleSort('batchNo')}>
-                          <span className="inline-flex items-center">제조번호<SortIcon field="batchNo" /></span>
-                        </TableHead>
-                        <TableHead className="cursor-pointer select-none px-3 text-left text-muted-foreground" onClick={() => toggleSort('reason')}>
-                          <span className="inline-flex items-center">사유<SortIcon field="reason" /></span>
-                        </TableHead>
+                        {UNASSIGNED_COLUMNS.map((col) => (
+                          <TableHead key={col.key} className="px-3 text-left text-muted-foreground">
+                            <SortColumnHeader
+                              col={col}
+                              sortField={sortField}
+                              sortDir={sortDir}
+                              onPick={pickSort}
+                            />
+                          </TableHead>
+                        ))}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {sortedUnassigned.map((u, i) => (
                         <TableRow key={i} className="border-b border-amber-50 dark:border-amber-950">
-                          <TableCell className="px-3 py-2.5 font-medium text-foreground">{u.productName}</TableCell>
-                          <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{u.productCode}</TableCell>
-                          <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{u.batchNo}</TableCell>
-                          <TableCell className="px-3 py-2.5 text-xs text-amber-700 dark:text-amber-300">{u.reason}</TableCell>
+                          <TableCell className="px-3 py-2.5">
+                            <CellStack
+                              primary={u.productName}
+                              secondary={`${u.productCode} · ${u.batchNo}`}
+                              primaryClass="font-medium text-foreground"
+                              title={`${u.productName} / ${u.productCode} / ${u.batchNo}`}
+                            />
+                          </TableCell>
+                          <TableCell className="px-3 py-2.5 text-xs text-amber-700 dark:text-amber-300">
+                            <span className="block truncate" title={u.reason}>{u.reason}</span>
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

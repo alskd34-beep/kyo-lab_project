@@ -59,56 +59,17 @@ function mapRow(
   }
 }
 
-/**
- * `.in()` 목록을 나누는 단위.
- * PostgREST 는 조회 조건을 URL 쿼리스트링으로 보내므로 목록이 길면 URL 길이 제한에
- * 걸려 요청이 통째로 실패한다(UUID 기준 품목 400건 ≈ 15KB 부근에서 깨짐).
- * 한 청크가 PostgREST 기본 응답 상한(1000행)에도 걸리지 않도록 작게 잡는다.
- */
-const IN_CHUNK_SIZE = 150
-
-function chunk<T>(arr: T[], size: number): T[][] {
-  const out: T[][] = []
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
-  return out
-}
-
-/** 품목코드 목록 → 공수(일) 맵 (product_workload.avg_workdays) */
-async function workdaysByCodes(codes: string[]): Promise<Map<string, number>> {
+/** 공수(일) 전량. 품목 목록과 병렬로 한 번에 읽는다. */
+async function listWorkdaysMap(): Promise<Map<string, number>> {
+  const { data, error } = await supabaseAdmin
+    .from('product_workload')
+    .select('product_code, avg_workdays')
+    .limit(5000)
+  if (error) throw error
   const map = new Map<string, number>()
-  if (codes.length === 0) return map
-  const results = await Promise.all(
-    chunk(codes, IN_CHUNK_SIZE).map(part =>
-      supabaseAdmin
-        .from('product_workload')
-        .select('product_code, avg_workdays')
-        .in('product_code', part)
-    )
-  )
-  for (const { data, error } of results) {
-    if (error) throw error
-    for (const w of data ?? []) {
-      const d = Number(w.avg_workdays)
-      if (d > 0) map.set(String(w.product_code), d)
-    }
-  }
-  return map
-}
-
-/** 품목 ID 목록 → 등록된 시험항목 수 맵 */
-async function testItemCountsByProductIds(ids: string[]): Promise<Map<string, number>> {
-  const map = new Map<string, number>()
-  if (ids.length === 0) return map
-  const results = await Promise.all(
-    chunk(ids, IN_CHUNK_SIZE).map(part =>
-      supabase.from('product_test_items').select('product_id').in('product_id', part)
-    )
-  )
-  for (const { data, error } of results) {
-    if (error) throw error
-    for (const row of (data ?? []) as unknown as { product_id: string }[]) {
-      map.set(row.product_id, (map.get(row.product_id) ?? 0) + 1)
-    }
+  for (const w of data ?? []) {
+    const d = Number(w.avg_workdays)
+    if (d > 0) map.set(String(w.product_code), d)
   }
   return map
 }
@@ -148,33 +109,17 @@ export async function listProducts(q: { search?: string; limit?: number } = {}):
     .order('sort_order', { ascending: true })
   if (q.search) query = query.or(`name.ilike.%${q.search}%,product_code.ilike.%${q.search}%`)
   if (q.limit) query = query.limit(q.limit)
-  const { data, error } = await query
-  if (error) throw error
+  else query = query.limit(2000)
 
-  const rows = (data ?? []) as unknown as Record<string, unknown>[]
-  if (rows.length === 0) return []
+  // 시험항목 건수는 이 목록에서 쓰지 않는다. 예전엔 product_test_items 전량을
+  // 읽어 세느라 품목 700건에서 수 초가 걸렸다. 공수는 별도 소량 테이블이라 함께 읽는다.
+  const [prodResult, workdaysMap] = await Promise.all([query, listWorkdaysMap()])
+  if (prodResult.error) throw prodResult.error
 
-  const ids = rows.map(r => r.id as string)
-  const codes = rows.map(r => r.product_code as string).filter(Boolean)
-
-  // 시험항목 카운트 + 공수(일) 일괄 조회
-  const [countByProduct, workdaysMap] = await Promise.all([
-    testItemCountsByProductIds(ids),
-    workdaysByCodes(codes),
-  ])
-
-  return rows
-    .map(r => mapRow(r, countByProduct.get(r.id as string) ?? 0, workdaysMap.get(r.product_code as string) ?? null))
-    .sort((a, b) => {
-      // 1차: 시험항목 보유 우선 (count > 0)
-      const aHas = a.testItemCount > 0 ? 1 : 0
-      const bHas = b.testItemCount > 0 ? 1 : 0
-      if (aHas !== bHas) return bHas - aHas
-      // 2차: 시험항목 수 내림차순
-      if (a.testItemCount !== b.testItemCount) return b.testItemCount - a.testItemCount
-      // 3차: 기존 sort_order
-      return a.sortOrder - b.sortOrder
-    })
+  const rows = (prodResult.data ?? []) as unknown as Record<string, unknown>[]
+  return rows.map(r =>
+    mapRow(r, 0, workdaysMap.get(r.product_code as string) ?? null)
+  )
 }
 
 export async function listProductCategories(): Promise<ProductOptionRow[]> {

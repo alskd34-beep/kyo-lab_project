@@ -4,7 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { useAuth } from "@frontend/lib/auth-context"
 import {
   RefreshCw, Sparkles, History, AlertCircle, X, Loader2, Database, Plus,
-  ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Lock, LockOpen, Search, CalendarDays, Users, ListChecks, Layers,
+  ChevronDown, ChevronRight, ChevronLeft, Lock, LockOpen, Search, CalendarDays, Users, ListChecks, Layers,
 } from "lucide-react"
 import { cn } from "@frontend/lib/utils"
 import { AssigneeDetailModal } from "@frontend/components/schedule/assignee-detail-modal"
@@ -12,6 +12,8 @@ import { TesterAvatar, TesterOptionLabel, primeTesterProfileCache } from "@front
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
 import { Badge } from "@frontend/components/ui/badge"
+import { CellStack } from "@frontend/components/ui/table-cell-stack"
+import { SortColumnHeader, type SortColumnDef, type SortDir } from "@frontend/components/ui/table-sort"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@frontend/components/ui/table"
@@ -106,6 +108,65 @@ const FIELD_LABEL: Record<string, string> = {
   packagingDate: "포장일", dueDate: "완료예정일", isUrgent: "긴급",
   method: "진행방법", status: "상태", note: "비고", assigneeTesterId: "담당자",
 }
+
+type SortField =
+  | "productName"
+  | "productCode"
+  | "batchNo"
+  | "dosageForm"
+  | "method"
+  | "packagingDate"
+  | "dueDate"
+  | "isUrgent"
+  | "workdays"
+  | "assigneeName"
+  | "status"
+
+const SORT_COLUMNS: SortColumnDef<SortField>[] = [
+  {
+    key: "product",
+    label: "품목",
+    fields: [
+      { id: "productName", label: "품목명" },
+      { id: "productCode", label: "품목코드" },
+      { id: "batchNo", label: "제조번호" },
+    ],
+  },
+  {
+    key: "form",
+    label: "제형·방법",
+    fields: [
+      { id: "dosageForm", label: "제형" },
+      { id: "method", label: "진행방법" },
+    ],
+  },
+  {
+    key: "dates",
+    label: "일정",
+    fields: [
+      { id: "packagingDate", label: "포장일" },
+      { id: "dueDate", label: "완료예정" },
+    ],
+  },
+  {
+    key: "load",
+    label: "공수/긴급",
+    fields: [
+      { id: "workdays", label: "공수" },
+      { id: "isUrgent", label: "긴급" },
+    ],
+  },
+  {
+    key: "assignee",
+    label: "담당·상태",
+    fields: [
+      { id: "assigneeName", label: "담당자" },
+      { id: "status", label: "상태" },
+    ],
+  },
+]
+
+const ORDER_COL_COUNT = 7
 
 const GROUP_COLORS = [
   "bg-blue-500", "bg-emerald-500", "bg-violet-500",
@@ -239,19 +300,12 @@ export default function OrdersPage() {
   const [bulkTester, setBulkTester] = useState("")
   const [families, setFamilies] = useState<{ id: string; name: string; codes: string[] }[]>([])
   const [famCollapsed, setFamCollapsed] = useState<Set<string>>(new Set())
-  const [sortField, setSortField] = useState<keyof OrderRow | null>(null)
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
+  const [sortField, setSortField] = useState<SortField | null>(null)
+  const [sortDir, setSortDir] = useState<SortDir>("asc")
 
-  const toggleSort = (field: keyof OrderRow) => {
-    if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc")
-    else { setSortField(field); setSortDir("asc") }
-  }
-
-  const SortIcon = ({ field }: { field: keyof OrderRow }) => {
-    if (sortField !== field) return <ChevronDown className="ml-1 inline size-3 text-muted-foreground/40" />
-    return sortDir === "asc"
-      ? <ChevronUp className="ml-1 inline size-3 text-primary" />
-      : <ChevronDown className="ml-1 inline size-3 text-primary" />
+  const pickSort = (field: SortField, dir: SortDir) => {
+    setSortField(field)
+    setSortDir(dir)
   }
 
   const load = useCallback(async () => {
@@ -723,48 +777,65 @@ export default function OrdersPage() {
             aria-label="선택"
           />
         </TableCell>
-        <TableCell className="px-3 py-2.5 font-medium text-foreground">
-          <div className={cn("flex items-center gap-1.5", indented && "pl-6")}>
-            {indented && <span className="text-muted-foreground/60">└</span>}
-            {r.productName}
-            <SourceBadge source={r.source} />
-            {r.source === "auto" && !r.productSynced && (
-              <Badge variant="outline" className="border-amber-200 text-amber-700">미동기화</Badge>
-            )}
+        <TableCell className="px-3 py-2.5">
+          <div className={cn("min-w-0", indented && "pl-5")}>
+            <div className="flex min-w-0 items-center gap-1.5">
+              {indented && <span className="shrink-0 text-muted-foreground/60">└</span>}
+              <span className="min-w-0 truncate font-medium text-foreground" title={r.productName}>{r.productName}</span>
+              <SourceBadge source={r.source} />
+              {r.source === "auto" && !r.productSynced && (
+                <Badge variant="outline" className="shrink-0 border-amber-200 text-amber-700">미동기화</Badge>
+              )}
+            </div>
+            <div className="truncate font-mono text-[11px] leading-4 text-muted-foreground" title={`${r.productCode} · ${r.batchNo}`}>
+              {r.productCode} · {r.batchNo}
+            </div>
           </div>
         </TableCell>
-        <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{r.productCode}</TableCell>
-        <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{r.batchNo}</TableCell>
-        <TableCell className="px-3 py-2.5">{r.dosageForm ?? "-"}</TableCell>
-        <TableCell className="px-3 py-2.5">{r.packagingDate ?? "-"}</TableCell>
-        <TableCell className={cn("px-3 py-2.5", dueSoon && "font-semibold text-orange-700")}>{r.dueDate ?? "-"}</TableCell>
         <TableCell className="px-3 py-2.5">
-          {r.isUrgent
-            ? <Badge variant="outline" className="border-red-200 text-red-700">긴급</Badge>
-            : <span className="text-muted-foreground">일반</span>}
-        </TableCell>
-        <TableCell className="px-3 py-2.5">{r.method}</TableCell>
-        <TableCell className="px-3 py-2.5">{r.workdays != null ? `${r.workdays}일` : "-"}</TableCell>
-        <TableCell className="px-3 py-2.5">
-          {r.assigneeName && r.assigneeTesterId
-            ? <button
-                onClick={(e) => { e.stopPropagation(); setAssigneeTarget({ id: r.assigneeTesterId!, name: r.assigneeName! }) }}
-                title={`${r.assigneeName} 담당 오더 보기`}
-                className="inline-flex items-center gap-1.5 font-medium text-foreground hover:text-primary"
-              >
-                <TesterAvatar testerId={r.assigneeTesterId} name={r.assigneeName} size="sm" />
-                <span className="underline-offset-2 hover:underline">{r.assigneeName}</span>
-              </button>
-            : <span className="text-muted-foreground">미배정</span>}
+          <CellStack
+            primary={r.dosageForm ?? "—"}
+            secondary={r.method}
+            title={[r.dosageForm, r.method].filter(Boolean).join(" / ")}
+          />
         </TableCell>
         <TableCell className="px-3 py-2.5">
-          <div className="flex items-center gap-1">
-            <StatusBadge status={r.status} />
-            {r.locked && (
-              <Badge variant="outline" className="gap-0.5 border-amber-200 text-amber-700">
-                <Lock className="size-2.5" />확정
-              </Badge>
-            )}
+          <CellStack
+            primary={r.packagingDate ?? "—"}
+            secondary={
+              <span className={cn(dueSoon && "font-semibold text-orange-700")}>완료 {r.dueDate ?? "—"}</span>
+            }
+            title={`포장 ${r.packagingDate ?? "—"} / 완료 ${r.dueDate ?? "—"}`}
+          />
+        </TableCell>
+        <TableCell className="px-3 py-2.5">
+          <div className="min-w-0">
+            <div className="truncate tabular-nums">{r.workdays != null ? `${r.workdays}일` : "—"}</div>
+            {r.isUrgent
+              ? <Badge variant="outline" className="border-red-200 text-red-700">긴급</Badge>
+              : <span className="text-[11px] leading-4 text-muted-foreground">일반</span>}
+          </div>
+        </TableCell>
+        <TableCell className="px-3 py-2.5">
+          <div className="min-w-0">
+            {r.assigneeName && r.assigneeTesterId
+              ? <button
+                  onClick={(e) => { e.stopPropagation(); setAssigneeTarget({ id: r.assigneeTesterId!, name: r.assigneeName! }) }}
+                  title={`${r.assigneeName} 담당 오더 보기`}
+                  className="inline-flex max-w-full items-center gap-1.5 font-medium text-foreground hover:text-primary"
+                >
+                  <TesterAvatar testerId={r.assigneeTesterId} name={r.assigneeName} size="sm" />
+                  <span className="min-w-0 truncate underline-offset-2 hover:underline">{r.assigneeName}</span>
+                </button>
+              : <span className="text-muted-foreground">미배정</span>}
+            <div className="mt-0.5 flex min-w-0 items-center gap-1">
+              <StatusBadge status={r.status} />
+              {r.locked && (
+                <Badge variant="outline" className="gap-0.5 border-amber-200 text-amber-700">
+                  <Lock className="size-2.5" />확정
+                </Badge>
+              )}
+            </div>
           </div>
         </TableCell>
         <TableCell className="px-3 py-2.5">
@@ -790,7 +861,7 @@ export default function OrdersPage() {
       : `${renderGroups.length}개 상태`
 
   return (
-    <div className="flex flex-col gap-4 p-4 md:p-6">
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-3 overflow-hidden p-4 md:p-6">
       {/* 헤더 */}
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
@@ -909,7 +980,7 @@ export default function OrdersPage() {
 
       {/* 그룹 카드 */}
       {loading ? (
-        <div className="flex flex-col gap-3">
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
           {Array.from({ length: 4 }).map((_, i) => (
             <Card key={i} className="gap-0 overflow-hidden py-0">
               <div className="flex items-center gap-3 px-4 py-3">
@@ -944,7 +1015,7 @@ export default function OrdersPage() {
           {search.trim() ? `"${search.trim()}" 검색 결과가 없습니다.` : "해당 기간에 표시할 오더가 없습니다."}
         </Card>
       ) : (
-        <div className="flex flex-col gap-3">
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
           {renderGroups.map(g => {
             const isCollapsed = collapsed.has(g.key)
             return (
@@ -1003,21 +1074,29 @@ export default function OrdersPage() {
                       </div>
 
                       <div className="hidden md:block">
-                    <Table className="min-w-[920px]">
+                    <Table>
+                      <colgroup>
+                        <col className="w-[5%]" />
+                        <col className="w-[28%]" />
+                        <col className="w-[14%]" />
+                        <col className="w-[16%]" />
+                        <col className="w-[12%]" />
+                        <col className="w-[17%]" />
+                        <col className="w-[8%]" />
+                      </colgroup>
                       <TableHeader>
                         <TableRow className="hover:bg-transparent">
                           <TableHead className="w-12 px-3 text-center text-muted-foreground">확정</TableHead>
-                          <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort("productName")}>품목명<SortIcon field="productName" /></TableHead>
-                          <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort("productCode")}>품목코드<SortIcon field="productCode" /></TableHead>
-                          <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort("batchNo")}>제조번호<SortIcon field="batchNo" /></TableHead>
-                          <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort("dosageForm")}>제형<SortIcon field="dosageForm" /></TableHead>
-                          <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort("packagingDate")}>포장일<SortIcon field="packagingDate" /></TableHead>
-                          <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort("dueDate")}>완료예정<SortIcon field="dueDate" /></TableHead>
-                          <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort("isUrgent")}>긴급<SortIcon field="isUrgent" /></TableHead>
-                          <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort("method")}>진행방법<SortIcon field="method" /></TableHead>
-                          <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort("workdays")}>공수<SortIcon field="workdays" /></TableHead>
-                          <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort("assigneeName")}>담당자<SortIcon field="assigneeName" /></TableHead>
-                          <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort("status")}>상태<SortIcon field="status" /></TableHead>
+                          {SORT_COLUMNS.map((col) => (
+                            <TableHead key={col.key} className="px-3 text-muted-foreground">
+                              <SortColumnHeader
+                                col={col}
+                                sortField={sortField}
+                                sortDir={sortDir}
+                                onPick={pickSort}
+                              />
+                            </TableHead>
+                          ))}
                           <TableHead className="px-3 text-right text-muted-foreground">관리</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -1028,7 +1107,7 @@ export default function OrdersPage() {
                           return (
                             <Fragment key={item.familyId}>
                               <TableRow className="bg-primary/5 hover:bg-primary/10">
-                                <TableCell colSpan={13} className="px-3 py-2">
+                                <TableCell colSpan={ORDER_COL_COUNT} className="px-3 py-2">
                                   <button onClick={() => toggleFamily(item.familyId)} className="flex items-center gap-2 text-left">
                                     {fc
                                       ? <ChevronRight className="size-4 text-muted-foreground" />

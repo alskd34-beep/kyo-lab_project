@@ -2,13 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
-import { Wrench, Plus, Trash2, Loader2, CheckCircle2, Ban, ChevronDown, ChevronUp } from "lucide-react"
+import { Wrench, Plus, Trash2, Loader2, CheckCircle2, Ban } from "lucide-react"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import { DateField } from "@frontend/components/ui/date-field"
 import { cn } from "@frontend/lib/utils"
 import { Badge } from "@frontend/components/ui/badge"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
+import { CellStack } from "@frontend/components/ui/table-cell-stack"
+import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from "@frontend/components/ui/table-sort"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@frontend/components/ui/table"
@@ -48,8 +50,21 @@ const STATUS_DOT: Record<ReservationStatus, string> = {
   COMPLETED: "bg-blue-500",
 }
 
-type SortField = "status" | "equipmentId" | "startDate" | "userName"
-type SortDir = "asc" | "desc"
+type SortField = "status" | "equipmentId" | "startDate" | "endDate" | "userName"
+
+const SORT_COLUMNS: SortColumnDef<SortField>[] = [
+  sortCol("status", "상태"),
+  sortCol("equipmentId", "장비"),
+  {
+    key: "period",
+    label: "기간",
+    fields: [
+      { id: "startDate", label: "시작일" },
+      { id: "endDate", label: "종료일" },
+    ],
+  },
+  sortCol("userName", "예약자"),
+]
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function EquipmentReservationPage() {
@@ -67,20 +82,9 @@ export default function EquipmentReservationPage() {
   const [sortField, setSortField] = useState<SortField>("startDate")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
 
-  const toggleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortDir(d => d === "asc" ? "desc" : "asc")
-    } else {
-      setSortField(field)
-      setSortDir("asc")
-    }
-  }
-
-  const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortField !== field) return <ChevronDown size={13} className="opacity-30" />
-    return sortDir === "asc"
-      ? <ChevronUp size={13} className="opacity-80" />
-      : <ChevronDown size={13} className="opacity-80" />
+  const pickSort = (field: SortField, dir: SortDir) => {
+    setSortField(field)
+    setSortDir(dir)
   }
 
   const sortedData = useMemo(() => {
@@ -90,8 +94,8 @@ export default function EquipmentReservationPage() {
         cmp = STATUS_LABEL[a.status].localeCompare(STATUS_LABEL[b.status], "ko")
       } else if (sortField === "equipmentId") {
         cmp = a.equipmentId.localeCompare(b.equipmentId, "ko")
-      } else if (sortField === "startDate") {
-        cmp = a.startDate.localeCompare(b.startDate, "ko")
+      } else if (sortField === "startDate" || sortField === "endDate") {
+        cmp = a[sortField].localeCompare(b[sortField], "ko")
       } else if (sortField === "userName") {
         cmp = (a.userName ?? "").localeCompare(b.userName ?? "", "ko")
       }
@@ -178,7 +182,7 @@ export default function EquipmentReservationPage() {
   }
 
   return (
-    <div className="flex flex-col gap-4 p-4 md:p-6">
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-3 overflow-hidden p-4 md:p-6">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -225,37 +229,44 @@ export default function EquipmentReservationPage() {
       </div>
 
       {/* List */}
-      <Card className="gap-0 overflow-hidden py-0">
+      <Card className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden py-0">
         <div className="border-b px-4 py-2.5 text-sm font-semibold text-foreground">
           예약 목록
         </div>
         <Table>
+          <colgroup>
+            <col className="w-[14%]" />
+            <col className="w-[22%]" />
+            <col className="w-[22%]" />
+            <col className="w-[16%]" />
+            <col className="w-[26%]" />
+          </colgroup>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead className="px-3 text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("status")}>
-                <span className="flex items-center gap-1">상태 <SortIcon field="status" /></span>
+              {SORT_COLUMNS.map((col) => (
+                <TableHead key={col.key} className="px-3 py-2">
+                  <SortColumnHeader
+                    col={col}
+                    sortField={sortField}
+                    sortDir={sortDir}
+                    onPick={pickSort}
+                  />
+                </TableHead>
+              ))}
+              <TableHead className="px-1 text-center text-muted-foreground">
+                <span className="sr-only">관리</span>
               </TableHead>
-              <TableHead className="px-3 text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("equipmentId")}>
-                <span className="flex items-center gap-1">장비 <SortIcon field="equipmentId" /></span>
-              </TableHead>
-              <TableHead className="px-3 text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("startDate")}>
-                <span className="flex items-center gap-1">기간 <SortIcon field="startDate" /></span>
-              </TableHead>
-              <TableHead className="px-3 text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("userName")}>
-                <span className="flex items-center gap-1">예약자 <SortIcon field="userName" /></span>
-              </TableHead>
-              <TableHead className="px-3 text-muted-foreground w-32" />
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               Array.from({ length: 6 }).map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-16" /></TableCell>
-                  <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-28" /></TableCell>
-                  <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-40" /></TableCell>
-                  <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-16" /></TableCell>
-                  <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
+                  <TableCell className="px-3 py-2"><Skeleton className="h-5 w-16" /></TableCell>
+                  <TableCell className="px-3 py-2"><Skeleton className="h-8 w-28" /></TableCell>
+                  <TableCell className="px-3 py-2"><Skeleton className="h-8 w-24" /></TableCell>
+                  <TableCell className="px-3 py-2"><Skeleton className="h-4 w-16" /></TableCell>
+                  <TableCell className="px-1 py-2"><Skeleton className="ml-auto h-6 w-20" /></TableCell>
                 </TableRow>
               ))
             ) : rows.length === 0 ? (
@@ -269,17 +280,35 @@ export default function EquipmentReservationPage() {
                 const canModify = (isAdmin || r.userId === user?.id) && (r.status === "RESERVED" || r.status === "WAITING")
                 return (
                   <TableRow key={r.id}>
-                    <TableCell className="px-3 py-2.5">
+                    <TableCell className="px-3 py-2">
                       <Badge variant="outline" className="gap-1.5">
                         <span className={cn("size-1.5 rounded-full", STATUS_DOT[r.status])} />
                         {STATUS_LABEL[r.status]}
                         {r.status === "WAITING" && r.waitOrder != null && ` #${r.waitOrder}`}
                       </Badge>
                     </TableCell>
-                    <TableCell className="px-3 py-2.5 font-medium text-foreground">{r.equipmentId}</TableCell>
-                    <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{r.startDate} ~ {r.endDate}</TableCell>
-                    <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">{r.userName ?? "이름없음"}</TableCell>
-                    <TableCell className="px-3 py-2.5">
+                    <TableCell className="px-3 py-2">
+                      <CellStack
+                        primary={r.equipmentId}
+                        primaryClass="font-medium text-foreground"
+                        title={r.equipmentId}
+                      />
+                    </TableCell>
+                    <TableCell className="px-3 py-2">
+                      <CellStack
+                        primary={r.startDate}
+                        secondary={`~ ${r.endDate}`}
+                        primaryClass="font-mono text-xs text-foreground"
+                        title={`${r.startDate} ~ ${r.endDate}`}
+                      />
+                    </TableCell>
+                    <TableCell className="px-3 py-2">
+                      <CellStack
+                        primary={r.userName ?? "이름없음"}
+                        title={r.userName ?? "이름없음"}
+                      />
+                    </TableCell>
+                    <TableCell className="px-1 py-2">
                       <div className="flex items-center justify-end gap-1.5">
                         {canModify && r.status === "RESERVED" && (
                           <Button

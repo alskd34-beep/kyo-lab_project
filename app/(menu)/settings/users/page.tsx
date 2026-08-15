@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
-import { ChevronDown, ChevronUp, ImagePlus, Pencil, Save, Trash2, Upload, UserPlus, X } from 'lucide-react'
+import { ImagePlus, Pencil, Save, Trash2, Upload, UserPlus, X } from 'lucide-react'
 import { Skeleton } from '@frontend/components/ui/skeleton'
 import { useAuth } from '@frontend/lib/auth-context'
 import { TesterAvatar, invalidateTesterProfileCache } from '@frontend/lib/tester-profiles'
@@ -16,7 +16,10 @@ import {
   DialogTitle,
 } from '@frontend/components/ui/dialog'
 import { Button } from '@frontend/components/ui/button'
+import { Card } from '@frontend/components/ui/card'
 import { Input } from '@frontend/components/ui/input'
+import { CellStack } from '@frontend/components/ui/table-cell-stack'
+import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from '@frontend/components/ui/table-sort'
 import {
   Select,
   SelectContent,
@@ -49,24 +52,23 @@ interface UserRow {
 
 type SortField = 'displayName' | 'username' | 'role' | 'customerNo' | 'lastLoginAt'
 
+const USER_SORT_COLUMNS: SortColumnDef<SortField>[] = [
+  {
+    key: 'user',
+    label: '사용자',
+    fields: [
+      { id: 'displayName', label: '사용자명' },
+      { id: 'username', label: '사번' },
+      { id: 'customerNo', label: '고객번호' },
+    ],
+  },
+  sortCol('role', '역할'),
+  sortCol('lastLoginAt', '마지막 로그인'),
+]
+
 /** 내부 고객번호 표기 — 5자리 zero-pad (미부여 시 '-') */
 function fmtCustomerNo(n: number | null): string {
   return n == null ? '-' : String(n).padStart(5, '0')
-}
-
-function SortIcon({
-  field,
-  sortField,
-  sortDir,
-}: {
-  field: SortField
-  sortField: SortField
-  sortDir: 'asc' | 'desc'
-}) {
-  if (sortField !== field) return <ChevronDown size={11} className="ml-1 inline opacity-30" />
-  return sortDir === 'asc'
-    ? <ChevronUp size={11} className="ml-1 inline text-primary" />
-    : <ChevronDown size={11} className="ml-1 inline text-primary" />
 }
 
 const MAX_AVATAR_SIZE = 1024 * 1024
@@ -97,10 +99,13 @@ export default function UsersAdminPage() {
   const [editingUser, setEditingUser] = useState<UserRow | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [sortField, setSortField] = useState<SortField>('customerNo')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
 
   const sortedUsers = useMemo(() => {
     return [...users].sort((a, b) => {
+      // 활성 사용자를 항상 위로. 어떤 컬럼으로 정렬하든 비활성은 아래로 밀린다.
+      if (a.isActive !== b.isActive) return a.isActive ? -1 : 1
+
       let va: string, vb: string
       if (sortField === 'customerNo') {
         va = String(a.customerNo ?? 0).padStart(10, '0')
@@ -116,10 +121,10 @@ export default function UsersAdminPage() {
     })
   }, [users, sortField, sortDir])
 
-  function toggleSort(field: SortField) {
-    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortField(field); setSortDir('asc') }
-  }
+  const pickSort = useCallback((field: SortField, dir: SortDir) => {
+    setSortField(field)
+    setSortDir(dir)
+  }, [])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -177,8 +182,8 @@ export default function UsersAdminPage() {
   }
 
   return (
-    <div className="p-3 md:p-5">
-      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-3 overflow-hidden p-4 md:p-6">
+      <div className="flex shrink-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-lg font-semibold text-slate-800">사용자 관리</h1>
           <p className="text-xs text-slate-500">총 {users.length}명</p>
@@ -203,62 +208,91 @@ export default function UsersAdminPage() {
         />
       )}
 
-      <div className="hidden overflow-x-auto rounded-lg border border-slate-200 bg-white md:block">
-        <Table className="w-full min-w-[640px] text-sm">
+      <Card className="hidden min-h-0 flex-1 flex-col overflow-hidden py-0 md:flex">
+        <Table className="w-full text-sm">
+          <colgroup>
+            <col className="w-[34%]" />
+            <col className="w-[12%]" />
+            <col className="w-[12%]" />
+            <col className="w-[24%]" />
+            <col className="w-[18%]" />
+          </colgroup>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead className="cursor-pointer select-none px-3 text-left text-muted-foreground" onClick={() => toggleSort('customerNo')}>고객번호<SortIcon field="customerNo" sortField={sortField} sortDir={sortDir} /></TableHead>
-              <TableHead className="cursor-pointer select-none px-3 text-left text-muted-foreground" onClick={() => toggleSort('displayName')}>사용자<SortIcon field="displayName" sortField={sortField} sortDir={sortDir} /></TableHead>
-              <TableHead className="cursor-pointer select-none px-3 text-left text-muted-foreground" onClick={() => toggleSort('username')}>사번(아이디)<SortIcon field="username" sortField={sortField} sortDir={sortDir} /></TableHead>
-              <TableHead className="cursor-pointer select-none px-3 text-left text-muted-foreground" onClick={() => toggleSort('role')}>역할<SortIcon field="role" sortField={sortField} sortDir={sortDir} /></TableHead>
-              <TableHead className="px-3 text-left text-muted-foreground">상태</TableHead>
-              <TableHead className="cursor-pointer select-none px-3 text-left text-muted-foreground" onClick={() => toggleSort('lastLoginAt')}>마지막 로그인<SortIcon field="lastLoginAt" sortField={sortField} sortDir={sortDir} /></TableHead>
-              <TableHead className="px-3 text-muted-foreground"></TableHead>
+              <TableHead className="px-3 py-2">
+                <SortColumnHeader
+                  col={USER_SORT_COLUMNS[0]}
+                  sortField={sortField}
+                  sortDir={sortDir}
+                  onPick={pickSort}
+                />
+              </TableHead>
+              <TableHead className="px-3 py-2">
+                <SortColumnHeader
+                  col={USER_SORT_COLUMNS[1]}
+                  sortField={sortField}
+                  sortDir={sortDir}
+                  onPick={pickSort}
+                />
+              </TableHead>
+              <TableHead className="px-3 text-muted-foreground">상태</TableHead>
+              <TableHead className="px-3 py-2">
+                <SortColumnHeader
+                  col={USER_SORT_COLUMNS[2]}
+                  sortField={sortField}
+                  sortDir={sortDir}
+                  onPick={pickSort}
+                />
+              </TableHead>
+              <TableHead className="px-1 text-center text-muted-foreground">
+                <span className="sr-only">관리</span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading
               ? Array.from({ length: 6 }).map((_, i) => (
                   <TableRow key={i}>
-                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-14" /></TableCell>
-                    <TableCell className="px-3 py-2.5">
+                    <TableCell className="px-3 py-2">
                       <div className="flex items-center gap-2">
-                        <Skeleton className="size-8 rounded-xl" />
-                        <Skeleton className="h-4 w-24" />
+                        <Skeleton className="size-8 shrink-0 rounded-xl" />
+                        <Skeleton className="h-8 w-28" />
                       </div>
                     </TableCell>
-                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20" /></TableCell>
-                    <TableCell className="px-3 py-2.5"><Skeleton className="h-5 w-14 rounded-full" /></TableCell>
-                    <TableCell className="px-3 py-2.5"><Skeleton className="h-5 w-12 rounded-full" /></TableCell>
-                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-32" /></TableCell>
-                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
+                    <TableCell className="px-3 py-2"><Skeleton className="h-5 w-14 rounded-full" /></TableCell>
+                    <TableCell className="px-3 py-2"><Skeleton className="h-5 w-12 rounded-full" /></TableCell>
+                    <TableCell className="px-3 py-2"><Skeleton className="h-4 w-28" /></TableCell>
+                    <TableCell className="px-1 py-2"><Skeleton className="ml-auto h-4 w-16" /></TableCell>
                   </TableRow>
                 ))
               : sortedUsers.map(u => (
               <TableRow key={u.id} className="border-t border-slate-100">
-                <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground tabular-nums">
-                  {fmtCustomerNo(u.customerNo)}
-                </TableCell>
-                <TableCell className="px-3 py-2.5">
-                  <div className="flex items-center gap-2">
+                <TableCell className="px-3 py-2">
+                  <div className="flex min-w-0 items-center gap-2">
                     <UserAvatar user={u} />
-                    <span className="font-medium text-foreground">{u.displayName ?? '-'}</span>
+                    <CellStack
+                      primary={u.displayName ?? '-'}
+                      secondary={`${u.username} · ${fmtCustomerNo(u.customerNo)}`}
+                      primaryClass="font-medium text-foreground"
+                      title={[u.displayName ?? '-', u.username, fmtCustomerNo(u.customerNo)].join(' / ')}
+                    />
                   </div>
                 </TableCell>
-                <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{u.username}</TableCell>
-                <TableCell className="px-3 py-2.5">
+                <TableCell className="px-3 py-2">
                   <RoleBadge role={u.role} />
                 </TableCell>
-                <TableCell className="px-3 py-2.5">
+                <TableCell className="px-3 py-2">
                   <StatusBadge isActive={u.isActive} />
                 </TableCell>
-                <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">
-                  {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('ko-KR') : '-'}
+                <TableCell className="px-3 py-2">
+                  <div className="truncate font-mono text-xs text-muted-foreground" title={u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('ko-KR') : '-'}>
+                    {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('ko-KR') : '-'}
+                  </div>
                 </TableCell>
-                <TableCell className="px-3 py-2.5 text-right">
+                <TableCell className="px-1 py-2 text-right">
                   <button
                     onClick={() => setEditingUser(u)}
-                    className="mr-2 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-blue-600 hover:bg-blue-50"
+                    className="mr-1 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-blue-600 hover:bg-blue-50"
                   >
                     <Pencil size={12} />
                     수정
@@ -277,9 +311,9 @@ export default function UsersAdminPage() {
             ))}
           </TableBody>
         </Table>
-      </div>
+      </Card>
 
-      <div className="space-y-2 md:hidden">
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto md:hidden">
         {loading
           ? Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="rounded-lg border border-slate-200 bg-white p-3 space-y-2">

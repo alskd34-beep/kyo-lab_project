@@ -26,7 +26,7 @@ export default function MenuLayout({ children }: { children: React.ReactNode }) 
         className={cn(
           'peer-data-[variant=inset]:border',
           '[--dashboard-header-height:--spacing(12)]',
-          'min-w-0 overflow-x-hidden',
+          'min-h-0 min-w-0 overflow-hidden',
         )}
       >
         {/* ── 상단바 ─────────────────────────────────────────────────────── */}
@@ -45,8 +45,10 @@ export default function MenuLayout({ children }: { children: React.ReactNode }) 
           </div>
         </header>
 
-        {/* 본문 — 페이지가 자체 패딩(p-4 md:p-6)을 가지므로 래퍼는 패딩 없음 */}
-        <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden">{children}</div>
+        {/* 본문 — 리스트 화면은 h-full 로 내부 스크롤, 그 외는 이 영역이 스크롤 */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto">
+          {children}
+        </div>
       </SidebarInset>
 
       <Chatbot />

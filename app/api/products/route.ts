@@ -9,12 +9,11 @@ export const runtime = 'nodejs'
 export async function GET(req: NextRequest) {
   try {
     const sp = req.nextUrl.searchParams
-    const rows = await listProducts({
-      search: sp.get('search') ?? undefined,
-      limit: sp.get('limit') ? Number(sp.get('limit')) : undefined,
-    })
-    // 옵션 데이터도 함께 반환
-    const [categories, classifications] = await Promise.all([
+    const [rows, categories, classifications] = await Promise.all([
+      listProducts({
+        search: sp.get('search') ?? undefined,
+        limit: sp.get('limit') ? Number(sp.get('limit')) : undefined,
+      }),
       listProductCategories(),
       listProductClassifications(),
     ])

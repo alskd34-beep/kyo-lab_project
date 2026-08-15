@@ -6,8 +6,6 @@ import {
   ArrowUpRight,
   CalendarClock,
   CheckCircle2,
-  ChevronDown,
-  ChevronUp,
   Clock3,
   DatabaseZap,
   FlaskConical,
@@ -21,6 +19,8 @@ import { Badge } from '@frontend/components/ui/badge'
 import { Button } from '@frontend/components/ui/button'
 import { Card, CardContent } from '@frontend/components/ui/card'
 import { Input } from '@frontend/components/ui/input'
+import { CellStack } from '@frontend/components/ui/table-cell-stack'
+import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from '@frontend/components/ui/table-sort'
 import {
   Table,
   TableBody,
@@ -148,14 +148,39 @@ type SortField = keyof Pick<
   StabilitySheetRow,
   'productCode' | 'productName' | 'testType' | 'batchNo' | 'manufacturedAt' | 'expiryDate' | 'reason' | 'period' | 'requestedAt' | 'requestNo' | 'status'
 >
-type SortDir = 'asc' | 'desc'
 
-function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: SortField | null; sortDir: SortDir }) {
-  if (sortField !== field) return <ChevronDown size={12} className="ml-0.5 opacity-30" />
-  return sortDir === 'asc'
-    ? <ChevronUp size={12} className="ml-0.5 text-foreground" />
-    : <ChevronDown size={12} className="ml-0.5 text-foreground" />
-}
+const SORT_COLUMNS: SortColumnDef<SortField>[] = [
+  {
+    key: 'product',
+    label: '품목',
+    fields: [
+      { id: 'productName', label: '품목' },
+      { id: 'productCode', label: '품목코드' },
+      { id: 'batchNo', label: '제조번호' },
+    ],
+  },
+  {
+    key: 'test',
+    label: '시험',
+    fields: [
+      { id: 'testType', label: '시험종류' },
+      { id: 'period', label: '기간' },
+      { id: 'requestNo', label: '의뢰번호' },
+    ],
+  },
+  {
+    key: 'dates',
+    label: '일자',
+    fields: [
+      { id: 'manufacturedAt', label: '제조일자' },
+      { id: 'expiryDate', label: '사용기한' },
+      { id: 'requestedAt', label: '의뢰일자' },
+    ],
+  },
+  sortCol('status', '상태'),
+]
+
+const STAB_COL_COUNT = 4
 
 export default function StabStatusPage() {
   const [rows, setRows] = useState<StabilitySheetRow[]>([])
@@ -167,13 +192,9 @@ export default function StabStatusPage() {
   const [sortField, setSortField] = useState<SortField | null>(null)
   const [sortDir, setSortDir] = useState<SortDir>('asc')
 
-  function toggleSort(field: SortField) {
-    if (sortField === field) {
-      setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))
-    } else {
-      setSortField(field)
-      setSortDir('asc')
-    }
+  function pickSort(field: SortField, dir: SortDir) {
+    setSortField(field)
+    setSortDir(dir)
   }
 
   const loadSheet = async () => {
@@ -353,108 +374,84 @@ export default function StabStatusPage() {
           </div>
         ) : (
           <Table>
+            <colgroup>
+              <col className="w-[32%]" />
+              <col className="w-[24%]" />
+              <col className="w-[24%]" />
+              <col className="w-[20%]" />
+            </colgroup>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort('productCode')}>
-                  <span className="flex items-center">품목코드<SortIcon field="productCode" sortField={sortField} sortDir={sortDir} /></span>
-                </TableHead>
-                <TableHead className="min-w-[220px] cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort('productName')}>
-                  <span className="flex items-center">품목<SortIcon field="productName" sortField={sortField} sortDir={sortDir} /></span>
-                </TableHead>
-                <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort('testType')}>
-                  <span className="flex items-center">시험종류<SortIcon field="testType" sortField={sortField} sortDir={sortDir} /></span>
-                </TableHead>
-                <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort('batchNo')}>
-                  <span className="flex items-center">제조번호<SortIcon field="batchNo" sortField={sortField} sortDir={sortDir} /></span>
-                </TableHead>
-                <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort('manufacturedAt')}>
-                  <span className="flex items-center">제조일자<SortIcon field="manufacturedAt" sortField={sortField} sortDir={sortDir} /></span>
-                </TableHead>
-                <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort('expiryDate')}>
-                  <span className="flex items-center">사용기한<SortIcon field="expiryDate" sortField={sortField} sortDir={sortDir} /></span>
-                </TableHead>
-                <TableHead className="min-w-[160px] cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort('reason')}>
-                  <span className="flex items-center">실시사유<SortIcon field="reason" sortField={sortField} sortDir={sortDir} /></span>
-                </TableHead>
-                <TableHead className="min-w-[150px] cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort('period')}>
-                  <span className="flex items-center">기간<SortIcon field="period" sortField={sortField} sortDir={sortDir} /></span>
-                </TableHead>
-                <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort('requestedAt')}>
-                  <span className="flex items-center">의뢰일자<SortIcon field="requestedAt" sortField={sortField} sortDir={sortDir} /></span>
-                </TableHead>
-                <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort('requestNo')}>
-                  <span className="flex items-center">의뢰번호<SortIcon field="requestNo" sortField={sortField} sortDir={sortDir} /></span>
-                </TableHead>
-                <TableHead className="cursor-pointer select-none px-3 text-muted-foreground" onClick={() => toggleSort('status')}>
-                  <span className="flex items-center">시험상태<SortIcon field="status" sortField={sortField} sortDir={sortDir} /></span>
-                </TableHead>
-                <TableHead className="px-3 text-muted-foreground">스케줄</TableHead>
+                {SORT_COLUMNS.map(col => (
+                  <TableHead key={col.key} className="px-3 text-muted-foreground">
+                    <SortColumnHeader
+                      col={col}
+                      sortField={sortField}
+                      sortDir={sortDir}
+                      onPick={pickSort}
+                    />
+                  </TableHead>
+                ))}
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 Array.from({ length: 6 }).map((_, i) => (
                   <TableRow key={i}>
-                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-16" /></TableCell>
-                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-40" /></TableCell>
-                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-16 rounded-full" /></TableCell>
-                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20" /></TableCell>
-                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20" /></TableCell>
-                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20" /></TableCell>
-                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-28" /></TableCell>
-                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-32" /></TableCell>
-                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20" /></TableCell>
-                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20" /></TableCell>
-                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-14 rounded-full" /></TableCell>
-                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20 rounded-full" /></TableCell>
+                    <TableCell className="px-3 py-2.5"><Skeleton className="h-8 w-40" /></TableCell>
+                    <TableCell className="px-3 py-2.5"><Skeleton className="h-8 w-24" /></TableCell>
+                    <TableCell className="px-3 py-2.5"><Skeleton className="h-8 w-28" /></TableCell>
+                    <TableCell className="px-3 py-2.5"><Skeleton className="h-8 w-20" /></TableCell>
                   </TableRow>
                 ))
               ) : filteredRows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={12} className="h-32 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={STAB_COL_COUNT} className="h-32 text-center text-sm text-muted-foreground">
                     표시할 안정성 품목이 없습니다.
                   </TableCell>
                 </TableRow>
               ) : (
                 sortedRows.map(row => (
                   <TableRow key={row.id}>
-                    <TableCell className="px-3 py-2.5 font-mono text-xs font-medium text-foreground">
-                      {row.productCode || '-'}
+                    <TableCell className="px-3 py-2.5">
+                      <CellStack
+                        primary={row.productName || '—'}
+                        secondary={`${row.productCode || '—'} · ${row.batchNo || '—'}`}
+                        primaryClass="font-medium text-foreground"
+                        title={[row.productName, row.productCode, row.batchNo].filter(Boolean).join(' / ')}
+                      />
                     </TableCell>
                     <TableCell className="px-3 py-2.5">
-                      <div className="max-w-[280px] truncate font-medium text-foreground">
-                        {row.productName || '-'}
+                      <CellStack
+                        primary={row.testType || '미분류'}
+                        secondary={[row.period || '—', row.requestNo ? `의뢰 ${row.requestNo}` : null, row.reason || null].filter(Boolean).join(' · ')}
+                        title={[row.testType, row.period, row.requestNo, row.reason].filter(Boolean).join(' / ')}
+                      />
+                    </TableCell>
+                    <TableCell className="px-3 py-2.5">
+                      <div className="min-w-0 text-[11px] leading-4 text-muted-foreground" title={`제조 ${row.manufacturedAt || '—'} / 기한 ${row.expiryDate || '—'} / 의뢰 ${row.requestedAt || '—'}`}>
+                        <div className="truncate">제조 {row.manufacturedAt || '—'}</div>
+                        <div className="truncate">기한 {row.expiryDate || '—'}</div>
+                        <div className="truncate">의뢰 {row.requestedAt || '—'}</div>
                       </div>
                     </TableCell>
                     <TableCell className="px-3 py-2.5">
-                      <Badge className="border-violet-200 bg-violet-50 text-violet-700" variant="outline">
-                        {row.testType || '미분류'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{row.batchNo || '-'}</TableCell>
-                    <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{row.manufacturedAt || '-'}</TableCell>
-                    <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{row.expiryDate || '-'}</TableCell>
-                    <TableCell className="px-3 py-2.5">
-                      <span className="block max-w-[220px] truncate text-xs text-muted-foreground">{row.reason || '-'}</span>
-                    </TableCell>
-                    <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{row.period || '-'}</TableCell>
-                    <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{row.requestedAt || '-'}</TableCell>
-                    <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{row.requestNo || '-'}</TableCell>
-                    <TableCell className="px-3 py-2.5">
-                      <Badge className={getStatusClass(row.status)} variant="outline">
-                        {row.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="px-3 py-2.5">
-                      {isScheduleCandidate(row) ? (
-                        <Badge className="border-blue-200 bg-blue-50 text-blue-700" variant="outline">
-                          동시분석 후보
+                      <div className="min-w-0">
+                        <Badge className={getStatusClass(row.status)} variant="outline">
+                          {row.status}
                         </Badge>
-                      ) : (
-                        <Badge className="border-slate-200 bg-slate-50 text-slate-500" variant="outline">
-                          제외
-                        </Badge>
-                      )}
+                        <div className="mt-1">
+                          {isScheduleCandidate(row) ? (
+                            <Badge className="border-blue-200 bg-blue-50 text-blue-700" variant="outline">
+                              동시분석 후보
+                            </Badge>
+                          ) : (
+                            <Badge className="border-slate-200 bg-slate-50 text-slate-500" variant="outline">
+                              제외
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))

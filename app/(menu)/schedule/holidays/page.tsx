@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
 import { CalendarDays, Plus, Trash2, Loader2, ChevronLeft, ChevronRight, Download } from "lucide-react"
 import { DateField } from "@frontend/components/ui/date-field"
@@ -8,6 +8,7 @@ import { Skeleton } from "@frontend/components/ui/skeleton"
 import { Badge } from "@frontend/components/ui/badge"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
+import { SortColumnHeader, sortCol, type SortDir } from "@frontend/components/ui/table-sort"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@frontend/components/ui/table"
@@ -31,6 +32,19 @@ interface HolidayRow {
   createdAt?: string
 }
 
+type SortField = "date" | "description" | "source"
+
+const SORT_COLUMNS = [
+  sortCol<SortField>("date", "날짜"),
+  sortCol<SortField>("description", "설명"),
+  sortCol<SortField>("source", "구분"),
+]
+
+function fieldValue(row: HolidayRow, field: SortField): string {
+  if (field === "source") return row.source === "api" ? "API" : "수동"
+  return row[field] ?? ""
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 export default function HolidaysPage() {
   const { user } = useAuth()
@@ -46,6 +60,22 @@ export default function HolidaysPage() {
   const [msg, setMsg] = useState<string | null>(null)
   const [msgType, setMsgType] = useState<"ok" | "err">("ok")
   const [showAdd, setShowAdd] = useState(false)
+  const [sortField, setSortField] = useState<SortField>("date")
+  const [sortDir, setSortDir] = useState<SortDir>("asc")
+
+  const pickSort = (field: SortField, dir: SortDir) => {
+    setSortField(field)
+    setSortDir(dir)
+  }
+
+  const sortedRows = useMemo(() => {
+    const mul = sortDir === "asc" ? 1 : -1
+    return [...rows].sort((a, b) => {
+      const av = fieldValue(a, sortField)
+      const bv = fieldValue(b, sortField)
+      return av.localeCompare(bv, "ko") * mul
+    })
+  }, [rows, sortField, sortDir])
 
   const flash = (m: string, type: "ok" | "err" = "ok") => {
     setMsg(m)
@@ -122,7 +152,7 @@ export default function HolidaysPage() {
   }
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-5 p-5">
+    <div className="mx-auto flex h-full min-h-0 w-full max-w-3xl flex-1 flex-col gap-3 overflow-hidden p-4 md:p-6">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
@@ -183,16 +213,29 @@ export default function HolidaysPage() {
         </button>
       </div>
 
-      <Card className="gap-0 overflow-hidden py-0">
+      <Card className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden py-0">
         <div className="border-b px-4 py-3 text-sm font-semibold text-foreground">
           {year}년 공휴일 ({rows.length}일)
         </div>
         <Table>
+          <colgroup>
+            <col className="w-[24%]" />
+            <col />
+            <col className="w-[16%]" />
+            {isAdmin && <col className="w-[10%]" />}
+          </colgroup>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead>날짜</TableHead>
-              <TableHead>설명</TableHead>
-              <TableHead>구분</TableHead>
+              {SORT_COLUMNS.map((col) => (
+                <TableHead key={col.key}>
+                  <SortColumnHeader
+                    col={col}
+                    sortField={sortField}
+                    sortDir={sortDir}
+                    onPick={pickSort}
+                  />
+                </TableHead>
+              ))}
               {isAdmin && <TableHead className="text-center">관리</TableHead>}
             </TableRow>
           </TableHeader>
@@ -214,10 +257,12 @@ export default function HolidaysPage() {
                       </TableCell>
                     </TableRow>
                   )
-                : rows.map(r => (
+                : sortedRows.map(r => (
                     <TableRow key={r.date}>
                       <TableCell className="font-mono text-xs text-muted-foreground">{r.date}</TableCell>
-                      <TableCell className="font-medium text-foreground">{r.description || "—"}</TableCell>
+                      <TableCell className="font-medium text-foreground">
+                        <span className="block truncate" title={r.description || undefined}>{r.description || "—"}</span>
+                      </TableCell>
                       <TableCell>
                         <Badge variant="outline">{r.source === "api" ? "API" : "수동"}</Badge>
                       </TableCell>

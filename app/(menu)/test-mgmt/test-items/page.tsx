@@ -3,8 +3,6 @@
 import { useEffect, useMemo, useState } from "react"
 import {
   AlertTriangle,
-  ChevronDown,
-  ChevronUp,
   Copy,
   Link2,
   PackagePlus,
@@ -28,6 +26,7 @@ import {
   DialogTitle,
 } from "@frontend/components/ui/dialog"
 import { Input } from "@frontend/components/ui/input"
+import { SortColumnHeader, sortCol, type SortDir } from "@frontend/components/ui/table-sort"
 import {
   Table,
   TableBody,
@@ -112,8 +111,18 @@ export default function TestItemsPage() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false)
   // 테이블 정렬
-  const [sortField, setSortField] = useState<"sequenceOrder" | "testItemName" | "isMandatory">("sequenceOrder")
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
+  type LinkedSortField = "sequenceOrder" | "testItemName" | "isMandatory"
+  const LINKED_SORT_COLUMNS = [
+    sortCol<LinkedSortField>("sequenceOrder", "순서"),
+    sortCol<LinkedSortField>("testItemName", "시험항목명"),
+    sortCol<LinkedSortField>("isMandatory", "필수여부"),
+  ]
+  const [sortField, setSortField] = useState<LinkedSortField>("sequenceOrder")
+  const [sortDir, setSortDir] = useState<SortDir>("asc")
+  const pickSort = (field: LinkedSortField, dir: SortDir) => {
+    setSortField(field)
+    setSortDir(dir)
+  }
   // 다른 품목에서 시험항목 복사
   const [copyDialogOpen, setCopyDialogOpen] = useState(false)
   const [copySourceSearch, setCopySourceSearch] = useState("")
@@ -276,25 +285,6 @@ export default function TestItemsPage() {
     })
     return items
   }, [linkedItems, sortField, sortDir])
-
-  function toggleSort(field: typeof sortField) {
-    if (sortField === field) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"))
-    } else {
-      setSortField(field)
-      setSortDir("asc")
-    }
-  }
-
-  function SortIcon({ field }: { field: typeof sortField }) {
-    if (sortField !== field)
-      return <ChevronDown className="ml-1 inline size-3 opacity-30" />
-    return sortDir === "asc" ? (
-      <ChevronUp className="ml-1 inline size-3" />
-    ) : (
-      <ChevronDown className="ml-1 inline size-3" />
-    )
-  }
 
   function openAddDialog() {
     setSelectedToAdd(new Set())
@@ -754,7 +744,14 @@ export default function TestItemsPage() {
 
                 {/* 데스크톱 테이블 */}
                 <Card className="hidden gap-0 overflow-hidden py-0 md:block">
-                  <Table className="min-w-[560px]">
+                  <Table>
+                    <colgroup>
+                      <col className="w-[8%]" />
+                      <col className="w-[10%]" />
+                      <col />
+                      <col className="w-[16%]" />
+                      <col className="w-[10%]" />
+                    </colgroup>
                     <TableHeader>
                       <TableRow className="hover:bg-transparent">
                         <TableHead className="w-10 px-3 text-muted-foreground">
@@ -769,24 +766,24 @@ export default function TestItemsPage() {
                             title="전체 선택"
                           />
                         </TableHead>
-                        <TableHead
-                          className="w-16 cursor-pointer select-none px-3 text-center text-muted-foreground"
-                          onClick={() => toggleSort("sequenceOrder")}
-                        >
-                          순서<SortIcon field="sequenceOrder" />
-                        </TableHead>
-                        <TableHead
-                          className="cursor-pointer select-none px-3 text-muted-foreground"
-                          onClick={() => toggleSort("testItemName")}
-                        >
-                          시험항목명<SortIcon field="testItemName" />
-                        </TableHead>
-                        <TableHead
-                          className="w-24 cursor-pointer select-none px-3 text-center text-muted-foreground"
-                          onClick={() => toggleSort("isMandatory")}
-                        >
-                          필수여부<SortIcon field="isMandatory" />
-                        </TableHead>
+                        {LINKED_SORT_COLUMNS.map((col) => (
+                          <TableHead
+                            key={col.key}
+                            className={cn(
+                              "px-3 text-muted-foreground",
+                              col.key !== "testItemName" && "text-center",
+                            )}
+                          >
+                            <div className={cn(col.key !== "testItemName" && "flex justify-center")}>
+                              <SortColumnHeader
+                                col={col}
+                                sortField={sortField}
+                                sortDir={sortDir}
+                                onPick={pickSort}
+                              />
+                            </div>
+                          </TableHead>
+                        ))}
                         <TableHead className="w-20 px-3 text-center text-muted-foreground">
                           삭제
                         </TableHead>
@@ -826,7 +823,9 @@ export default function TestItemsPage() {
                                   {idx + 1}
                                 </TableCell>
                                 <TableCell className="px-3 py-2.5 font-medium text-foreground">
-                                  {item.testItemName}
+                                  <span className="block truncate" title={item.testItemName}>
+                                    {item.testItemName}
+                                  </span>
                                 </TableCell>
                                 <TableCell className="px-3 py-2.5 text-center">
                                   {item.isMandatory ? (

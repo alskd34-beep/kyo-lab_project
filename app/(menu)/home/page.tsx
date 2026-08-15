@@ -1,11 +1,12 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ChevronDown, ChevronUp } from 'lucide-react'
 import { Badge } from '@frontend/components/ui/badge'
 import { Card, CardContent } from '@frontend/components/ui/card'
 import { Skeleton } from '@frontend/components/ui/skeleton'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@frontend/components/ui/table'
+import { CellStack } from '@frontend/components/ui/table-cell-stack'
+import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from '@frontend/components/ui/table-sort'
 import { Avatar, AvatarFallback } from '@frontend/components/ui/avatar'
 import { cn } from '@frontend/lib/utils'
 import type { BatchSummary, BatchStatus, DashboardStats } from '@shared/pqm'
@@ -72,33 +73,41 @@ function dDayLabel(dDayQc: number | null): string {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 type SortField = 'product_name' | 'batch_no' | 'qc_completion_deadline' | 'dDayQc' | 'status'
-type SortDir   = 'asc' | 'desc'
 
-function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: SortField | null; sortDir: SortDir }) {
-  if (sortField !== field) return <span className="ml-1 opacity-40"><ChevronDown size={11} /></span>
-  return sortDir === 'asc'
-    ? <ChevronUp size={11} className="ml-1 text-primary" />
-    : <ChevronDown size={11} className="ml-1 text-primary" />
-}
+const SORT_COLUMNS: SortColumnDef<SortField>[] = [
+  {
+    key: 'product',
+    label: '품목',
+    fields: [
+      { id: 'product_name', label: '품목명' },
+      { id: 'batch_no', label: '제조번호' },
+    ],
+  },
+  {
+    key: 'deadline',
+    label: '기한',
+    fields: [
+      { id: 'qc_completion_deadline', label: 'QC완료예정일' },
+      { id: 'dDayQc', label: 'D-Day' },
+    ],
+  },
+  sortCol('status', '상태'),
+]
 
 export default function HomePage() {
   const [upcoming, setUpcoming]   = useState<BatchSummary[]>(DEMO_UPCOMING)
   const [stats, setStats]         = useState<DashboardStats>(DEMO_STATS)
   const [usingDemo, setUsingDemo] = useState(true)
   const [isLoading, setIsLoading] = useState(true)
-  const [sortField, setSortField] = useState<SortField | null>(null)
+  const [sortField, setSortField] = useState<SortField>('qc_completion_deadline')
   const [sortDir, setSortDir]     = useState<SortDir>('asc')
 
-  function toggleSort(field: SortField) {
-    setSortField(prev => {
-      if (prev === field) { setSortDir(d => d === 'asc' ? 'desc' : 'asc'); return field }
-      setSortDir('asc')
-      return field
-    })
+  function pickSort(field: SortField, dir: SortDir) {
+    setSortField(field)
+    setSortDir(dir)
   }
 
   const sortedData = useMemo(() => {
-    if (!sortField) return upcoming
     return [...upcoming].sort((a, b) => {
       let cmp = 0
       if (sortField === 'dDayQc') {
@@ -222,68 +231,70 @@ export default function HomePage() {
               <Badge variant="outline" className="border-amber-200 text-amber-700">D-7 이내</Badge>
             </div>
           </div>
-          <div className="overflow-x-auto">
-            <Table className="w-full min-w-[640px]">
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="cursor-pointer px-3 text-muted-foreground select-none" onClick={() => toggleSort('product_name')}>
-                    <span className="flex items-center">품목명 <SortIcon field="product_name" sortField={sortField} sortDir={sortDir} /></span>
+          <Table>
+            <colgroup>
+              <col className="w-[48%]" />
+              <col className="w-[28%]" />
+              <col className="w-[24%]" />
+            </colgroup>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                {SORT_COLUMNS.map((col) => (
+                  <TableHead key={col.key} className="px-3 py-2">
+                    <SortColumnHeader
+                      col={col}
+                      sortField={sortField}
+                      sortDir={sortDir}
+                      onPick={pickSort}
+                    />
                   </TableHead>
-                  <TableHead className="cursor-pointer px-3 text-muted-foreground select-none" onClick={() => toggleSort('batch_no')}>
-                    <span className="flex items-center">제조번호 <SortIcon field="batch_no" sortField={sortField} sortDir={sortDir} /></span>
-                  </TableHead>
-                  <TableHead className="cursor-pointer px-3 text-muted-foreground select-none" onClick={() => toggleSort('qc_completion_deadline')}>
-                    <span className="flex items-center">QC완료예정일 <SortIcon field="qc_completion_deadline" sortField={sortField} sortDir={sortDir} /></span>
-                  </TableHead>
-                  <TableHead className="cursor-pointer px-3 text-center text-muted-foreground select-none" onClick={() => toggleSort('dDayQc')}>
-                    <span className="flex items-center justify-center">D-Day <SortIcon field="dDayQc" sortField={sortField} sortDir={sortDir} /></span>
-                  </TableHead>
-                  <TableHead className="cursor-pointer px-3 text-muted-foreground select-none" onClick={() => toggleSort('status')}>
-                    <span className="flex items-center">상태 <SortIcon field="status" sortField={sortField} sortDir={sortDir} /></span>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading
-                  ? Array.from({ length: 6 }).map((_, i) => (
-                      <TableRow key={i}>
-                        <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-32" /></TableCell>
-                        <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-16" /></TableCell>
-                        <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20" /></TableCell>
-                        <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-12" /></TableCell>
-                        <TableCell className="px-3 py-2.5"><Skeleton className="h-5 w-14 rounded-full" /></TableCell>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading
+                ? Array.from({ length: 6 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell className="px-3 py-2"><Skeleton className="h-8 w-40" /></TableCell>
+                      <TableCell className="px-3 py-2"><Skeleton className="h-8 w-24" /></TableCell>
+                      <TableCell className="px-3 py-2"><Skeleton className="h-5 w-14 rounded-full" /></TableCell>
+                    </TableRow>
+                  ))
+                : sortedData.slice(0, 10).map(row => {
+                    const statusCfg = STATUS_CONFIG[row.status]
+                    return (
+                      <TableRow key={row.id} className="cursor-pointer hover:bg-muted/40">
+                        <TableCell className="px-3 py-2">
+                          <CellStack
+                            primary={row.product_name}
+                            secondary={row.batch_no}
+                            primaryClass="font-medium text-foreground"
+                            title={`${row.product_name} / ${row.batch_no}`}
+                          />
+                        </TableCell>
+                        <TableCell className="px-3 py-2">
+                          <CellStack
+                            primary={row.qc_completion_deadline}
+                            secondary={
+                              <span className={cn('tabular-nums', dDayColor(row.dDayQc))}>
+                                {dDayLabel(row.dDayQc)}
+                              </span>
+                            }
+                            primaryClass="font-mono text-xs text-foreground"
+                            title={`${row.qc_completion_deadline} ${dDayLabel(row.dDayQc)}`}
+                          />
+                        </TableCell>
+                        <TableCell className="px-3 py-2">
+                          <Badge variant="outline" className="gap-1.5">
+                            <span className={cn('size-1.5 rounded-full', statusCfg.dot)} />
+                            {statusCfg.label}
+                          </Badge>
+                        </TableCell>
                       </TableRow>
-                    ))
-                  : sortedData.slice(0, 10).map(row => {
-                      const statusCfg = STATUS_CONFIG[row.status]
-                      return (
-                        <TableRow key={row.id} className="cursor-pointer hover:bg-muted/40">
-                          <TableCell className="px-3 py-2.5 font-medium text-foreground">
-                            {row.product_name}
-                          </TableCell>
-                          <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">
-                            {row.batch_no}
-                          </TableCell>
-                          <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">
-                            {row.qc_completion_deadline}
-                          </TableCell>
-                          <TableCell className="px-3 py-2.5 text-center">
-                            <span className={cn('text-xs tabular-nums', dDayColor(row.dDayQc))}>
-                              {dDayLabel(row.dDayQc)}
-                            </span>
-                          </TableCell>
-                          <TableCell className="px-3 py-2.5">
-                            <Badge variant="outline" className="gap-1.5">
-                              <span className={cn('size-1.5 rounded-full', statusCfg.dot)} />
-                              {statusCfg.label}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })}
-              </TableBody>
-            </Table>
-          </div>
+                    )
+                  })}
+            </TableBody>
+          </Table>
         </Card>
 
         <Card className="flex-[2] gap-0 overflow-hidden py-0">

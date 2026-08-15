@@ -2,8 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import {
-  ChevronDown,
-  ChevronUp,
   Grid2x2,
   Lock,
   Save,
@@ -16,6 +14,8 @@ import { Badge } from "@frontend/components/ui/badge"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
+import { CellStack } from "@frontend/components/ui/table-cell-stack"
+import { SortColumnHeader, type SortColumnDef, type SortDir } from "@frontend/components/ui/table-sort"
 import {
   Dialog,
   DialogBody,
@@ -88,6 +88,41 @@ const LEVEL_LABEL: Record<ProficiencyLevel, string> = {
 
 type TabId = "testers" | "capability"
 
+type SortField = "name" | "employeeNo" | "canSolo" | "canDuo" | "isActive"
+
+const TESTER_SORT_COLUMNS: SortColumnDef<SortField>[] = [
+  {
+    key: "tester",
+    label: "시험자",
+    fields: [
+      { id: "name", label: "이름" },
+      { id: "employeeNo", label: "사번" },
+    ],
+  },
+  {
+    key: "capability",
+    label: "시험가능",
+    fields: [
+      { id: "canSolo", label: "단독" },
+      { id: "canDuo", label: "2인" },
+    ],
+  },
+  {
+    key: "status",
+    label: "상태",
+    fields: [{ id: "isActive", label: "활성" }],
+  },
+]
+
+function StatusLine({ color, label }: { color: string; label: string }) {
+  return (
+    <div className="flex min-w-0 items-center gap-1.5">
+      <span className={cn("size-1.5 shrink-0 rounded-full", color)} />
+      <span className="min-w-0 truncate text-xs text-foreground">{label}</span>
+    </div>
+  )
+}
+
 export default function TestersPage() {
   const [activeTab, setActiveTab] = useState<TabId>("testers")
   const [testers, setTesters] = useState<TesterRow[]>([])
@@ -111,10 +146,8 @@ export default function TestersPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
 
-  const [sortField, setSortField] = useState<"employeeNo" | "name">(
-    "employeeNo"
-  )
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
+  const [sortField, setSortField] = useState<SortField>("employeeNo")
+  const [sortDir, setSortDir] = useState<SortDir>("asc")
 
   useEffect(() => {
     void fetchTesters()
@@ -314,9 +347,11 @@ export default function TestersPage() {
 
   const sortedTesters = useMemo(() => {
     return [...testers].sort((a, b) => {
-      const va = sortField === "employeeNo" ? a.employeeNo : a.name
-      const vb = sortField === "employeeNo" ? b.employeeNo : b.name
-      return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va)
+      const mul = sortDir === "asc" ? 1 : -1
+      if (sortField === "canSolo" || sortField === "canDuo" || sortField === "isActive") {
+        return (Number(a[sortField]) - Number(b[sortField])) * mul
+      }
+      return a[sortField].localeCompare(b[sortField], "ko") * mul
     })
   }, [testers, sortDir, sortField])
 
@@ -336,34 +371,15 @@ export default function TestersPage() {
     return { active, solo, duo }
   }, [testers])
 
-  function toggleSort(field: "employeeNo" | "name") {
-    if (sortField === field) {
-      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"))
-      return
-    }
+  const pickSort = useCallback((field: SortField, dir: SortDir) => {
     setSortField(field)
-    setSortDir("asc")
-  }
-
-  function SortIcon({ field }: { field: "employeeNo" | "name" }) {
-    if (sortField !== field) {
-      return (
-        <span className="ml-1 opacity-40">
-          <ChevronDown size={11} />
-        </span>
-      )
-    }
-    return sortDir === "asc" ? (
-      <ChevronUp size={11} className="ml-1 text-primary" />
-    ) : (
-      <ChevronDown size={11} className="ml-1 text-primary" />
-    )
-  }
+    setSortDir(dir)
+  }, [])
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-4 p-4 md:p-6">
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden p-4 md:p-6">
       {/* Header */}
-      <div className="flex flex-col gap-3">
+      <div className="flex shrink-0 flex-col gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <div className="flex items-center gap-2">
             {activeTab === "testers" ? (
@@ -414,42 +430,40 @@ export default function TestersPage() {
       </div>
 
       {/* KPI cards */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Card className="gap-1 border-l-4 border-l-primary px-4 py-4">
-          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+      <div className="grid shrink-0 grid-cols-3 gap-2">
+        <Card className="gap-0.5 border-l-4 border-l-primary px-3 py-2">
+          <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
             활성 시험자
           </span>
-          <span className="text-2xl font-semibold tabular-nums text-foreground">
+          <span className="text-lg font-semibold tabular-nums text-foreground">
             {summary.active}
-          </span>
-          <span className="text-[11px] text-muted-foreground">
-            전체 <span className="font-semibold tabular-nums">{testers.length}</span>명 중
+            <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">
+              / {testers.length}명
+            </span>
           </span>
         </Card>
-        <Card className="gap-1 border-l-4 border-l-emerald-500 px-4 py-4">
-          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+        <Card className="gap-0.5 border-l-4 border-l-emerald-500 px-3 py-2">
+          <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
             단독 가능
           </span>
-          <span className="text-2xl font-semibold tabular-nums text-emerald-600">
+          <span className="text-lg font-semibold tabular-nums text-emerald-600">
             {summary.solo}
           </span>
-          <span className="text-[11px] text-muted-foreground">활성 기준</span>
         </Card>
-        <Card className="gap-1 border-l-4 border-l-amber-500 px-4 py-4">
-          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+        <Card className="gap-0.5 border-l-4 border-l-amber-500 px-3 py-2">
+          <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
             2인 가능
           </span>
-          <span className="text-2xl font-semibold tabular-nums text-amber-600">
+          <span className="text-lg font-semibold tabular-nums text-amber-600">
             {summary.duo}
           </span>
-          <span className="text-[11px] text-muted-foreground">활성 기준</span>
         </Card>
       </div>
 
       {activeTab === "testers" && (
-        <>
+        <div className="flex min-h-0 flex-1 flex-col">
           {/* Mobile cards */}
-          <div className="flex flex-col gap-2 md:hidden">
+          <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto md:hidden">
             {loading ? (
               Array.from({ length: 4 }).map((_, i) => (
                 <Card key={i} className="gap-2 px-3 py-3">
@@ -550,38 +564,30 @@ export default function TestersPage() {
           </div>
 
           {/* Desktop table */}
-          <Card className="hidden gap-0 overflow-hidden py-0 md:block">
-            <Table className="min-w-[640px]">
+          <Card className="hidden min-h-0 flex-1 flex-col overflow-hidden py-0 md:flex">
+            <Table className="w-full">
+              <colgroup>
+                <col className="w-[8%]" />
+                <col className="w-[42%]" />
+                <col className="w-[24%]" />
+                <col className="w-[14%]" />
+                <col className="w-[12%]" />
+              </colgroup>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="w-14 px-3 text-muted-foreground">순번</TableHead>
-                  <TableHead
-                    className="w-28 cursor-pointer px-3 text-muted-foreground"
-                    onClick={() => toggleSort("employeeNo")}
-                  >
-                    <span className="flex items-center">
-                      사번 <SortIcon field="employeeNo" />
-                    </span>
-                  </TableHead>
-                  <TableHead
-                    className="cursor-pointer px-3 text-muted-foreground"
-                    onClick={() => toggleSort("name")}
-                  >
-                    <span className="flex items-center">
-                      이름 <SortIcon field="name" />
-                    </span>
-                  </TableHead>
-                  <TableHead className="w-24 px-3 text-center text-muted-foreground">
-                    단독시험
-                  </TableHead>
-                  <TableHead className="w-24 px-3 text-center text-muted-foreground">
-                    2인시험
-                  </TableHead>
-                  <TableHead className="w-20 px-3 text-center text-muted-foreground">
-                    상태
-                  </TableHead>
-                  <TableHead className="w-24 px-3 text-center text-muted-foreground">
-                    관리
+                  <TableHead className="px-3 text-muted-foreground">순번</TableHead>
+                  {TESTER_SORT_COLUMNS.map((col) => (
+                    <TableHead key={col.key} className="px-3">
+                      <SortColumnHeader
+                        col={col}
+                        sortField={sortField}
+                        sortDir={sortDir}
+                        onPick={pickSort}
+                      />
+                    </TableHead>
+                  ))}
+                  <TableHead className="px-1 text-center text-muted-foreground">
+                    <span className="sr-only">관리</span>
                   </TableHead>
                 </TableRow>
               </TableHeader>
@@ -589,13 +595,11 @@ export default function TestersPage() {
                 {loading
                   ? Array.from({ length: 6 }).map((_, i) => (
                       <TableRow key={i}>
-                        <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-6" /></TableCell>
-                        <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20" /></TableCell>
-                        <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20" /></TableCell>
-                        <TableCell className="px-3 py-2.5 text-center"><Skeleton className="h-5 w-14 mx-auto rounded-full" /></TableCell>
-                        <TableCell className="px-3 py-2.5 text-center"><Skeleton className="h-5 w-14 mx-auto rounded-full" /></TableCell>
-                        <TableCell className="px-3 py-2.5 text-center"><Skeleton className="h-5 w-12 mx-auto rounded-full" /></TableCell>
-                        <TableCell className="px-3 py-2.5 text-center"><Skeleton className="h-6 w-6 mx-auto" /></TableCell>
+                        <TableCell className="px-3 py-2"><Skeleton className="h-4 w-6" /></TableCell>
+                        <TableCell className="px-3 py-2"><Skeleton className="h-8 w-28" /></TableCell>
+                        <TableCell className="px-3 py-2"><Skeleton className="h-8 w-20" /></TableCell>
+                        <TableCell className="px-3 py-2"><Skeleton className="h-5 w-12 rounded-full" /></TableCell>
+                        <TableCell className="px-1 py-2"><Skeleton className="mx-auto h-6 w-6" /></TableCell>
                       </TableRow>
                     ))
                   : sortedTesters.map((tester, idx) => (
@@ -604,50 +608,30 @@ export default function TestersPage() {
                       className="cursor-pointer hover:bg-muted/40"
                       onClick={() => openEdit(tester)}
                     >
-                      <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">
+                      <TableCell className="px-3 py-2 text-xs text-muted-foreground">
                         {idx + 1}
                       </TableCell>
-                      <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">
-                        {tester.employeeNo}
+                      <TableCell className="px-3 py-2">
+                        <CellStack
+                          primary={tester.name}
+                          secondary={tester.employeeNo}
+                          primaryClass="font-medium text-foreground"
+                          title={`${tester.name} ${tester.employeeNo}`}
+                        />
                       </TableCell>
-                      <TableCell className="px-3 py-2.5 font-medium text-foreground">
-                        {tester.name}
-                      </TableCell>
-                      <TableCell className="px-3 py-2.5 text-center">
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "gap-1.5",
-                            tester.canSolo ? "border-emerald-200 text-emerald-700" : ""
-                          )}
-                        >
-                          <span
-                            className={cn(
-                              "size-1.5 rounded-full",
-                              tester.canSolo ? "bg-emerald-500" : "bg-muted-foreground"
-                            )}
+                      <TableCell className="px-3 py-2">
+                        <div className="min-w-0">
+                          <StatusLine
+                            color={tester.canSolo ? "bg-emerald-500" : "bg-muted-foreground"}
+                            label={tester.canSolo ? "단독 가능" : "단독 불가"}
                           />
-                          {tester.canSolo ? "가능" : "불가"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="px-3 py-2.5 text-center">
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "gap-1.5",
-                            tester.canDuo ? "border-amber-200 text-amber-700" : ""
-                          )}
-                        >
-                          <span
-                            className={cn(
-                              "size-1.5 rounded-full",
-                              tester.canDuo ? "bg-amber-500" : "bg-muted-foreground"
-                            )}
+                          <StatusLine
+                            color={tester.canDuo ? "bg-amber-500" : "bg-muted-foreground"}
+                            label={tester.canDuo ? "2인 가능" : "2인 불가"}
                           />
-                          {tester.canDuo ? "가능" : "불가"}
-                        </Badge>
+                        </div>
                       </TableCell>
-                      <TableCell className="px-3 py-2.5 text-center">
+                      <TableCell className="px-3 py-2">
                         <button
                           onClick={(e) => { e.stopPropagation(); void toggleActive(tester) }}
                           className={cn(
@@ -660,7 +644,7 @@ export default function TestersPage() {
                           {tester.isActive ? "활성" : "비활성"}
                         </button>
                       </TableCell>
-                      <TableCell className="px-3 py-2.5 text-center">
+                      <TableCell className="px-1 py-2 text-center">
                         <Button
                           variant="ghost"
                           size="icon-sm"
@@ -676,7 +660,7 @@ export default function TestersPage() {
                 {!loading && testers.length === 0 && (
                   <TableRow className="hover:bg-transparent">
                     <TableCell
-                      colSpan={7}
+                      colSpan={5}
                       className="py-16 text-center text-sm text-muted-foreground"
                     >
                       등록된 시험자가 없습니다.
@@ -686,13 +670,13 @@ export default function TestersPage() {
               </TableBody>
             </Table>
           </Card>
-        </>
+        </div>
       )}
 
       {activeTab === "capability" && (
-        <>
+        <div className="flex min-h-0 flex-1 flex-col gap-3">
           {/* Legend */}
-          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <div className="flex shrink-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <span className="font-medium text-foreground">범례</span>
             {(["O", "Y", "N", "X"] as ProficiencyLevel[]).map((level) => (
               <span key={level} className="flex items-center gap-1">
@@ -780,8 +764,8 @@ export default function TestersPage() {
               </div>
 
               {/* Desktop capability matrix table */}
-              <Card className="hidden gap-0 overflow-x-auto py-0 md:block">
-                <Table className="min-w-[700px] border-collapse text-xs">
+              <Card className="hidden min-h-0 flex-1 flex-col overflow-hidden py-0 md:flex">
+                <Table layout="wide" className="min-w-[700px] border-collapse text-xs">
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
                       <TableHead className="sticky top-0 left-0 z-20 min-w-[100px] border-r px-3 text-muted-foreground">
@@ -850,7 +834,7 @@ export default function TestersPage() {
               </Card>
             </>
           )}
-        </>
+        </div>
       )}
 
       {/* Add Dialog */}

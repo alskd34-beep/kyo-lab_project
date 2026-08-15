@@ -1,11 +1,9 @@
 "use client"
 
-import { useCallback, useDeferredValue, useEffect, useMemo, useState, type ChangeEvent } from "react"
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState, type ChangeEvent } from "react"
 import {
   AlertTriangle,
   Box,
-  ChevronDown,
-  ChevronUp,
   Lock,
   Plus,
   Save,
@@ -15,6 +13,7 @@ import {
 
 import { cn } from "@frontend/lib/utils"
 import { useIsMobile } from "@frontend/hooks/use-mobile"
+import { useVirtualWindow } from "@frontend/hooks/use-virtual-window"
 import { Badge } from "@frontend/components/ui/badge"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
@@ -28,6 +27,8 @@ import {
   DialogTitle,
 } from "@frontend/components/ui/dialog"
 import { Input } from "@frontend/components/ui/input"
+import { CellStack } from "@frontend/components/ui/table-cell-stack"
+import { SortColumnHeader, type SortColumnDef, type SortDir } from "@frontend/components/ui/table-sort"
 import {
   Select,
   SelectContent,
@@ -127,13 +128,96 @@ const NONE_SENTINEL = "__none__"
  */
 const KO_COLLATOR = new Intl.Collator("ko")
 
+type SortField =
+  | "productCode"
+  | "abbreviation"
+  | "name"
+  | "nameAlt"
+  | "categoryName"
+  | "classificationName"
+  | "unit"
+  | "packageSpec"
+  | "difficulty"
+  | "avgWorkdays"
+  | "isActive"
+
+const SORT_COLUMNS: SortColumnDef<SortField>[] = [
+  {
+    key: "code",
+    label: "품목코드",
+    fields: [
+      { id: "productCode", label: "품목코드" },
+      { id: "abbreviation", label: "약호" },
+    ],
+  },
+  {
+    key: "name",
+    label: "품목명",
+    fields: [
+      { id: "name", label: "품목명" },
+      { id: "nameAlt", label: "품목명2" },
+    ],
+  },
+  {
+    key: "class",
+    label: "분류",
+    fields: [
+      { id: "categoryName", label: "품목구분" },
+      { id: "classificationName", label: "전문분류" },
+      { id: "unit", label: "단위" },
+      { id: "packageSpec", label: "포장규격" },
+    ],
+  },
+  {
+    key: "status",
+    label: "상태",
+    fields: [
+      { id: "difficulty", label: "난이도" },
+      { id: "avgWorkdays", label: "공수" },
+      { id: "isActive", label: "활성/비활성" },
+    ],
+  },
+]
+
+const DIFF_RANK: Record<string, number> = { High: 3, Medium: 2, Low: 1 }
+
+function textOf(row: ProductRow, field: SortField): string {
+  if (field === "avgWorkdays" || field === "isActive" || field === "difficulty") return ""
+  const value = row[field]
+  return value == null ? "" : String(value)
+}
+
+function compareProducts(a: ProductRow, b: ProductRow, field: SortField, dir: SortDir): number {
+  const mul = dir === "asc" ? 1 : -1
+  if (field === "avgWorkdays") {
+    const na = a.avgWorkdays
+    const nb = b.avgWorkdays
+    if (na == null && nb == null) return 0
+    if (na == null) return 1
+    if (nb == null) return -1
+    return (na - nb) * mul
+  }
+  if (field === "isActive") return (Number(a.isActive) - Number(b.isActive)) * mul
+  if (field === "difficulty") {
+    const ra = DIFF_RANK[a.difficulty ?? ""] ?? 0
+    const rb = DIFF_RANK[b.difficulty ?? ""] ?? 0
+    return (ra - rb) * mul
+  }
+  const sa = textOf(a, field).trim()
+  const sb = textOf(b, field).trim()
+  if (!sa && !sb) return 0
+  if (!sa) return 1
+  if (!sb) return -1
+  return KO_COLLATOR.compare(sa, sb) * mul
+}
+
 const DIFF_DOT: Record<string, string> = {
   High: "bg-red-500",
   Medium: "bg-amber-500",
   Low: "bg-emerald-500",
 }
 
-function DifficultyBadge({ difficulty }: { difficulty: string | null }) {
+const DifficultyBadge = memo(function DifficultyBadge({ difficulty }: { difficulty: string | null }) {
   if (!difficulty) return <span className="text-xs text-muted-foreground">—</span>
   return (
     <Badge variant="outline" className="gap-1.5">
@@ -141,7 +225,156 @@ function DifficultyBadge({ difficulty }: { difficulty: string | null }) {
       {difficulty}
     </Badge>
   )
+})
+
+const ROW_HEIGHT = 52
+const CARD_HEIGHT = 156
+const PRODUCT_COL_COUNT = 5
+
+function StatusLine({
+  color,
+  label,
+  extra,
+}: {
+  color: string
+  label: string
+  extra?: string
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-1.5">
+      <span className={cn("size-1.5 shrink-0 rounded-full", color)} />
+      <span className="min-w-0 truncate text-xs text-foreground">{label}</span>
+      {extra ? <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{extra}</span> : null}
+    </div>
+  )
 }
+
+const ProductTableRow = memo(function ProductTableRow({
+  row,
+  onEdit,
+  onDelete,
+}: {
+  row: ProductRow
+  onEdit: (row: ProductRow) => void
+  onDelete: (row: ProductRow) => void
+}) {
+  const classLine = [row.categoryName, row.classificationName].filter(Boolean).join(" · ") || "—"
+  const spec = [row.unit, row.packageSpec].filter(Boolean).join(" · ")
+  return (
+    <TableRow className="cursor-pointer hover:bg-muted/40" onClick={() => onEdit(row)}>
+      <TableCell className="px-3 py-2">
+        <CellStack
+          primary={row.productCode}
+          secondary={row.abbreviation}
+          primaryClass="font-mono text-xs text-muted-foreground"
+          title={[row.productCode, row.abbreviation].filter(Boolean).join(" / ")}
+        />
+      </TableCell>
+      <TableCell className="px-3 py-2">
+        <CellStack
+          primary={row.name}
+          secondary={row.nameAlt}
+          primaryClass="font-medium text-foreground"
+          title={row.nameAlt ? `${row.name} ${row.nameAlt}` : row.name}
+        />
+      </TableCell>
+      <TableCell className="px-3 py-2">
+        <CellStack
+          primary={classLine}
+          secondary={spec || undefined}
+          primaryClass="text-xs text-foreground"
+          title={[classLine, spec].filter(Boolean).join(" / ")}
+        />
+      </TableCell>
+      <TableCell className="px-3 py-2">
+        <div className="min-w-0">
+          <StatusLine
+            color={row.difficulty ? (DIFF_DOT[row.difficulty] ?? "bg-muted-foreground") : "bg-muted-foreground"}
+            label={row.difficulty ?? "—"}
+            extra={row.avgWorkdays != null ? `${row.avgWorkdays}일` : undefined}
+          />
+          <StatusLine
+            color={row.isActive ? "bg-emerald-500" : "bg-muted-foreground"}
+            label={row.isActive ? "활성" : "비활성"}
+          />
+        </div>
+      </TableCell>
+      <TableCell className="px-1 py-2 text-center">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={(e) => { e.stopPropagation(); onDelete(row) }}
+          className="text-destructive hover:text-destructive"
+          title="삭제"
+        >
+          <Trash2 className="size-3.5" />
+        </Button>
+      </TableCell>
+    </TableRow>
+  )
+})
+
+function VirtualPad({ height }: { height: number }) {
+  if (height <= 0) return null
+  return (
+    <tr aria-hidden className="border-0 hover:bg-transparent">
+      <td colSpan={PRODUCT_COL_COUNT} className="p-0" style={{ height, border: 0, padding: 0 }} />
+    </tr>
+  )
+}
+
+const ProductCard = memo(function ProductCard({
+  row,
+  onEdit,
+  onDelete,
+}: {
+  row: ProductRow
+  onEdit: (row: ProductRow) => void
+  onDelete: (row: ProductRow) => void
+}) {
+  return (
+    <Card
+      className="cursor-pointer gap-0 px-3 py-3 transition-colors hover:bg-muted/30"
+      onClick={() => onEdit(row)}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="font-mono text-[11px] text-muted-foreground">{row.productCode}</span>
+            <Badge variant="outline" className="gap-1.5 text-[10px]">
+              <span className={cn("size-1.5 rounded-full", row.isActive ? "bg-emerald-500" : "bg-muted-foreground")} />
+              {row.isActive ? "활성" : "비활성"}
+            </Badge>
+            <DifficultyBadge difficulty={row.difficulty} />
+          </div>
+          <div className="mt-1 break-words text-sm font-semibold text-foreground">
+            {row.name}
+            {row.nameAlt && <span className="ml-1.5 text-xs font-normal text-muted-foreground">{row.nameAlt}</span>}
+          </div>
+          {row.abbreviation && (
+            <div className="font-mono text-[11px] text-muted-foreground">약호: {row.abbreviation}</div>
+          )}
+        </div>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={(e) => { e.stopPropagation(); onDelete(row) }}
+          className="text-destructive hover:text-destructive"
+          title="삭제"
+        >
+          <Trash2 className="size-3.5" />
+        </Button>
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 border-t pt-2 text-[11px] text-muted-foreground">
+        <div><span className="font-medium text-foreground">품목구분:</span> {row.categoryName ?? "—"}</div>
+        <div><span className="font-medium text-foreground">전문분류:</span> {row.classificationName ?? "—"}</div>
+        <div><span className="font-medium text-foreground">단위:</span> {row.unit ?? "—"}</div>
+        <div className="truncate"><span className="font-medium text-foreground">포장:</span> {row.packageSpec ?? "—"}</div>
+        <div><span className="font-medium text-foreground">공수:</span> {row.avgWorkdays != null ? `${row.avgWorkdays}일` : "—"}</div>
+      </div>
+    </Card>
+  )
+})
 
 const labelClass = "text-xs font-medium text-foreground"
 
@@ -269,17 +502,187 @@ function FormFields({
   )
 }
 
+/**
+ * 검색·정렬·가상 스크롤은 여기만 다시 그린다.
+ * KPI·추가/수정 모달이 같이 다시 그려지면 목록이 버벅인다.
+ */
+const ProductMasterList = memo(function ProductMasterList({
+  rows,
+  loading,
+  onAdd,
+  onEdit,
+  onDelete,
+}: {
+  rows: ProductRow[]
+  loading: boolean
+  onAdd: () => void
+  onEdit: (row: ProductRow) => void
+  onDelete: (row: ProductRow) => void
+}) {
+  const [search, setSearch] = useState("")
+  const deferredSearch = useDeferredValue(search)
+  const isMobile = useIsMobile()
+
+  const [sortField, setSortField] = useState<SortField>("productCode")
+  const [sortDir, setSortDir] = useState<SortDir>("asc")
+
+  const pickSort = useCallback((field: SortField, dir: SortDir) => {
+    setSortField(field)
+    setSortDir(dir)
+  }, [])
+
+  const sorted = useMemo(() => {
+    const q = deferredSearch.trim().toLowerCase()
+    const filtered = q
+      ? rows.filter(
+          (r) =>
+            r.name.toLowerCase().includes(q) ||
+            r.productCode.toLowerCase().includes(q) ||
+            (r.abbreviation ?? "").toLowerCase().includes(q)
+        )
+      : rows
+    return [...filtered].sort((a, b) => compareProducts(a, b, sortField, sortDir))
+  }, [rows, deferredSearch, sortField, sortDir])
+
+  const { containerRef, start, end, padTop, padBottom } = useVirtualWindow(
+    sorted.length,
+    isMobile ? CARD_HEIGHT : ROW_HEIGHT,
+  )
+  const windowedRows = sorted.slice(start, end)
+
+  return (
+    <>
+      <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="relative w-full sm:w-64">
+          <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="품목명 / 코드 / 약호 검색..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="h-9 pl-9"
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+          <Badge variant="secondary" className="tabular-nums">{sorted.length}건</Badge>
+          <Button onClick={onAdd}>
+            <Plus />
+            품목 추가
+          </Button>
+        </div>
+      </div>
+
+      {!isMobile && (
+      <Card className="hidden min-h-0 flex-1 flex-col overflow-hidden py-0 md:flex">
+        <Table
+          containerRef={containerRef}
+          containerClassName="min-w-0 overflow-x-hidden overflow-y-auto border-b border-border/60"
+          className="w-full"
+        >
+          <colgroup>
+            <col className="w-[14%]" />
+            <col className="w-[38%]" />
+            <col className="w-[24%]" />
+            <col className="w-[18%]" />
+            <col className="w-[6%]" />
+          </colgroup>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              {SORT_COLUMNS.map((col) => (
+                <TableHead key={col.key} className="px-3 py-2">
+                  <SortColumnHeader
+                    col={col}
+                    sortField={sortField}
+                    sortDir={sortDir}
+                    onPick={pickSort}
+                  />
+                </TableHead>
+              ))}
+              <TableHead className="px-1 text-center text-muted-foreground">
+                <span className="sr-only">관리</span>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading
+              ? Array.from({ length: 6 }).map((_, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="px-3 py-2"><Skeleton className="h-8 w-20" /></TableCell>
+                    <TableCell className="px-3 py-2"><Skeleton className="h-8 w-full max-w-56" /></TableCell>
+                    <TableCell className="px-3 py-2"><Skeleton className="h-8 w-24" /></TableCell>
+                    <TableCell className="px-3 py-2"><Skeleton className="h-8 w-16" /></TableCell>
+                    <TableCell className="px-1 py-2"><Skeleton className="mx-auto h-6 w-6 rounded" /></TableCell>
+                  </TableRow>
+                ))
+              : sorted.length === 0
+              ? (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={PRODUCT_COL_COUNT} className="py-16 text-center text-sm text-muted-foreground">
+                    데이터가 없습니다.
+                  </TableCell>
+                </TableRow>
+              )
+              : (
+                <>
+                  <VirtualPad height={padTop} />
+                  {windowedRows.map((row) => (
+                    <ProductTableRow
+                      key={row.id}
+                      row={row}
+                      onEdit={onEdit}
+                      onDelete={onDelete}
+                    />
+                  ))}
+                  <VirtualPad height={padBottom} />
+                </>
+              )
+            }
+          </TableBody>
+        </Table>
+      </Card>
+      )}
+
+      {isMobile && (
+      <div ref={containerRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto md:hidden">
+        {loading
+          ? Array.from({ length: 4 }).map((_, i) => (
+              <Card key={i} className="mb-2 gap-2 px-3 py-3">
+                <div className="flex items-center justify-between">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-5 w-14 rounded-full" />
+                </div>
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-3/4" />
+              </Card>
+            ))
+          : sorted.length === 0
+          ? (
+            <Card className="items-center py-6 text-center text-sm text-muted-foreground">
+              데이터가 없습니다.
+            </Card>
+          )
+          : (
+            <>
+              {padTop > 0 && <div aria-hidden style={{ height: padTop }} />}
+              <div className="flex flex-col gap-2">
+                {windowedRows.map((row) => (
+                  <ProductCard key={row.id} row={row} onEdit={onEdit} onDelete={onDelete} />
+                ))}
+              </div>
+              {padBottom > 0 && <div aria-hidden style={{ height: padBottom }} />}
+            </>
+          )
+        }
+      </div>
+      )}
+    </>
+  )
+})
+
 export function ProductTestWorkspace() {
   const [rows, setRows] = useState<ProductRow[]>([])
   const [categories, setCategories] = useState<LookupOptionRow[]>([])
   const [classifications, setClassifications] = useState<LookupOptionRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState("")
-  // 입력은 즉시 반영하되 무거운 목록 재계산·재렌더는 뒤로 미뤄 타이핑이 끊기지 않게 한다.
-  const deferredSearch = useDeferredValue(search)
-  // 데스크톱 테이블과 모바일 카드는 CSS(hidden/md:block)로만 감추면 양쪽 DOM 이 모두 생성되므로
-  // 실제로 보이는 쪽만 마운트한다.
-  const isMobile = useIsMobile()
 
   const [addOpen, setAddOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
@@ -292,9 +695,6 @@ export function ProductTestWorkspace() {
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  const [sortField, setSortField] = useState<"productCode" | "name">("productCode")
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
 
   const loadProducts = useCallback(async () => {
     setLoading(true)
@@ -318,35 +718,6 @@ export function ProductTestWorkspace() {
 
   useEffect(() => { void loadProducts() }, [loadProducts])
 
-  function toggleSort(field: "productCode" | "name") {
-    if (sortField === field) setSortDir((d) => (d === "asc" ? "desc" : "asc"))
-    else { setSortField(field); setSortDir("asc") }
-  }
-
-  function SortIcon({ field }: { field: "productCode" | "name" }) {
-    if (sortField !== field) return <span className="ml-1 opacity-40"><ChevronDown size={11} /></span>
-    return sortDir === "asc"
-      ? <ChevronUp size={11} className="ml-1 text-primary" />
-      : <ChevronDown size={11} className="ml-1 text-primary" />
-  }
-
-  const sorted = useMemo(() => {
-    const q = deferredSearch.trim().toLowerCase()
-    const filtered = q
-      ? rows.filter(
-          (r) =>
-            r.name.toLowerCase().includes(q) ||
-            r.productCode.toLowerCase().includes(q) ||
-            (r.abbreviation ?? "").toLowerCase().includes(q)
-        )
-      : rows
-    return [...filtered].sort((a, b) => {
-      const va = sortField === "productCode" ? a.productCode : a.name
-      const vb = sortField === "productCode" ? b.productCode : b.name
-      return sortDir === "asc" ? KO_COLLATOR.compare(va, vb) : KO_COLLATOR.compare(vb, va)
-    })
-  }, [rows, deferredSearch, sortField, sortDir])
-
   const summary = useMemo(() => {
     const total = rows.length
     const active = rows.filter((r) => r.isActive).length
@@ -359,13 +730,13 @@ export function ProductTestWorkspace() {
     return { total, active, byCat, byCls, byDiff }
   }, [rows])
 
-  function openAdd() {
+  const openAdd = useCallback(() => {
     setAddForm(EMPTY_ADD_FORM)
     setError(null)
     setAddOpen(true)
-  }
+  }, [])
 
-  function openEdit(row: ProductRow) {
+  const openEdit = useCallback((row: ProductRow) => {
     setEditTarget(row)
     setEditForm({
       name: row.name,
@@ -381,7 +752,11 @@ export function ProductTestWorkspace() {
     })
     setError(null)
     setEditOpen(true)
-  }
+  }, [])
+
+  const requestDelete = useCallback((row: ProductRow) => {
+    setDeleteTarget(row)
+  }, [])
 
   async function handleAdd() {
     if (!addForm.productCode.trim() || !addForm.name.trim()) {
@@ -482,67 +857,64 @@ export function ProductTestWorkspace() {
   }
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-4 p-4 md:p-6">
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden p-4 md:p-6">
       {/* 헤더 */}
-      <div className="flex flex-col gap-1">
+      <div className="flex shrink-0 flex-col gap-0.5">
         <div className="flex items-center gap-2">
-          <Box className="size-5 text-muted-foreground" />
-          <h1 className="text-xl font-semibold text-foreground">품목 마스터</h1>
+          <Box className="size-4 text-muted-foreground" />
+          <h1 className="text-lg font-semibold text-foreground">품목 마스터</h1>
         </div>
-        <p className="text-sm text-muted-foreground">시험 품목의 기본 정보와 분류 기준을 관리합니다.</p>
+        <p className="text-xs text-muted-foreground">시험 품목의 기본 정보와 분류 기준을 관리합니다.</p>
       </div>
 
-      {/* KPI 카드 */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {/* KPI 카드 — 한 줄 요약 */}
+      <div className="grid shrink-0 grid-cols-2 gap-2 lg:grid-cols-4">
         {loading ? (
           Array.from({ length: 4 }).map((_, i) => (
-            <Card key={i} className="gap-1 px-4 py-4">
-              <Skeleton className="h-3 w-16" />
-              <Skeleton className="h-8 w-12" />
-              <Skeleton className="h-3 w-24" />
+            <Card key={i} className="gap-0.5 px-3 py-2">
+              <Skeleton className="h-3 w-12" />
+              <Skeleton className="h-5 w-10" />
             </Card>
           ))
         ) : (
           <>
-            <Card className="gap-1 border-l-4 border-l-primary px-4 py-4">
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">전체 품목</span>
-              <span className="text-2xl font-semibold tabular-nums text-foreground">{summary.total}</span>
-              <span className="text-[11px] text-muted-foreground">
-                활성 <span className="font-semibold text-emerald-600">{summary.active}</span>
-                {" / "}
-                비활성 <span className="font-semibold">{summary.total - summary.active}</span>
+            <Card className="gap-0.5 border-l-4 border-l-primary px-3 py-2">
+              <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">전체 품목</span>
+              <span className="text-lg font-semibold tabular-nums text-foreground">
+                {summary.total}
+                <span className="ml-2 text-[11px] font-normal text-muted-foreground">
+                  활성 <span className="font-semibold text-emerald-600">{summary.active}</span>
+                  {" · "}
+                  비활성 {summary.total - summary.active}
+                </span>
               </span>
             </Card>
 
-            <Card className="gap-1 px-4 py-4">
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">품목구분</span>
-              <div className="mt-1 flex flex-col gap-1">
-                {Object.entries(summary.byCat).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([name, cnt]) => (
-                  <div key={name} className="flex items-center gap-1.5">
-                    <div className="h-1.5 rounded-full bg-primary" style={{ width: `${Math.round((cnt / summary.total) * 100)}%`, minWidth: 4, maxWidth: "55%" }} />
-                    <span className="flex-1 truncate text-[11px] text-muted-foreground">{name}</span>
-                    <span className="shrink-0 text-[11px] font-semibold tabular-nums text-foreground">{cnt}</span>
-                  </div>
+            <Card className="gap-0.5 px-3 py-2">
+              <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">품목구분</span>
+              <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+                {Object.entries(summary.byCat).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([name, cnt]) => (
+                  <span key={name} className="text-[11px] text-muted-foreground">
+                    {name} <span className="font-semibold tabular-nums text-foreground">{cnt}</span>
+                  </span>
                 ))}
               </div>
             </Card>
 
-            <Card className="gap-1 px-4 py-4">
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">전문분류</span>
-              <div className="mt-1 flex flex-col gap-1">
-                {Object.entries(summary.byCls).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([name, cnt]) => (
-                  <div key={name} className="flex items-center gap-1.5">
-                    <div className="h-1.5 rounded-full bg-violet-500" style={{ width: `${Math.round((cnt / summary.total) * 100)}%`, minWidth: 4, maxWidth: "55%" }} />
-                    <span className="flex-1 truncate text-[11px] text-muted-foreground">{name}</span>
-                    <span className="shrink-0 text-[11px] font-semibold tabular-nums text-foreground">{cnt}</span>
-                  </div>
+            <Card className="gap-0.5 px-3 py-2">
+              <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">전문분류</span>
+              <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+                {Object.entries(summary.byCls).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([name, cnt]) => (
+                  <span key={name} className="text-[11px] text-muted-foreground">
+                    {name} <span className="font-semibold tabular-nums text-foreground">{cnt}</span>
+                  </span>
                 ))}
               </div>
             </Card>
 
-            <Card className="gap-1 px-4 py-4">
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">난이도</span>
-              <div className="mt-1 flex flex-col gap-1.5">
+            <Card className="gap-0.5 px-3 py-2">
+              <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">난이도</span>
+              <div className="flex flex-wrap gap-x-2 gap-y-0.5">
                 {[
                   { key: "High", dot: "bg-red-500" },
                   { key: "Medium", dot: "bg-amber-500" },
@@ -552,11 +924,10 @@ export function ProductTestWorkspace() {
                   const cnt = summary.byDiff[key] ?? 0
                   if (!cnt) return null
                   return (
-                    <div key={key} className="flex items-center gap-1.5">
-                      <div className={cn("h-1.5 rounded-full", dot)} style={{ width: `${Math.round((cnt / summary.total) * 100)}%`, minWidth: 4, maxWidth: "55%" }} />
-                      <span className="flex-1 text-[11px] text-muted-foreground">{key}</span>
-                      <span className="shrink-0 text-[11px] font-semibold tabular-nums text-foreground">{cnt}</span>
-                    </div>
+                    <span key={key} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                      <span className={cn("size-1.5 rounded-full", dot)} />
+                      {key} <span className="font-semibold tabular-nums text-foreground">{cnt}</span>
+                    </span>
                   )
                 })}
               </div>
@@ -565,193 +936,21 @@ export function ProductTestWorkspace() {
         )}
       </div>
 
-      {/* 툴바 */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <div className="relative w-full sm:w-64">
-          <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="품목명 / 코드 / 약호 검색..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="h-9 pl-9"
-          />
-        </div>
-        <div className="flex items-center gap-2 sm:ml-auto">
-          <Badge variant="secondary" className="tabular-nums">{sorted.length}건</Badge>
-          <Button onClick={openAdd}>
-            <Plus />
-            품목 추가
-          </Button>
-        </div>
-      </div>
-
       {error && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive">
           {error}
         </div>
       )}
 
-      {/* 데스크톱 테이블 */}
-      {!isMobile && (
-      <Card className="hidden gap-0 overflow-hidden py-0 md:block">
-        <Table className="min-w-[880px]">
-          <TableHeader>
-            <TableRow className="hover:bg-transparent">
-              <TableHead className="cursor-pointer px-3 text-muted-foreground" onClick={() => toggleSort("productCode")}>
-                <span className="flex items-center">품목코드 <SortIcon field="productCode" /></span>
-              </TableHead>
-              <TableHead className="cursor-pointer px-3 text-muted-foreground" onClick={() => toggleSort("name")}>
-                <span className="flex items-center">품목명 <SortIcon field="name" /></span>
-              </TableHead>
-              <TableHead className="px-3 text-muted-foreground">약호</TableHead>
-              <TableHead className="px-3 text-muted-foreground">품목구분</TableHead>
-              <TableHead className="px-3 text-muted-foreground">전문분류</TableHead>
-              <TableHead className="px-3 text-muted-foreground">난이도</TableHead>
-              <TableHead className="px-3 text-muted-foreground">단위</TableHead>
-              <TableHead className="px-3 text-muted-foreground">포장규격</TableHead>
-              <TableHead className="px-3 text-muted-foreground">공수</TableHead>
-              <TableHead className="px-3 text-muted-foreground">상태</TableHead>
-              <TableHead className="w-14 px-3 text-center text-muted-foreground">관리</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading
-              ? Array.from({ length: 6 }).map((_, i) => (
-                  <TableRow key={i}>
-                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20" /></TableCell>
-                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-36" /></TableCell>
-                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-12" /></TableCell>
-                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-16" /></TableCell>
-                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-16" /></TableCell>
-                    <TableCell className="px-3 py-2.5"><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
-                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-10" /></TableCell>
-                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20" /></TableCell>
-                    <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-10" /></TableCell>
-                    <TableCell className="px-3 py-2.5"><Skeleton className="h-5 w-14 rounded-full" /></TableCell>
-                    <TableCell className="px-3 py-2.5"><Skeleton className="mx-auto h-6 w-6 rounded" /></TableCell>
-                  </TableRow>
-                ))
-              : sorted.length === 0
-              ? (
-                <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={11} className="py-16 text-center text-sm text-muted-foreground">
-                    데이터가 없습니다.
-                  </TableCell>
-                </TableRow>
-              )
-              : sorted.map((row) => (
-                  <TableRow
-                    key={row.id}
-                    className="cursor-pointer hover:bg-muted/40"
-                    onClick={() => openEdit(row)}
-                  >
-                    <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{row.productCode}</TableCell>
-                    <TableCell className="px-3 py-2.5 font-medium text-foreground">
-                      {row.name}
-                      {row.nameAlt && <span className="ml-1.5 text-xs font-normal text-muted-foreground">{row.nameAlt}</span>}
-                    </TableCell>
-                    <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{row.abbreviation ?? "—"}</TableCell>
-                    <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">{row.categoryName ?? "—"}</TableCell>
-                    <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">{row.classificationName ?? "—"}</TableCell>
-                    <TableCell className="px-3 py-2.5"><DifficultyBadge difficulty={row.difficulty} /></TableCell>
-                    <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">{row.unit ?? "—"}</TableCell>
-                    <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">{row.packageSpec ?? "—"}</TableCell>
-                    <TableCell className="px-3 py-2.5 text-xs text-foreground">
-                      {row.avgWorkdays != null ? `${row.avgWorkdays}일` : <span className="text-muted-foreground">—</span>}
-                    </TableCell>
-                    <TableCell className="px-3 py-2.5">
-                      <Badge variant="outline" className="gap-1.5">
-                        <span className={cn("size-1.5 rounded-full", row.isActive ? "bg-emerald-500" : "bg-muted-foreground")} />
-                        {row.isActive ? "활성" : "비활성"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="px-3 py-2.5 text-center">
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={(e) => { e.stopPropagation(); setDeleteTarget(row) }}
-                        className="text-destructive hover:text-destructive"
-                        title="삭제"
-                      >
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
-            }
-          </TableBody>
-        </Table>
-      </Card>
-      )}
+      <ProductMasterList
+        rows={rows}
+        loading={loading}
+        onAdd={openAdd}
+        onEdit={openEdit}
+        onDelete={requestDelete}
+      />
 
-      {/* 모바일 카드 */}
-      {isMobile && (
-      <div className="flex flex-col gap-2 md:hidden">
-        {loading
-          ? Array.from({ length: 4 }).map((_, i) => (
-              <Card key={i} className="gap-2 px-3 py-3">
-                <div className="flex items-center justify-between">
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-5 w-14 rounded-full" />
-                </div>
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-3/4" />
-              </Card>
-            ))
-          : sorted.length === 0
-          ? (
-            <Card className="items-center py-6 text-center text-sm text-muted-foreground">
-              데이터가 없습니다.
-            </Card>
-          )
-          : sorted.map((row) => (
-              <Card
-                key={row.id}
-                className="cursor-pointer gap-0 px-3 py-3 transition-colors hover:bg-muted/30"
-                onClick={() => openEdit(row)}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="font-mono text-[11px] text-muted-foreground">{row.productCode}</span>
-                      <Badge variant="outline" className="gap-1.5 text-[10px]">
-                        <span className={cn("size-1.5 rounded-full", row.isActive ? "bg-emerald-500" : "bg-muted-foreground")} />
-                        {row.isActive ? "활성" : "비활성"}
-                      </Badge>
-                      <DifficultyBadge difficulty={row.difficulty} />
-                    </div>
-                    <div className="mt-1 break-words text-sm font-semibold text-foreground">
-                      {row.name}
-                      {row.nameAlt && <span className="ml-1.5 text-xs font-normal text-muted-foreground">{row.nameAlt}</span>}
-                    </div>
-                    {row.abbreviation && (
-                      <div className="font-mono text-[11px] text-muted-foreground">약호: {row.abbreviation}</div>
-                    )}
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={(e) => { e.stopPropagation(); setDeleteTarget(row) }}
-                    className="text-destructive hover:text-destructive"
-                    title="삭제"
-                  >
-                    <Trash2 className="size-3.5" />
-                  </Button>
-                </div>
-                <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 border-t pt-2 text-[11px] text-muted-foreground">
-                  <div><span className="font-medium text-foreground">품목구분:</span> {row.categoryName ?? "—"}</div>
-                  <div><span className="font-medium text-foreground">전문분류:</span> {row.classificationName ?? "—"}</div>
-                  <div><span className="font-medium text-foreground">단위:</span> {row.unit ?? "—"}</div>
-                  <div className="truncate"><span className="font-medium text-foreground">포장:</span> {row.packageSpec ?? "—"}</div>
-                  <div><span className="font-medium text-foreground">공수:</span> {row.avgWorkdays != null ? `${row.avgWorkdays}일` : "—"}</div>
-                </div>
-              </Card>
-            ))
-        }
-      </div>
-      )}
-
-      {/* 품목 추가 Dialog */}
+      {addOpen && (
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent size="lg">
           <DialogHeader>
@@ -823,8 +1022,9 @@ export function ProductTestWorkspace() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      )}
 
-      {/* 품목 수정 Sheet */}
+      {editOpen && (
       <Sheet open={editOpen} onOpenChange={setEditOpen}>
         <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
           <SheetHeader className="border-b px-5 py-4">
@@ -873,8 +1073,9 @@ export function ProductTestWorkspace() {
           </SheetFooter>
         </SheetContent>
       </Sheet>
+      )}
 
-      {/* 삭제 확인 Dialog */}
+      {deleteTarget && (
       <Dialog
         open={!!deleteTarget}
         onOpenChange={(open) => { if (!open && !deleting) setDeleteTarget(null) }}
@@ -901,6 +1102,7 @@ export function ProductTestWorkspace() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      )}
     </div>
   )
 }

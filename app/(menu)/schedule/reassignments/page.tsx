@@ -7,6 +7,8 @@ import { Badge } from "@frontend/components/ui/badge"
 import { Button } from "@frontend/components/ui/button"
 import { DateRangeField } from "@frontend/components/ui/date-range-field"
 import { Skeleton } from "@frontend/components/ui/skeleton"
+import { CellStack } from "@frontend/components/ui/table-cell-stack"
+import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from "@frontend/components/ui/table-sort"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@frontend/components/ui/table"
 import {
   CalendarDays,
@@ -74,6 +76,24 @@ const TYPE_META: Record<HistoryType, { label: string; icon: typeof History; clas
   },
 }
 
+type SortField = "occurredAt" | "type" | "productName" | "productCode" | "batchNo" | "title" | "actorName"
+
+const SORT_COLUMNS: SortColumnDef<SortField>[] = [
+  sortCol("occurredAt", "일시"),
+  sortCol("type", "유형"),
+  {
+    key: "order",
+    label: "오더",
+    fields: [
+      { id: "productName", label: "품목명" },
+      { id: "productCode", label: "품목코드" },
+      { id: "batchNo", label: "제조번호" },
+    ],
+  },
+  sortCol("title", "내용"),
+  sortCol("actorName", "작업자"),
+]
+
 function formatDateTime(value: string): string {
   const d = new Date(value)
   if (Number.isNaN(d.getTime())) return value
@@ -135,6 +155,13 @@ export default function ReassignmentsPage() {
   const [query, setQuery] = useState("")
   const [fromDate, setFromDate] = useState(() => daysAgoDate(30))
   const [toDate, setToDate] = useState(() => todayDate())
+  const [sortField, setSortField] = useState<SortField>("occurredAt")
+  const [sortDir, setSortDir] = useState<SortDir>("desc")
+
+  const pickSort = (field: SortField, dir: SortDir) => {
+    setSortField(field)
+    setSortDir(dir)
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -179,6 +206,21 @@ export default function ReassignmentsPage() {
       ].some(value => (value ?? "").toLowerCase().includes(needle))
     })
   }, [rows, filter, query])
+
+  const displayedRows = useMemo(() => {
+    const mul = sortDir === "asc" ? 1 : -1
+    return [...filteredRows].sort((a, b) => {
+      const av = a[sortField] ?? ""
+      const bv = b[sortField] ?? ""
+      if (sortField === "occurredAt") {
+        return String(av).localeCompare(String(bv)) * mul
+      }
+      if (sortField === "type") {
+        return TYPE_META[a.type].label.localeCompare(TYPE_META[b.type].label, "ko") * mul
+      }
+      return String(av).localeCompare(String(bv), "ko") * mul
+    })
+  }, [filteredRows, sortField, sortDir])
 
   if (!isAdmin) {
     return (
@@ -279,59 +321,72 @@ export default function ReassignmentsPage() {
           </div>
           <span className="text-xs font-medium text-slate-500">표시 {filteredRows.length.toLocaleString("ko-KR")}건</span>
         </div>
-        <div className="overflow-x-auto">
-          <Table className="w-full min-w-[880px] text-sm">
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="px-3 py-2 text-muted-foreground">일시</TableHead>
-                <TableHead className="px-3 py-2 text-muted-foreground">유형</TableHead>
-                <TableHead className="px-3 py-2 text-muted-foreground">오더</TableHead>
-                <TableHead className="px-3 py-2 text-muted-foreground">내용</TableHead>
-                <TableHead className="px-3 py-2 text-muted-foreground">작업자</TableHead>
+        <Table className="text-sm">
+          <colgroup>
+            <col className="w-[16%]" />
+            <col className="w-[14%]" />
+            <col className="w-[22%]" />
+            <col className="w-[36%]" />
+            <col className="w-[12%]" />
+          </colgroup>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              {SORT_COLUMNS.map((col) => (
+                <TableHead key={col.key} className="px-3 py-2 text-muted-foreground">
+                  <SortColumnHeader
+                    col={col}
+                    sortField={sortField}
+                    sortDir={sortDir}
+                    onPick={pickSort}
+                  />
+                </TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading ? (
+              <LoadingRows />
+            ) : displayedRows.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={5} className="px-3 py-10 text-center text-sm text-slate-400">
+                  표시할 AI 스케줄 이력이 없습니다.
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <LoadingRows />
-              ) : filteredRows.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="px-3 py-10 text-center text-sm text-slate-400">
-                    표시할 AI 스케줄 이력이 없습니다.
+            ) : (
+              displayedRows.map(row => (
+                <TableRow key={row.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                  <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">
+                    <span className="block truncate" title={formatDateTime(row.occurredAt)}>
+                      {formatDateTime(row.occurredAt)}
+                    </span>
+                  </TableCell>
+                  <TableCell className="px-3 py-2.5">
+                    <TypeBadge type={row.type} />
+                  </TableCell>
+                  <TableCell className="px-3 py-2.5">
+                    <CellStack
+                      primary={row.productName ?? "—"}
+                      secondary={`${row.productCode ?? "—"} · ${row.batchNo ?? "—"}`}
+                      primaryClass="font-semibold text-slate-900"
+                      title={[row.productName, row.productCode, row.batchNo].filter(Boolean).join(" / ")}
+                    />
+                  </TableCell>
+                  <TableCell className="px-3 py-2.5">
+                    <CellStack
+                      primary={row.title}
+                      secondary={row.reason ? `${row.summary} · 사유: ${row.reason}` : row.summary}
+                      primaryClass="font-medium text-slate-900"
+                      title={[row.title, row.summary, row.reason ? `사유: ${row.reason}` : ""].filter(Boolean).join(" / ")}
+                    />
+                  </TableCell>
+                  <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">
+                    <span className="block truncate">{row.actorName ?? "—"}</span>
                   </TableCell>
                 </TableRow>
-              ) : (
-                filteredRows.map(row => (
-                  <TableRow key={row.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
-                    <TableCell className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground">
-                      {formatDateTime(row.occurredAt)}
-                    </TableCell>
-                    <TableCell className="px-3 py-2.5">
-                      <TypeBadge type={row.type} />
-                    </TableCell>
-                    <TableCell className="px-3 py-2.5">
-                      <div className="min-w-0">
-                        <p className="truncate font-semibold text-slate-900">{row.productName ?? "-"}</p>
-                        <p className="mt-0.5 font-mono text-[11px] text-slate-500">
-                          {row.productCode ?? "-"} · {row.batchNo ?? "-"}
-                        </p>
-                      </div>
-                    </TableCell>
-                    <TableCell className="px-3 py-2.5">
-                      <p className="font-medium text-slate-900">{row.title}</p>
-                      <p className="mt-0.5 text-xs text-slate-600">{row.summary}</p>
-                      {row.reason && (
-                        <p className="mt-1 text-[11px] text-slate-400">사유: {row.reason}</p>
-                      )}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap px-3 py-2.5 text-xs text-muted-foreground">
-                      {row.actorName ?? "-"}
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
+              ))
+            )}
+          </TableBody>
+        </Table>
       </div>
     </div>
   )

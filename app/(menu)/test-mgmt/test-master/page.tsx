@@ -1,10 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import {
-  AlertTriangle,
-  ChevronDown,
-  ChevronUp,
   ClipboardList,
   Pencil,
   Plus,
@@ -35,6 +32,7 @@ import {
   SelectValue,
 } from "@frontend/components/ui/select"
 import { Skeleton } from "@frontend/components/ui/skeleton"
+import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from "@frontend/components/ui/table-sort"
 import {
   Table,
   TableBody,
@@ -90,15 +88,22 @@ const EMPTY_FORM: FormState = {
   requiresDuo: false,
 }
 
-type SortField = "name" | "category" | "estimatedHours"
-type SortDir = "asc" | "desc"
+type SortField = "name" | "category" | "estimatedHours" | "requiresDuo" | "isActive"
 
-function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: SortField; sortDir: SortDir }) {
-  if (sortField !== field) return <ChevronDown className="size-3 opacity-30" />
-  return sortDir === "asc"
-    ? <ChevronUp className="size-3" />
-    : <ChevronDown className="size-3" />
-}
+const SORT_COLUMNS: SortColumnDef<SortField>[] = [
+  sortCol("name", "시험항목명"),
+  sortCol("category", "대분류"),
+  sortCol("estimatedHours", "예상시간"),
+  {
+    key: "attrs",
+    label: "속성",
+    fields: [
+      { id: "estimatedHours", label: "예상시간" },
+      { id: "requiresDuo", label: "2인시험" },
+      { id: "isActive", label: "활성" },
+    ],
+  },
+]
 
 function CategoryBadge({ category }: { category: string }) {
   const dot = CATEGORY_DOT[category] ?? CATEGORY_DOT["기타"]
@@ -164,28 +169,23 @@ export default function TestMasterPage() {
     })
   }, [rows, search, activeTab])
 
-  function toggleSort(field: SortField) {
-    if (sortField === field) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"))
-    } else {
-      setSortField(field)
-      setSortDir("asc")
-    }
-  }
+  const pickSort = useCallback((field: SortField, dir: SortDir) => {
+    setSortField(field)
+    setSortDir(dir)
+  }, [])
 
   const sortedData = useMemo(() => {
     return [...filtered].sort((a, b) => {
-      let cmp = 0
-      if (sortField === "name") {
-        cmp = a.name.localeCompare(b.name, "ko")
-      } else if (sortField === "category") {
-        cmp = a.category.localeCompare(b.category, "ko")
-      } else if (sortField === "estimatedHours") {
+      const mul = sortDir === "asc" ? 1 : -1
+      if (sortField === "estimatedHours") {
         const ah = a.estimatedHours ?? -1
         const bh = b.estimatedHours ?? -1
-        cmp = ah - bh
+        return (ah - bh) * mul
       }
-      return sortDir === "asc" ? cmp : -cmp
+      if (sortField === "requiresDuo" || sortField === "isActive") {
+        return (Number(a[sortField]) - Number(b[sortField])) * mul
+      }
+      return a[sortField].localeCompare(b[sortField], "ko") * mul
     })
   }, [filtered, sortField, sortDir])
 
@@ -346,30 +346,28 @@ export default function TestMasterPage() {
   const allTabs = ["전체", ...CATEGORIES] as const
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-4 p-4 md:p-6">
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden p-4 md:p-6">
       {/* KPI 카드 */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Card className="gap-1 px-4 py-4">
-          <span className="text-xs font-medium text-muted-foreground">전체 항목</span>
-          <span className="text-2xl font-semibold tabular-nums text-foreground">{rows.length}</span>
+      <div className="grid shrink-0 grid-cols-3 gap-2">
+        <Card className="gap-0.5 px-3 py-2">
+          <span className="text-[10px] font-medium text-muted-foreground">전체 항목</span>
+          <span className="text-lg font-semibold tabular-nums text-foreground">{rows.length}</span>
           <span className="text-[11px] text-muted-foreground">
             현재 표시{" "}
             <span className="font-semibold text-foreground tabular-nums">{filtered.length}</span>건
           </span>
         </Card>
-        <Card className="gap-1 px-4 py-4">
-          <span className="text-xs font-medium text-muted-foreground">활성 항목</span>
-          <span className="text-2xl font-semibold tabular-nums text-emerald-600">{summary.active}</span>
-          <span className="text-[11px] text-muted-foreground">운영 중 항목</span>
+        <Card className="gap-0.5 px-3 py-2">
+          <span className="text-[10px] font-medium text-muted-foreground">활성 항목</span>
+          <span className="text-lg font-semibold tabular-nums text-emerald-600">{summary.active}</span>
         </Card>
-        <Card className="gap-1 px-4 py-4">
-          <span className="text-xs font-medium text-muted-foreground">평균 예상시간</span>
-          <span className="text-2xl font-semibold tabular-nums text-amber-600">
+        <Card className="gap-0.5 px-3 py-2">
+          <span className="text-[10px] font-medium text-muted-foreground">평균 예상시간</span>
+          <span className="text-lg font-semibold tabular-nums text-amber-600">
             {summary.avgHours.toFixed(1)}
-          </span>
-          <span className="text-[11px] text-muted-foreground">
-            2인시험{" "}
-            <span className="font-semibold text-foreground tabular-nums">{summary.duo}</span>건
+            <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">
+              2인 {summary.duo}건
+            </span>
           </span>
         </Card>
       </div>
@@ -525,99 +523,90 @@ export default function TestMasterPage() {
       </div>
 
       {/* 데스크톱 테이블 */}
-      <Card className="hidden gap-0 overflow-hidden py-0 md:block">
-        <Table className="min-w-[640px]">
+      <Card className="hidden min-h-0 flex-1 flex-col overflow-hidden py-0 md:flex">
+        <Table className="w-full">
+          <colgroup>
+            <col className="w-[38%]" />
+            <col className="w-[16%]" />
+            <col className="w-[14%]" />
+            <col className="w-[20%]" />
+            <col className="w-[12%]" />
+          </colgroup>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead
-                className="cursor-pointer select-none px-3 text-muted-foreground"
-                onClick={() => toggleSort("name")}
-              >
-                <span className="inline-flex items-center gap-1">
-                  시험항목명
-                  <SortIcon field="name" sortField={sortField} sortDir={sortDir} />
-                </span>
+              {SORT_COLUMNS.map((col) => (
+                <TableHead key={col.key} className="px-3 py-2">
+                  <SortColumnHeader
+                    col={col}
+                    sortField={sortField}
+                    sortDir={sortDir}
+                    onPick={pickSort}
+                  />
+                </TableHead>
+              ))}
+              <TableHead className="px-1 text-center text-muted-foreground">
+                <span className="sr-only">액션</span>
               </TableHead>
-              <TableHead
-                className="w-28 cursor-pointer select-none px-3 text-muted-foreground"
-                onClick={() => toggleSort("category")}
-              >
-                <span className="inline-flex items-center gap-1">
-                  대분류
-                  <SortIcon field="category" sortField={sortField} sortDir={sortDir} />
-                </span>
-              </TableHead>
-              <TableHead
-                className="w-32 cursor-pointer select-none px-3 text-center text-muted-foreground"
-                onClick={() => toggleSort("estimatedHours")}
-              >
-                <span className="inline-flex items-center justify-center gap-1">
-                  예상시간(h)
-                  <SortIcon field="estimatedHours" sortField={sortField} sortDir={sortDir} />
-                </span>
-              </TableHead>
-              <TableHead className="w-24 px-3 text-center text-muted-foreground">2인시험</TableHead>
-              <TableHead className="w-20 px-3 text-center text-muted-foreground">활성</TableHead>
-              <TableHead className="w-24 px-3 text-center text-muted-foreground">액션</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               Array.from({ length: 6 }).map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-36" /></TableCell>
-                  <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20" /></TableCell>
-                  <TableCell className="px-3 py-2.5 text-center"><Skeleton className="mx-auto h-4 w-8" /></TableCell>
-                  <TableCell className="px-3 py-2.5 text-center"><Skeleton className="mx-auto h-5 w-12 rounded-full" /></TableCell>
-                  <TableCell className="px-3 py-2.5 text-center"><Skeleton className="mx-auto h-5 w-10 rounded-full" /></TableCell>
-                  <TableCell className="px-3 py-2.5 text-center"><Skeleton className="mx-auto h-6 w-14" /></TableCell>
+                  <TableCell className="px-3 py-2"><Skeleton className="h-4 w-36" /></TableCell>
+                  <TableCell className="px-3 py-2"><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
+                  <TableCell className="px-3 py-2"><Skeleton className="h-4 w-8" /></TableCell>
+                  <TableCell className="px-3 py-2"><Skeleton className="h-8 w-16" /></TableCell>
+                  <TableCell className="px-1 py-2"><Skeleton className="mx-auto h-6 w-14" /></TableCell>
                 </TableRow>
               ))
             ) : filtered.length === 0 ? (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={6} className="py-16 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={5} className="py-16 text-center text-sm text-muted-foreground">
                   데이터가 없습니다.
                 </TableCell>
               </TableRow>
             ) : (
               sortedData.map((row) => (
                 <TableRow key={row.id}>
-                  <TableCell className="px-3 py-2.5 font-medium text-foreground">
-                    {row.name}
+                  <TableCell className="px-3 py-2">
+                    <div className="truncate font-medium text-foreground" title={row.name}>
+                      {row.name}
+                    </div>
                   </TableCell>
-                  <TableCell className="px-3 py-2.5">
+                  <TableCell className="px-3 py-2">
                     <CategoryBadge category={row.category} />
                   </TableCell>
-                  <TableCell className="px-3 py-2.5 text-center text-xs tabular-nums text-muted-foreground">
+                  <TableCell className="px-3 py-2 text-xs tabular-nums text-muted-foreground">
                     {row.estimatedHours != null ? `${row.estimatedHours}` : "—"}
                   </TableCell>
-                  <TableCell className="px-3 py-2.5 text-center">
-                    <button
-                      onClick={() => void toggleDuo(row)}
-                      className={cn(
-                        "rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
-                        row.requiresDuo
-                          ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
-                          : "border-input bg-background text-muted-foreground hover:bg-muted/50",
-                      )}
-                    >
-                      {row.requiresDuo ? "사용" : "미사용"}
-                    </button>
+                  <TableCell className="px-3 py-2">
+                    <div className="min-w-0">
+                      <button
+                        onClick={() => void toggleDuo(row)}
+                        className={cn(
+                          "block max-w-full truncate rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
+                          row.requiresDuo
+                            ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                            : "border-input bg-background text-muted-foreground hover:bg-muted/50",
+                        )}
+                      >
+                        {row.requiresDuo ? "2인 사용" : "2인 미사용"}
+                      </button>
+                      <button
+                        onClick={() => void toggleActive(row)}
+                        className={cn(
+                          "mt-0.5 block max-w-full truncate rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
+                          row.isActive
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                            : "border-input bg-background text-muted-foreground hover:bg-muted/50",
+                        )}
+                      >
+                        {row.isActive ? "활성" : "비활성"}
+                      </button>
+                    </div>
                   </TableCell>
-                  <TableCell className="px-3 py-2.5 text-center">
-                    <button
-                      onClick={() => void toggleActive(row)}
-                      className={cn(
-                        "rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
-                        row.isActive
-                          ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                          : "border-input bg-background text-muted-foreground hover:bg-muted/50",
-                      )}
-                    >
-                      {row.isActive ? "활성" : "비활성"}
-                    </button>
-                  </TableCell>
-                  <TableCell className="px-3 py-2.5 text-center">
+                  <TableCell className="px-1 py-2 text-center">
                     <div className="flex items-center justify-center gap-1">
                       <Button
                         variant="ghost"

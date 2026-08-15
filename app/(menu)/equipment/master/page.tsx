@@ -2,13 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
-import { ClipboardList, Plus, Pencil, Trash2, Loader2, AlertTriangle, AlertCircle, ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react"
+import { ClipboardList, Plus, Pencil, Trash2, Loader2 } from "lucide-react"
 import { DateField } from "@frontend/components/ui/date-field"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
 import { Badge } from "@frontend/components/ui/badge"
 import { Input } from "@frontend/components/ui/input"
 import { Skeleton } from "@frontend/components/ui/skeleton"
+import { CellStack } from "@frontend/components/ui/table-cell-stack"
+import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from "@frontend/components/ui/table-sort"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@frontend/components/ui/table"
@@ -69,37 +71,45 @@ function getCalibrationUrgency(dueDate: string | null): "expired" | "soon" | "ok
   return "ok"
 }
 
-function CalibrationDueBadge({ dueDate }: { dueDate: string | null }) {
-  if (!dueDate) return <span className="text-muted-foreground text-xs">미등록</span>
+function calibrationDueLine(dueDate: string | null) {
+  if (!dueDate) return "다음 미등록"
   const urgency = getCalibrationUrgency(dueDate)
-  if (urgency === "expired") {
-    return (
-      <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600">
-        <AlertCircle size={12} /> {dueDate} <span className="font-normal">(만료)</span>
-      </span>
-    )
-  }
-  if (urgency === "soon") {
-    return (
-      <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-600">
-        <AlertTriangle size={12} /> {dueDate} <span className="font-normal">(30일 이내)</span>
-      </span>
-    )
-  }
-  return <span className="text-xs text-foreground">{dueDate}</span>
+  if (urgency === "expired") return <span className="text-red-600">다음 {dueDate} · 만료</span>
+  if (urgency === "soon") return <span className="text-amber-600">다음 {dueDate} · 30일 이내</span>
+  return `다음 ${dueDate}`
 }
 
 // ─── Sort ─────────────────────────────────────────────────────────────────────
 
 type SortField = "code" | "name" | "category" | "status" | "calibrationDate" | "calibrationDueDate" | "location"
-type SortDir = "asc" | "desc"
 
-function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: SortField | null; sortDir: SortDir }) {
-  if (sortField !== field) return <ChevronsUpDown size={13} className="ml-1 opacity-40" />
-  return sortDir === "asc"
-    ? <ChevronUp size={13} className="ml-1" />
-    : <ChevronDown size={13} className="ml-1" />
-}
+const SORT_COLUMNS: SortColumnDef<SortField>[] = [
+  {
+    key: "equipment",
+    label: "장비",
+    fields: [
+      { id: "name", label: "장비명" },
+      { id: "code", label: "코드" },
+    ],
+  },
+  {
+    key: "class",
+    label: "분류",
+    fields: [
+      { id: "category", label: "카테고리" },
+      { id: "location", label: "위치" },
+    ],
+  },
+  {
+    key: "cal",
+    label: "교정",
+    fields: [
+      { id: "calibrationDate", label: "최근 검교정" },
+      { id: "calibrationDueDate", label: "차기 검교정" },
+    ],
+  },
+  sortCol("status", "상태"),
+]
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -113,25 +123,18 @@ export default function EquipmentMasterPage() {
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ text: string; type: "info" | "error" } | null>(null)
 
-  const [sortField, setSortField] = useState<SortField | null>(null)
+  const [sortField, setSortField] = useState<SortField>("name")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
 
   const [editTarget, setEditTarget] = useState<EquipmentMasterRow | null>(null)
   const [showAdd, setShowAdd] = useState(false)
 
-  const toggleSort = (field: SortField) => {
-    setSortField(prev => {
-      if (prev === field) {
-        setSortDir(d => d === "asc" ? "desc" : "asc")
-        return field
-      }
-      setSortDir("asc")
-      return field
-    })
+  const pickSort = (field: SortField, dir: SortDir) => {
+    setSortField(field)
+    setSortDir(dir)
   }
 
   const sortedRows = useMemo(() => {
-    if (!sortField) return rows
     return [...rows].sort((a, b) => {
       const av = a[sortField] ?? ""
       const bv = b[sortField] ?? ""
@@ -183,7 +186,7 @@ export default function EquipmentMasterPage() {
   }
 
   return (
-    <div className="flex flex-col gap-4 p-4 md:p-6">
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-3 overflow-hidden p-4 md:p-6">
       {/* 헤더 */}
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="flex items-center gap-2.5">
@@ -214,7 +217,7 @@ export default function EquipmentMasterPage() {
       )}
 
       {/* 테이블 */}
-      <Card className="gap-0 py-0 overflow-hidden">
+      <Card className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden py-0">
         <div className="border-b px-4 py-2.5 text-sm font-semibold text-foreground">
           장비 목록 ({rows.length})
         </div>
@@ -222,46 +225,42 @@ export default function EquipmentMasterPage() {
         {rows.length === 0 && !loading ? (
           <div className="py-10 text-center text-sm text-muted-foreground">등록된 장비가 없습니다.</div>
         ) : (
-          <div className="overflow-x-auto">
             <Table>
+              <colgroup>
+                <col className={isAdmin ? "w-[30%]" : "w-[32%]"} />
+                <col className={isAdmin ? "w-[22%]" : "w-[24%]"} />
+                <col className={isAdmin ? "w-[24%]" : "w-[26%]"} />
+                <col className={isAdmin ? "w-[16%]" : "w-[18%]"} />
+                {isAdmin && <col className="w-[8%]" />}
+              </colgroup>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="px-3 text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("code")}>
-                    <span className="inline-flex items-center">코드<SortIcon field="code" sortField={sortField} sortDir={sortDir} /></span>
-                  </TableHead>
-                  <TableHead className="px-3 text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("name")}>
-                    <span className="inline-flex items-center">장비명<SortIcon field="name" sortField={sortField} sortDir={sortDir} /></span>
-                  </TableHead>
-                  <TableHead className="px-3 text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("category")}>
-                    <span className="inline-flex items-center">카테고리<SortIcon field="category" sortField={sortField} sortDir={sortDir} /></span>
-                  </TableHead>
-                  <TableHead className="px-3 text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("status")}>
-                    <span className="inline-flex items-center">상태<SortIcon field="status" sortField={sortField} sortDir={sortDir} /></span>
-                  </TableHead>
-                  <TableHead className="px-3 text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("calibrationDate")}>
-                    <span className="inline-flex items-center">최근 검교정<SortIcon field="calibrationDate" sortField={sortField} sortDir={sortDir} /></span>
-                  </TableHead>
-                  <TableHead className="px-3 text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("calibrationDueDate")}>
-                    <span className="inline-flex items-center">차기 검교정<SortIcon field="calibrationDueDate" sortField={sortField} sortDir={sortDir} /></span>
-                  </TableHead>
-                  <TableHead className="px-3 text-muted-foreground cursor-pointer select-none" onClick={() => toggleSort("location")}>
-                    <span className="inline-flex items-center">위치<SortIcon field="location" sortField={sortField} sortDir={sortDir} /></span>
-                  </TableHead>
-                  {isAdmin && <TableHead className="px-3 text-muted-foreground">관리</TableHead>}
+                  {SORT_COLUMNS.map((col) => (
+                    <TableHead key={col.key} className="px-3 py-2">
+                      <SortColumnHeader
+                        col={col}
+                        sortField={sortField}
+                        sortDir={sortDir}
+                        onPick={pickSort}
+                      />
+                    </TableHead>
+                  ))}
+                  {isAdmin && (
+                    <TableHead className="px-1 text-center text-muted-foreground">
+                      <span className="sr-only">관리</span>
+                    </TableHead>
+                  )}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading
                   ? Array.from({ length: 6 }).map((_, i) => (
                       <TableRow key={i}>
-                        <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-16" /></TableCell>
-                        <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-32" /></TableCell>
-                        <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20" /></TableCell>
-                        <TableCell className="px-3 py-2.5"><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
-                        <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-24" /></TableCell>
-                        <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-24" /></TableCell>
-                        <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-20" /></TableCell>
-                        {isAdmin && <TableCell className="px-3 py-2.5"><Skeleton className="h-6 w-14" /></TableCell>}
+                        <TableCell className="px-3 py-2"><Skeleton className="h-8 w-28" /></TableCell>
+                        <TableCell className="px-3 py-2"><Skeleton className="h-8 w-24" /></TableCell>
+                        <TableCell className="px-3 py-2"><Skeleton className="h-8 w-24" /></TableCell>
+                        <TableCell className="px-3 py-2"><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
+                        {isAdmin && <TableCell className="px-1 py-2"><Skeleton className="mx-auto h-6 w-6 rounded" /></TableCell>}
                       </TableRow>
                     ))
                   : sortedRows.map(row => {
@@ -271,25 +270,38 @@ export default function EquipmentMasterPage() {
                     urgency === "soon"    ? "bg-amber-50/40" : ""
                   return (
                     <TableRow key={row.id} className={rowHighlight}>
-                      <TableCell className="px-3 py-2.5 font-mono text-xs font-semibold text-foreground">{row.code}</TableCell>
-                      <TableCell className="px-3 py-2.5 font-medium text-foreground">{row.name}</TableCell>
-                      <TableCell className="px-3 py-2.5 text-muted-foreground">{row.category ?? "—"}</TableCell>
-                      <TableCell className="px-3 py-2.5">
+                      <TableCell className="px-3 py-2">
+                        <CellStack
+                          primary={row.name}
+                          secondary={row.code}
+                          primaryClass="font-medium text-foreground"
+                          title={`${row.name} / ${row.code}`}
+                        />
+                      </TableCell>
+                      <TableCell className="px-3 py-2">
+                        <CellStack
+                          primary={row.category ?? "—"}
+                          secondary={row.location ?? undefined}
+                          title={[row.category, row.location].filter(Boolean).join(" / ")}
+                        />
+                      </TableCell>
+                      <TableCell className="px-3 py-2">
+                        <CellStack
+                          primary={row.calibrationDate ?? "—"}
+                          secondary={calibrationDueLine(row.calibrationDueDate)}
+                          primaryClass="font-mono text-xs text-foreground"
+                          title={[row.calibrationDate, row.calibrationDueDate].filter(Boolean).join(" / ")}
+                        />
+                      </TableCell>
+                      <TableCell className="px-3 py-2">
                         <Badge variant="outline" className="gap-1.5">
                           <span className={`size-1.5 rounded-full ${STATUS_DOT[row.status]}`} />
                           {STATUS_LABEL[row.status]}
                         </Badge>
                       </TableCell>
-                      <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">
-                        {row.calibrationDate ?? <span className="text-muted-foreground/40">—</span>}
-                      </TableCell>
-                      <TableCell className="px-3 py-2.5">
-                        <CalibrationDueBadge dueDate={row.calibrationDueDate} />
-                      </TableCell>
-                      <TableCell className="px-3 py-2.5 text-muted-foreground">{row.location ?? "—"}</TableCell>
                       {isAdmin && (
-                        <TableCell className="px-3 py-2.5">
-                          <div className="flex items-center gap-1">
+                        <TableCell className="px-1 py-2 text-center">
+                          <div className="flex items-center justify-center gap-1">
                             <Button
                               variant="ghost"
                               size="icon-sm"
@@ -319,7 +331,6 @@ export default function EquipmentMasterPage() {
                 })}
               </TableBody>
             </Table>
-          </div>
         )}
       </Card>
 
