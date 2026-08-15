@@ -229,8 +229,9 @@ interface ProductColumn {
 }
 
 /**
- * 단계별 컬럼 구성. 표 컨테이너가 넓어질수록 묶였던 컬럼이 하나씩 갈라진다.
- * 인덱스 = `useColumnExpandLevel` 이 돌려주는 단계 값.
+ * 컬럼 구성 2단계. 중간 단계 없이, 표 컨테이너가 `COLUMN_BREAKPOINTS` 이상으로
+ * 넓어지면 한 번에 전부 펼치고 그 밑으로는 전부 묶는다.
+ * 인덱스 = `useColumnExpandLevel` 이 돌려주는 단계 값(0 또는 1).
  */
 const COLUMN_LEVELS: ProductColumn[][] = [
   // 0 — 전부 묶음 (좁은 화면)
@@ -241,26 +242,7 @@ const COLUMN_LEVELS: ProductColumn[][] = [
     { key: "status", width: "w-[18%]", def: COL_STATUS_MERGED },
     { key: "actions", width: "w-[6%]" },
   ],
-  // 1 — 난이도 / 상태 분리
-  [
-    { key: "code", width: "w-[13%]", def: COL_CODE },
-    { key: "name", width: "w-[33%]", def: COL_NAME_MERGED },
-    { key: "class", width: "w-[22%]", def: COL_CLASS_MERGED },
-    { key: "difficulty", width: "w-[14%]", def: COL_DIFFICULTY },
-    { key: "status", width: "w-[12%]", def: COL_ACTIVE },
-    { key: "actions", width: "w-[6%]" },
-  ],
-  // 2 — 분류 / 규격 분리
-  [
-    { key: "code", width: "w-[12%]", def: COL_CODE },
-    { key: "name", width: "w-[28%]", def: COL_NAME_MERGED },
-    { key: "class", width: "w-[16%]", def: COL_CLASS },
-    { key: "spec", width: "w-[12%]", def: COL_SPEC },
-    { key: "difficulty", width: "w-[14%]", def: COL_DIFFICULTY },
-    { key: "status", width: "w-[12%]", def: COL_ACTIVE },
-    { key: "actions", width: "w-[6%]" },
-  ],
-  // 3 — 품목명 / 품목명2 분리 (전부 펼침)
+  // 1 — 전부 펼침 (넓은 화면 — 여유가 있으면 굳이 묶어 둘 이유가 없다)
   [
     { key: "code", width: "w-[11%]", def: COL_CODE },
     { key: "name", width: "w-[20%]", def: COL_NAME },
@@ -273,8 +255,8 @@ const COLUMN_LEVELS: ProductColumn[][] = [
   ],
 ]
 
-/** 표 컨테이너 너비(px) 기준 단계 전환점 */
-const COLUMN_BREAKPOINTS = [860, 1020, 1180]
+/** 표 컨테이너 너비(px) 기준 전환점 — 이 이상이면 전부 펼침 */
+const COLUMN_BREAKPOINTS = [1180]
 
 const DIFF_RANK: Record<string, number> = { High: 3, Medium: 2, Low: 1 }
 
@@ -362,9 +344,11 @@ const ProductTableRow = memo(function ProductTableRow({
 }) {
   const classLine = [row.categoryName, row.classificationName].filter(Boolean).join(" · ") || "—"
   const spec = [row.unit, row.packageSpec].filter(Boolean).join(" · ")
-  const splitStatus = level >= 1
-  const splitClass = level >= 2
-  const splitName = level >= 3
+  // 컬럼 구성이 2단계(묶음/펼침)뿐이라 세 쌍이 함께 갈라진다
+  const split = level >= 1
+  const splitStatus = split
+  const splitClass = split
+  const splitName = split
 
   return (
     <TableRow className="cursor-pointer hover:bg-muted/40" onClick={() => onEdit(row)}>
