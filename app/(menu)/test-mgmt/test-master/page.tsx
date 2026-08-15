@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { useColumnExpandLevel } from "@frontend/hooks/use-column-expand-level"
 import {
   ClipboardList,
   Pencil,
@@ -57,7 +58,7 @@ type Category = (typeof CATEGORIES)[number]
 const CATEGORY_DOT: Record<string, string> = {
   "성상·포장": "bg-fuchsia-500",
   이화학: "bg-blue-500",
-  함량시험: "bg-emerald-500",
+  함량시험: "bg-indigo-500",
   확인시험: "bg-cyan-500",
   기기분석: "bg-amber-500",
   안전성: "bg-red-500",
@@ -90,7 +91,8 @@ const EMPTY_FORM: FormState = {
 
 type SortField = "name" | "category" | "estimatedHours" | "requiresDuo" | "isActive"
 
-const SORT_COLUMNS: SortColumnDef<SortField>[] = [
+// 표 너비가 좁을 때: 2인시험·활성을 "속성" 한 컬럼에 묶어 보여준다
+const SORT_COLUMNS_MERGED: SortColumnDef<SortField>[] = [
   sortCol("name", "시험항목명"),
   sortCol("category", "대분류"),
   sortCol("estimatedHours", "예상시간"),
@@ -98,12 +100,23 @@ const SORT_COLUMNS: SortColumnDef<SortField>[] = [
     key: "attrs",
     label: "속성",
     fields: [
-      { id: "estimatedHours", label: "예상시간" },
       { id: "requiresDuo", label: "2인시험" },
       { id: "isActive", label: "활성" },
     ],
   },
 ]
+
+// 표 너비에 여유가 있을 때: 2인시험·활성을 별도 컬럼으로 갈라 보여준다
+const SORT_COLUMNS_SPLIT: SortColumnDef<SortField>[] = [
+  sortCol("name", "시험항목명"),
+  sortCol("category", "대분류"),
+  sortCol("estimatedHours", "예상시간"),
+  sortCol("requiresDuo", "2인시험"),
+  sortCol("isActive", "활성"),
+]
+
+/** 표 컨테이너 너비(px) 기준 전환점 — 이 이상이면 2인시험·활성을 분리해 보여준다 */
+const COLUMN_BREAKPOINTS = [780]
 
 function CategoryBadge({ category }: { category: string }) {
   const dot = CATEGORY_DOT[category] ?? CATEGORY_DOT["기타"]
@@ -112,6 +125,40 @@ function CategoryBadge({ category }: { category: string }) {
       <span className={cn("size-1.5 rounded-full", dot)} />
       {category || "기타"}
     </Badge>
+  )
+}
+
+function DuoToggleButton({ row, onToggle, className }: { row: TestItemRow; onToggle: () => void; className?: string }) {
+  return (
+    <button
+      onClick={onToggle}
+      className={cn(
+        "block max-w-full truncate rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
+        row.requiresDuo
+          ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+          : "border-input bg-background text-muted-foreground hover:bg-muted/50",
+        className,
+      )}
+    >
+      {row.requiresDuo ? "2인 사용" : "2인 미사용"}
+    </button>
+  )
+}
+
+function ActiveToggleButton({ row, onToggle, className }: { row: TestItemRow; onToggle: () => void; className?: string }) {
+  return (
+    <button
+      onClick={onToggle}
+      className={cn(
+        "block max-w-full truncate rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
+        row.isActive
+          ? "border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+          : "border-input bg-background text-muted-foreground hover:bg-muted/50",
+        className,
+      )}
+    >
+      {row.isActive ? "활성" : "비활성"}
+    </button>
   )
 }
 
@@ -129,6 +176,9 @@ export default function TestMasterPage() {
   const [error, setError] = useState<string | null>(null)
   const [sortField, setSortField] = useState<SortField>("name")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
+  const [tableEl, setTableEl] = useState<HTMLDivElement | null>(null)
+  const columnLevel = useColumnExpandLevel(tableEl, COLUMN_BREAKPOINTS)
+  const split = columnLevel >= 1
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -522,19 +572,32 @@ export default function TestMasterPage() {
         )}
       </div>
 
-      {/* 데스크톱 테이블 */}
+      {/* 데스크톱 테이블 — 표 너비에 여유가 있으면 2인시험·활성을 별도 컬럼으로 분리 */}
       <Card className="hidden min-h-0 flex-1 flex-col overflow-hidden py-0 md:flex">
-        <Table className="w-full">
+        <Table className="w-full" containerRef={setTableEl}>
           <colgroup>
-            <col className="w-[38%]" />
-            <col className="w-[16%]" />
-            <col className="w-[14%]" />
-            <col className="w-[20%]" />
-            <col className="w-[12%]" />
+            {split ? (
+              <>
+                <col className="w-[44%]" />
+                <col className="w-[15%]" />
+                <col className="w-[9%]" />
+                <col className="w-[13%]" />
+                <col className="w-[11%]" />
+                <col className="w-[8%]" />
+              </>
+            ) : (
+              <>
+                <col className="w-[38%]" />
+                <col className="w-[16%]" />
+                <col className="w-[14%]" />
+                <col className="w-[20%]" />
+                <col className="w-[12%]" />
+              </>
+            )}
           </colgroup>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              {SORT_COLUMNS.map((col) => (
+              {(split ? SORT_COLUMNS_SPLIT : SORT_COLUMNS_MERGED).map((col) => (
                 <TableHead key={col.key} className="px-3 py-2">
                   <SortColumnHeader
                     col={col}
@@ -557,12 +620,13 @@ export default function TestMasterPage() {
                   <TableCell className="px-3 py-2"><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
                   <TableCell className="px-3 py-2"><Skeleton className="h-4 w-8" /></TableCell>
                   <TableCell className="px-3 py-2"><Skeleton className="h-8 w-16" /></TableCell>
+                  {split && <TableCell className="px-3 py-2"><Skeleton className="h-8 w-14" /></TableCell>}
                   <TableCell className="px-1 py-2"><Skeleton className="mx-auto h-6 w-14" /></TableCell>
                 </TableRow>
               ))
             ) : filtered.length === 0 ? (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={5} className="py-16 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={split ? 6 : 5} className="py-16 text-center text-sm text-muted-foreground">
                   데이터가 없습니다.
                 </TableCell>
               </TableRow>
@@ -580,32 +644,23 @@ export default function TestMasterPage() {
                   <TableCell className="px-3 py-2 text-xs tabular-nums text-muted-foreground">
                     {row.estimatedHours != null ? `${row.estimatedHours}` : "—"}
                   </TableCell>
-                  <TableCell className="px-3 py-2">
-                    <div className="min-w-0">
-                      <button
-                        onClick={() => void toggleDuo(row)}
-                        className={cn(
-                          "block max-w-full truncate rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
-                          row.requiresDuo
-                            ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
-                            : "border-input bg-background text-muted-foreground hover:bg-muted/50",
-                        )}
-                      >
-                        {row.requiresDuo ? "2인 사용" : "2인 미사용"}
-                      </button>
-                      <button
-                        onClick={() => void toggleActive(row)}
-                        className={cn(
-                          "mt-0.5 block max-w-full truncate rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
-                          row.isActive
-                            ? "border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
-                            : "border-input bg-background text-muted-foreground hover:bg-muted/50",
-                        )}
-                      >
-                        {row.isActive ? "활성" : "비활성"}
-                      </button>
-                    </div>
-                  </TableCell>
+                  {split ? (
+                    <>
+                      <TableCell className="px-3 py-2">
+                        <DuoToggleButton row={row} onToggle={() => void toggleDuo(row)} />
+                      </TableCell>
+                      <TableCell className="px-3 py-2">
+                        <ActiveToggleButton row={row} onToggle={() => void toggleActive(row)} />
+                      </TableCell>
+                    </>
+                  ) : (
+                    <TableCell className="px-3 py-2">
+                      <div className="min-w-0">
+                        <DuoToggleButton row={row} onToggle={() => void toggleDuo(row)} />
+                        <ActiveToggleButton row={row} onToggle={() => void toggleActive(row)} className="mt-0.5" />
+                      </div>
+                    </TableCell>
+                  )}
                   <TableCell className="px-1 py-2 text-center">
                     <div className="flex items-center justify-center gap-1">
                       <Button

@@ -51,7 +51,7 @@ type Category = (typeof CATEGORIES)[number]
 const CATEGORY_COLORS: Record<string, string> = {
   "성상·포장": "border-fuchsia-300 bg-fuchsia-100 text-fuchsia-800",
   이화학: "border-blue-300 bg-blue-100 text-blue-800",
-  함량시험: "border-emerald-300 bg-emerald-100 text-emerald-800",
+  함량시험: "border-indigo-300 bg-indigo-100 text-indigo-800",
   확인시험: "border-cyan-300 bg-cyan-100 text-cyan-800",
   기기분석: "border-amber-300 bg-amber-100 text-amber-800",
   안전성: "border-rose-300 bg-rose-100 text-rose-800",
