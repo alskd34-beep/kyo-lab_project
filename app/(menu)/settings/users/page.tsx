@@ -20,6 +20,7 @@ import { Card } from '@frontend/components/ui/card'
 import { Input } from '@frontend/components/ui/input'
 import { CellStack } from '@frontend/components/ui/table-cell-stack'
 import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from '@frontend/components/ui/table-sort'
+import { StatusFilterTabs, type StatusFilterValue } from '@frontend/components/ui/status-filter-tabs'
 import {
   Select,
   SelectContent,
@@ -100,6 +101,7 @@ export default function UsersAdminPage() {
   const [error, setError] = useState<string | null>(null)
   const [sortField, setSortField] = useState<SortField>('customerNo')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
+  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>('all')
 
   const sortedUsers = useMemo(() => {
     return [...users].sort((a, b) => {
@@ -120,6 +122,16 @@ export default function UsersAdminPage() {
       return sortDir === 'asc' ? va.localeCompare(vb, 'ko') : vb.localeCompare(va, 'ko')
     })
   }, [users, sortField, sortDir])
+
+  const filteredUsers = useMemo(() => {
+    if (statusFilter === 'all') return sortedUsers
+    return sortedUsers.filter(u => u.isActive === (statusFilter === 'active'))
+  }, [sortedUsers, statusFilter])
+
+  const userStatusCounts = useMemo(() => {
+    const active = users.filter(u => u.isActive).length
+    return { all: users.length, active, inactive: users.length - active }
+  }, [users])
 
   const pickSort = useCallback((field: SortField, dir: SortDir) => {
     setSortField(field)
@@ -196,13 +208,20 @@ export default function UsersAdminPage() {
           <h1 className="text-lg font-semibold text-slate-800">사용자 관리</h1>
           <p className="text-xs text-slate-500">총 {users.length}명</p>
         </div>
-        <button
-          onClick={() => setCreating(true)}
-          className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 md:w-auto"
-        >
-          <UserPlus size={13} />
-          사용자 추가
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusFilterTabs
+            value={statusFilter}
+            onChange={setStatusFilter}
+            counts={userStatusCounts}
+          />
+          <button
+            onClick={() => setCreating(true)}
+            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 md:flex-none"
+          >
+            <UserPlus size={13} />
+            사용자 추가
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -273,7 +292,7 @@ export default function UsersAdminPage() {
                     <TableCell className="px-1 py-2"><Skeleton className="ml-auto h-4 w-16" /></TableCell>
                   </TableRow>
                 ))
-              : sortedUsers.map(u => (
+              : filteredUsers.map(u => (
               <TableRow key={u.id} className="border-t border-slate-100">
                 <TableCell className="px-3 py-2">
                   <div className="flex min-w-0 items-center gap-2">

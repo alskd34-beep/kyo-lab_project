@@ -34,6 +34,7 @@ import {
 } from "@frontend/components/ui/select"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from "@frontend/components/ui/table-sort"
+import { StatusFilterTabs, type StatusFilterValue } from "@frontend/components/ui/status-filter-tabs"
 import {
   Table,
   TableBody,
@@ -176,6 +177,7 @@ export default function TestMasterPage() {
   const [error, setError] = useState<string | null>(null)
   const [sortField, setSortField] = useState<SortField>("name")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
+  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>("all")
   const [tableEl, setTableEl] = useState<HTMLDivElement | null>(null)
   const columnLevel = useColumnExpandLevel(tableEl, COLUMN_BREAKPOINTS)
   const split = columnLevel >= 1
@@ -215,9 +217,10 @@ export default function TestMasterPage() {
     return rows.filter((row) => {
       if (activeTab !== "전체" && row.category !== activeTab) return false
       if (q && !row.name.toLowerCase().includes(q)) return false
+      if (statusFilter !== "all" && row.isActive !== (statusFilter === "active")) return false
       return true
     })
-  }, [rows, search, activeTab])
+  }, [rows, search, activeTab, statusFilter])
 
   const pickSort = useCallback((field: SortField, dir: SortDir) => {
     setSortField(field)
@@ -225,17 +228,30 @@ export default function TestMasterPage() {
   }, [])
 
   const sortedData = useMemo(() => {
+    const mul = sortDir === "asc" ? 1 : -1
+    // 활성 항목을 항상 위로 올린다. "활성" 컬럼 정렬만 방향으로 그룹 순서를 뒤집는다.
+    const activeRank = (row: TestItemRow) => (row.isActive ? 0 : 1)
+    const byName = (a: TestItemRow, b: TestItemRow) => a.name.localeCompare(b.name, "ko")
+
     return [...filtered].sort((a, b) => {
-      const mul = sortDir === "asc" ? 1 : -1
+      const groupDiff = activeRank(a) - activeRank(b)
+      if (sortField === "isActive") {
+        return groupDiff !== 0 ? groupDiff * mul : byName(a, b)
+      }
+      if (groupDiff !== 0) return groupDiff
+
       if (sortField === "estimatedHours") {
         const ah = a.estimatedHours ?? -1
         const bh = b.estimatedHours ?? -1
-        return (ah - bh) * mul
+        const diff = (ah - bh) * mul
+        return diff !== 0 ? diff : byName(a, b)
       }
-      if (sortField === "requiresDuo" || sortField === "isActive") {
-        return (Number(a[sortField]) - Number(b[sortField])) * mul
+      if (sortField === "requiresDuo") {
+        const diff = (Number(a.requiresDuo) - Number(b.requiresDuo)) * mul
+        return diff !== 0 ? diff : byName(a, b)
       }
-      return a[sortField].localeCompare(b[sortField], "ko") * mul
+      const diff = a[sortField].localeCompare(b[sortField], "ko") * mul
+      return diff !== 0 ? diff : byName(a, b)
     })
   }, [filtered, sortField, sortDir])
 
@@ -421,6 +437,15 @@ export default function TestMasterPage() {
           </span>
         </Card>
       </div>
+
+      <StatusFilterTabs
+        value={statusFilter}
+        onChange={setStatusFilter}
+        counts={{ all: rows.length, active: summary.active, inactive: rows.length - summary.active }}
+        activeLabel="활성 항목"
+        inactiveLabel="비활성 항목"
+        className="shrink-0"
+      />
 
       {/* 헤더 + 검색 + 추가 버튼 */}
       <div className="flex flex-col gap-3">

@@ -16,6 +16,7 @@ import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
 import { CellStack } from "@frontend/components/ui/table-cell-stack"
 import { SortColumnHeader, type SortColumnDef, type SortDir } from "@frontend/components/ui/table-sort"
+import { StatusFilterTabs, type StatusFilterValue } from "@frontend/components/ui/status-filter-tabs"
 import {
   Dialog,
   DialogBody,
@@ -150,6 +151,7 @@ export default function TestersPage() {
 
   const [sortField, setSortField] = useState<SortField>("employeeNo")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
+  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>("all")
 
   useEffect(() => {
     void fetchTesters()
@@ -377,6 +379,13 @@ export default function TestersPage() {
     [sortedTesters]
   )
 
+  const filteredTesters = useMemo(() => {
+    if (statusFilter === "all") return sortedTesters
+    return sortedTesters.filter((tester) =>
+      statusFilter === "active" ? tester.isActive : !tester.isActive
+    )
+  }, [sortedTesters, statusFilter])
+
   const summary = useMemo(() => {
     const active = testers.filter((tester) => tester.isActive).length
     const solo = testers.filter(
@@ -478,6 +487,17 @@ export default function TestersPage() {
       </div>
 
       {activeTab === "testers" && (
+        <StatusFilterTabs
+          value={statusFilter}
+          onChange={setStatusFilter}
+          counts={{ all: testers.length, active: summary.active, inactive: testers.length - summary.active }}
+          activeLabel="활성 시험자"
+          inactiveLabel="비활성 시험자"
+          className="shrink-0"
+        />
+      )}
+
+      {activeTab === "testers" && (
         <div className="flex min-h-0 flex-1 flex-col">
           {/* Mobile cards */}
           <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto md:hidden">
@@ -492,12 +512,12 @@ export default function TestersPage() {
                   <Skeleton className="h-4 w-3/4" />
                 </Card>
               ))
-            ) : sortedTesters.length === 0 ? (
+            ) : filteredTesters.length === 0 ? (
               <Card className="items-center py-6 text-center text-sm text-muted-foreground">
-                등록된 시험자가 없습니다.
+                {statusFilter === "all" ? "등록된 시험자가 없습니다." : "조건에 맞는 시험자가 없습니다."}
               </Card>
             ) : (
-              sortedTesters.map((tester, idx) => (
+              filteredTesters.map((tester, idx) => (
                 <Card
                   key={tester.id}
                   className="cursor-pointer gap-0 px-3 py-3 transition-colors hover:bg-muted/30"
@@ -606,7 +626,7 @@ export default function TestersPage() {
                         <TableCell className="px-1 py-2"><Skeleton className="mx-auto h-6 w-6" /></TableCell>
                       </TableRow>
                     ))
-                  : sortedTesters.map((tester, idx) => (
+                  : filteredTesters.map((tester, idx) => (
                     <TableRow
                       key={tester.id}
                       className="cursor-pointer hover:bg-muted/40"
@@ -662,13 +682,13 @@ export default function TestersPage() {
                       </TableCell>
                     </TableRow>
                   ))}
-                {!loading && testers.length === 0 && (
+                {!loading && filteredTesters.length === 0 && (
                   <TableRow className="hover:bg-transparent">
                     <TableCell
                       colSpan={5}
                       className="py-16 text-center text-sm text-muted-foreground"
                     >
-                      등록된 시험자가 없습니다.
+                      {statusFilter === "all" ? "등록된 시험자가 없습니다." : "조건에 맞는 시험자가 없습니다."}
                     </TableCell>
                   </TableRow>
                 )}

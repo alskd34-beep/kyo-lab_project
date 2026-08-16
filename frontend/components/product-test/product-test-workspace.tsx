@@ -30,6 +30,7 @@ import {
 import { Input } from "@frontend/components/ui/input"
 import { CellStack } from "@frontend/components/ui/table-cell-stack"
 import { SortColumnHeader, type SortColumnDef, type SortDir } from "@frontend/components/ui/table-sort"
+import { StatusFilterTabs, type StatusFilterValue } from "@frontend/components/ui/status-filter-tabs"
 import {
   Select,
   SelectContent,
@@ -645,12 +646,14 @@ function FormFields({
 const ProductMasterList = memo(function ProductMasterList({
   rows,
   loading,
+  statusFilter,
   onAdd,
   onEdit,
   onDelete,
 }: {
   rows: ProductRow[]
   loading: boolean
+  statusFilter: StatusFilterValue
   onAdd: () => void
   onEdit: (row: ProductRow) => void
   onDelete: (row: ProductRow) => void
@@ -669,7 +672,7 @@ const ProductMasterList = memo(function ProductMasterList({
 
   const sorted = useMemo(() => {
     const q = deferredSearch.trim().toLowerCase()
-    const filtered = q
+    let filtered = q
       ? rows.filter(
           (r) =>
             r.name.toLowerCase().includes(q) ||
@@ -677,8 +680,21 @@ const ProductMasterList = memo(function ProductMasterList({
             (r.abbreviation ?? "").toLowerCase().includes(q)
         )
       : rows
-    return [...filtered].sort((a, b) => compareProducts(a, b, sortField, sortDir))
-  }, [rows, deferredSearch, sortField, sortDir])
+    if (statusFilter !== "all") {
+      filtered = filtered.filter((r) => r.isActive === (statusFilter === "active"))
+    }
+    // 활성 품목을 항상 위로 올린다. "활성" 컬럼 정렬만 방향으로 그룹 순서를 뒤집는다.
+    const activeRank = (r: ProductRow) => (r.isActive ? 0 : 1)
+    return [...filtered].sort((a, b) => {
+      const groupDiff = activeRank(a) - activeRank(b)
+      if (sortField === "isActive") {
+        const mul = sortDir === "asc" ? 1 : -1
+        return groupDiff !== 0 ? groupDiff * mul : compareProducts(a, b, "productCode", "asc")
+      }
+      if (groupDiff !== 0) return groupDiff
+      return compareProducts(a, b, sortField, sortDir)
+    })
+  }, [rows, deferredSearch, sortField, sortDir, statusFilter])
 
   const { containerRef: virtualRef, start, end, padTop, padBottom } = useVirtualWindow(
     sorted.length,
@@ -837,6 +853,7 @@ export function ProductTestWorkspace() {
   const [categories, setCategories] = useState<LookupOptionRow[]>([])
   const [classifications, setClassifications] = useState<LookupOptionRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>("all")
 
   const [addOpen, setAddOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
@@ -1090,6 +1107,15 @@ export function ProductTestWorkspace() {
         )}
       </div>
 
+      <StatusFilterTabs
+        value={statusFilter}
+        onChange={setStatusFilter}
+        counts={{ all: summary.total, active: summary.active, inactive: summary.total - summary.active }}
+        activeLabel="활성 품목"
+        inactiveLabel="비활성 품목"
+        className="shrink-0"
+      />
+
       {error && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive">
           {error}
@@ -1099,6 +1125,7 @@ export function ProductTestWorkspace() {
       <ProductMasterList
         rows={rows}
         loading={loading}
+        statusFilter={statusFilter}
         onAdd={openAdd}
         onEdit={openEdit}
         onDelete={requestDelete}

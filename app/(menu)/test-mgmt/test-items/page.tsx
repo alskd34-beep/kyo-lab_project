@@ -27,6 +27,7 @@ import {
 } from "@frontend/components/ui/dialog"
 import { Input } from "@frontend/components/ui/input"
 import { SortColumnHeader, sortCol, type SortDir } from "@frontend/components/ui/table-sort"
+import { StatusFilterTabs, type StatusFilterValue } from "@frontend/components/ui/status-filter-tabs"
 import {
   Table,
   TableBody,
@@ -95,6 +96,7 @@ export default function TestItemsPage() {
   )
   const [linkedItems, setLinkedItems] = useState<ProductTestItemRow[]>([])
   const [productSearch, setProductSearch] = useState("")
+  const [productStatusFilter, setProductStatusFilter] = useState<StatusFilterValue>("all")
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [dialogSearch, setDialogSearch] = useState("")
   const [dialogTab, setDialogTab] = useState<"전체" | Category>("전체")
@@ -211,13 +213,24 @@ export default function TestItemsPage() {
 
   const filteredProducts = useMemo(() => {
     const q = productSearch.trim().toLowerCase()
-    if (!q) return products
-    return products.filter(
-      (product) =>
-        product.name.toLowerCase().includes(q) ||
-        product.productCode.toLowerCase().includes(q)
-    )
-  }, [products, productSearch])
+    let list = q
+      ? products.filter(
+          (product) =>
+            product.name.toLowerCase().includes(q) ||
+            product.productCode.toLowerCase().includes(q)
+        )
+      : products
+    if (productStatusFilter !== "all") {
+      list = list.filter((p) => p.isActive === (productStatusFilter === "active"))
+    }
+    // 활성 품목을 항상 위로 올린다. 원래 정렬(sort_order)은 그룹 안에서 그대로 유지된다(stable sort).
+    return [...list].sort((a, b) => Number(b.isActive) - Number(a.isActive))
+  }, [products, productSearch, productStatusFilter])
+
+  const productStatusCounts = useMemo(() => {
+    const active = products.filter((p) => p.isActive).length
+    return { all: products.length, active, inactive: products.length - active }
+  }, [products])
 
   const linkedIds = useMemo(
     () => new Set(linkedItems.map((item) => item.testItemId)),
@@ -538,6 +551,14 @@ export default function TestItemsPage() {
                 className="h-9 pl-9"
               />
             </div>
+            <StatusFilterTabs
+              value={productStatusFilter}
+              onChange={setProductStatusFilter}
+              counts={productStatusCounts}
+              activeLabel="활성"
+              inactiveLabel="비활성"
+              className="mt-2 w-full"
+            />
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto">

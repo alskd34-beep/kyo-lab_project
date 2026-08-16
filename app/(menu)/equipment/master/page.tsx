@@ -11,6 +11,7 @@ import { Input } from "@frontend/components/ui/input"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import { CellStack } from "@frontend/components/ui/table-cell-stack"
 import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from "@frontend/components/ui/table-sort"
+import { StatusFilterTabs, type StatusFilterValue } from "@frontend/components/ui/status-filter-tabs"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@frontend/components/ui/table"
@@ -125,6 +126,7 @@ export default function EquipmentMasterPage() {
 
   const [sortField, setSortField] = useState<SortField>("name")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
+  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>("all")
 
   const [editTarget, setEditTarget] = useState<EquipmentMasterRow | null>(null)
   const [showAdd, setShowAdd] = useState(false)
@@ -134,14 +136,37 @@ export default function EquipmentMasterPage() {
     setSortDir(dir)
   }
 
+  // 이 화면은 활성/비활성 boolean 대신 3단계 상태(active/calibrating/out_of_service)를 쓴다.
+  // "활성" 필터·우선정렬 기준으로는 active 만 활성, 나머지 둘은 비활성으로 묶는다.
+  const isRowActive = (row: EquipmentMasterRow) => row.status === "active"
+
+  const statusCounts = useMemo(() => {
+    const active = rows.filter(isRowActive).length
+    return { all: rows.length, active, inactive: rows.length - active }
+  }, [rows])
+
   const sortedRows = useMemo(() => {
-    return [...rows].sort((a, b) => {
+    const filtered = statusFilter === "all"
+      ? rows
+      : rows.filter((row) => isRowActive(row) === (statusFilter === "active"))
+
+    // 활성 장비를 항상 위로 올린다. "상태" 컬럼 정렬만 방향으로 그룹 순서를 뒤집는다.
+    const activeRank = (row: EquipmentMasterRow) => (isRowActive(row) ? 0 : 1)
+    const mul = sortDir === "asc" ? 1 : -1
+
+    return [...filtered].sort((a, b) => {
+      const groupDiff = activeRank(a) - activeRank(b)
+      if (sortField === "status") {
+        return groupDiff !== 0 ? groupDiff * mul : a.name.localeCompare(b.name, "ko")
+      }
+      if (groupDiff !== 0) return groupDiff
+
       const av = a[sortField] ?? ""
       const bv = b[sortField] ?? ""
-      const cmp = av.localeCompare(bv, "ko")
-      return sortDir === "asc" ? cmp : -cmp
+      const cmp = av.localeCompare(bv, "ko") * mul
+      return cmp !== 0 ? cmp : a.name.localeCompare(b.name, "ko")
     })
-  }, [rows, sortField, sortDir])
+  }, [rows, sortField, sortDir, statusFilter])
 
   const flash = (text: string, type: "info" | "error" = "info") => {
     setMsg({ text, type })
@@ -218,12 +243,23 @@ export default function EquipmentMasterPage() {
 
       {/* 테이블 */}
       <Card className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden py-0">
-        <div className="border-b px-4 py-2.5 text-sm font-semibold text-foreground">
-          장비 목록 ({rows.length})
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2.5">
+          <span className="text-sm font-semibold text-foreground">
+            장비 목록 ({sortedRows.length}{sortedRows.length !== rows.length ? ` / ${rows.length}` : ""})
+          </span>
+          <StatusFilterTabs
+            value={statusFilter}
+            onChange={setStatusFilter}
+            counts={statusCounts}
+            activeLabel="사용 중"
+            inactiveLabel="사용 중 아님"
+          />
         </div>
 
         {rows.length === 0 && !loading ? (
           <div className="py-10 text-center text-sm text-muted-foreground">등록된 장비가 없습니다.</div>
+        ) : sortedRows.length === 0 && !loading ? (
+          <div className="py-10 text-center text-sm text-muted-foreground">조건에 맞는 장비가 없습니다.</div>
         ) : (
             <Table>
               <colgroup>
