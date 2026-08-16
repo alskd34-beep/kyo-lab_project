@@ -16,4 +16,5 @@
 - 한국어가 제품 언어. 주석·UI 문자열·에러 메시지는 한국어, 코드 식별자는 영어.
 - 날짜 입력은 공통 `<DateField>` 사용(`/date-field` 스킬 참고), `<input type="date">` 직접 사용 금지.
 - 데이터 수정 UX는 인라인보다 모달/Dialog 기본.
+- 브랜드 메인 컬러는 보라빛 도는 파랑(indigo) 하나로 통일. 버튼·강조색은 `bg-primary` 등 시맨틱 클래스나 `indigo-*`만 쓰고 `blue-*`/`violet-*`/`purple-*`/`sky-*`를 새로 쓰지 않는다(상태·카테고리 팔레트, 정보/성공 배너 등 색 자체가 의미인 곳은 예외).
 - 검증: `npm run typecheck`(필수) · `npm run lint` · 운영 영향 시 `npm run build`. dev 서버 포트 3300.

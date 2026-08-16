@@ -26,6 +26,16 @@
 > **⚡ 자동 적용 규칙**: 화면에 데이터를 불러올 때는 **항상 Skeleton**을 사용한다.
 > `"불러오는 중..."` 텍스트, `<Loader2>` 스피너, 빈 카드 등 모든 로딩 표현을 Skeleton으로 교체한다.
 
+> **🎨 자동 적용 규칙 — 브랜드 메인 컬러**: 보라빛 도는 파랑(indigo) 하나로 통일한다.
+> `app/globals.css`의 `--primary` / `--ring` / `--sidebar-primary` / `--sidebar-accent` / `--secondary`가
+> 전부 이 색(`oklch(.. .. 273)`)이다.
+> - 버튼·아이콘 칩·포커스 링·선택된 탭/메뉴·"활성" 상태처럼 브랜드·인터랙션 강조색이 필요하면
+>   먼저 시맨틱 클래스(`bg-primary`, `text-primary`, `ring-ring`, `<Button>` 기본 variant)를 쓴다 — 자동으로 통일된다.
+> - 직접 Tailwind 색을 써야 하면 반드시 `indigo-*`를 쓴다. `blue-*` / `violet-*` / `purple-*` / `sky-*` 등
+>   다른 파랑·보라 계열을 브랜드 강조색으로 새로 쓰지 않는다.
+> - **예외(바꾸지 않는다)**: 검토중/진행중/완료/지연처럼 여러 색이 순환하는 상태·카테고리 팔레트,
+>   정보 배너(파랑=안내), 성공 토스트(초록), 요일 색(토·일) 등 색상 자체가 의미인 곳.
+
 ---
 
 ## 1. 테이블 (Table)
@@ -591,9 +601,9 @@ import { Badge } from "@frontend/components/ui/badge"
 - 건수 표시: `<Badge variant="secondary">`
 
 ```tsx
-// 상태 dot 패턴
+// 상태 dot 패턴 (활성/브랜드 강조는 indigo)
 <Badge variant="outline" className="gap-1.5">
-  <span className="size-1.5 rounded-full bg-emerald-500" />
+  <span className="size-1.5 rounded-full bg-indigo-500" />
   활성
 </Badge>
 

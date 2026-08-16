@@ -47,6 +47,13 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/*
+ * 브랜드 메인 컬러: 보라빛 도는 파랑(indigo, hue 273) 하나로 통일.
+ * --primary / --ring / --sidebar-primary / --sidebar-accent / --secondary 가 전부 이 색이다.
+ * 브랜드 강조가 필요하면 이 변수(bg-primary 등)를 쓰거나, 직접 Tailwind 색이 필요하면 indigo-* 만 쓴다.
+ * 상태·카테고리 팔레트(검토중/진행중/완료/지연 등 색이 곧 의미인 곳)는 대상이 아니다.
+ * 자세한 규칙: .claude/commands/design-standard.md
+ */
 :root {
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
