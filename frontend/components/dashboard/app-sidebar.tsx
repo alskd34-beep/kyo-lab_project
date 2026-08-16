@@ -10,6 +10,7 @@ import {
 import { cn } from "@frontend/lib/utils"
 import { useAuth } from "@frontend/lib/auth-context"
 import { TesterAvatar } from "@frontend/lib/tester-profiles"
+import { Skeleton } from "@frontend/components/ui/skeleton"
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@frontend/components/ui/collapsible"
@@ -188,7 +189,7 @@ const PATH_MAP: Record<string, string> = {
 // ─── Component ────────────────────────────────────────────────────────────────
 export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname() ?? ""
-  const { user, logout } = useAuth()
+  const { user, loading: authLoading, logout } = useAuth()
   const { isMobile, setOpenMobile } = useSidebar()
   const isAdmin = user?.role === "admin"
 
@@ -307,6 +308,16 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
+            {authLoading ? (
+              // 로그인 사용자 확인 전엔 "게스트"로 잘못 표시하지 않고 스켈레톤을 보여준다
+              <div className="flex items-center gap-2 p-2">
+                <Skeleton className="size-8 shrink-0 rounded-lg" />
+                <div className="grid flex-1 gap-1.5">
+                  <Skeleton className="h-3.5 w-20" />
+                  <Skeleton className="h-3 w-12" />
+                </div>
+              </div>
+            ) : (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
@@ -345,6 +356,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            )}
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
