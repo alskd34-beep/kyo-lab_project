@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
 import {
   RefreshCw, Sparkles, History, AlertCircle, X, Loader2, Database, Plus,
@@ -13,9 +13,10 @@ import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
 import { Badge } from "@frontend/components/ui/badge"
 import { CellStack } from "@frontend/components/ui/table-cell-stack"
-import { SortColumnHeader, type SortColumnDef, type SortDir } from "@frontend/components/ui/table-sort"
+import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from "@frontend/components/ui/table-sort"
+
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow, useTableColSpan,
 } from "@frontend/components/ui/table"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -122,51 +123,65 @@ type SortField =
   | "assigneeName"
   | "status"
 
-const SORT_COLUMNS: SortColumnDef<SortField>[] = [
+const ORDER_COLUMNS: { key: string; def?: SortColumnDef<SortField>; head?: string }[] = [
+  { key: "lock", head: "확정" },
+  { key: "name", def: sortCol("productName", "품목명") },
   {
-    key: "product",
-    label: "품목",
-    fields: [
-      { id: "productName", label: "품목명" },
-      { id: "productCode", label: "품목코드" },
-      { id: "batchNo", label: "제조번호" },
-    ],
+    key: "code",
+    def: {
+      key: "code",
+      label: "품목코드",
+      fields: [
+        { id: "productCode", label: "품목코드" },
+        { id: "batchNo", label: "제조번호" },
+      ],
+    },
   },
   {
     key: "form",
-    label: "제형·방법",
-    fields: [
-      { id: "dosageForm", label: "제형" },
-      { id: "method", label: "진행방법" },
-    ],
+    def: {
+      key: "form",
+      label: "제형",
+      fields: [
+        { id: "dosageForm", label: "제형" },
+        { id: "method", label: "진행방법" },
+      ],
+    },
   },
   {
     key: "dates",
-    label: "일정",
-    fields: [
-      { id: "packagingDate", label: "포장일" },
-      { id: "dueDate", label: "완료예정" },
-    ],
+    def: {
+      key: "dates",
+      label: "일정",
+      fields: [
+        { id: "packagingDate", label: "포장일" },
+        { id: "dueDate", label: "완료예정" },
+      ],
+    },
   },
   {
     key: "load",
-    label: "공수/긴급",
-    fields: [
-      { id: "workdays", label: "공수" },
-      { id: "isUrgent", label: "긴급" },
-    ],
+    def: {
+      key: "load",
+      label: "공수",
+      fields: [
+        { id: "workdays", label: "공수" },
+        { id: "isUrgent", label: "긴급" },
+      ],
+    },
   },
   {
     key: "assignee",
-    label: "담당·상태",
-    fields: [
-      { id: "assigneeName", label: "담당자" },
-      { id: "status", label: "상태" },
-    ],
+    def: {
+      key: "assignee",
+      label: "담당자",
+      fields: [
+        { id: "assigneeName", label: "담당자" },
+        { id: "status", label: "상태" },
+      ],
+    },
   },
 ]
-
-const ORDER_COL_COUNT = 7
 
 const GROUP_COLORS = [
   "bg-blue-500", "bg-emerald-500", "bg-violet-500",
@@ -198,6 +213,11 @@ function thisWeekKey(): string {
 
 const pushTo = (m: Map<string, OrderRow[]>, k: string, r: OrderRow) => {
   const arr = m.get(k); if (arr) arr.push(r); else m.set(k, [r])
+}
+
+function FamilySpanCell({ children }: { children: ReactNode }) {
+  const colSpan = useTableColSpan()
+  return <TableCell colSpan={colSpan} className="px-3 py-2">{children}</TableCell>
 }
 
 // 완료예정일 임박 여부 (오늘 기준 3일 이내·기한 경과 포함, 완료·삭제 제외)
@@ -302,6 +322,7 @@ export default function OrdersPage() {
   const [famCollapsed, setFamCollapsed] = useState<Set<string>>(new Set())
   const [sortField, setSortField] = useState<SortField | null>(null)
   const [sortDir, setSortDir] = useState<SortDir>("asc")
+  const columns = ORDER_COLUMNS
 
   const pickSort = (field: SortField, dir: SortDir) => {
     setSortField(field)
@@ -778,19 +799,22 @@ export default function OrdersPage() {
           />
         </TableCell>
         <TableCell className="px-3 py-2.5">
-          <div className={cn("min-w-0", indented && "pl-5")}>
-            <div className="flex min-w-0 items-center gap-1.5">
-              {indented && <span className="shrink-0 text-muted-foreground/60">└</span>}
-              <span className="min-w-0 truncate font-medium text-foreground" title={r.productName}>{r.productName}</span>
-              <SourceBadge source={r.source} />
-              {r.source === "auto" && !r.productSynced && (
-                <Badge variant="outline" className="shrink-0 border-amber-200 text-amber-700">미동기화</Badge>
-              )}
-            </div>
-            <div className="truncate font-mono text-[11px] leading-4 text-muted-foreground" title={`${r.productCode} · ${r.batchNo}`}>
-              {r.productCode} · {r.batchNo}
-            </div>
+          <div className={cn("flex min-w-0 items-center gap-1.5", indented && "pl-5")}>
+            {indented && <span className="shrink-0 text-muted-foreground/60">└</span>}
+            <span className="min-w-0 truncate font-medium text-foreground" title={r.productName}>{r.productName}</span>
+            <SourceBadge source={r.source} />
+            {r.source === "auto" && !r.productSynced && (
+              <Badge variant="outline" className="shrink-0 border-amber-200 text-amber-700">미동기화</Badge>
+            )}
           </div>
+        </TableCell>
+        <TableCell className="px-3 py-2.5">
+          <CellStack
+            primary={r.productCode}
+            secondary={r.batchNo}
+            primaryClass="font-mono text-xs text-muted-foreground"
+            title={`${r.productCode} · ${r.batchNo}`}
+          />
         </TableCell>
         <TableCell className="px-3 py-2.5">
           <CellStack
@@ -803,40 +827,45 @@ export default function OrdersPage() {
           <CellStack
             primary={r.packagingDate ?? "—"}
             secondary={
-              <span className={cn(dueSoon && "font-semibold text-orange-700")}>완료 {r.dueDate ?? "—"}</span>
+              <span className={cn(dueSoon && "font-semibold text-orange-700")}>{r.dueDate ?? "—"}</span>
             }
             title={`포장 ${r.packagingDate ?? "—"} / 완료 ${r.dueDate ?? "—"}`}
           />
         </TableCell>
         <TableCell className="px-3 py-2.5">
-          <div className="min-w-0">
-            <div className="truncate tabular-nums">{r.workdays != null ? `${r.workdays}일` : "—"}</div>
-            {r.isUrgent
-              ? <Badge variant="outline" className="border-red-200 text-red-700">긴급</Badge>
-              : <span className="text-[11px] leading-4 text-muted-foreground">일반</span>}
-          </div>
+          <CellStack
+            primary={r.workdays != null ? `${r.workdays}일` : "—"}
+            secondary={r.isUrgent ? "긴급" : "일반"}
+          />
         </TableCell>
         <TableCell className="px-3 py-2.5">
-          <div className="min-w-0">
-            {r.assigneeName && r.assigneeTesterId
-              ? <button
-                  onClick={(e) => { e.stopPropagation(); setAssigneeTarget({ id: r.assigneeTesterId!, name: r.assigneeName! }) }}
-                  title={`${r.assigneeName} 담당 오더 보기`}
-                  className="inline-flex max-w-full items-center gap-1.5 font-medium text-foreground hover:text-primary"
-                >
-                  <TesterAvatar testerId={r.assigneeTesterId} name={r.assigneeName} size="sm" />
-                  <span className="min-w-0 truncate underline-offset-2 hover:underline">{r.assigneeName}</span>
-                </button>
-              : <span className="text-muted-foreground">미배정</span>}
-            <div className="mt-0.5 flex min-w-0 items-center gap-1">
-              <StatusBadge status={r.status} />
-              {r.locked && (
-                <Badge variant="outline" className="gap-0.5 border-amber-200 text-amber-700">
-                  <Lock className="size-2.5" />확정
-                </Badge>
-              )}
-            </div>
-          </div>
+          <CellStack
+            primary={
+              r.assigneeName && r.assigneeTesterId
+                ? (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setAssigneeTarget({ id: r.assigneeTesterId!, name: r.assigneeName! }) }}
+                    title={`${r.assigneeName} 담당 오더 보기`}
+                    className="inline-flex max-w-full items-center gap-1.5 font-medium text-foreground hover:text-primary"
+                  >
+                    <TesterAvatar testerId={r.assigneeTesterId} name={r.assigneeName} size="sm" />
+                    <span className="min-w-0 truncate underline-offset-2 hover:underline">{r.assigneeName}</span>
+                  </button>
+                )
+                : "미배정"
+            }
+            secondary={
+              <span className="inline-flex items-center gap-1">
+                <StatusBadge status={r.status} />
+                {r.locked && (
+                  <Badge variant="outline" className="gap-0.5 border-amber-200 text-amber-700">
+                    <Lock className="size-2.5" />확정
+                  </Badge>
+                )}
+              </span>
+            }
+            secondaryLabel="상태"
+          />
         </TableCell>
         <TableCell className="px-3 py-2.5">
           <div className="flex items-center justify-end gap-1">
@@ -1080,28 +1109,22 @@ export default function OrdersPage() {
 
                       <div className="hidden md:block">
                     <Table layout="content">
-                      <colgroup>
-                        <col className="w-[5%]" />
-                        <col className="w-[28%]" />
-                        <col className="w-[14%]" />
-                        <col className="w-[16%]" />
-                        <col className="w-[12%]" />
-                        <col className="w-[17%]" />
-                        <col className="w-[8%]" />
-                      </colgroup>
                       <TableHeader>
                         <TableRow className="hover:bg-transparent">
-                          <TableHead className="w-12 px-3 text-center text-muted-foreground">확정</TableHead>
-                          {SORT_COLUMNS.map((col) => (
-                            <TableHead key={col.key} className="px-3 text-muted-foreground">
-                              <SortColumnHeader
-                                col={col}
-                                sortField={sortField}
-                                sortDir={sortDir}
-                                onPick={pickSort}
-                              />
-                            </TableHead>
-                          ))}
+                          {columns.map((col) =>
+                            col.def ? (
+                              <TableHead key={col.key} className="px-3 text-muted-foreground">
+                                <SortColumnHeader
+                                  col={col.def}
+                                  sortField={sortField}
+                                  sortDir={sortDir}
+                                  onPick={pickSort}
+                                />
+                              </TableHead>
+                            ) : (
+                              <TableHead key={col.key} className="w-12 px-3 text-center text-muted-foreground">{col.head}</TableHead>
+                            )
+                          )}
                           <TableHead className="px-3 text-right text-muted-foreground">관리</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -1112,7 +1135,7 @@ export default function OrdersPage() {
                           return (
                             <Fragment key={item.familyId}>
                               <TableRow className="bg-primary/5 hover:bg-primary/10">
-                                <TableCell colSpan={ORDER_COL_COUNT} className="px-3 py-2">
+                                <FamilySpanCell>
                                   <button onClick={() => toggleFamily(item.familyId)} className="flex items-center gap-2 text-left">
                                     {fc
                                       ? <ChevronRight className="size-4 text-muted-foreground" />
@@ -1121,7 +1144,7 @@ export default function OrdersPage() {
                                     <span className="text-sm font-semibold text-foreground">{item.familyName}</span>
                                     <Badge variant="secondary">동시분석 {item.rows.length}건</Badge>
                                   </button>
-                                </TableCell>
+                                </FamilySpanCell>
                               </TableRow>
                               {!fc && item.rows.map(r => renderOrderRow(r, true))}
                             </Fragment>

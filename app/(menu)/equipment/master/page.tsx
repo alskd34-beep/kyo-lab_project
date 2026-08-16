@@ -310,6 +310,7 @@ export default function EquipmentMasterPage() {
                         <CellStack
                           primary={row.name}
                           secondary={row.code}
+                          secondaryLabel="코드"
                           primaryClass="font-medium text-foreground"
                           title={`${row.name} / ${row.code}`}
                         />
@@ -318,6 +319,7 @@ export default function EquipmentMasterPage() {
                         <CellStack
                           primary={row.category ?? "—"}
                           secondary={row.location ?? undefined}
+                          secondaryLabel="위치"
                           title={[row.category, row.location].filter(Boolean).join(" / ")}
                         />
                       </TableCell>
@@ -325,6 +327,7 @@ export default function EquipmentMasterPage() {
                         <CellStack
                           primary={row.calibrationDate ?? "—"}
                           secondary={calibrationDueLine(row.calibrationDueDate)}
+                          secondaryLabel="차기 검교정"
                           primaryClass="font-mono text-xs text-foreground"
                           title={[row.calibrationDate, row.calibrationDueDate].filter(Boolean).join(" / ")}
                         />

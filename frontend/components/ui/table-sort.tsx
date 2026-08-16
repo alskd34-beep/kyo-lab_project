@@ -116,3 +116,5 @@ export function SortColumnHeader<F extends string>({
     </Popover>
   )
 }
+
+SortColumnHeader.displayName = "SortColumnHeader"

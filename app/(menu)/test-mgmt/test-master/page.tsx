@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { useColumnExpandLevel } from "@frontend/hooks/use-column-expand-level"
+import { CellStack } from "@frontend/components/ui/table-cell-stack"
 import {
   ClipboardList,
   Pencil,
@@ -92,14 +92,13 @@ const EMPTY_FORM: FormState = {
 
 type SortField = "name" | "category" | "estimatedHours" | "requiresDuo" | "isActive"
 
-// 표 너비가 좁을 때: 2인시험·활성을 "속성" 한 컬럼에 묶어 보여준다
-const SORT_COLUMNS_MERGED: SortColumnDef<SortField>[] = [
+const SORT_COLUMNS: SortColumnDef<SortField>[] = [
   sortCol("name", "시험항목명"),
   sortCol("category", "대분류"),
   sortCol("estimatedHours", "예상시간"),
   {
     key: "attrs",
-    label: "속성",
+    label: "2인시험",
     fields: [
       { id: "requiresDuo", label: "2인시험" },
       { id: "isActive", label: "활성" },
@@ -107,17 +106,7 @@ const SORT_COLUMNS_MERGED: SortColumnDef<SortField>[] = [
   },
 ]
 
-// 표 너비에 여유가 있을 때: 2인시험·활성을 별도 컬럼으로 갈라 보여준다
-const SORT_COLUMNS_SPLIT: SortColumnDef<SortField>[] = [
-  sortCol("name", "시험항목명"),
-  sortCol("category", "대분류"),
-  sortCol("estimatedHours", "예상시간"),
-  sortCol("requiresDuo", "2인시험"),
-  sortCol("isActive", "활성"),
-]
 
-/** 표 컨테이너 너비(px) 기준 전환점 — 이 이상이면 2인시험·활성을 분리해 보여준다 */
-const COLUMN_BREAKPOINTS = [780]
 
 function CategoryBadge({ category }: { category: string }) {
   const dot = CATEGORY_DOT[category] ?? CATEGORY_DOT["기타"]
@@ -178,10 +167,6 @@ export default function TestMasterPage() {
   const [sortField, setSortField] = useState<SortField>("name")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
   const [statusFilter, setStatusFilter] = useState<StatusFilterValue>("all")
-  const [tableEl, setTableEl] = useState<HTMLDivElement | null>(null)
-  const columnLevel = useColumnExpandLevel(tableEl, COLUMN_BREAKPOINTS)
-  const split = columnLevel >= 1
-
   useEffect(() => {
     queueMicrotask(() => {
       void loadItems()
@@ -597,32 +582,11 @@ export default function TestMasterPage() {
         )}
       </div>
 
-      {/* 데스크톱 테이블 — 표 너비에 여유가 있으면 2인시험·활성을 별도 컬럼으로 분리 */}
       <Card className="hidden min-h-0 flex-1 flex-col overflow-hidden py-0 md:flex">
-        <Table className="w-full" containerRef={setTableEl}>
-          <colgroup>
-            {split ? (
-              <>
-                <col className="w-[44%]" />
-                <col className="w-[15%]" />
-                <col className="w-[9%]" />
-                <col className="w-[13%]" />
-                <col className="w-[11%]" />
-                <col className="w-[8%]" />
-              </>
-            ) : (
-              <>
-                <col className="w-[38%]" />
-                <col className="w-[16%]" />
-                <col className="w-[14%]" />
-                <col className="w-[20%]" />
-                <col className="w-[12%]" />
-              </>
-            )}
-          </colgroup>
+        <Table className="w-full">
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              {(split ? SORT_COLUMNS_SPLIT : SORT_COLUMNS_MERGED).map((col) => (
+              {SORT_COLUMNS.map((col) => (
                 <TableHead key={col.key} className="px-3 py-2">
                   <SortColumnHeader
                     col={col}
@@ -645,13 +609,12 @@ export default function TestMasterPage() {
                   <TableCell className="px-3 py-2"><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
                   <TableCell className="px-3 py-2"><Skeleton className="h-4 w-8" /></TableCell>
                   <TableCell className="px-3 py-2"><Skeleton className="h-8 w-16" /></TableCell>
-                  {split && <TableCell className="px-3 py-2"><Skeleton className="h-8 w-14" /></TableCell>}
                   <TableCell className="px-1 py-2"><Skeleton className="mx-auto h-6 w-14" /></TableCell>
                 </TableRow>
               ))
             ) : filtered.length === 0 ? (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={split ? 6 : 5} className="py-16 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={8} className="py-16 text-center text-sm text-muted-foreground">
                   데이터가 없습니다.
                 </TableCell>
               </TableRow>
@@ -669,23 +632,12 @@ export default function TestMasterPage() {
                   <TableCell className="px-3 py-2 text-xs tabular-nums text-muted-foreground">
                     {row.estimatedHours != null ? `${row.estimatedHours}` : "—"}
                   </TableCell>
-                  {split ? (
-                    <>
-                      <TableCell className="px-3 py-2">
-                        <DuoToggleButton row={row} onToggle={() => void toggleDuo(row)} />
-                      </TableCell>
-                      <TableCell className="px-3 py-2">
-                        <ActiveToggleButton row={row} onToggle={() => void toggleActive(row)} />
-                      </TableCell>
-                    </>
-                  ) : (
-                    <TableCell className="px-3 py-2">
-                      <div className="min-w-0">
-                        <DuoToggleButton row={row} onToggle={() => void toggleDuo(row)} />
-                        <ActiveToggleButton row={row} onToggle={() => void toggleActive(row)} className="mt-0.5" />
-                      </div>
-                    </TableCell>
-                  )}
+                  <TableCell className="px-3 py-2">
+                    <CellStack
+                      primary={<DuoToggleButton row={row} onToggle={() => void toggleDuo(row)} />}
+                      secondary={<ActiveToggleButton row={row} onToggle={() => void toggleActive(row)} />}
+                    />
+                  </TableCell>
                   <TableCell className="px-1 py-2 text-center">
                     <div className="flex items-center justify-center gap-1">
                       <Button

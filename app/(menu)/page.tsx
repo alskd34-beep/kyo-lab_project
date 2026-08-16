@@ -80,7 +80,6 @@ const SORT_COLUMNS: SortColumnDef<SortField>[] = [
     fields: [
       { id: 'product', label: '제품명' },
       { id: 'type', label: '유형' },
-      { id: 'category', label: '구분' },
     ],
   },
   {
@@ -442,9 +441,9 @@ export default function QCDashboard() {
                         <TableCell className="px-3 py-2">
                           <CellStack
                             primary={row.product}
-                            secondary={`${row.category} · ${row.type}`}
+                            secondary={row.type}
                             primaryClass="font-medium text-foreground"
-                            title={`${row.product} / ${row.category} / ${row.type}`}
+                            title={`${row.product} / ${row.type}`}
                           />
                         </TableCell>
                         <TableCell className="px-3 py-2">

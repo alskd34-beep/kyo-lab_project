@@ -1,6 +1,6 @@
 "use client"
 
-import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState, type ChangeEvent } from "react"
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from "react"
 import {
   AlertTriangle,
   Box,
@@ -14,7 +14,7 @@ import {
 import { cn } from "@frontend/lib/utils"
 import { useIsMobile } from "@frontend/hooks/use-mobile"
 import { useVirtualWindow } from "@frontend/hooks/use-virtual-window"
-import { useColumnExpandLevel } from "@frontend/hooks/use-column-expand-level"
+
 import { Badge } from "@frontend/components/ui/badge"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
@@ -54,6 +54,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  useTableColSpan,
 } from "@frontend/components/ui/table"
 
 interface LookupOptionRow {
@@ -146,133 +147,67 @@ type SortField =
 // ─── 컬럼 정의 ────────────────────────────────────────────────────────────────
 // 좁을 때는 두 필드를 한 셀에 쌓아 보여주고(묶음), 넓어지면 별도 컬럼으로 갈라진다.
 
-const COL_CODE: SortColumnDef<SortField> = {
-  key: "code",
-  label: "품목코드",
-  fields: [
-    { id: "productCode", label: "품목코드" },
-    { id: "abbreviation", label: "약호" },
-  ],
-}
-const COL_NAME_MERGED: SortColumnDef<SortField> = {
-  key: "name",
-  label: "품목명",
-  fields: [
-    { id: "name", label: "품목명" },
-    { id: "nameAlt", label: "품목명2" },
-  ],
-}
-const COL_NAME: SortColumnDef<SortField> = {
-  key: "name",
-  label: "품목명",
-  fields: [{ id: "name", label: "품목명" }],
-}
-const COL_NAME_ALT: SortColumnDef<SortField> = {
-  key: "nameAlt",
-  label: "품목명2",
-  fields: [{ id: "nameAlt", label: "품목명2" }],
-}
-const COL_CLASS_MERGED: SortColumnDef<SortField> = {
-  key: "class",
-  label: "분류",
-  fields: [
-    { id: "categoryName", label: "품목구분" },
-    { id: "classificationName", label: "전문분류" },
-    { id: "unit", label: "단위" },
-    { id: "packageSpec", label: "포장규격" },
-  ],
-}
-const COL_CLASS: SortColumnDef<SortField> = {
-  key: "class",
-  label: "분류",
-  fields: [
-    { id: "categoryName", label: "품목구분" },
-    { id: "classificationName", label: "전문분류" },
-  ],
-}
-const COL_SPEC: SortColumnDef<SortField> = {
-  key: "spec",
-  label: "규격",
-  fields: [
-    { id: "unit", label: "단위" },
-    { id: "packageSpec", label: "포장규격" },
-  ],
-}
-const COL_STATUS_MERGED: SortColumnDef<SortField> = {
-  key: "status",
-  label: "상태",
-  fields: [
-    { id: "difficulty", label: "난이도" },
-    { id: "avgWorkdays", label: "공수" },
-    { id: "isActive", label: "활성/비활성" },
-  ],
-}
-const COL_DIFFICULTY: SortColumnDef<SortField> = {
-  key: "difficulty",
-  label: "난이도",
-  fields: [
-    { id: "difficulty", label: "난이도" },
-    { id: "avgWorkdays", label: "공수" },
-  ],
-}
-const COL_ACTIVE: SortColumnDef<SortField> = {
-  key: "status",
-  label: "상태",
-  fields: [{ id: "isActive", label: "활성/비활성" }],
-}
-
-interface ProductColumn {
-  key: string
-  /** colgroup 폭 (합이 100%) */
-  width: string
-  /** 정렬 헤더 정의. 없으면 '관리' 컬럼 */
-  def?: SortColumnDef<SortField>
-}
-
-/**
- * 컬럼 구성 3단계. 인덱스 = `useColumnExpandLevel` 이 돌려주는 단계 값.
- *
- * 0 → 1 은 "묶음 → 펼침" 자체를 바꾼다(컬럼 개수가 달라짐).
- * 1 → 2 는 이미 펼쳐진 8개 컬럼의 비율만 바꾼다 — 실제 품목 데이터(718건) 기준
- * 품목명·품목명2·분류·규격 각 필드의 99번째 백분위 렌더 폭을 측정해 정한 비율이라,
- * 레벨 2 폭(1400px)에서는 표에 있는 대부분의 값이 잘리지 않고 그대로 보인다.
- * (극단적으로 긴 이상치 한두 건만 더 넓어질 때까지 말줄임이 남는다.)
- */
-const COLUMN_LEVELS: ProductColumn[][] = [
-  // 0 — 전부 묶음 (좁은 화면)
-  [
-    { key: "code", width: "w-[14%]", def: COL_CODE },
-    { key: "name", width: "w-[38%]", def: COL_NAME_MERGED },
-    { key: "class", width: "w-[24%]", def: COL_CLASS_MERGED },
-    { key: "status", width: "w-[18%]", def: COL_STATUS_MERGED },
-    { key: "actions", width: "w-[6%]" },
-  ],
-  // 1 — 전부 펼침, 균형 비율 (여유가 있으면 굳이 묶어 둘 이유가 없다)
-  [
-    { key: "code", width: "w-[11%]", def: COL_CODE },
-    { key: "name", width: "w-[20%]", def: COL_NAME },
-    { key: "nameAlt", width: "w-[16%]", def: COL_NAME_ALT },
-    { key: "class", width: "w-[15%]", def: COL_CLASS },
-    { key: "spec", width: "w-[10%]", def: COL_SPEC },
-    { key: "difficulty", width: "w-[12%]", def: COL_DIFFICULTY },
-    { key: "status", width: "w-[10%]", def: COL_ACTIVE },
-    { key: "actions", width: "w-[6%]" },
-  ],
-  // 2 — 전부 펼침, 실측 기반 비율 (더 넓은 화면 — 긴 품목명도 잘리지 않도록)
-  [
-    { key: "code", width: "w-[8%]", def: COL_CODE },
-    { key: "name", width: "w-[30%]", def: COL_NAME },
-    { key: "nameAlt", width: "w-[23%]", def: COL_NAME_ALT },
-    { key: "class", width: "w-[10%]", def: COL_CLASS },
-    { key: "spec", width: "w-[12%]", def: COL_SPEC },
-    { key: "difficulty", width: "w-[8%]", def: COL_DIFFICULTY },
-    { key: "status", width: "w-[5%]", def: COL_ACTIVE },
-    { key: "actions", width: "w-[4%]" },
-  ],
+const PRODUCT_COLUMNS: { key: string; def?: SortColumnDef<SortField> }[] = [
+  {
+    key: "code",
+    def: {
+      key: "code",
+      label: "품목코드",
+      fields: [
+        { id: "productCode", label: "품목코드" },
+        { id: "abbreviation", label: "약호" },
+      ],
+    },
+  },
+  {
+    key: "name",
+    def: {
+      key: "name",
+      label: "품목명",
+      fields: [
+        { id: "name", label: "품목명" },
+        { id: "nameAlt", label: "품목명2" },
+      ],
+    },
+  },
+  {
+    key: "class",
+    def: {
+      key: "class",
+      label: "분류",
+      fields: [
+        { id: "categoryName", label: "품목구분" },
+        { id: "classificationName", label: "전문분류" },
+      ],
+    },
+  },
+  {
+    key: "spec",
+    def: {
+      key: "spec",
+      label: "규격",
+      fields: [
+        { id: "unit", label: "단위" },
+        { id: "packageSpec", label: "포장규격" },
+      ],
+    },
+  },
+  {
+    key: "load",
+    def: {
+      key: "load",
+      label: "난이도",
+      fields: [
+        { id: "difficulty", label: "난이도" },
+        { id: "avgWorkdays", label: "공수" },
+      ],
+    },
+  },
+  {
+    key: "status",
+    def: { key: "status", label: "상태", fields: [{ id: "isActive", label: "활성/비활성" }] },
+  },
 ]
-
-/** 표 컨테이너 너비(px) 기준 전환점 — [묶음→펼침, 펼침→실측 비율] */
-const COLUMN_BREAKPOINTS = [1180, 1400]
 
 const DIFF_RANK: Record<string, number> = { High: 3, Medium: 2, Low: 1 }
 
@@ -324,7 +259,6 @@ const DifficultyBadge = memo(function DifficultyBadge({ difficulty }: { difficul
 
 const ROW_HEIGHT = 52
 const CARD_HEIGHT = 156
-const PRODUCT_COL_COUNT = 5
 
 function StatusLine({
   color,
@@ -344,28 +278,15 @@ function StatusLine({
   )
 }
 
-const EMPTY = <span className="text-muted-foreground/40">—</span>
-
 const ProductTableRow = memo(function ProductTableRow({
   row,
-  level,
   onEdit,
   onDelete,
 }: {
   row: ProductRow
-  /** 컬럼 펼침 단계 — COLUMN_LEVELS 의 인덱스와 같다 */
-  level: number
   onEdit: (row: ProductRow) => void
   onDelete: (row: ProductRow) => void
 }) {
-  const classLine = [row.categoryName, row.classificationName].filter(Boolean).join(" · ") || "—"
-  const spec = [row.unit, row.packageSpec].filter(Boolean).join(" · ")
-  // 컬럼 구성이 2단계(묶음/펼침)뿐이라 세 쌍이 함께 갈라진다
-  const split = level >= 1
-  const splitStatus = split
-  const splitClass = split
-  const splitName = split
-
   return (
     <TableRow className="cursor-pointer hover:bg-muted/40" onClick={() => onEdit(row)}>
       <TableCell className="px-3 py-2">
@@ -376,65 +297,48 @@ const ProductTableRow = memo(function ProductTableRow({
           title={[row.productCode, row.abbreviation].filter(Boolean).join(" / ")}
         />
       </TableCell>
-
-      {/* 품목명 (+ 품목명2) */}
       <TableCell className="px-3 py-2">
         <CellStack
           primary={row.name}
-          secondary={splitName ? undefined : row.nameAlt}
+          secondary={row.nameAlt}
           primaryClass="font-medium text-foreground"
           title={row.nameAlt ? `${row.name} ${row.nameAlt}` : row.name}
         />
       </TableCell>
-      {splitName && (
-        <TableCell className="px-3 py-2">
-          <CellStack
-            primary={row.nameAlt || EMPTY}
-            primaryClass="text-xs text-muted-foreground"
-            title={row.nameAlt ?? undefined}
-          />
-        </TableCell>
-      )}
-
-      {/* 분류 (+ 규격) */}
       <TableCell className="px-3 py-2">
         <CellStack
-          primary={classLine}
-          secondary={splitClass ? undefined : spec || undefined}
+          primary={row.categoryName || "—"}
+          secondary={row.classificationName}
           primaryClass="text-xs text-foreground"
-          title={[classLine, spec].filter(Boolean).join(" / ")}
+          title={[row.categoryName, row.classificationName].filter(Boolean).join(" / ")}
         />
       </TableCell>
-      {splitClass && (
-        <TableCell className="px-3 py-2">
-          <CellStack primary={spec || EMPTY} primaryClass="text-xs text-muted-foreground" title={spec || undefined} />
-        </TableCell>
-      )}
-
-      {/* 난이도 (+ 상태) */}
       <TableCell className="px-3 py-2">
-        <div className="min-w-0">
-          <StatusLine
-            color={row.difficulty ? (DIFF_DOT[row.difficulty] ?? "bg-muted-foreground") : "bg-muted-foreground"}
-            label={row.difficulty ?? "—"}
-            extra={row.avgWorkdays != null ? `${row.avgWorkdays}일` : undefined}
-          />
-          {!splitStatus && (
-            <StatusLine
-              color={row.isActive ? "bg-indigo-500" : "bg-muted-foreground"}
-              label={row.isActive ? "활성" : "비활성"}
-            />
-          )}
-        </div>
+        <CellStack
+          primary={row.unit || "—"}
+          secondary={row.packageSpec}
+          primaryClass="text-xs text-foreground"
+          title={[row.unit, row.packageSpec].filter(Boolean).join(" / ")}
+        />
       </TableCell>
-      {splitStatus && (
-        <TableCell className="px-3 py-2">
-          <StatusLine
-            color={row.isActive ? "bg-indigo-500" : "bg-muted-foreground"}
-            label={row.isActive ? "활성" : "비활성"}
-          />
-        </TableCell>
-      )}
+      <TableCell className="px-3 py-2">
+        <CellStack
+          primary={
+            <StatusLine
+              color={row.difficulty ? (DIFF_DOT[row.difficulty] ?? "bg-muted-foreground") : "bg-muted-foreground"}
+              label={row.difficulty ?? "—"}
+            />
+          }
+          secondary={row.avgWorkdays != null ? `${row.avgWorkdays}일` : undefined}
+          secondaryLabel="공수"
+        />
+      </TableCell>
+      <TableCell className="px-3 py-2">
+        <StatusLine
+          color={row.isActive ? "bg-indigo-500" : "bg-muted-foreground"}
+          label={row.isActive ? "활성" : "비활성"}
+        />
+      </TableCell>
 
       <TableCell className="px-1 py-2 text-center">
         <Button
@@ -452,11 +356,23 @@ const ProductTableRow = memo(function ProductTableRow({
 })
 
 function VirtualPad({ height }: { height: number }) {
+  const colSpan = useTableColSpan()
   if (height <= 0) return null
   return (
     <tr aria-hidden className="border-0 hover:bg-transparent">
-      <td colSpan={PRODUCT_COL_COUNT} className="p-0" style={{ height, border: 0, padding: 0 }} />
+      <td colSpan={colSpan} className="p-0" style={{ height, border: 0, padding: 0 }} />
     </tr>
+  )
+}
+
+function EmptyRow({ children }: { children: ReactNode }) {
+  const colSpan = useTableColSpan()
+  return (
+    <TableRow className="hover:bg-transparent">
+      <TableCell colSpan={colSpan} className="py-16 text-center text-sm text-muted-foreground">
+        {children}
+      </TableCell>
+    </TableRow>
   )
 }
 
@@ -702,19 +618,8 @@ const ProductMasterList = memo(function ProductMasterList({
   )
   const windowedRows = sorted.slice(start, end)
 
-  // 표 너비에 여유가 생기면 묶인 컬럼을 단계적으로 펼친다.
-  // useVirtualWindow 의 containerRef(콜백)와 별개로 실제 DOM 노드를 들고 있어야
-  // ResizeObserver 를 붙일 수 있으므로, 같은 노드에 두 콜백 ref 를 합성한다.
-  const [tableEl, setTableEl] = useState<HTMLDivElement | null>(null)
-  const containerRef = useCallback(
-    (node: HTMLDivElement | null) => {
-      virtualRef(node)
-      setTableEl(node)
-    },
-    [virtualRef],
-  )
-  const columnLevel = useColumnExpandLevel(isMobile ? null : tableEl, COLUMN_BREAKPOINTS)
-  const columns = COLUMN_LEVELS[columnLevel]
+  const columns = PRODUCT_COLUMNS
+  const containerRef = virtualRef
 
   return (
     <>
@@ -744,51 +649,38 @@ const ProductMasterList = memo(function ProductMasterList({
           containerClassName="min-w-0 overflow-x-hidden overflow-y-auto border-b border-border/60"
           className="w-full"
         >
-          <colgroup>
-            {columns.map((col) => (
-              <col key={col.key} className={col.width} />
-            ))}
-          </colgroup>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              {columns.map((col) =>
-                col.def ? (
-                  <TableHead key={col.key} className="px-3 py-2">
+              {columns.map((col) => (
+                <TableHead key={col.key} className="px-3 py-2">
+                  {col.def ? (
                     <SortColumnHeader
                       col={col.def}
                       sortField={sortField}
                       sortDir={sortDir}
                       onPick={pickSort}
                     />
-                  </TableHead>
-                ) : (
-                  <TableHead key={col.key} className="px-1 text-center text-muted-foreground">
-                    <span className="sr-only">관리</span>
-                  </TableHead>
-                )
-              )}
+                  ) : null}
+                </TableHead>
+              ))}
+              <TableHead className="px-1 text-center text-muted-foreground">
+                <span className="sr-only">관리</span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading
               ? Array.from({ length: 6 }).map((_, i) => (
                   <TableRow key={i}>
-                    {columns.map((col) =>
-                      col.def ? (
-                        <TableCell key={col.key} className="px-3 py-2"><Skeleton className="h-8 w-full" /></TableCell>
-                      ) : (
-                        <TableCell key={col.key} className="px-1 py-2"><Skeleton className="mx-auto h-6 w-6 rounded" /></TableCell>
-                      )
-                    )}
+                    {columns.map((col) => (
+                      <TableCell key={col.key} className="px-3 py-2"><Skeleton className="h-8 w-full" /></TableCell>
+                    ))}
+                    <TableCell className="px-1 py-2"><Skeleton className="mx-auto h-6 w-6 rounded" /></TableCell>
                   </TableRow>
                 ))
               : sorted.length === 0
               ? (
-                <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={columns.length} className="py-16 text-center text-sm text-muted-foreground">
-                    데이터가 없습니다.
-                  </TableCell>
-                </TableRow>
+                <EmptyRow>데이터가 없습니다.</EmptyRow>
               )
               : (
                 <>
@@ -797,7 +689,6 @@ const ProductMasterList = memo(function ProductMasterList({
                     <ProductTableRow
                       key={row.id}
                       row={row}
-                      level={columnLevel}
                       onEdit={onEdit}
                       onDelete={onDelete}
                     />

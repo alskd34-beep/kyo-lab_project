@@ -40,6 +40,9 @@
 
 ## 1. 테이블 (Table)
 
+목록 표의 컬럼 합침·펼침은 **[표 컬럼 자동 합침](../../docs/table-adaptive-columns.md)** 을 따른다.  
+묶음은 필드 2개(`CellStack` + `SortColumnHeader.fields`)만. px 단계·`COLUMN_LEVELS`를 화면마다 두지 않는다.
+
 ### 카드 래퍼
 
 ```tsx

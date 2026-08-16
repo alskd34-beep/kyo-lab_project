@@ -641,20 +641,17 @@ export default function TestersPage() {
                           <CellStack
                             primary={tester.name}
                             secondary={tester.employeeNo}
+                            secondaryLabel="사번"
                             primaryClass="font-medium text-foreground"
                             title={`${tester.name} ${tester.employeeNo}`}
                           />
                         </div>
                       </TableCell>
                       <TableCell className="px-3 py-2">
-                        {/* 가능한 항목만 노출 — '불가'는 표시하지 않는다 */}
-                        <div className="min-w-0">
-                          {tester.canSolo && <StatusLine color="bg-indigo-500" label="단독 가능" />}
-                          {tester.canDuo && <StatusLine color="bg-amber-500" label="2인 가능" />}
-                          {!tester.canSolo && !tester.canDuo && (
-                            <span className="text-xs text-muted-foreground/50">—</span>
-                          )}
-                        </div>
+                        <CellStack
+                          primary={tester.canSolo ? <StatusLine color="bg-indigo-500" label="단독 가능" /> : "—"}
+                          secondary={tester.canDuo ? <StatusLine color="bg-amber-500" label="2인 가능" /> : undefined}
+                        />
                       </TableCell>
                       <TableCell className="px-3 py-2">
                         <button

@@ -60,7 +60,6 @@ const USER_SORT_COLUMNS: SortColumnDef<SortField>[] = [
     fields: [
       { id: 'displayName', label: '사용자명' },
       { id: 'username', label: '사번' },
-      { id: 'customerNo', label: '고객번호' },
     ],
   },
   sortCol('role', '역할'),
@@ -299,9 +298,9 @@ export default function UsersAdminPage() {
                     <UserAvatar user={u} />
                     <CellStack
                       primary={u.displayName ?? '-'}
-                      secondary={`${u.username} · ${fmtCustomerNo(u.customerNo)}`}
+                      secondary={u.username}
                       primaryClass="font-medium text-foreground"
-                      title={[u.displayName ?? '-', u.username, fmtCustomerNo(u.customerNo)].join(' / ')}
+                      title={[u.displayName ?? '-', u.username].join(' / ')}
                     />
                   </div>
                 </TableCell>

@@ -156,7 +156,6 @@ const SORT_COLUMNS: SortColumnDef<SortField>[] = [
     fields: [
       { id: 'productName', label: '품목' },
       { id: 'productCode', label: '품목코드' },
-      { id: 'batchNo', label: '제조번호' },
     ],
   },
   {
@@ -165,7 +164,6 @@ const SORT_COLUMNS: SortColumnDef<SortField>[] = [
     fields: [
       { id: 'testType', label: '시험종류' },
       { id: 'period', label: '기간' },
-      { id: 'requestNo', label: '의뢰번호' },
     ],
   },
   {
@@ -416,16 +414,16 @@ export default function StabStatusPage() {
                     <TableCell className="px-3 py-2.5">
                       <CellStack
                         primary={row.productName || '—'}
-                        secondary={`${row.productCode || '—'} · ${row.batchNo || '—'}`}
+                        secondary={row.productCode || undefined}
                         primaryClass="font-medium text-foreground"
-                        title={[row.productName, row.productCode, row.batchNo].filter(Boolean).join(' / ')}
+                        title={[row.productName, row.productCode].filter(Boolean).join(' / ')}
                       />
                     </TableCell>
                     <TableCell className="px-3 py-2.5">
                       <CellStack
                         primary={row.testType || '미분류'}
-                        secondary={[row.period || '—', row.requestNo ? `의뢰 ${row.requestNo}` : null, row.reason || null].filter(Boolean).join(' · ')}
-                        title={[row.testType, row.period, row.requestNo, row.reason].filter(Boolean).join(' / ')}
+                        secondary={row.period || undefined}
+                        title={[row.testType, row.period].filter(Boolean).join(' / ')}
                       />
                     </TableCell>
                     <TableCell className="px-3 py-2.5">
