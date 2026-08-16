@@ -539,7 +539,7 @@ export default function SchedulerPage() {
                                     {allDone && !isSubmitted && (
                                       <button
                                         onClick={() => submitForReview(key)}
-                                        className="inline-flex items-center gap-1 rounded-md bg-violet-600 px-2 py-1 text-[10px] font-semibold text-white hover:bg-violet-700 transition-colors"
+                                        className="inline-flex items-center gap-1 rounded-md bg-indigo-600 px-2 py-1 text-[10px] font-semibold text-white hover:bg-indigo-700 transition-colors"
                                       >
                                         <Send size={9} />
                                         검토 요청

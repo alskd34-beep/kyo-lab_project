@@ -378,7 +378,7 @@ export default function MonthlySchedulePage() {
 
         {/* Header */}
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 shadow-md shadow-violet-600/30">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 shadow-md shadow-indigo-600/30">
             <Calendar size={20} className="text-white" />
           </div>
           <div className="min-w-0">
@@ -545,7 +545,7 @@ export default function MonthlySchedulePage() {
                     onClick={() => setView(t.key)}
                     className={`inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold transition-colors ${
                       active
-                        ? 'bg-violet-600 text-white shadow-sm'
+                        ? 'bg-indigo-600 text-white shadow-sm'
                         : `${TXT_TERTIARY} hover:bg-slate-100 dark:hover:bg-slate-800`
                     }`}
                   >
