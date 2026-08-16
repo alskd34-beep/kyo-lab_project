@@ -294,15 +294,20 @@ export default function UsersAdminPage() {
               : filteredUsers.map(u => (
               <TableRow key={u.id} className="border-t border-slate-100">
                 <TableCell className="px-3 py-2">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <UserAvatar user={u} />
-                    <CellStack
-                      primary={u.displayName ?? '-'}
-                      secondary={u.username}
-                      primaryClass="font-medium text-foreground"
-                      title={[u.displayName ?? '-', u.username].join(' / ')}
-                    />
-                  </div>
+                  {/* 아바타는 CellStack 바깥이 아니라 primary 안에 둔다.
+                      CellStack 루트는 @container(container-type:inline-size)라 고유 폭이 0이다.
+                      flex 형제로 두면 폭이 0으로 접혀 이름이 통째로 잘린다. */}
+                  <CellStack
+                    primary={
+                      <span className="flex min-w-0 items-center gap-2">
+                        <UserAvatar user={u} />
+                        <span className="truncate">{u.displayName ?? '-'}</span>
+                      </span>
+                    }
+                    secondary={u.username}
+                    primaryClass="font-medium text-foreground"
+                    title={[u.displayName ?? '-', u.username].join(' / ')}
+                  />
                 </TableCell>
                 <TableCell className="px-3 py-2">
                   <RoleBadge role={u.role} />

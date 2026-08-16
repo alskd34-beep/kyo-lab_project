@@ -636,16 +636,20 @@ export default function TestersPage() {
                         {idx + 1}
                       </TableCell>
                       <TableCell className="px-3 py-2">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <TesterAvatar testerId={tester.id} name={tester.name} avatarUrl={tester.avatarUrl} size="sm" />
-                          <CellStack
-                            primary={tester.name}
-                            secondary={tester.employeeNo}
-                            secondaryLabel="사번"
-                            primaryClass="font-medium text-foreground"
-                            title={`${tester.name} ${tester.employeeNo}`}
-                          />
-                        </div>
+                        {/* 아바타는 primary 안에 둔다 — CellStack 루트는 @container라 고유 폭이 0이라
+                            flex 형제로 두면 폭이 접혀 이름이 잘린다. */}
+                        <CellStack
+                          primary={
+                            <span className="flex min-w-0 items-center gap-2">
+                              <TesterAvatar testerId={tester.id} name={tester.name} avatarUrl={tester.avatarUrl} size="sm" />
+                              <span className="truncate">{tester.name}</span>
+                            </span>
+                          }
+                          secondary={tester.employeeNo}
+                          secondaryLabel="사번"
+                          primaryClass="font-medium text-foreground"
+                          title={`${tester.name} ${tester.employeeNo}`}
+                        />
                       </TableCell>
                       <TableCell className="px-3 py-2">
                         <CellStack

@@ -16,6 +16,7 @@ import {
   ChevronDown, ChevronRight, ExternalLink, ArrowLeftRight, Loader2,
 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@frontend/components/ui/select'
+import { JOB_STAGES, OPEN_STATUSES, stageStyle } from "@shared/qc-status"
 import { cn } from "@frontend/lib/utils"
 import { TesterAvatar } from "@frontend/lib/tester-profiles"
 import {
@@ -56,11 +57,8 @@ interface Props {
 }
 
 // ─── 상수/유틸 ─────────────────────────────────────────────────────────────────
-const STATUS_DOT: Record<string, string> = {
-  대기: "bg-slate-400", 진행중: "bg-violet-500", 검토중: "bg-blue-500",
-  완료: "bg-emerald-500", 지연: "bg-red-500", 삭제: "bg-slate-300",
-}
-const STATUS_OPTIONS = ["대기", "진행중", "검토중", "완료", "지연"]
+const statusDot = (s: string) => stageStyle(s).dot
+const STATUS_OPTIONS = ["대기", ...JOB_STAGES, "지연"]
 const GROUP_ACCENTS = [
   "bg-blue-500", "bg-emerald-500", "bg-violet-500",
   "bg-amber-500", "bg-rose-500", "bg-teal-500", "bg-fuchsia-500",
@@ -78,7 +76,7 @@ const todayStr = () => {
   const n = new Date()
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`
 }
-const isActive = (s: string) => s === "대기" || s === "진행중" || s === "검토중" || s === "지연"
+const isActive = (s: string) => OPEN_STATUSES.has(s)
 const sumWork = (rows: OrderRow[]) => rows.reduce((s, r) => s + (r.workdays ?? 0), 0)
 const maxDue = (rows: OrderRow[]) => rows.map(r => r.dueDate).filter(Boolean).sort().slice(-1)[0] ?? null
 
@@ -407,7 +405,7 @@ function MiniStat({ label, value, tone }: { label: string; value: string; tone?:
 function StatusBadge({ status }: { status: string }) {
   return (
     <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
-      <span className={cn("size-1.5 rounded-full", STATUS_DOT[status] ?? "bg-slate-400")} />{status}
+      <span className={cn("size-1.5 rounded-full", statusDot(status))} />{status}
     </span>
   )
 }

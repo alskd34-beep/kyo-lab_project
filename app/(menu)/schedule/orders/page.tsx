@@ -6,6 +6,7 @@ import {
   RefreshCw, Sparkles, History, AlertCircle, X, Loader2, Database, Plus,
   ChevronDown, ChevronRight, ChevronLeft, Lock, LockOpen, Search, CalendarDays, Users, ListChecks, Layers,
 } from "lucide-react"
+import { CLOSED_STAGE, JOB_STAGES, stageStyle } from "@shared/qc-status"
 import { cn } from "@frontend/lib/utils"
 import { AssigneeDetailModal } from "@frontend/components/schedule/assignee-detail-modal"
 import { TesterAvatar, TesterOptionLabel, primeTesterProfileCache } from "@frontend/lib/tester-profiles"
@@ -91,18 +92,12 @@ const TABS: { id: TabId; label: string; icon: typeof CalendarDays }[] = [
   { id: "status", label: "상태별", icon: ListChecks },
 ]
 
-const STATUS_OPTIONS = ["대기", "진행중", "검토중", "완료", "지연"]
+// 오더 상태 = 대기 + 작업 단계(진행중→검토전→검토중→승인전→승인완료) + 지연 (types/qc-status.ts)
+const STATUS_OPTIONS = ["대기", ...JOB_STAGES, "지연"]
 const METHOD_OPTIONS = ["전항목", "개별항목"]
 
 // 상태 점 색 (템플릿 스타일의 outline 뱃지 + 컬러 도트)
-const STATUS_DOT: Record<string, string> = {
-  대기:   "bg-muted-foreground",
-  진행중: "bg-violet-500",
-  검토중: "bg-blue-500",
-  완료:   "bg-emerald-500",
-  지연:   "bg-red-500",
-  삭제:   "bg-slate-300",
-}
+const statusDot = (s: string) => stageStyle(s).dot
 
 const FIELD_LABEL: Record<string, string> = {
   productCode: "품목코드", productName: "품목명", batchNo: "제조번호", dosageForm: "제형",
@@ -222,7 +217,7 @@ function FamilySpanCell({ children }: { children: ReactNode }) {
 
 // 완료예정일 임박 여부 (오늘 기준 3일 이내·기한 경과 포함, 완료·삭제 제외)
 function isDueSoon(dueDate: string | null, status: string): boolean {
-  if (!dueDate || status === "완료" || status === "삭제") return false
+  if (!dueDate || status === CLOSED_STAGE || status === "삭제") return false
   const now = new Date()
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const due = new Date(`${dueDate}T00:00:00`)
@@ -553,7 +548,7 @@ export default function OrdersPage() {
     return Array.from(m.entries())
       .map(([status, rs]) => ({
         key: `st:${status}`, label: status,
-        color: STATUS_DOT[status] ?? "bg-slate-400", rows: rs, meta: `${rs.length}건`,
+        color: statusDot(status), rows: rs, meta: `${rs.length}건`,
       }))
       .sort((a, b) => {
         const ia = order.indexOf(a.label); const ib = order.indexOf(b.label)
@@ -1251,7 +1246,7 @@ export default function OrdersPage() {
 function StatusBadge({ status }: { status: string }) {
   return (
     <Badge variant="outline" className="gap-1.5">
-      <span className={cn("size-1.5 rounded-full", STATUS_DOT[status] ?? "bg-slate-400")} />
+      <span className={cn("size-1.5 rounded-full", statusDot(status))} />
       {status}
     </Badge>
   )

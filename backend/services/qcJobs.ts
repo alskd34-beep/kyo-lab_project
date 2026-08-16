@@ -12,6 +12,10 @@ import { generateQcNo } from '@backend/lib/qcNumber'
 import { createNotification } from '@backend/services/notifications'
 import { checkEquipmentReadiness, type ReadinessResult } from '@backend/services/equipmentMaster'
 import { listByProduct, type PretestNoteRow } from '@backend/services/productPretestNotes'
+import {
+  ACTIVE_JOB_STATUSES, CLOSED_STAGE, NEXT_STAGE, STAGE_ACTION_LABEL,
+  canAdvanceByAdmin, isJobStage, type JobStage,
+} from '@shared/qc-status'
 
 export interface JobItemRow {
   id: string
@@ -265,8 +269,7 @@ export interface WorkerOverview {
   workers: WorkerOverviewRow[]
 }
 
-// 진행 중으로 간주하는 작업 상태
-const ACTIVE_JOB_STATUSES = new Set(['진행중', '검토중', '지연'])
+// 진행 중으로 간주하는 작업 상태는 @shared/qc-status 의 ACTIVE_JOB_STATUSES 를 쓴다.
 
 // ─── 작업 상세 (시험항목 진행 내역) ──────────────────────────────────────────
 export interface JobDetail {
@@ -290,6 +293,10 @@ export interface JobDetail {
   currentItemId: string | null
   /** 현재 항목을 시작한 시각 = 직전 클리어 시각 ?? 작업 생성 시각 (clearItem 의 경과시간 기준과 동일) */
   currentItemStartedAt: string | null
+  /** 관리자가 버튼으로 넘길 수 있는 다음 단계. 없으면 null */
+  nextStage: string | null
+  /** 그 버튼에 표시할 라벨 (예: '검토 시작'). 없으면 null */
+  nextStageLabel: string | null
 }
 
 /**
@@ -336,7 +343,10 @@ export async function getJobDetail(jobId: string): Promise<JobDetail | null> {
   }))
 
   const status = job.status as string
-  const current = ACTIVE_JOB_STATUSES.has(status)
+  // "현재 수행 중인 항목"은 아직 시험을 하고 있는 단계에서만 의미가 있다.
+  // 검토전 이후 단계는 시험이 끝난 상태라 현재 항목을 표시하지 않는다.
+  const testing = status === '진행중' || status === '지연'
+  const current = testing
     ? items.find(i => i.status !== 'cleared') ?? null
     : null
 
@@ -366,6 +376,8 @@ export async function getJobDetail(jobId: string): Promise<JobDetail | null> {
     items,
     currentItemId: current?.id ?? null,
     currentItemStartedAt: current ? (lastClearedAt ?? (job.created_at as string) ?? null) : null,
+    nextStage: canAdvanceByAdmin(status) ? NEXT_STAGE[status] : null,
+    nextStageLabel: canAdvanceByAdmin(status) ? STAGE_ACTION_LABEL[status] : null,
   }
 }
 
@@ -451,7 +463,7 @@ export async function listWorkerOverview(): Promise<WorkerOverview> {
 
     const status = j.status as string
     const o = orderById.get(j.order_id as string)
-    if (status === '완료') {
+    if (status === CLOSED_STAGE) {
       row.completedTotal += 1
       if ((j.work_end_date as string) === today) completedToday += 1
       continue
@@ -459,7 +471,8 @@ export async function listWorkerOverview(): Promise<WorkerOverview> {
     if (!ACTIVE_JOB_STATUSES.has(status)) continue
 
     if (status === '진행중') row.inProgress += 1
-    else if (status === '검토중') row.reviewing += 1
+    // 검토전·검토중·승인전은 모두 "시험은 끝나고 후속 절차 대기" — 검토 카운터로 함께 센다
+    else if (status === '검토전' || status === '검토중' || status === '승인전') row.reviewing += 1
     else if (status === '지연') row.delayed += 1
 
     const agg = itemAgg.get(j.id as string) ?? { total: 0, cleared: 0 }
@@ -608,8 +621,117 @@ export async function updateJobDates(jobId: string, userSub: string, dates: { wo
   if (error) throw error
 }
 
-/** 항목 클리어 — 시간 적재 + 감독관 알림 */
-export async function clearItem(jobId: string, itemId: string, userSub: string): Promise<void> {
+/**
+ * 모든 시험항목이 완료되면 작업 상태를 '진행중' → '검토전' 으로 자동 전환한다.
+ * 이후 검토·승인 단계는 관리자가 작업 현황 화면에서 버튼으로 넘긴다(advanceJobStage).
+ *
+ * - 대상은 '진행중' 인 작업만. 이후 단계는 그대로 두고,
+ *   '지연' 은 지연 표시를 잃지 않도록 자동 전환하지 않는다(담당자가 직접 변경).
+ * - 조건부 update(.eq('status','진행중'))로 항목 동시 클리어 시 중복 전환·중복 알림을 막는다.
+ * - work_end_date 는 건드리지 않는다(승인완료 시점에만 기록).
+ *
+ * @returns allCleared(전 항목 완료 여부)와 statusChangedTo(전환된 경우 '검토전')
+ */
+async function autoAdvanceToReview(jobId: string): Promise<{ allCleared: boolean; statusChangedTo: string | null }> {
+  // 미완료 항목이 남아있으면 전환하지 않음
+  const { count: remaining, error: cntErr } = await supabaseAdmin
+    .from('qc_job_items')
+    .select('id', { count: 'exact', head: true })
+    .eq('qc_job_id', jobId)
+    .neq('status', 'cleared')
+  if (cntErr || remaining === null || remaining > 0) return { allCleared: false, statusChangedTo: null }
+
+  const target = NEXT_STAGE['진행중']   // '검토전'
+
+  // '진행중' 인 경우에만 전환 (동시 호출 시 한 번만 성공)
+  const { data: updated } = await supabaseAdmin
+    .from('qc_jobs')
+    .update({ status: target })
+    .eq('id', jobId)
+    .eq('status', '진행중')
+    .select('order_id')
+    .maybeSingle()
+  if (!updated) return { allCleared: true, statusChangedTo: null }
+
+  // 오더 상태 동기화 + 감독관 알림
+  await supabaseAdmin.from('pct_orders').update({ status: target }).eq('id', updated.order_id as string)
+  await createNotification({
+    type: 'status_changed',
+    title: '검토 대기',
+    body: `모든 시험항목이 완료되어 작업 상태가 "${target}" 으로 자동 변경되었습니다.`,
+    relatedOrderId: updated.order_id as string,
+    relatedQcJobId: jobId,
+    severity: 'info',
+  })
+  return { allCleared: true, statusChangedTo: target }
+}
+
+/**
+ * 검토·승인 단계를 한 칸 앞으로 넘긴다 (관리자 전용).
+ *   검토전 ─[검토 시작]─▶ 검토중 ─[검토 완료]─▶ 승인전 ─[승인]─▶ 승인완료
+ *
+ * - `expected` 를 주면 화면이 보고 있던 단계와 실제 단계가 같을 때만 전환한다(동시 클릭 방지).
+ * - 조건부 update 로 한 번만 성공하게 한다.
+ * - 마지막 단계(승인완료) 도달 시 work_end_date 를 오늘로 기록한다(이미 있으면 유지).
+ * - 오더 상태를 함께 동기화하고 알림을 남긴다.
+ */
+export async function advanceJobStage(
+  jobId: string,
+  expected?: string,
+): Promise<{ from: JobStage; to: JobStage }> {
+  const { data: job } = await supabaseAdmin
+    .from('qc_jobs')
+    .select('status, order_id, work_end_date, qc_no')
+    .eq('id', jobId)
+    .maybeSingle()
+  if (!job) throw new Error('작업을 찾을 수 없습니다.')
+
+  const current = job.status as string
+  if (expected && expected !== current) {
+    throw new Error(`이미 "${current}" 단계로 변경되었습니다. 새로고침 후 다시 시도하세요.`)
+  }
+  if (!isJobStage(current)) {
+    throw new Error(`"${current}" 상태에서는 단계를 넘길 수 없습니다.`)
+  }
+  if (!canAdvanceByAdmin(current)) {
+    throw new Error(`"${current}" 단계에서는 넘길 다음 단계가 없습니다.`)
+  }
+  const target = NEXT_STAGE[current]
+  if (!target) throw new Error(`"${current}" 단계에서는 넘길 다음 단계가 없습니다.`)
+
+  const patch: Record<string, unknown> = { status: target }
+  if (target === CLOSED_STAGE && !job.work_end_date) {
+    patch.work_end_date = new Date().toISOString().slice(0, 10)
+  }
+
+  const { data: updated } = await supabaseAdmin
+    .from('qc_jobs')
+    .update(patch)
+    .eq('id', jobId)
+    .eq('status', current)          // 낙관적 잠금 — 그 사이 바뀌었으면 실패
+    .select('order_id')
+    .maybeSingle()
+  if (!updated) {
+    throw new Error('다른 사용자가 먼저 단계를 변경했습니다. 새로고침 후 다시 시도하세요.')
+  }
+
+  await supabaseAdmin.from('pct_orders').update({ status: target }).eq('id', updated.order_id as string)
+  await createNotification({
+    type: 'status_changed',
+    title: `${STAGE_ACTION_LABEL[current] ?? '단계 변경'} 처리`,
+    body: `QC ${job.qc_no} 작업이 "${current}" → "${target}" 단계로 변경되었습니다.`,
+    relatedOrderId: updated.order_id as string,
+    relatedQcJobId: jobId,
+    severity: 'info',
+  })
+
+  return { from: current, to: target }
+}
+
+/** 항목 클리어 — 시간 적재 + 감독관 알림 + 전체 완료 시 '검토전' 자동 전환 */
+export async function clearItem(
+  jobId: string, itemId: string, userSub: string,
+): Promise<{ allCleared: boolean; statusChangedTo: string | null }> {
   await assertOwner(jobId, userSub)
   const now = new Date()
 
@@ -637,15 +759,27 @@ export async function clearItem(jobId: string, itemId: string, userSub: string):
     relatedOrderId: (job?.order_id as string) ?? null,
     relatedQcJobId: jobId, severity: 'info',
   })
+
+  // 마지막 항목이었다면 '검토전' 으로 자동 전환
+  return autoAdvanceToReview(jobId)
 }
 
-/** 작업 상태 변경 — 오더 상태 동기화 + 감독관 알림.
- *  status === '완료' 이면 work_end_date를 오늘로 설정(이미 설정된 경우 유지).
+/**
+ * 담당 시험자가 직접 바꿀 수 있는 상태.
+ * 검토·승인 단계는 관리자만 advanceJobStage 로 넘길 수 있어야 워크플로가 의미를 갖는다.
+ */
+const SELF_SERVICE_STATUSES = new Set(['진행중', '지연'])
+
+/** 작업 상태 변경(담당자) — 오더 상태 동기화 + 감독관 알림.
+ *  최종 단계(승인완료)면 work_end_date를 오늘로 설정(이미 설정된 경우 유지).
  */
 export async function changeJobStatus(jobId: string, userSub: string, status: string): Promise<void> {
   await assertOwner(jobId, userSub)
+  if (!SELF_SERVICE_STATUSES.has(status)) {
+    throw new Error(`"${status}" 는 담당자가 직접 지정할 수 없습니다. 검토·승인은 관리자가 작업 현황에서 진행합니다.`)
+  }
   const patch: Record<string, unknown> = { status }
-  if (status === '완료') {
+  if (status === CLOSED_STAGE) {
     // 기존 work_end_date가 없을 때만 오늘로 설정
     const { data: existing } = await supabaseAdmin
       .from('qc_jobs').select('work_end_date').eq('id', jobId).maybeSingle()

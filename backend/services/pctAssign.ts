@@ -9,6 +9,7 @@
  */
 
 import { supabaseAdmin } from '@backend/lib/supabase'
+import { CLOSED_STAGE } from '@shared/qc-status'
 import { selectAll } from '@backend/lib/supabasePage'
 import { listTesters, listCapabilities, listCapabilityMatrix, assertTesterAssignable } from '@backend/services/testers'
 import { testersOnLeave } from '@backend/services/operatorSchedule'
@@ -125,7 +126,7 @@ async function currentWorkload(): Promise<Map<string, number>> {
     .from('pct_orders')
     .select('assignee_tester_id, status')
     .not('assignee_tester_id', 'is', null)
-    .not('status', 'in', '("완료","삭제")')
+    .not('status', 'in', `("${CLOSED_STAGE}","삭제")`)
   const m = new Map<string, number>()
   for (const r of data ?? []) {
     const id = r.assignee_tester_id as string

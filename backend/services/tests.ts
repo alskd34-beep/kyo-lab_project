@@ -37,11 +37,13 @@ const CONTRACTOR = '광동제약(주)'
 
 /** pct_orders / qc_jobs 한글 상태 → 화면 StatusKey */
 const STATUS_MAP: Record<string, StatusKey> = {
-  대기:   'pending',
-  진행중: 'inprogress',
-  검토중: 'reviewing',
-  지연:   'inprogress',
-  완료:   'completed',
+  대기:     'pending',
+  진행중:   'inprogress',
+  검토전:   'reviewing',   // 검토 대기 — 화면상 '검토중' 묶음으로 표시
+  검토중:   'reviewing',
+  승인전:   'pending',     // 승인 대기
+  지연:     'inprogress',
+  승인완료: 'completed',
 }
 const toStatusKey = (ko: string): StatusKey => STATUS_MAP[ko] ?? 'pending'
 

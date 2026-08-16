@@ -11,6 +11,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  useTableColSpan,
 } from '@frontend/components/ui/table'
 import { CellStack } from '@frontend/components/ui/table-cell-stack'
 import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from '@frontend/components/ui/table-sort'
@@ -97,6 +98,16 @@ const SORT_COLUMNS: SortColumnDef<SortField>[] = [
   },
   sortCol('status', '진행상태'),
 ]
+
+/** 빈 상태/로딩 행 — 쌍이 펼쳐지면 칸 수가 달라지므로 colSpan 을 표에서 받아 쓴다. */
+function FullWidthCell({ children }: { children: React.ReactNode }) {
+  const colSpan = useTableColSpan()
+  return (
+    <TableCell colSpan={colSpan} className="py-14 text-center text-sm text-slate-500">
+      {children}
+    </TableCell>
+  )
+}
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function TestStatusPage() {
@@ -438,15 +449,11 @@ export default function TestStatusPage() {
 
               {/* Table (desktop) */}
               <div className="hidden md:block">
-              <Table>
-                <colgroup>
-                  <col className="w-[4%]" />
-                  <col className="w-[26%]" />
-                  <col className="w-[22%]" />
-                  <col className="w-[18%]" />
-                  <col className="w-[16%]" />
-                  <col className="w-[14%]" />
-                </colgroup>
+              {/* colgroup 고정폭 금지 — 쌍이 펼쳐지면 칸 수가 늘어나 폭 배분이 어긋난다.
+                  폭은 Table 이 헤더·셀 자수로 계산한다. (docs/table-adaptive-columns.md)
+                  pinLastColumn={false} — 마지막 칸이 관리 아이콘이 아니라 진행상태 배지라
+                  기본값(48px 고정)이면 배지가 잘린다. */}
+              <Table pinLastColumn={false}>
                 <TableHeader>
                   <TableRow className="bg-slate-50/80 hover:bg-transparent border-slate-100">
                     <TableHead className="w-10 px-3">
@@ -472,13 +479,13 @@ export default function TestStatusPage() {
                 <TableBody>
                   {(isLoading || sortedData.length === 0) && (
                     <TableRow className="hover:bg-transparent border-slate-100">
-                      <TableCell colSpan={6} className="py-14 text-center text-sm text-slate-500">
+                      <FullWidthCell>
                         {isLoading
                           ? '불러오는 중…'
                           : loadError
                             ? `목록을 불러오지 못했습니다. ${loadError}`
                             : '조회 조건에 해당하는 시험이 없습니다.'}
-                      </TableCell>
+                      </FullWidthCell>
                     </TableRow>
                   )}
                   {!isLoading && sortedData.map(row => {

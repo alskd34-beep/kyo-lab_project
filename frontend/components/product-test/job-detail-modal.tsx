@@ -13,8 +13,9 @@
 
 import { useCallback, useEffect, useState } from "react"
 import {
-  CheckCircle2, Circle, Clock, LoaderCircle, TriangleAlert, User,
+  ArrowRight, CheckCircle2, Circle, Clock, LoaderCircle, TriangleAlert, User,
 } from "lucide-react"
+import { JOB_STAGES, stageStyle } from "@shared/qc-status"
 import { cn } from "@frontend/lib/utils"
 import { Badge } from "@frontend/components/ui/badge"
 import { Button } from "@frontend/components/ui/button"
@@ -38,15 +39,11 @@ export interface JobDetail {
   items: JobItem[]
   currentItemId: string | null
   currentItemStartedAt: string | null
+  nextStage: string | null
+  nextStageLabel: string | null
 }
 
 // ─── 헬퍼 ────────────────────────────────────────────────────────────────────
-const JOB_STATUS_META: Record<string, { dot: string; cls: string }> = {
-  진행중: { dot: "bg-violet-500", cls: "border-violet-200 text-violet-700" },
-  검토중: { dot: "bg-blue-500", cls: "border-blue-200 text-blue-700" },
-  완료:   { dot: "bg-emerald-500", cls: "border-emerald-200 text-emerald-700" },
-  지연:   { dot: "bg-red-500", cls: "border-red-200 text-red-700" },
-}
 
 /** 분 단위를 "1시간 20분" 형태로 */
 function formatMinutes(min: number): string {
@@ -73,16 +70,53 @@ function SummaryField({ label, value, mono }: { label: string; value: string; mo
 }
 
 // ─── 모달 ────────────────────────────────────────────────────────────────────
+/** 진행중 → 검토전 → 검토중 → 승인전 → 승인완료 진행 막대 */
+function StageTrack({ status }: { status: string }) {
+  const idx = (JOB_STAGES as readonly string[]).indexOf(status)
+  // '지연' 등 단계에 없는 상태는 막대를 그리지 않는다
+  if (idx < 0) return null
+  return (
+    <div className="flex items-center gap-1">
+      {JOB_STAGES.map((s, i) => {
+        const done = i < idx
+        const here = i === idx
+        return (
+          <div key={s} className="flex min-w-0 flex-1 flex-col items-center gap-1">
+            <div
+              className={cn(
+                "h-1 w-full rounded-full",
+                done ? "bg-emerald-400" : here ? stageStyle(s).dot : "bg-muted",
+              )}
+            />
+            <span className={cn(
+              "truncate text-[10px]",
+              here ? "font-semibold text-foreground" : "text-muted-foreground",
+            )}>
+              {s}
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export function JobDetailModal({
-  jobId, open, onOpenChange,
+  jobId, open, onOpenChange, canAdvance = false, onAdvanced,
 }: {
   jobId: string | null
   open: boolean
   onOpenChange: (v: boolean) => void
+  /** 관리자만 검토·승인 버튼을 쓸 수 있다 */
+  canAdvance?: boolean
+  /** 단계 전이 후 목록을 새로고침하도록 알린다 */
+  onAdvanced?: () => void
 }) {
   const [detail, setDetail] = useState<JobDetail | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [advancing, setAdvancing] = useState(false)
+  const [advanceError, setAdvanceError] = useState<string | null>(null)
 
   const load = useCallback(async (id: string) => {
     setLoading(true)
@@ -99,15 +133,39 @@ export function JobDetailModal({
     }
   }, [])
 
+  /** 다음 단계로 넘기기 (관리자) */
+  const advance = useCallback(async () => {
+    if (!detail?.nextStage) return
+    setAdvancing(true)
+    setAdvanceError(null)
+    try {
+      const res = await fetch(`/api/qc-jobs/${detail.jobId}/stage`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        // 화면이 보고 있던 단계를 함께 보내 동시 클릭을 막는다
+        body: JSON.stringify({ expected: detail.status }),
+      })
+      const data = await res.json() as { error?: string }
+      if (!res.ok) throw new Error(data.error ?? "단계 변경 실패")
+      await load(detail.jobId)
+      onAdvanced?.()
+    } catch (e) {
+      setAdvanceError(e instanceof Error ? e.message : "단계 변경 실패")
+    } finally {
+      setAdvancing(false)
+    }
+  }, [detail, load, onAdvanced])
+
   useEffect(() => {
     if (open && jobId) void load(jobId)
-    if (!open) { setDetail(null); setError(null) }
+    if (!open) { setDetail(null); setError(null); setAdvanceError(null) }
   }, [open, jobId, load])
 
   const cleared = detail?.items.filter(i => i.status === "cleared").length ?? 0
   const total = detail?.items.length ?? 0
   const pct = total > 0 ? Math.round((cleared / total) * 100) : 0
-  const statusMeta = detail ? JOB_STATUS_META[detail.status] ?? { dot: "bg-muted-foreground", cls: "" } : null
+  const statusMeta = detail ? stageStyle(detail.status) : null
   // 순번은 sequence_order 값(0-based/1-based 혼재 가능)이 아니라 정렬된 배열 위치로 표기한다
   const currentIdx = detail ? detail.items.findIndex(i => i.id === detail.currentItemId) : -1
   const currentItem = currentIdx >= 0 ? detail!.items[currentIdx] : null
@@ -156,6 +214,11 @@ export function JobDetailModal({
             </div>
           ) : detail ? (
             <>
+              {/* 단계 진행 막대 */}
+              <section className="rounded-lg border bg-card p-3 shadow-sm">
+                <StageTrack status={detail.status} />
+              </section>
+
               {/* 작업 요약 */}
               <section className="rounded-lg border bg-card p-3 shadow-sm">
                 <p className="truncate text-sm font-semibold text-foreground">
@@ -292,8 +355,21 @@ export function JobDetailModal({
           ) : null}
         </DialogBody>
 
-        <DialogFooter>
+        <DialogFooter className="flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+          {advanceError && (
+            <p className="min-w-0 flex-1 text-left text-xs font-medium text-destructive sm:mr-auto">
+              {advanceError}
+            </p>
+          )}
           <Button variant="outline" onClick={() => onOpenChange(false)}>닫기</Button>
+          {canAdvance && detail?.nextStage && detail.nextStageLabel && (
+            <Button onClick={() => void advance()} disabled={advancing}>
+              {advancing
+                ? <LoaderCircle className="animate-spin" />
+                : <ArrowRight />}
+              {advancing ? "처리 중..." : `${detail.nextStageLabel} → ${detail.nextStage}`}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -8,12 +8,13 @@
  *  - reassignment_history : 재배정 총건수 + 시험자(after_user)별 집계
  *  - testers         : id → name
  *
- * "보유 DAY"는 현재 미완료(대기/진행중/검토중/지연) 배정 오더의 공수(DAY) 합이며,
+ * "보유 DAY"는 현재 미완료(대기/진행중/검토전/검토중/승인전/지연) 배정 오더의 공수(DAY) 합이며,
  * 공수는 자동배정과 동일하게 product_workload.avg_workdays(DAY 단위, PRD 절대값)를 쓴다.
  * 공수 미등록 품목은 1일로 간주하는 근사치다.
  */
 
 import { supabaseAdmin } from '@backend/lib/supabase'
+import { CLOSED_STAGE, OPEN_STATUSES as SHARED_OPEN_STATUSES } from '@shared/qc-status'
 
 export interface QcDashboard {
   counts: {
@@ -31,7 +32,8 @@ export interface QcDashboard {
 }
 
 // 미완료(보유 중) 상태 — 보유 DAY / 난이도 분포 산정 대상
-const OPEN_STATUSES = new Set(['대기', '진행중', '검토중', '지연'])
+// 미완료(진행 중) 상태 집합 — 단계 정의는 @shared/qc-status 가 단일 기준
+const OPEN_STATUSES = SHARED_OPEN_STATUSES
 const PSYCHOTROPIC_NAMES = new Set(['자이렌정', '아디펙스정'])
 // 공수(DAY) 미등록 품목 근사치
 const DEFAULT_WORKDAYS = 1
@@ -98,7 +100,7 @@ export async function getQcDashboard(): Promise<QcDashboard> {
 
     counts.total += 1
     if (status === '진행중') counts.inProgress += 1
-    if (status === '완료') counts.completed += 1
+    if (status === CLOSED_STAGE) counts.completed += 1
     if (status === '지연') counts.delayed += 1
     if (!assignee && status === '대기') counts.unassigned += 1
 

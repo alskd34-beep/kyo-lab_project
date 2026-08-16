@@ -304,13 +304,17 @@ export default function EquipmentReservationPage() {
                       />
                     </TableCell>
                     <TableCell className="px-3 py-2">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <TesterAvatar name={r.userName} size="sm" />
-                        <CellStack
-                          primary={r.userName ?? "이름없음"}
-                          title={r.userName ?? "이름없음"}
-                        />
-                      </div>
+                      {/* 아바타는 primary 안에 둔다 — CellStack 루트는 @container라 고유 폭이 0이라
+                          flex 형제로 두면 폭이 접혀 이름이 잘린다. */}
+                      <CellStack
+                        primary={
+                          <span className="flex min-w-0 items-center gap-2">
+                            <TesterAvatar name={r.userName} size="sm" />
+                            <span className="truncate">{r.userName ?? "이름없음"}</span>
+                          </span>
+                        }
+                        title={r.userName ?? "이름없음"}
+                      />
                     </TableCell>
                     <TableCell className="px-1 py-2">
                       <div className="flex items-center justify-end gap-1.5">

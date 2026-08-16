@@ -34,6 +34,8 @@ type AdaptiveTableContextValue = {
 const AdaptiveTableContext = React.createContext<AdaptiveTableContextValue | null>(null)
 const LogicalColContext = React.createContext(0)
 const LastColContext = React.createContext(false)
+/** 마지막 칸을 오른쪽 고정 액션 칸(PIN_END)으로 처리할지. 관리/삭제 아이콘 칸이 아닌 표는 끈다. */
+const PinLastColContext = React.createContext(true)
 const InHeaderContext = React.createContext(false)
 
 /** 현재 펼쳐진 실제 칸 수. colSpan 은 이 값만 쓴다 — 더 큰 값을 쓰면 표 오른쪽에 빈 칸이 생긴다. */
@@ -111,6 +113,7 @@ function Table({
   containerRef,
   layout = "fluid",
   adaptive,
+  pinLastColumn = true,
   ...props
 }: React.ComponentProps<"table"> & {
   containerClassName?: string
@@ -122,6 +125,12 @@ function Table({
    * 행렬/캘린더(`wide`)와 단계를 직접 그리는 표는 끈다.
    */
   adaptive?: boolean
+  /**
+   * 마지막 칸을 오른쪽 고정 액션 칸(48px)으로 만든다. 기본 true.
+   * 마지막 칸이 관리/삭제 아이콘이 아니라 상태 배지·텍스트인 표는 false 로 끈다
+   * (48px 로 눌려 내용이 잘린다).
+   */
+  pinLastColumn?: boolean
 }) {
   const enabled = (adaptive ?? layout !== "wide") && layout !== "wide"
   const [el, setEl] = React.useState<HTMLDivElement | null>(null)
@@ -285,6 +294,7 @@ function Table({
 
   return (
     <AdaptiveTableContext.Provider value={ctx}>
+      <PinLastColContext.Provider value={pinLastColumn}>
       <div
         ref={setContainer}
         data-slot="table-container"
@@ -306,6 +316,7 @@ function Table({
           {...props}
         />
       </div>
+      </PinLastColContext.Provider>
     </AdaptiveTableContext.Provider>
   )
 }
@@ -348,6 +359,7 @@ function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
 function TableRow({ className, children, ...props }: React.ComponentProps<"tr">) {
   const adaptive = React.useContext(AdaptiveTableContext)
   const inHeader = React.useContext(InHeaderContext)
+  const pinLast = React.useContext(PinLastColContext)
   const items = React.Children.toArray(children)
 
   React.useLayoutEffect(() => {
@@ -366,7 +378,7 @@ function TableRow({ className, children, ...props }: React.ComponentProps<"tr">)
       {items.map((child, i) => (
         <LastColContext.Provider
           key={React.isValidElement(child) && child.key != null ? String(child.key) : i}
-          value={i === items.length - 1}
+          value={pinLast && i === items.length - 1}
         >
           <LogicalColContext.Provider value={i}>
             {child}

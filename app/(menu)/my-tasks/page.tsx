@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import {
   Play, CheckCircle2, Circle, Loader2, AlertTriangle, Clock, XCircle, ShieldAlert, ClipboardList,
 } from "lucide-react"
+import { ACTIVE_JOB_STATUSES, CLOSED_STAGE, stageStyle } from "@shared/qc-status"
 import { cn } from "@frontend/lib/utils"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import { DateField } from "@frontend/components/ui/date-field"
@@ -54,13 +55,13 @@ interface ReadinessResult {
   pretestNotes?: PretestNote[]
 }
 
-const STATUS_OPTIONS = ["진행중", "검토중", "완료", "지연"]
-const STATUS_CLS: Record<string, string> = {
-  진행중: "bg-violet-50 text-violet-700 border-violet-200",
-  검토중: "bg-blue-50 text-blue-700 border-blue-200",
-  완료:   "bg-emerald-50 text-emerald-700 border-emerald-200",
-  지연:   "bg-red-50 text-red-700 border-red-200",
-}
+/**
+ * 시험자가 직접 바꿀 수 있는 상태만 남긴다.
+ * 검토전은 시험항목을 모두 완료하면 자동 전환되고,
+ * 검토중·승인전·승인완료는 관리자가 작업 현황 화면에서 넘긴다. (types/qc-status.ts)
+ */
+const STATUS_OPTIONS = ["진행중", "지연"]
+const statusCls = (s: string) => stageStyle(s).cls
 
 function dDay(due: string | null): number | null {
   if (!due) return null
@@ -190,7 +191,7 @@ export default function MyTasksPage() {
   // 다중 선택(진행 중) 일괄 상태 변경
   const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set())
   const [jobBulkBusy, setJobBulkBusy] = useState(false)
-  const [bulkStatus, setBulkStatus] = useState<string>("검토중")
+  const [bulkStatus, setBulkStatus] = useState<string>("진행중")
 
   /** 장비 준비상태 모달 상태 */
   const [readinessModal, setReadinessModal] = useState<{
@@ -223,7 +224,7 @@ export default function MyTasksPage() {
   // jobs 갱신 시 더 이상 진행 중이 아닌(완료된 등) 항목은 선택에서 제거
   useEffect(() => {
     setSelectedJobs(prev => {
-      const ids = new Set(jobs.filter(j => j.status === "진행중" || j.status === "검토중" || j.status === "지연").map(j => j.id))
+      const ids = new Set(jobs.filter(j => ACTIVE_JOB_STATUSES.has(j.status)).map(j => j.id))
       const next = new Set([...prev].filter(id => ids.has(id)))
       return next.size === prev.size ? prev : next
     })
@@ -358,8 +359,13 @@ export default function MyTasksPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ itemId, action: "clear" }),
       })
-      if (!res.ok) throw new Error((await res.json()).error)
+      const data = await res.json() as { error?: string; statusChangedTo?: string | null }
+      if (!res.ok) throw new Error(data.error)
       await load()
+      // 마지막 항목이었으면 서버가 상태를 자동 전환한다 — 사용자가 알 수 있게 안내
+      if (data.statusChangedTo) {
+        flash(`모든 시험항목 완료 — 상태가 "${data.statusChangedTo}" 로 자동 변경되었습니다.`)
+      }
     } catch (e) { flash(`처리 실패: ${e instanceof Error ? e.message : ""}`, "error") }
     finally { setBusy(null) }
   }
@@ -382,8 +388,8 @@ export default function MyTasksPage() {
   }
 
   // 작업을 상태별로 분리
-  const activeJobs = jobs.filter(j => j.status === "진행중" || j.status === "검토중" || j.status === "지연")
-  const doneJobs = jobs.filter(j => j.status === "완료")
+  const activeJobs = jobs.filter(j => ACTIVE_JOB_STATUSES.has(j.status))
+  const doneJobs = jobs.filter(j => j.status === CLOSED_STAGE)
 
   const allJobsSelected = activeJobs.length > 0 && selectedJobs.size === activeJobs.length
   const toggleAllJobs = () => setSelectedJobs(allJobsSelected ? new Set() : new Set(activeJobs.map(j => j.id)))
@@ -663,7 +669,7 @@ export default function MyTasksPage() {
   function renderJobCard(job: Job, selectable = false) {
     const cleared = job.items.filter(i => i.status === "cleared").length
     const dd = dDay(job.dueDate)
-    const isDone = job.status === "완료"
+    const isDone = job.status === CLOSED_STAGE
     return (
       <Card key={job.id} className={cn("gap-0 overflow-hidden py-0", isDone && "border-emerald-200")}>
         <div className="flex flex-col gap-3 border-b px-4 py-3 md:flex-row md:items-center md:justify-between">
@@ -722,7 +728,7 @@ export default function MyTasksPage() {
               value={job.status}
               onValueChange={v => patchJob(job.id, { status: v })}
             >
-              <SelectTrigger className={`h-8 shrink-0 rounded-full border px-2.5 text-[11px] font-semibold focus-visible:outline-none ${STATUS_CLS[job.status] ?? ""}`}>
+              <SelectTrigger className={`h-8 shrink-0 rounded-full border px-2.5 text-[11px] font-semibold focus-visible:outline-none ${statusCls(job.status)}`}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

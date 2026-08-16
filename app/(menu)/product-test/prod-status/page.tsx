@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   RefreshCw, Search, Users, TriangleAlert, CheckCircle2, ClipboardList, Clock, ListChecks,
 } from "lucide-react"
+import { stageStyle } from "@shared/qc-status"
 import { cn } from "@frontend/lib/utils"
 import { useAuth } from "@frontend/lib/auth-context"
 import { Badge } from "@frontend/components/ui/badge"
@@ -38,15 +39,8 @@ interface Overview {
 }
 
 // ─── 헬퍼 ────────────────────────────────────────────────────────────────────
-const JOB_STATUS_META: Record<string, { dot: string; cls: string }> = {
-  진행중: { dot: "bg-violet-500", cls: "border-violet-200 text-violet-700" },
-  검토중: { dot: "bg-blue-500", cls: "border-blue-200 text-blue-700" },
-  완료:   { dot: "bg-emerald-500", cls: "border-emerald-200 text-emerald-700" },
-  지연:   { dot: "bg-red-500", cls: "border-red-200 text-red-700" },
-}
-
 function JobStatusBadge({ status }: { status: string }) {
-  const meta = JOB_STATUS_META[status] ?? { dot: "bg-muted-foreground", cls: "" }
+  const meta = stageStyle(status)
   return (
     <Badge variant="outline" className={cn("gap-1.5", meta.cls)}>
       <span className={cn("size-1.5 rounded-full", meta.dot)} />
@@ -333,7 +327,13 @@ export default function ProdStatusPage() {
         </div>
       ) : null}
 
-      <JobDetailModal jobId={detailJobId} open={detailOpen} onOpenChange={setDetailOpen} />
+      <JobDetailModal
+        jobId={detailJobId}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        canAdvance={isAdmin}
+        onAdvanced={() => void load()}
+      />
     </div>
   )
 }

@@ -12,6 +12,7 @@
  */
 
 import { supabaseAdmin } from '@backend/lib/supabase'
+import { CLOSED_STAGE } from '@shared/qc-status'
 import { getHolidaySet } from '@backend/services/holidays'
 
 // 난이도 가중치 (products.difficulty: 'High'|'Medium'|'Low'|null). null·미상은 기본 1.
@@ -79,7 +80,7 @@ export async function getTesterEvaluation(params: { from: string; to: string }):
   const { data: jobsRaw, error: jErr } = await supabaseAdmin
     .from('qc_jobs')
     .select('id, order_id, assignee_tester_id, work_start_date, work_end_date')
-    .eq('status', '완료')
+    .eq('status', CLOSED_STAGE)
     .gte('work_end_date', from)
     .lte('work_end_date', to)
   if (jErr) throw jErr

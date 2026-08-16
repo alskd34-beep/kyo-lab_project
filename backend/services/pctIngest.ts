@@ -12,6 +12,7 @@ import { supabaseAdmin } from '@backend/lib/supabase'
 import { fetchPctSheet, type SheetPctRow } from '@backend/lib/googleSheet'
 import { createNotification } from '@backend/services/notifications'
 import { rebuildGroups } from '@backend/services/concurrentGroups'
+import { CLOSED_STAGE, LOCKED_STATUSES } from '@shared/qc-status'
 
 // 기존 PCT 화면이 쓰던 기본 시트 ID (폴백)
 const DEFAULT_FILE_ID = '1H9_lR-_tpEHKSpVD2qLbxX5cqXRG_s5rpbGs-gqSPxU'
@@ -34,7 +35,6 @@ const keyOf = (batchNo: string, code: string) => `${batchNo}|${code}`
  * 작업이 이미 진행/완료되었거나 LOCK 된 오더는 생산계획(시트) 변경을 자동 반영하지 않는다.
  * (영문 상태 전환 후 LOCKED/IN_PROGRESS/REVIEW/COMPLETED 등을 추가)
  */
-const LOCKED_STATUSES = new Set(['진행중', '검토중', '완료', '지연', 'LOCKED', 'IN_PROGRESS', 'REVIEW', 'COMPLETED'])
 const isLockedStatus = (status: string) => LOCKED_STATUSES.has(status)
 
 /** 변경 차단 시 before/after 비교 대상 필드 (라벨, 기존값, 신규값) */
@@ -272,7 +272,7 @@ async function notifyDeadlines(): Promise<number> {
     .select('id, product_name, batch_no, due_date, status')
     .gte('due_date', todayStr)
     .lte('due_date', limitStr)
-    .not('status', 'in', '("완료","삭제")')
+    .not('status', 'in', `("${CLOSED_STAGE}","삭제")`)
   if (!due || due.length === 0) return 0
 
   // 이미 알림 보낸 오더 제외
