@@ -26,23 +26,6 @@ interface WorkerRow {
   delayed: number
 }
 
-// ─── Demo Data ────────────────────────────────────────────────────────────────
-
-const DEMO_UPCOMING: BatchSummary[] = [
-  { id: 1, product_code: '21081', product_name: '(사향)광동우황청심원현탁액(신)', spec: '50ML', batch_no: '26002', dosage_form: '현탁제', packaging_date: '2026-04-10', record_review_deadline: '2026-04-24', qc_completion_deadline: '2026-04-24', is_urgent: false, status: 'completed', dDayRecord: -13, dDayQc: -13, note: null, created_at: '', process_order: null, validation_type: '일반' },
-  { id: 2, product_code: '21350', product_name: '슬라임캡슐', spec: '120C', batch_no: '26001', dosage_form: '내용고형제', packaging_date: '2026-03-30', record_review_deadline: '2026-04-27', qc_completion_deadline: '2026-04-27', is_urgent: false, status: 'completed', dDayRecord: -10, dDayQc: -10, note: null, created_at: '', process_order: null, validation_type: '일반' },
-  { id: 3, product_code: '23263', product_name: '베니톨정', spec: '500T', batch_no: '26023', dosage_form: '내용고형제', packaging_date: '2026-04-16', record_review_deadline: '2026-04-30', qc_completion_deadline: '2026-04-30', is_urgent: false, status: 'in_progress', dDayRecord: -7, dDayQc: -7, note: null, created_at: '', process_order: null, validation_type: '일반' },
-  { id: 4, product_code: '23263', product_name: '베니톨정', spec: '500T', batch_no: '26024', dosage_form: '내용고형제', packaging_date: '2026-04-16', record_review_deadline: '2026-04-30', qc_completion_deadline: '2026-04-30', is_urgent: false, status: 'in_progress', dDayRecord: -7, dDayQc: -7, note: null, created_at: '', process_order: null, validation_type: '일반' },
-  { id: 5, product_code: '21391', product_name: '알도셉트정5mg', spec: '30T', batch_no: '26001-A', dosage_form: '내용고형제', packaging_date: '2026-04-06', record_review_deadline: '2026-04-30', qc_completion_deadline: '2026-04-30', is_urgent: false, status: 'in_progress', dDayRecord: -7, dDayQc: -7, note: null, created_at: '', process_order: null, validation_type: '일반' },
-  { id: 6, product_code: '21080', product_name: '(사향)광동우황청심원(신)', spec: '1환', batch_no: '26010', dosage_form: '환제', packaging_date: '2026-04-25', record_review_deadline: '2026-05-07', qc_completion_deadline: '2026-05-07', is_urgent: false, status: 'pending', dDayRecord: 0, dDayQc: 0, note: null, created_at: '', process_order: null, validation_type: '일반' },
-  { id: 7, product_code: '27045', product_name: '(베트남수출용)광동우황청심원(영묘향)', spec: '1환', batch_no: '26011', dosage_form: '환제', packaging_date: '2026-04-28', record_review_deadline: '2026-05-10', qc_completion_deadline: '2026-05-10', is_urgent: false, status: 'pending', dDayRecord: 3, dDayQc: 3, note: null, created_at: '', process_order: null, validation_type: '일반' },
-]
-
-const DEMO_STATS: DashboardStats = {
-  totalBatches: 129, pending: 97, inProgress: 15, completed: 17,
-  dueSoon7: 23, dueSoon3: 8, overdueCount: 5,
-}
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<BatchStatus, { label: string; dot: string }> = {
@@ -96,9 +79,9 @@ export default function HomePage() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
 
-  const [upcoming, setUpcoming]   = useState<BatchSummary[]>(DEMO_UPCOMING)
-  const [stats, setStats]         = useState<DashboardStats>(DEMO_STATS)
-  const [usingDemo, setUsingDemo] = useState(true)
+  const [upcoming, setUpcoming]   = useState<BatchSummary[]>([])
+  const [stats, setStats]         = useState<DashboardStats | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [sortField, setSortField] = useState<SortField>('qc_completion_deadline')
   const [sortDir, setSortDir]     = useState<SortDir>('asc')
@@ -145,11 +128,16 @@ export default function HomePage() {
       ])
       if (!signal?.aborted) {
         setStats(statsData)
-        setUpcoming(batchData.rows.length > 0 ? batchData.rows : DEMO_UPCOMING)
-        setUsingDemo(false)
+        setUpcoming(batchData.rows)
+        setLoadError(null)
       }
-    } catch {
-      if (!signal?.aborted) setUsingDemo(true)
+    } catch (e) {
+      // 조회 실패 시 가짜 데이터로 채우지 않고 빈 목록 + 사유를 보여준다
+      if (!signal?.aborted) {
+        setUpcoming([])
+        setStats(null)
+        setLoadError(e instanceof Error ? e.message : '불러오지 못했습니다.')
+      }
     } finally {
       if (!signal?.aborted) setIsLoading(false)
     }
@@ -212,12 +200,12 @@ export default function HomePage() {
   }, [workers])
 
   const KPI_CARDS = [
-    { label: '전체 배치', value: stats.totalBatches, unit: '건', sub: '총 생산배치 수',     accent: 'text-foreground',  bar: 'border-l-primary' },
-    { label: '대기중',    value: stats.pending,      unit: '건', sub: '시험 대기',          accent: 'text-foreground',  bar: 'border-l-muted-foreground' },
-    { label: '진행중',    value: stats.inProgress,   unit: '건', sub: 'QC 시험 진행',       accent: 'text-violet-600',  bar: 'border-l-violet-500' },
-    { label: 'QC완료',    value: stats.completed,    unit: '건', sub: '이번달 완료',        accent: 'text-emerald-600', bar: 'border-l-emerald-500' },
-    { label: 'D-7 임박',  value: stats.dueSoon7,     unit: '건', sub: '기한 임박 배치',     accent: 'text-amber-600',   bar: 'border-l-amber-500' },
-    { label: '기한초과',  value: stats.overdueCount, unit: '건', sub: 'QC완료예정일 초과', accent: 'text-destructive', bar: 'border-l-destructive' },
+    { label: '전체 배치', value: stats?.totalBatches, unit: '건', sub: '총 생산배치 수',     accent: 'text-foreground',  bar: 'border-l-primary' },
+    { label: '대기중',    value: stats?.pending,      unit: '건', sub: '시험 대기',          accent: 'text-foreground',  bar: 'border-l-muted-foreground' },
+    { label: '진행중',    value: stats?.inProgress,   unit: '건', sub: 'QC 시험 진행',       accent: 'text-violet-600',  bar: 'border-l-violet-500' },
+    { label: 'QC완료',    value: stats?.completed,    unit: '건', sub: '이번달 완료',        accent: 'text-emerald-600', bar: 'border-l-emerald-500' },
+    { label: 'D-7 임박',  value: stats?.dueSoon7,     unit: '건', sub: '기한 임박 배치',     accent: 'text-amber-600',   bar: 'border-l-amber-500' },
+    { label: '기한초과',  value: stats?.overdueCount, unit: '건', sub: 'QC완료예정일 초과', accent: 'text-destructive', bar: 'border-l-destructive' },
   ]
 
   const statRows = [
@@ -231,8 +219,8 @@ export default function HomePage() {
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <h1 className="text-xl font-semibold text-foreground">홈</h1>
         <p className="text-sm text-muted-foreground">기한 임박 배치와 오늘 시험 배정을 한눈에 봅니다.</p>
-        {usingDemo && (
-          <Badge variant="outline" className="border-amber-200 text-amber-700">데모 모드</Badge>
+        {loadError && (
+          <Badge variant="outline" className="border-amber-200 text-amber-700">조회 실패</Badge>
         )}
       </div>
 
@@ -251,7 +239,7 @@ export default function HomePage() {
                   {kpi.label}
                 </span>
                 <span className={cn('text-2xl font-semibold tabular-nums', kpi.accent)}>
-                  {kpi.value}
+                  {kpi.value ?? '-'}
                   <span className="ml-1 text-xs font-medium text-muted-foreground">{kpi.unit}</span>
                 </span>
                 <span className="text-[11px] text-muted-foreground">{kpi.sub}</span>
@@ -298,6 +286,16 @@ export default function HomePage() {
                       <TableCell className="px-3 py-2"><Skeleton className="h-5 w-14 rounded-full" /></TableCell>
                     </TableRow>
                   ))
+                : sortedData.length === 0
+                ? (
+                    <TableRow className="hover:bg-transparent">
+                      <TableCell colSpan={3} className="py-14 text-center text-sm text-muted-foreground">
+                        {loadError
+                          ? `배치를 불러오지 못했습니다. ${loadError}`
+                          : '기한이 임박한 배치가 없습니다.'}
+                      </TableCell>
+                    </TableRow>
+                  )
                 : sortedData.slice(0, 10).map(row => {
                     const statusCfg = STATUS_CONFIG[row.status]
                     return (
@@ -341,13 +339,14 @@ export default function HomePage() {
           </div>
           <CardContent className="px-4 py-4">
             <div className="mb-4 flex items-baseline gap-2">
-              <span className="text-3xl font-semibold tabular-nums text-foreground">{stats.totalBatches}</span>
+              <span className="text-3xl font-semibold tabular-nums text-foreground">{stats?.totalBatches ?? '-'}</span>
               <span className="text-sm text-muted-foreground">건 총 배치</span>
             </div>
             <div className="flex flex-col gap-3">
               {statRows.map(row => {
-                const count = stats[row.key]
-                const pct = stats.totalBatches > 0 ? Math.round((count / stats.totalBatches) * 100) : 0
+                const count = stats?.[row.key] ?? 0
+                const total = stats?.totalBatches ?? 0
+                const pct = total > 0 ? Math.round((count / total) * 100) : 0
                 return (
                   <div key={row.key}>
                     <div className="mb-1 flex items-center justify-between">
