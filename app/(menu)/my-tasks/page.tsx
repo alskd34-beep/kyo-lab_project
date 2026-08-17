@@ -724,17 +724,33 @@ export default function MyTasksPage() {
                 />
               </div>
             </div>
-            <Select
-              value={job.status}
-              onValueChange={v => patchJob(job.id, { status: v })}
-            >
-              <SelectTrigger className={`h-8 shrink-0 rounded-full border px-2.5 text-[11px] font-semibold focus-visible:outline-none ${statusCls(job.status)}`}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            {/* 담당자가 바꿀 수 있는 단계(진행중·지연)만 선택형으로 둔다.
+                검토전 이후 단계는 관리자가 작업 현황에서 넘기므로 읽기 전용으로 표시한다.
+                (STATUS_OPTIONS 에 없는 값을 Select 에 넣으면 라벨이 빈칸으로 렌더된다) */}
+            {STATUS_OPTIONS.includes(job.status) ? (
+              <Select
+                value={job.status}
+                onValueChange={v => patchJob(job.id, { status: v })}
+              >
+                <SelectTrigger className={`h-8 shrink-0 rounded-full border px-2.5 text-[11px] font-semibold focus-visible:outline-none ${statusCls(job.status)}`}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            ) : (
+              <span
+                title="검토·승인 단계는 관리자가 변경합니다."
+                className={cn(
+                  'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-semibold',
+                  statusCls(job.status),
+                )}
+              >
+                <span className={cn('size-1.5 rounded-full', stageStyle(job.status).dot)} />
+                {job.status}
+              </span>
+            )}
           </div>
         </div>
 
