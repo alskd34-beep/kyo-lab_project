@@ -7,23 +7,17 @@ import { Skeleton } from '@frontend/components/ui/skeleton'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@frontend/components/ui/table'
 import { CellStack } from '@frontend/components/ui/table-cell-stack'
 import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from '@frontend/components/ui/table-sort'
-import { TesterAvatar } from '@frontend/lib/tester-profiles'
-import { useAuth } from '@frontend/lib/auth-context'
+import { Avatar, AvatarFallback } from '@frontend/components/ui/avatar'
 import { cn } from '@frontend/lib/utils'
 import type { BatchSummary, BatchStatus, DashboardStats } from '@shared/pqm'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-/** /api/qc-jobs/overview 응답 중 이 화면에서 쓰는 부분 (backend listWorkerOverview) */
-interface WorkerRow {
-  testerId: string
+interface Tester {
   name: string
-  employeeNo: string
-  isActive: boolean
-  pendingCount: number
-  inProgress: number
-  reviewing: number
-  delayed: number
+  init: string
+  color: string
+  assignedToday: number
 }
 
 // ─── Demo Data ────────────────────────────────────────────────────────────────
@@ -42,6 +36,14 @@ const DEMO_STATS: DashboardStats = {
   totalBatches: 129, pending: 97, inProgress: 15, completed: 17,
   dueSoon7: 23, dueSoon3: 8, overdueCount: 5,
 }
+
+const DEMO_TESTERS: Tester[] = [
+  { name: '김태훈', init: '김', color: 'bg-blue-500',    assignedToday: 3 },
+  { name: '박성호', init: '박', color: 'bg-violet-500',  assignedToday: 2 },
+  { name: '권택균', init: '권', color: 'bg-emerald-500', assignedToday: 1 },
+  { name: '장재훈', init: '장', color: 'bg-amber-500',   assignedToday: 4 },
+  { name: '지건희', init: '지', color: 'bg-rose-500',    assignedToday: 2 },
+]
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -93,19 +95,12 @@ const SORT_COLUMNS: SortColumnDef<SortField>[] = [
 ]
 
 export default function HomePage() {
-  const { user } = useAuth()
-  const isAdmin = user?.role === 'admin'
-
   const [upcoming, setUpcoming]   = useState<BatchSummary[]>(DEMO_UPCOMING)
   const [stats, setStats]         = useState<DashboardStats>(DEMO_STATS)
   const [usingDemo, setUsingDemo] = useState(true)
   const [isLoading, setIsLoading] = useState(true)
   const [sortField, setSortField] = useState<SortField>('qc_completion_deadline')
   const [sortDir, setSortDir]     = useState<SortDir>('asc')
-
-  // 시험자별 작업 배정 — /api/qc-jobs/overview (관리자 전용)
-  const [workers, setWorkers]           = useState<WorkerRow[] | null>(null)
-  const [workersError, setWorkersError] = useState<string | null>(null)
 
   function pickSort(field: SortField, dir: SortDir) {
     setSortField(field)
@@ -155,39 +150,17 @@ export default function HomePage() {
     }
   }, [])
 
-  /**
-   * 시험자별 배정 현황.
-   * 관리자 전용 API라 시험자 계정에서는 호출하지 않는다.
-   * 위 배치 조회와 분리해 실패해도 화면 나머지에 영향을 주지 않게 한다.
-   */
-  const loadWorkers = useCallback(async (signal?: AbortSignal) => {
-    if (!isAdmin) return
-    try {
-      const res = await fetch('/api/qc-jobs/overview', { credentials: 'include', signal })
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? '불러오기 실패')
-      const data = await res.json() as { workers: WorkerRow[] }
-      if (!signal?.aborted) { setWorkers(data.workers); setWorkersError(null) }
-    } catch (e) {
-      if (signal?.aborted) return
-      // 조회 실패 시 가짜 데이터로 채우지 않고 사유를 보여준다
-      setWorkers([])
-      setWorkersError(e instanceof Error ? e.message : '불러오기 실패')
-    }
-  }, [isAdmin])
-
   useEffect(() => {
     const controller = new AbortController()
-    const refreshAll = () => {
-      void loadHomeData(controller.signal)
-      void loadWorkers(controller.signal)
-    }
     const refreshOnVisible = () => {
-      if (!document.hidden) refreshAll()
+      if (!document.hidden) void loadHomeData(controller.signal)
     }
 
-    refreshAll()
+    void loadHomeData(controller.signal)
 
-    const refreshTimer = window.setInterval(refreshAll, 60_000)
+    const refreshTimer = window.setInterval(() => {
+      void loadHomeData(controller.signal)
+    }, 60_000)
 
     window.addEventListener('focus', refreshOnVisible)
     document.addEventListener('visibilitychange', refreshOnVisible)
@@ -198,18 +171,7 @@ export default function HomePage() {
       window.removeEventListener('focus', refreshOnVisible)
       document.removeEventListener('visibilitychange', refreshOnVisible)
     }
-  }, [loadHomeData, loadWorkers])
-
-  /**
-   * 카드에 노출할 시험자 — 활성 시험자 중 담당 작업(진행/검토/지연 + 시작 대기)이 있는 사람만,
-   * 담당량이 많은 순으로. 담당이 없는 시험자까지 늘어놓으면 "배정 현황"이 읽히지 않는다.
-   */
-  const assignedWorkers = useMemo(() => {
-    const load = (w: WorkerRow) => w.inProgress + w.reviewing + w.delayed + w.pendingCount
-    return (workers ?? [])
-      .filter(w => w.isActive && load(w) > 0)
-      .sort((a, b) => load(b) - load(a) || a.employeeNo.localeCompare(b.employeeNo))
-  }, [workers])
+  }, [loadHomeData])
 
   const KPI_CARDS = [
     { label: '전체 배치', value: stats.totalBatches, unit: '건', sub: '총 생산배치 수',     accent: 'text-foreground',  bar: 'border-l-primary' },
@@ -371,65 +333,33 @@ export default function HomePage() {
         </Card>
       </div>
 
-      {/* 시험자별 배정 현황 — 관리자에게만 보인다(overview API가 관리자 전용) */}
-      {isAdmin && (
-        <Card className="gap-0 overflow-hidden py-0">
-          <div className="flex flex-wrap items-center gap-2 border-b px-4 py-3">
-            <span className="text-sm font-semibold text-foreground">오늘의 시험 배정 현황</span>
-            {assignedWorkers.length > 0 && (
-              <Badge variant="secondary" className="tabular-nums">{assignedWorkers.length}명</Badge>
-            )}
-            {workersError && (
-              <Badge variant="outline" className="border-amber-200 text-amber-700">조회 실패</Badge>
-            )}
+      <Card className="gap-0 overflow-hidden py-0">
+        <div className="border-b px-4 py-3">
+          <span className="text-sm font-semibold text-foreground">오늘의 시험 배정 현황</span>
+        </div>
+        <CardContent className="px-4 py-3">
+          <div className="flex flex-wrap items-center gap-3">
+            {DEMO_TESTERS.map(tester => (
+              <div
+                key={tester.name}
+                className="flex items-center gap-2.5 rounded-lg border bg-muted/30 px-3.5 py-2.5"
+              >
+                <Avatar className="h-8 w-8 shrink-0">
+                  <AvatarFallback className={`text-xs font-bold text-white ${tester.color}`}>
+                    {tester.init}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="text-xs font-semibold text-foreground">{tester.name}</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    오늘 <span className="font-semibold text-foreground">{tester.assignedToday}</span>건 배정
+                  </p>
+                </div>
+              </div>
+            ))}
           </div>
-          <CardContent className="px-4 py-3">
-            {workers === null ? (
-              <div className="flex flex-wrap items-center gap-3">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <Skeleton key={i} className="h-[52px] w-44 rounded-lg" />
-                ))}
-              </div>
-            ) : workersError ? (
-              <p className="py-2 text-xs text-muted-foreground">
-                배정 현황을 불러오지 못했습니다. {workersError}
-              </p>
-            ) : assignedWorkers.length === 0 ? (
-              <p className="py-2 text-xs text-muted-foreground">
-                현재 배정된 작업이 있는 시험자가 없습니다.
-              </p>
-            ) : (
-              <div className="flex flex-wrap items-center gap-3">
-                {assignedWorkers.map(w => {
-                  const load = w.inProgress + w.reviewing + w.delayed + w.pendingCount
-                  return (
-                    <div
-                      key={w.testerId}
-                      className="flex items-center gap-2.5 rounded-lg border bg-muted/30 px-3.5 py-2.5"
-                    >
-                      <TesterAvatar testerId={w.testerId} name={w.name} size="sm" />
-                      <div className="min-w-0">
-                        <p className="truncate text-xs font-semibold text-foreground">
-                          {w.name}
-                          <span className="ml-1 font-mono text-[10px] font-normal text-muted-foreground">
-                            {w.employeeNo}
-                          </span>
-                        </p>
-                        <p className="text-[11px] text-muted-foreground">
-                          <span className="font-semibold text-foreground">{load}</span>건 담당
-                          <span className="ml-1">
-                            (진행 {w.inProgress + w.reviewing + w.delayed} · 대기 {w.pendingCount})
-                          </span>
-                        </p>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+        </CardContent>
+      </Card>
 
     </div>
   )
