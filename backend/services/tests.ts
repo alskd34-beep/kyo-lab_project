@@ -10,6 +10,7 @@
  */
 
 import { supabaseAdmin } from '@backend/lib/supabase'
+import { METHOD_PARTIAL, mapByOrders } from '@backend/services/pctOrderTestItems'
 import type { TestRow, StatusKey } from '@shared/qc'
 
 interface TestsQuery {
@@ -108,10 +109,12 @@ export async function listTests(q: TestsQuery = {}): Promise<TestRow[]> {
   const orderIds = orders.map(o => o.id)
 
   // 2) 작업(QC번호·상태), 담당자명, 품목 메타(구분·예정항목) — 병렬
-  const [jobsRes, testersRes, productMeta] = await Promise.all([
+  const [jobsRes, testersRes, productMeta, orderItems] = await Promise.all([
     supabaseAdmin.from('qc_jobs').select('id, order_id, qc_no, status').in('order_id', orderIds),
     supabaseAdmin.from('testers').select('id, name'),
     productMetaByCode([...new Set(orders.map(o => o.product_code))]),
+    // 개별항목 오더는 품목 전체가 아니라 오더에서 고른 항목만 보여준다
+    mapByOrders(orders.filter(o => o.method === METHOD_PARTIAL).map(o => o.id)),
   ])
 
   const jobByOrder = new Map<string, { id: string; qcNo: string; status: string }>()
@@ -143,7 +146,10 @@ export async function listTests(q: TestsQuery = {}): Promise<TestRow[]> {
     const name = o.assignee_tester_id ? (testerName.get(o.assignee_tester_id) ?? '') : ''
     // 진행상태는 작업 상태 우선(시작했으면), 없으면 오더 상태
     const koStatus = job?.status ?? o.status
-    const items = (job ? itemsByJob.get(job.id) : meta?.items) ?? []
+    // 시작한 작업이 있으면 실제 체크리스트, 없으면 예정 항목
+    //  (개별항목 오더는 오더에서 고른 항목, 전항목 오더는 품목 전체)
+    const planned = o.method === METHOD_PARTIAL ? orderItems.get(o.id) : meta?.items
+    const items = (job ? itemsByJob.get(job.id) : planned) ?? []
     return {
       id:          i + 1,
       category:    meta?.productType ?? o.dosage_form ?? '-',

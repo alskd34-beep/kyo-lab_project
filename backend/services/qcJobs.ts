@@ -12,6 +12,7 @@ import { generateQcNo } from '@backend/lib/qcNumber'
 import { createNotification } from '@backend/services/notifications'
 import { checkEquipmentReadiness, type ReadinessResult } from '@backend/services/equipmentMaster'
 import { listByProduct, type PretestNoteRow } from '@backend/services/productPretestNotes'
+import { METHOD_PARTIAL, listByOrder as listOrderTestItems } from '@backend/services/pctOrderTestItems'
 import {
   ACTIVE_JOB_STATUSES, CLOSED_STAGE, NEXT_STAGE, STAGE_ACTION_LABEL,
   canAdvanceByAdmin, isJobStage, type JobStage,
@@ -541,7 +542,7 @@ export async function startJob(orderId: string, userSub: string): Promise<{ jobI
 
   const { data: order, error: oErr } = await supabaseAdmin
     .from('pct_orders')
-    .select('id, product_code, product_name, batch_no, assignee_tester_id')
+    .select('id, product_code, product_name, batch_no, assignee_tester_id, method')
     .eq('id', orderId)
     .single()
   if (oErr) throw oErr
@@ -563,6 +564,37 @@ export async function startJob(orderId: string, userSub: string): Promise<{ jobI
     ? warningChecks.map(c => c.warning ?? c.reason ?? c.name ?? c.code)
     : undefined
 
+  // 체크리스트에 넣을 항목을 작업 생성 '전에' 확정한다.
+  //  - 개별항목: 오더 생성 시 고른 항목만 (pct_order_test_items)
+  //  - 전항목  : 품목에 등록된 시험항목 전체 (product_test_items)
+  // 작업을 만든 뒤에 실패하면 QC번호만 소모된 빈 작업이 남으므로 순서가 중요하다.
+  const plannedItems: Array<{ test_item_name: string; sequence_order: number }> = []
+  if (order.method === METHOD_PARTIAL) {
+    const selected = await listOrderTestItems(orderId)
+    if (selected.length === 0) {
+      // 오더 수정으로 진행방법만 개별항목으로 바뀌면 선택 목록이 비어 있을 수 있다.
+      // 품목 전체로 대체하면 '개별항목' 지시와 어긋난 체크리스트가 되므로 시작을 막는다.
+      throw new Error('진행방법이 「개별항목」인데 배정된 시험항목이 없습니다. 관리자에게 오더의 시험항목 지정을 요청하세요.')
+    }
+    selected.forEach((it, idx) => plannedItems.push({
+      test_item_name: it.testItemName,
+      sequence_order: it.sequenceOrder ?? idx,
+    }))
+  } else {
+    const { data: prod } = await supabaseAdmin.from('products').select('id').eq('product_code', order.product_code).maybeSingle()
+    if (prod?.id) {
+      const { data: pti } = await supabaseAdmin
+        .from('product_test_items')
+        .select('sequence_order, test_items!inner(name)')
+        .eq('product_id', prod.id)
+        .order('sequence_order', { ascending: true })
+      ;(pti ?? []).forEach((r, idx) => plannedItems.push({
+        test_item_name: (r as unknown as { test_items: { name: string } }).test_items.name,
+        sequence_order: (r.sequence_order as number) ?? idx,
+      }))
+    }
+  }
+
   // 채번 (충돌 시 1회 재시도)
   let qcNo = await generateQcNo()
   let jobId = ''
@@ -579,20 +611,10 @@ export async function startJob(orderId: string, userSub: string): Promise<{ jobI
   }
   if (!jobId) throw new Error('작업 생성에 실패했습니다.')
 
-  // 시험항목 → 체크리스트
-  const { data: prod } = await supabaseAdmin.from('products').select('id').eq('product_code', order.product_code).maybeSingle()
-  if (prod?.id) {
-    const { data: pti } = await supabaseAdmin
-      .from('product_test_items')
-      .select('sequence_order, test_items!inner(name)')
-      .eq('product_id', prod.id)
-      .order('sequence_order', { ascending: true })
-    const items = (pti ?? []).map((r, idx) => ({
-      qc_job_id: jobId,
-      test_item_name: (r as unknown as { test_items: { name: string } }).test_items.name,
-      sequence_order: (r.sequence_order as number) ?? idx,
-    }))
-    if (items.length > 0) await supabaseAdmin.from('qc_job_items').insert(items)
+  if (plannedItems.length > 0) {
+    await supabaseAdmin.from('qc_job_items').insert(
+      plannedItems.map(it => ({ qc_job_id: jobId, ...it })),
+    )
   }
 
   // 오더 상태 진행중

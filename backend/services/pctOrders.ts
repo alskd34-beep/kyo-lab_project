@@ -4,6 +4,10 @@
 
 import { supabaseAdmin } from '@backend/lib/supabase'
 import { assertTesterAssignable } from '@backend/services/testers'
+import {
+  METHOD_PARTIAL, normalizeForMethod, replaceForOrder,
+  type OrderTestItemInput,
+} from '@backend/services/pctOrderTestItems'
 
 export interface PctOrderRow {
   id: string
@@ -140,6 +144,8 @@ export async function createOrder(input: {
   status?: string
   assigneeTesterId?: string | null
   note?: string | null
+  /** 진행방법이 '개별항목'일 때 배정할 시험항목. '전항목'이면 무시된다. */
+  testItems?: OrderTestItemInput[]
 }): Promise<PctOrderRow> {
   const code = (input.productCode ?? '').trim()
   const name = (input.productName ?? '').trim()
@@ -147,6 +153,9 @@ export async function createOrder(input: {
   if (!code || !name || !batch) throw new Error('품목코드·품목명·제조번호는 필수입니다.')
   // 비활성 시험자는 담당자로 지정할 수 없다
   await assertTesterAssignable(input.assigneeTesterId)
+  // 오더를 만들기 전에 검증한다 — 만든 뒤 실패하면 항목 없는 개별항목 오더가 남는다
+  const method = input.method || '전항목'
+  const selectedItems = normalizeForMethod(method, input.testItems)
 
   const { data, error } = await supabaseAdmin
     .from('pct_orders')
@@ -158,7 +167,7 @@ export async function createOrder(input: {
       packaging_date:     input.packagingDate || null,
       due_date:           input.dueDate || null,
       is_urgent:          input.isUrgent ?? false,
-      method:             input.method || '전항목',
+      method:             method,
       status:             input.status || '대기',
       assignee_tester_id: input.assigneeTesterId || null,
       note:               input.note?.trim() || null,
@@ -175,6 +184,17 @@ export async function createOrder(input: {
   }
 
   const o = data as Record<string, unknown>
+
+  // 개별항목 오더의 선택 목록 저장. 실패하면 항목 없는 오더가 남으므로 오더를 되돌린다.
+  if (method === METHOD_PARTIAL) {
+    try {
+      await replaceForOrder(o.id as string, selectedItems)
+    } catch (e) {
+      await supabaseAdmin.from('pct_orders').delete().eq('id', o.id as string)
+      throw e
+    }
+  }
+
   let assigneeName: string | null = null
   if (o.assignee_tester_id) {
     const { data: t } = await supabaseAdmin.from('testers').select('name').eq('id', o.assignee_tester_id as string).maybeSingle()

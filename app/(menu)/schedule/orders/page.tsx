@@ -5,6 +5,7 @@ import { useAuth } from "@frontend/lib/auth-context"
 import {
   RefreshCw, Sparkles, History, AlertCircle, X, Loader2, Database, Plus,
   ChevronDown, ChevronRight, ChevronLeft, Lock, LockOpen, Search, CalendarDays, Users, ListChecks, Layers,
+  Check,
 } from "lucide-react"
 import { CLOSED_STAGE, JOB_STAGES, stageStyle } from "@shared/qc-status"
 import { cn } from "@frontend/lib/utils"
@@ -1260,8 +1261,138 @@ function SourceBadge({ source }: { source: OrderRow["source"] }) {
   )
 }
 
+// ─── 시험항목 선택 팝업 (진행방법 = 개별항목) ─────────────────────────────────
+interface ProductTestItem { testItemId: string; testItemName: string; isMandatory: boolean; sequenceOrder: number }
+
+/**
+ * 선택한 품목에 등록된 시험항목을 보여주고 배정할 항목만 고르게 한다.
+ * 필수 항목(is_mandatory)은 기본으로 켜 두되, 해제도 가능하게 둔다 —
+ * 개별항목 오더는 "일부만 시험한다"는 뜻이라 강제하면 기능이 무의미해진다.
+ */
+function TestItemPickerDialog({
+  productId, productName, initialSelected, onClose, onConfirm,
+}: {
+  productId: string
+  productName: string
+  initialSelected: OrderTestItem[]
+  onClose: () => void
+  onConfirm: (items: OrderTestItem[]) => void
+}) {
+  const [rows, setRows] = useState<ProductTestItem[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [checked, setChecked] = useState<Set<string>>(
+    () => new Set(initialSelected.map(i => i.testItemName)),
+  )
+
+  useEffect(() => {
+    // 팝업은 열 때마다 새로 마운트되므로 error/rows 초기화는 useState 기본값이 담당한다
+    let alive = true
+    fetch(`/api/product-test-items?productId=${encodeURIComponent(productId)}`, { credentials: "include" })
+      .then(async r => {
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error ?? "불러오기 실패")
+        return r.json() as Promise<{ rows: ProductTestItem[] }>
+      })
+      .then(({ rows }) => {
+        if (!alive) return
+        setRows(rows)
+        // 처음 여는 경우에만 필수 항목을 기본 선택으로 채운다
+        if (initialSelected.length === 0) {
+          setChecked(new Set(rows.filter(r => r.isMandatory).map(r => r.testItemName)))
+        }
+      })
+      .catch(e => { if (alive) { setRows([]); setError(e instanceof Error ? e.message : "불러오기 실패") } })
+    return () => { alive = false }
+    // initialSelected 는 열 때 한 번만 반영한다
+  }, [productId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toggle = (name: string) =>
+    setChecked(prev => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name); else next.add(name)
+      return next
+    })
+
+  const allOn = (rows?.length ?? 0) > 0 && rows!.every(r => checked.has(r.testItemName))
+  const toggleAll = () =>
+    setChecked(allOn ? new Set() : new Set((rows ?? []).map(r => r.testItemName)))
+
+  const confirm = () => {
+    const picked = (rows ?? [])
+      .filter(r => checked.has(r.testItemName))
+      .map((r, idx) => ({ testItemId: r.testItemId, testItemName: r.testItemName, sequenceOrder: idx }))
+    onConfirm(picked)
+  }
+
+  return (
+    <Dialog open onOpenChange={next => { if (!next) onClose() }}>
+      <DialogContent size="lg" className="max-h-[85dvh]">
+        <DialogHeader>
+          <DialogTitle>시험항목 선택</DialogTitle>
+          <DialogDescription>
+            {productName} — 배정할 시험항목을 고르세요. 선택한 항목만 담당자에게 배정됩니다.
+          </DialogDescription>
+        </DialogHeader>
+
+        <DialogBody className="flex flex-col gap-2">
+          {rows === null ? (
+            <div className="flex flex-col gap-1.5">
+              {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-11 w-full rounded-lg" />)}
+            </div>
+          ) : error ? (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-6 text-center text-sm text-amber-800">
+              시험항목을 불러오지 못했습니다. {error}
+            </p>
+          ) : rows.length === 0 ? (
+            <p className="rounded-lg border border-dashed py-10 text-center text-sm text-muted-foreground">
+              이 품목에 등록된 시험항목이 없습니다.
+              <br />
+              <span className="text-xs">기준 설정 › 품목별 시험항목 관리에서 먼저 등록하세요.</span>
+            </p>
+          ) : (
+            <>
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-xs font-medium">
+                <input type="checkbox" checked={allOn} onChange={toggleAll} className="cb-custom" />
+                전체 선택 ({checked.size}/{rows.length})
+              </label>
+              <ul className="flex flex-col gap-1.5">
+                {rows.map(r => (
+                  <li key={r.testItemId}>
+                    <label className={cn(
+                      "flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2.5",
+                      checked.has(r.testItemName) && "border-primary/40 bg-primary/5",
+                    )}>
+                      <input
+                        type="checkbox"
+                        checked={checked.has(r.testItemName)}
+                        onChange={() => toggle(r.testItemName)}
+                        className="cb-custom"
+                      />
+                      <span className="min-w-0 flex-1 truncate text-sm text-foreground">{r.testItemName}</span>
+                      {r.isMandatory && (
+                        <Badge variant="outline" className="border-amber-200 text-amber-700">필수</Badge>
+                      )}
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </DialogBody>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>취소</Button>
+          <Button onClick={confirm} disabled={checked.size === 0}>
+            <Check />{checked.size}개 선택 적용
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 // ─── 오더 추가 모달 (수동 생성) ───────────────────────────────────────────────
 interface ProductHit { id: string; productCode: string; name: string }
+interface OrderTestItem { testItemId: string; testItemName: string; sequenceOrder: number }
 function CreateModal({ testers, onClose, onCreated }: {
   testers: Tester[]; onClose: () => void; onCreated: () => void
 }) {
@@ -1272,6 +1403,11 @@ function CreateModal({ testers, onClose, onCreated }: {
   })
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+
+  // 진행방법=개별항목 일 때 배정할 시험항목
+  const [productId, setProductId] = useState("")
+  const [testItems, setTestItems] = useState<OrderTestItem[]>([])
+  const [pickerOpen, setPickerOpen] = useState(false)
 
   // 품목 검색 (자동완성) — 선택 시 코드·품목명 자동 입력
   const [pq, setPq] = useState("")
@@ -1302,11 +1438,17 @@ function CreateModal({ testers, onClose, onCreated }: {
     setForm(f => ({ ...f, productCode: p.productCode, productName: p.name }))
     setPq(`${p.name} (${p.productCode})`)
     setShowHits(false)
+    // 품목이 바뀌면 이전 품목 기준으로 고른 항목은 무효다
+    setProductId(p.id)
+    setTestItems([])
   }
 
   const save = async () => {
     if (!form.productCode.trim() || !form.productName.trim() || !form.batchNo.trim()) {
       setErr("품목코드·품목명·제조번호는 필수입니다."); return
+    }
+    if (form.method === "개별항목" && testItems.length === 0) {
+      setErr("진행방법이 「개별항목」이면 시험항목을 1개 이상 선택하세요."); return
     }
     setSaving(true); setErr(null)
     try {
@@ -1325,6 +1467,7 @@ function CreateModal({ testers, onClose, onCreated }: {
           status: form.status,
           assigneeTesterId: form.assigneeTesterId || null,
           note: form.note || null,
+          testItems: form.method === "개별항목" ? testItems : [],
         }),
       })
       const data = await res.json()
@@ -1390,13 +1533,52 @@ function CreateModal({ testers, onClose, onCreated }: {
           </Select>
         </Field>
         <Field label="진행방법">
-          <Select value={form.method} onValueChange={v => setForm({ ...form, method: v })}>
+          <Select
+            value={form.method}
+            onValueChange={v => {
+              setForm({ ...form, method: v })
+              // 전항목으로 되돌리면 고른 항목은 의미가 없다
+              if (v !== "개별항목") setTestItems([])
+            }}
+          >
             <SelectTrigger className="!h-9 w-full px-3"><SelectValue /></SelectTrigger>
             <SelectContent>
               {METHOD_OPTIONS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
             </SelectContent>
           </Select>
         </Field>
+
+        {form.method === "개별항목" && (
+          <Field label="배정 시험항목" full>
+            {!productId ? (
+              <p className="rounded-md border border-dashed px-3 py-2.5 text-xs text-muted-foreground">
+                먼저 위에서 품목을 검색해 선택하세요. 그 품목에 등록된 시험항목 중에서 고릅니다.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => setPickerOpen(true)}>
+                    <ListChecks />시험항목 선택
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    {testItems.length > 0
+                      ? `${testItems.length}개 선택됨 — 선택한 항목만 배정됩니다.`
+                      : "선택된 항목이 없습니다."}
+                  </span>
+                </div>
+                {testItems.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {testItems.map(it => (
+                      <Badge key={it.testItemName} variant="secondary" className="font-normal">
+                        {it.testItemName}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </Field>
+        )}
         <Field label="상태">
           <Select value={form.status} onValueChange={v => setForm({ ...form, status: v })}>
             <SelectTrigger className="!h-9 w-full px-3"><SelectValue /></SelectTrigger>
@@ -1429,6 +1611,16 @@ function CreateModal({ testers, onClose, onCreated }: {
           {saving ? <Loader2 className="animate-spin" /> : <Plus />}오더 추가
         </Button>
       </div>
+
+      {pickerOpen && productId && (
+        <TestItemPickerDialog
+          productId={productId}
+          productName={form.productName}
+          initialSelected={testItems}
+          onClose={() => setPickerOpen(false)}
+          onConfirm={items => { setTestItems(items); setPickerOpen(false); setErr(null) }}
+        />
+      )}
     </SlideOver>
   )
 }

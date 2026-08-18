@@ -37,6 +37,8 @@ export async function POST(req: NextRequest) {
       dosageForm?: string | null; packagingDate?: string | null; dueDate?: string | null
       isUrgent?: boolean; method?: string; status?: string
       assigneeTesterId?: string | null; note?: string | null
+      /** method='개별항목' 일 때 배정할 시험항목 */
+      testItems?: Array<{ testItemId?: string | null; testItemName?: string }>
     }
     if (!body.productCode || !body.productName || !body.batchNo) {
       return Response.json({ error: '품목코드·품목명·제조번호는 필수입니다.' }, { status: 400 })
@@ -53,6 +55,13 @@ export async function POST(req: NextRequest) {
       status: body.status,
       assigneeTesterId: body.assigneeTesterId ?? null,
       note: body.note ?? null,
+      testItems: (body.testItems ?? [])
+        .filter(i => (i.testItemName ?? '').trim())
+        .map((i, idx) => ({
+          testItemId: i.testItemId ?? null,
+          testItemName: (i.testItemName ?? '').trim(),
+          sequenceOrder: idx,
+        })),
     })
     return Response.json({ row }, { status: 201 })
   } catch (err) {
