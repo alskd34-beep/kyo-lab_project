@@ -116,6 +116,38 @@ export async function deleteSchedule(id: string): Promise<void> {
 }
 
 /**
+ * 지정 기간 [from, to] 에 걸치는 시험자 부재 구간 목록.
+ * 배정 엔진이 유형별로 다르게 처리한다 —
+ *   연차(ANNUAL)·출장(BUSINESS_TRIP): 그 날은 근무일에서 제외(하드)
+ *   반차(HALF_DAY)               : 근무는 하되 가용 공수 0.5일 차감(소프트)
+ * users.tester_id 가 연결된 사용자만 포함한다(시험자가 아닌 계정의 휴가는 배정과 무관).
+ */
+export async function testerAbsences(
+  from: string, to: string,
+): Promise<Array<{ testerId: string; from: string; to: string; type: string }>> {
+  const { data, error } = await supabaseAdmin
+    .from('operator_schedule')
+    .select('start_date, end_date, type, users(tester_id)')
+    .lte('start_date', to)
+    .gte('end_date', from)
+  if (error) throw error
+  const out: Array<{ testerId: string; from: string; to: string; type: string }> = []
+  for (const r of data ?? []) {
+    const row = r as Record<string, unknown>
+    const user = row.users as Record<string, unknown> | null
+    const testerId = user?.tester_id as string | undefined
+    if (!testerId) continue
+    out.push({
+      testerId,
+      from: row.start_date as string,
+      to: row.end_date as string,
+      type: (row.type as string) ?? 'ANNUAL',
+    })
+  }
+  return out
+}
+
+/**
  * 지정 기간 [from, to] 에 휴가/출장이 걸치는 tester_id 집합.
  * AI 자동배정에서 후보 제외용. users.tester_id 가 연결된 사용자만 포함.
  */

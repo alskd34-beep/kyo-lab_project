@@ -10,6 +10,14 @@ import { requireAuth } from '@backend/lib/guard'
 import { supabaseAdmin } from '@backend/lib/supabase'
 import { selectAll } from '@backend/lib/supabasePage'
 import { listTesters, listCapabilities, listCapabilityMatrix } from '@backend/services/testers'
+import { testerAbsences } from '@backend/services/operatorSchedule'
+
+/** ISO 날짜에 n일 더하기 (부재 조회 기간 여유용) */
+function addDaysISO(iso: string, n: number): string {
+  const d = new Date(iso + 'T00:00:00Z')
+  d.setUTCDate(d.getUTCDate() + n)
+  return d.toISOString().slice(0, 10)
+}
 import { getHolidaySet } from '@backend/services/holidays'
 import {
   generatePctSchedule,
@@ -149,10 +157,17 @@ export async function POST(req: NextRequest) {
     const repRows = rows.filter((_, i) => repIdxSet.has(i))
     const year = body.year ?? new Date().getFullYear()
 
+    // 시험자 부재(휴가/출장) — 스케줄 대상 기간 전체를 조회해 엔진에 넘긴다.
+    // 이 경로는 예전에 휴가를 전혀 보지 않아, 휴가 중인 시험자에게도 일정이 잡혔다.
+    const scheduleDates = repRows.map(r => r.포장일).filter(Boolean).sort()
+    const absFrom = scheduleDates[0] ?? `${year}-01-01`
+    const absTo   = scheduleDates[scheduleDates.length - 1] ?? `${year}-12-31`
+    const absences = await testerAbsences(absFrom, addDaysISO(absTo, 30))
+
     const result = generatePctSchedule({
       rows: repRows, testers, capabilities,
       matrix: matrix.map(m => ({ testerId: m.testerId, capabilityId: m.capabilityId, level: m.proficiencyLevel })),
-      productItems, equipment, workload, year, holidays,
+      productItems, equipment, workload, year, holidays, absences,
     })
 
     // 대표 배정 결과를 키(코드|제조번호)로 인덱싱

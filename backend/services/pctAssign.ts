@@ -12,7 +12,7 @@ import { supabaseAdmin } from '@backend/lib/supabase'
 import { CLOSED_STAGE } from '@shared/qc-status'
 import { selectAll } from '@backend/lib/supabasePage'
 import { listTesters, listCapabilities, listCapabilityMatrix, assertTesterAssignable } from '@backend/services/testers'
-import { testersOnLeave } from '@backend/services/operatorSchedule'
+import { testerAbsences } from '@backend/services/operatorSchedule'
 import { createNotification } from '@backend/services/notifications'
 import { logReassignment } from '@backend/services/reassignmentHistory'
 import {
@@ -107,17 +107,24 @@ function groupOrders(orders: OrderForAssign[], familyByCode?: Map<string, string
 }
 
 /**
- * 대상 오더 기준 휴가 점검 구간 [from, to] 산출.
- * 포장일이 있으면 그 범위, 없으면 오늘. 시험 진행 여력을 감안해 종료측에 14일 버퍼.
+ * 부재(휴가/출장)를 조회할 기간 [from, to].
+ *
+ * 시험은 '지금부터 완료예정일 사이'에 수행되므로 그 구간을 본다.
+ * 예전에는 packaging_date(제조일) 기준이라, 포장이 끝난 오더는 구간 끝이 '오늘'로 잘려
+ * 내일 시작하는 휴가를 놓쳤다. 제조일은 시험 시점과 무관하므로 완료예정일을 쓴다.
  */
 function leaveWindow(orders: OrderForAssign[]): { from: string; to: string } {
   const today = new Date().toISOString().slice(0, 10)
-  const dates = orders.map(o => o.packaging_date).filter((d): d is string => !!d).sort()
-  const from = dates[0] ?? today
-  const base = dates[dates.length - 1] ?? today
+  const ends = orders
+    .map(o => o.due_date || o.packaging_date)
+    .filter((d): d is string => !!d)
+    .sort()
+  const last = ends[ends.length - 1] ?? today
+  const base = last > today ? last : today
+  // 마감 이후로 밀리는 작업까지 감안한 여유
   const to = new Date(new Date(base + 'T00:00:00Z').getTime() + 14 * 86400000)
     .toISOString().slice(0, 10)
-  return { from: from < today ? from : today, to: to > today ? to : today }
+  return { from: today, to }
 }
 
 /** 진행 중(미완료) 배정 건수 → 담당자별 현재 업무량 */
@@ -337,7 +344,10 @@ async function autoAssignCodex(orders: OrderForAssign[], excludedTesterIds: Set<
 }
 
 // ─── 규칙엔진 배분 (폴백) ──────────────────────────────────────────────────────
-async function autoAssignRule(orders: OrderForAssign[], excludedTesterIds: Set<string>): Promise<{ mode: 'rule'; pick: PickFn }> {
+async function autoAssignRule(
+  orders: OrderForAssign[],
+  absences: Array<{ testerId: string; from: string; to: string; type: string }>,
+): Promise<{ mode: 'rule'; pick: PickFn }> {
   const [allTesters, capabilities, matrix, productsRes, ptiRes, testItemsRes, equipRes, workloadRes] =
     await Promise.all([
       listTesters({ activeOnly: true }),
@@ -350,8 +360,9 @@ async function autoAssignRule(orders: OrderForAssign[], excludedTesterIds: Set<s
       selectAll(supabaseAdmin, 'product_workload', 'product_code, avg_workdays'),
     ])
 
-  // 비활성(퇴사·휴직 등) 시험자와 휴가/출장 중인 시험자는 배정 후보에서 제외
-  const testers = allTesters.filter(t => t.isActive && !excludedTesterIds.has(t.id))
+  // 비활성(퇴사·휴직) 시험자만 여기서 거른다.
+  // 휴가·출장은 엔진이 실제 근무일과 대조해 판정한다(반차는 제외 대신 공수 차감).
+  const testers = allTesters.filter(t => t.isActive)
 
   const codeById = new Map<string, string>()
   for (const p of productsRes.data ?? []) codeById.set(p.id as string, String(p.product_code))
@@ -411,6 +422,7 @@ async function autoAssignRule(orders: OrderForAssign[], excludedTesterIds: Set<s
     rows, testers, capabilities,
     matrix: matrix.map(m => ({ testerId: m.testerId, capabilityId: m.capabilityId, level: m.proficiencyLevel })),
     productItems, equipment, workload, year: new Date().getFullYear(), initialLoad,
+    absences,
   })
 
   const testerByKey = new Map<string, { id: string; name: string }>()
@@ -436,9 +448,17 @@ export async function autoAssign(orderIds?: string[]): Promise<AssignResult> {
   const familyByCode = await loadFamilyByCode().catch(() => new Map<string, string>())
   const { reps, memberToRep } = groupOrders(orders, familyByCode)
 
-  // 휴가/출장 중인 시험자 제외 (요구사항: 휴가 기간 중인 시험자는 자동 배정 대상 제외)
+  // 부재(휴가/출장) 로드.
+  //  - 연차·출장: 배정 제외 (엔진이 근무일 단위로 판정)
+  //  - 반차     : 제외하지 않고 가용 공수 0.5일 차감
+  // 예전에는 조회 실패를 .catch 로 삼켜 "휴가 없음"으로 배정이 성사됐다.
+  // 조용히 넘기면 휴가 중 배정이 성공으로 보고되므로 실패는 그대로 올린다.
   const { from, to } = leaveWindow(orders)
-  const excludedTesterIds = await testersOnLeave(from, to).catch(() => new Set<string>())
+  const absences = await testerAbsences(from, to)
+  // LLM 경로는 엔진을 거치지 않으므로 하드 제외분만 미리 걸러 넘긴다
+  const excludedTesterIds = new Set(
+    absences.filter(a => a.type !== 'HALF_DAY').map(a => a.testerId),
+  )
 
   let resolved: { mode: 'codex' | 'rule'; pick: PickFn } | null = null
   if (codexAssignEnabled()) {
@@ -448,7 +468,7 @@ export async function autoAssign(orderIds?: string[]): Promise<AssignResult> {
       console.error('[pctAssign] Codex 배분 실패 — 규칙엔진 폴백:', err)
     }
   }
-  if (!resolved) resolved = await autoAssignRule(reps, excludedTesterIds)
+  if (!resolved) resolved = await autoAssignRule(reps, absences)
 
   // [동시분석] 각 멤버는 자신이 속한 그룹 대표의 배정 결과를 따른다(한 시험자가 동시분석).
   const groupPick: PickFn = (o) => resolved!.pick(memberToRep.get(o.id) ?? o)

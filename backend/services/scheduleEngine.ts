@@ -43,6 +43,23 @@ export interface EngineEquip { testItem: string; requiredEquipment: string; isUn
 /** product_workload: 품목코드 → 공수(일) */
 export interface EngineWorkload { productCode: string; avgWorkdays: number }
 
+/** 반차와 겹친 배정 — 관리자가 "이대로 배정할지" 확인하는 용도 */
+export interface EngineHalfDayNotice {
+  testerId: string
+  productCode: string
+  batchNo: string
+  testItemName: string | null   // 개별항목 배정이면 항목명, 전항목이면 null
+  dates: string[]               // 반차와 겹친 근무일
+}
+
+/** 시험자 부재(휴가/출장). operator_schedule 1행 = 1구간 */
+export interface EngineAbsence {
+  testerId: string
+  from: string           // YYYY-MM-DD (포함)
+  to: string             // YYYY-MM-DD (포함)
+  type: 'ANNUAL' | 'HALF_DAY' | 'BUSINESS_TRIP' | string
+}
+
 export interface EngineInput {
   rows: EnginePctRow[]
   testers: EngineTester[]
@@ -51,6 +68,12 @@ export interface EngineInput {
   productItems: EngineProductItems[]
   equipment: EngineEquip[]
   workload: EngineWorkload[]
+  /**
+   * 시험자 부재 구간.
+   *  - 연차(ANNUAL)·출장(BUSINESS_TRIP): 그 날은 근무일로 치지 않는다 → 배정도, 일정 배치도 피한다
+   *  - 반차(HALF_DAY): 근무는 하므로 날짜는 살리되 가용 공수를 0.5일 차감(부하 가산)해 후순위로 민다
+   */
+  absences?: EngineAbsence[]
   year: number
   defaultWorkdays?: number  // 공수 미상 시 (기본 3)
   /**
@@ -110,6 +133,8 @@ export interface EngineUnassigned {
 export interface EngineResult {
   assignments: EngineAssignment[]
   unassigned: EngineUnassigned[]
+  /** 반차와 겹친 배정 목록(비어 있으면 겹침 없음) */
+  halfDayNotices: EngineHalfDayNotice[]
   stats: {
     total: number
     assigned: number
@@ -138,8 +163,17 @@ function isWeekend(iso: string): boolean {
   return dow === 0 || dow === 6
 }
 
-function isNonWorkingDay(iso: string, holidays: Set<string>): boolean {
-  return isWeekend(iso) || holidays.has(iso)
+function isNonWorkingDay(iso: string, holidays: Set<string>, skip?: Set<string>): boolean {
+  return isWeekend(iso) || holidays.has(iso) || (skip?.has(iso) ?? false)
+}
+
+/** 'YYYY-MM-DD' 구간을 하루 단위로 펼친다 (양끝 포함, 폭주 방지 상한 400일) */
+function expandRange(from: string, to: string): string[] {
+  const out: string[] = []
+  let cur = from
+  let guard = 0
+  while (cur <= to && guard < 400) { out.push(cur); cur = addDays(cur, 1); guard++ }
+  return out
 }
 
 function addDays(iso: string, n: number): string {
@@ -178,12 +212,12 @@ function workingDaysBefore(dueISO: string, count: number, holidays: Set<string>)
 }
 
 /** startISO(당일 포함)부터 정방향으로 count개의 근무일(주말·공휴일 제외)을 모아 반환. dense 패킹용. */
-function workingDaysFromInclusive(startISO: string, count: number, holidays: Set<string>): string[] {
+function workingDaysFromInclusive(startISO: string, count: number, holidays: Set<string>, skip?: Set<string>): string[] {
   const out: string[] = []
   let cur = startISO
   let guard = 0
   while (out.length < count && guard < 400) {
-    if (!isNonWorkingDay(cur, holidays)) out.push(cur)
+    if (!isNonWorkingDay(cur, holidays, skip)) out.push(cur)
     cur = addDays(cur, 1)
     guard++
   }
@@ -270,6 +304,44 @@ export function generatePctSchedule(input: EngineInput): EngineResult {
     if (m.level === 'Y' || m.level === 'O') yesByTester.get(m.testerId)?.add(m.capabilityId)
   }
 
+  // ── 부재(휴가/출장) 인덱스 ────────────────────────────────────────────────
+  // 연차·출장 = 그 시험자에게는 근무일이 아님(하드 제외)
+  // 반차     = 근무는 하되 가용 공수 0.5일 차감(소프트, 후순위)
+  const blockDays = new Map<string, Set<string>>()   // testerId → 연차·출장 일자
+  const halfDays  = new Map<string, Set<string>>()   // testerId → 반차 일자
+  for (const a of input.absences ?? []) {
+    const target = a.type === 'HALF_DAY' ? halfDays : blockDays
+    const set = target.get(a.testerId) ?? new Set<string>()
+    for (const d of expandRange(a.from, a.to)) set.add(d)
+    target.set(a.testerId, set)
+  }
+  const blockedOn = (testerId: string, dates: string[]): boolean => {
+    const set = blockDays.get(testerId)
+    if (!set) return false
+    return dates.some(d => set.has(d))
+  }
+  /** 배정 기간과 겹치는 반차 일수 (0.5일씩 공수 차감 → 부하로 환산) */
+  const halfOverlap = (testerId: string, dates: string[]): string[] => {
+    const set = halfDays.get(testerId)
+    if (!set) return []
+    return dates.filter(d => set.has(d))
+  }
+  /** 반차 겹침 기록 — 관리자 확인용으로 결과에 실어 보낸다 */
+  const halfDayNotices: EngineHalfDayNotice[] = []
+  /**
+   * 반차 겹침을 부하로 환산해 돌려주고(0.5일/일) 확인 알림을 남긴다.
+   * 반차는 근무를 하므로 제외하지 않고, 그만큼 여력이 줄었다고 보고 후순위로 민다.
+   */
+  const halfLoad = (
+    testerId: string, dates: string[],
+    productCode: string, batchNo: string, testItemName: string | null,
+  ): number => {
+    const days = halfOverlap(testerId, dates)
+    if (days.length === 0) return 0
+    halfDayNotices.push({ testerId, productCode, batchNo, testItemName, dates: days })
+    return days.length * 0.5
+  }
+
   const activeTesters = testers.filter(t => t.isActive)
   const soloPool = activeTesters.filter(t => t.canSolo)
   const duoPool  = activeTesters.filter(t => t.canDuo)
@@ -306,8 +378,9 @@ export function generatePctSchedule(input: EngineInput): EngineResult {
   }
 
   /** 부하 최소 자격 시험자 1인 (solo) */
-  const pickSolo = (caps: string[], avoid?: Set<string>): EngineTester | null => {
-    const elig = soloPool.filter(t => can(t.id, caps))
+  const pickSolo = (caps: string[], dates: string[], avoid?: Set<string>): EngineTester | null => {
+    // 연차·출장이 배정 기간과 겹치는 시험자는 후보에서 제외
+    const elig = soloPool.filter(t => can(t.id, caps) && !blockedOn(t.id, dates))
     if (elig.length === 0) return null
     // 정렬: ① 부하 ② 배정건수 ③ (개별항목) 같은 품목의 다른 항목을 이미 받은 사람은 후순위(분산)
     elig.sort((a, b) =>
@@ -318,11 +391,13 @@ export function generatePctSchedule(input: EngineInput): EngineResult {
   }
 
   /** 듀오 조 구성: (solo 가능 리드) + (duo 가능 보조). 두 사람의 역량 합집합이 caps를 커버 */
-  const pickDuo = (caps: string[]): { lead: EngineTester; partner: EngineTester } | null => {
-    const leads = soloPool.slice().sort((a, b) => getLoad(a.id) - getLoad(b.id) || getCount(a.id) - getCount(b.id))
+  const pickDuo = (caps: string[], dates: string[]): { lead: EngineTester; partner: EngineTester } | null => {
+    const leads = soloPool.slice()
+      .filter(t => !blockedOn(t.id, dates))
+      .sort((a, b) => getLoad(a.id) - getLoad(b.id) || getCount(a.id) - getCount(b.id))
     for (const lead of leads) {
       const partners = duoPool
-        .filter(p => p.id !== lead.id)
+        .filter(p => p.id !== lead.id && !blockedOn(p.id, dates))
         .sort((a, b) => getLoad(a.id) - getLoad(b.id) || getCount(a.id) - getCount(b.id))
       for (const partner of partners) {
         const have = new Set<string>([...(yesByTester.get(lead.id) ?? []), ...(yesByTester.get(partner.id) ?? [])])
@@ -408,16 +483,17 @@ export function generatePctSchedule(input: EngineInput): EngineResult {
         const { caps, duo } = reqOf(ti)
         let testerName = '', testerId = '', isDuo = false, partner: string | null = null
         if (duo) {
-          const d = pickDuo(caps)
+          const d = pickDuo(caps, itemDates)
           if (!d) { unassignedItems.push(ti); continue }
           testerName = d.lead.name; testerId = d.lead.id; isDuo = true; partner = d.partner.name
-          addLoad(d.lead.id, itemWorkdays); addLoad(d.partner.id, itemWorkdays)
+          addLoad(d.lead.id, itemWorkdays + halfLoad(d.lead.id, itemDates, code, r.제조번호, ti))
+          addLoad(d.partner.id, itemWorkdays + halfLoad(d.partner.id, itemDates, code, r.제조번호, ti))
           incCount(d.lead.id); incCount(d.partner.id)
         } else {
-          const t = pickSolo(caps, assignedThisProduct)
+          const t = pickSolo(caps, itemDates, assignedThisProduct)
           if (!t) { unassignedItems.push(ti); continue }
           testerName = t.name; testerId = t.id
-          addLoad(t.id, itemWorkdays)
+          addLoad(t.id, itemWorkdays + halfLoad(t.id, itemDates, code, r.제조번호, ti))
           incCount(t.id)
         }
         assignedThisProduct.add(testerId)
@@ -453,17 +529,18 @@ export function generatePctSchedule(input: EngineInput): EngineResult {
         if (pre && can(pre.id, capsArr)) chosen = pre
       }
       let isDuo = false, partner: string | null = null
-      if (!needsDuo && (chosen || (chosen = pickSolo(capsArr)))) {
-        addLoad(chosen.id, workdays)
+      if (!needsDuo && (chosen || (chosen = pickSolo(capsArr, dates)))) {
+        addLoad(chosen.id, workdays + halfLoad(chosen.id, dates, code, r.제조번호, null))
         incCount(chosen.id)
       } else {
-        const d = pickDuo(capsArr)
+        const d = pickDuo(capsArr, dates)
         if (!d) {
           unassigned.push({ productCode: code, productName: r.품목명, batchNo: r.제조번호, testItems: effectiveItems, reason: needsDuo ? '듀오 조 구성 불가' : '전항목 자격 시험자 없음' })
           continue
         }
         chosen = d.lead; isDuo = true; partner = d.partner.name
-        addLoad(d.lead.id, workdays); addLoad(d.partner.id, workdays)
+        addLoad(d.lead.id, workdays + halfLoad(d.lead.id, dates, code, r.제조번호, null))
+        addLoad(d.partner.id, workdays + halfLoad(d.partner.id, dates, code, r.제조번호, null))
         incCount(d.lead.id); incCount(d.partner.id)
       }
 
@@ -491,7 +568,10 @@ export function generatePctSchedule(input: EngineInput): EngineResult {
     arr.push(i)
     byTester.set(a.testerId, arr)
   })
-  for (const idxs of byTester.values()) {
+  for (const [packTesterId, idxs] of byTester.entries()) {
+    // 이 시험자의 연차·출장 일자는 근무일에서 제외한다.
+    // (선정 단계에서 걸렀더라도 여기서 날짜가 다시 계산되므로 한 번 더 반영해야 한다)
+    const skipDays = blockDays.get(packTesterId)
     idxs.sort((x, y) => {
       const dx = packInfo[x].due ?? '9999-99-99'
       const dy = packInfo[y].due ?? '9999-99-99'
@@ -502,7 +582,7 @@ export function generatePctSchedule(input: EngineInput): EngineResult {
     for (const i of idxs) {
       const info = packInfo[i]
       const start0 = freeFrom && freeFrom > info.earliestStart ? freeFrom : info.earliestStart
-      const dts = workingDaysFromInclusive(start0, info.workdays, holidays)
+      const dts = workingDaysFromInclusive(start0, info.workdays, holidays, skipDays)
       const last = dts[dts.length - 1] ?? start0
       const risk = !!info.due && last > info.due
       assignments[i].dates = dts
@@ -520,6 +600,7 @@ export function generatePctSchedule(input: EngineInput): EngineResult {
   return {
     assignments,
     unassigned,
+    halfDayNotices,
     stats: {
       total: rows.length,
       assigned: assignments.length,
