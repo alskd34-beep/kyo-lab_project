@@ -43,11 +43,13 @@ import {
 const ALL_TABS = ['시험현황', '제품시험', '안정성시험', '일탈관리'] as const
 
 const STATUS_CONFIG: Record<StatusKey, { label: string; dot: string }> = {
-  completed:  { label: '적합완료', dot: 'bg-emerald-500' },
-  reviewing:  { label: '검토중',   dot: 'bg-blue-500' },
-  pending:    { label: '승인대기', dot: 'bg-amber-500' },
-  fail:       { label: '부적합',   dot: 'bg-destructive' },
+  waiting:    { label: '시작대기', dot: 'bg-slate-400' },
   inprogress: { label: '진행중',   dot: 'bg-violet-500' },
+  prereview:  { label: '검토대기', dot: 'bg-amber-500' },
+  reviewing:  { label: '검토중',   dot: 'bg-blue-500' },
+  pending:    { label: '승인대기', dot: 'bg-teal-500' },
+  completed:  { label: '적합완료', dot: 'bg-emerald-500' },
+  fail:       { label: '부적합',   dot: 'bg-destructive' },
 }
 
 /**
@@ -59,10 +61,11 @@ function buildKpis(rows: TestRow[]): KpiItem[] {
   const by = (s: StatusKey) => rows.filter(r => r.status === s).length
   return [
     { label: '전체시험', value: String(rows.length),     unit: '건', sub: '조회 기간 전체', accent: 'text-foreground',  bg: 'bg-white',         border: 'border-slate-200'   },
+    { label: '시작대기', value: String(by('waiting')),    unit: '건', sub: '배정 후 미착수', accent: 'text-slate-600',   bg: 'bg-slate-50',      border: 'border-slate-200'   },
     { label: '진행중',   value: String(by('inprogress')), unit: '건', sub: '처리 진행 중',   accent: 'text-violet-600',  bg: 'bg-violet-50/60',  border: 'border-violet-100'  },
-    { label: '검토중',   value: String(by('reviewing')),  unit: '건', sub: '결과 검토 중',   accent: 'text-blue-600',    bg: 'bg-blue-50/60',    border: 'border-blue-100'    },
-    { label: '승인대기', value: String(by('pending')),    unit: '건', sub: '승인 대기',      accent: 'text-amber-600',   bg: 'bg-amber-50/60',   border: 'border-amber-100'   },
-    { label: '완료',     value: String(by('completed')),  unit: '건', sub: '시험 완료',      accent: 'text-emerald-600', bg: 'bg-emerald-50/60', border: 'border-emerald-100' },
+    { label: '검토',     value: String(by('prereview') + by('reviewing')), unit: '건', sub: '검토대기·검토중', accent: 'text-blue-600', bg: 'bg-blue-50/60', border: 'border-blue-100' },
+    { label: '승인대기', value: String(by('pending')),    unit: '건', sub: '검토 후 승인 대기', accent: 'text-teal-600', bg: 'bg-teal-50/60',    border: 'border-teal-100'    },
+    { label: '완료',     value: String(by('completed')),  unit: '건', sub: '승인 완료',      accent: 'text-emerald-600', bg: 'bg-emerald-50/60', border: 'border-emerald-100' },
     { label: 'OOS건수',  value: String(by('fail')),       unit: '건', sub: '기준 이탈',      accent: 'text-destructive', bg: 'bg-red-50/60',     border: 'border-red-100'     },
   ]
 }
@@ -295,7 +298,7 @@ export default function QCDashboard() {
               </Button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 px-4 pb-4 sm:grid-cols-3 md:grid-cols-4 md:px-6 lg:grid-cols-6">
+            <div className="grid grid-cols-2 gap-3 px-4 pb-4 sm:grid-cols-3 md:grid-cols-4 md:px-6 lg:grid-cols-7">
               {kpis.map(kpi => (
                 <Card key={kpi.label} className="gap-1 border-l-4 border-l-primary px-4 py-4">
                   <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{kpi.label}</span>

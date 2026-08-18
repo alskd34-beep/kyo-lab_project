@@ -37,15 +37,16 @@ const CONTRACTOR = '광동제약(주)'
 
 /** pct_orders / qc_jobs 한글 상태 → 화면 StatusKey */
 const STATUS_MAP: Record<string, StatusKey> = {
-  대기:     'pending',
+  대기:     'waiting',     // 배정만 되고 아직 시작 전 — 승인 대기와 다르다
   진행중:   'inprogress',
-  검토전:   'reviewing',   // 검토 대기 — 화면상 '검토중' 묶음으로 표시
-  검토중:   'reviewing',
-  승인전:   'pending',     // 승인 대기
   지연:     'inprogress',
+  검토전:   'prereview',   // 시험 끝나고 검토 대기
+  검토중:   'reviewing',
+  승인전:   'pending',     // 검토 끝나고 승인 대기
   승인완료: 'completed',
 }
-const toStatusKey = (ko: string): StatusKey => STATUS_MAP[ko] ?? 'pending'
+// 알 수 없는 값을 '승인대기'로 단정하면 안 되므로 가장 이른 단계로 떨어뜨린다
+const toStatusKey = (ko: string): StatusKey => STATUS_MAP[ko] ?? 'waiting'
 
 /** 'YYYY-MM-DD…' → 'YYYY.MM.DD' (빈 값은 '') */
 const fmtDate = (v: string | null | undefined): string => (v ? v.slice(0, 10).replaceAll('-', '.') : '')
