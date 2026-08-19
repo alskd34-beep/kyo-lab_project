@@ -178,7 +178,7 @@ export default function EquipmentReservationPage() {
       const res = await fetch(`/api/equipment-reservation/${id}`, { method: "DELETE", credentials: "include" })
       if (!res.ok) { const d = await res.json(); flash(d.error ?? "삭제 실패"); return }
       flash("삭제되었습니다.")
-      await load()
+      setRows(prev => prev.filter(row => row.id !== id))
     } finally { setBusy(null) }
   }
 

@@ -181,7 +181,7 @@ export default function UsersAdminPage() {
     const r = await fetch(`/api/users/${id}`, { method: 'DELETE', credentials: 'include' })
     if (r.ok) {
       invalidateTesterProfileCache()
-      void load()
+      setUsers(prev => prev.filter(user => user.id !== id))
     } else {
       setError((await r.json().catch(() => ({}))).error ?? '삭제 실패')
     }
@@ -235,14 +235,11 @@ export default function UsersAdminPage() {
       )}
 
       <Card className="hidden min-h-0 flex-1 flex-col overflow-hidden py-0 md:flex">
-        <Table className="w-full text-sm">
-          <colgroup>
-            <col className="w-[34%]" />
-            <col className="w-[12%]" />
-            <col className="w-[12%]" />
-            <col className="w-[24%]" />
-            <col className="w-[18%]" />
-          </colgroup>
+        {/* colgroup 고정폭 금지 — 사용자명 칸이 사용자명/사번으로 펼쳐지면 실제 칸 수가 늘어나
+            고정 colgroup과 어긋나 마지막 관리 칸이 폭 0으로 밀린다. 폭은 Table이 헤더·셀 자수로 계산한다.
+            pinLastColumn={false} — 마지막 칸이 아이콘 전용이 아니라 "수정"/"삭제" 텍스트 버튼이라
+            기본값(48px 고정)이면 삭제 버튼이 잘려 안 보인다. */}
+        <Table className="w-full text-sm" pinLastColumn={false}>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead className="px-3 py-2">

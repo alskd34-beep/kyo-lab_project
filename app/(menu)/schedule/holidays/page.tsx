@@ -121,7 +121,7 @@ export default function HolidaysPage() {
         return
       }
       flash("삭제되었습니다.")
-      await load()
+      setRows(prev => prev.filter(row => row.date !== date))
     } finally {
       setBusy(null)
     }

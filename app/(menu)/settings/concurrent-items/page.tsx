@@ -96,7 +96,7 @@ export default function ConcurrentItemsPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
       flash("삭제되었습니다.")
-      await load()
+      setRows(prev => prev.filter(row => row.id !== f.id))
     } catch (e) {
       flash(`삭제 실패: ${e instanceof Error ? e.message : ""}`)
     } finally { setBusy(null) }

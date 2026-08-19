@@ -204,7 +204,7 @@ export default function EquipmentMasterPage() {
       })
       if (!res.ok) { const d = await res.json() as { error?: string }; flash(d.error ?? "삭제 실패", "error"); return }
       flash("삭제되었습니다.")
-      await load()
+      setRows(prev => prev.filter(r => r.id !== row.id))
     } finally {
       setBusy(null)
     }
