@@ -200,7 +200,7 @@ export default function EquipmentReservationPage() {
       </div>
 
       {msg && (
-        <div className="rounded-lg border px-4 py-2.5 text-sm text-foreground">{msg}</div>
+        <div className="rounded-md border px-4 py-2.5 text-sm text-foreground">{msg}</div>
       )}
 
       {/* Filter */}
@@ -212,7 +212,7 @@ export default function EquipmentReservationPage() {
             value={filterEquipment}
             onChange={e => setFilterEquipment(e.target.value)}
             placeholder="장비 선택 또는 입력"
-            className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
           />
           <datalist id="equipment-ids-filter">
             {equipmentIds.map(id => <option key={id} value={id} />)}
@@ -425,7 +425,7 @@ function AddModal({
               value={equipmentId}
               onChange={e => setEquipmentId(e.target.value)}
               placeholder="장비 선택 또는 입력"
-              className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
             />
             <datalist id="equipment-ids-add">
               {equipmentIds.map(id => <option key={id} value={id} />)}

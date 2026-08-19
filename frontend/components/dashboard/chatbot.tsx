@@ -312,7 +312,7 @@ export default function Chatbot() {
         className={`
           fixed z-[55] flex flex-col overflow-hidden bg-white shadow-2xl transition-all duration-300
           inset-0 rounded-none border-0
-          md:inset-auto md:bottom-24 md:right-6 md:rounded-2xl md:border md:border-slate-200
+          md:inset-auto md:bottom-24 md:right-6 md:rounded-md md:border md:border-slate-200
           md:w-[440px] md:h-[70vh] md:max-h-[600px]
           lg:w-[360px] lg:h-auto lg:max-h-[560px]
         `}
@@ -371,7 +371,7 @@ export default function Chatbot() {
 
         {/* Date label */}
         <div className="flex items-center justify-center py-2 shrink-0">
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] text-slate-500">
+          <span className="rounded-md bg-slate-100 px-3 py-1 text-[11px] text-slate-500">
             {todayLabel()}
           </span>
         </div>
@@ -384,7 +384,7 @@ export default function Chatbot() {
               className={`flex gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
             >
               {msg.role === 'bot' && (
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-600 mt-0.5">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-600 mt-0.5">
                   <Bot size={13} className="text-white" />
                 </div>
               )}
@@ -393,15 +393,15 @@ export default function Chatbot() {
                   <div className="flex flex-wrap justify-end gap-1.5">
                     {msg.images.map((src, i) => (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img key={i} src={src} alt="첨부 이미지" className="h-20 w-20 rounded-lg border border-slate-200 object-cover" />
+                      <img key={i} src={src} alt="첨부 이미지" className="h-20 w-20 rounded-md border border-slate-200 object-cover" />
                     ))}
                   </div>
                 )}
                 <div
-                  className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
+                  className={`rounded-md px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
                     msg.role === 'user'
-                      ? 'bg-indigo-600 text-white rounded-tr-sm'
-                      : 'bg-slate-100 text-slate-800 rounded-tl-sm'
+                      ? 'bg-blue-600 text-white rounded-tr-md'
+                      : 'bg-slate-100 text-slate-800 rounded-tl-md'
                   }`}
                 >
                   {msg.content}
@@ -431,7 +431,7 @@ export default function Chatbot() {
               {attachments.map(a => (
                 <div key={a.id} className="relative">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={a.url} alt={a.name} className="h-14 w-14 rounded-lg border border-slate-200 object-cover" />
+                  <img src={a.url} alt={a.name} className="h-14 w-14 rounded-md border border-slate-200 object-cover" />
                   <button
                     onClick={() => removeAttachment(a.id)}
                     title="첨부 제거"
@@ -443,7 +443,7 @@ export default function Chatbot() {
               ))}
             </div>
           )}
-          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+          <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
             {canAttach && (
               <>
                 <input
@@ -459,7 +459,7 @@ export default function Chatbot() {
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isStreaming || uploading}
                   title="이미지 첨부 (시험일지 등)"
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-600 disabled:opacity-40"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-600 disabled:opacity-40"
                 >
                   {uploading ? <Loader2 size={15} className="animate-spin" /> : <ImagePlus size={15} />}
                 </button>
@@ -478,7 +478,7 @@ export default function Chatbot() {
             <button
               onClick={sendMessage}
               disabled={(!input.trim() && attachments.length === 0) || isStreaming || uploading}
-              className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 text-white transition-all hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
+              className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-600 text-white transition-all hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
             >
               <Send size={13} />
             </button>

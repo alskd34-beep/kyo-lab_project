@@ -306,13 +306,13 @@ export default function StabStatusPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-5">
-        <Card className="rounded-xl border-slate-200 py-0 shadow-none">
+        <Card className="rounded-md border-slate-200 py-0 shadow-none">
           <CardContent className="px-4 py-3">
             <p className="text-[11px] font-medium text-slate-500">전체 건수</p>
             <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900">{rows.length}</p>
           </CardContent>
         </Card>
-        <Card className="rounded-xl border-blue-100 bg-blue-50/50 py-0 shadow-none">
+        <Card className="rounded-md border-blue-100 bg-blue-50/50 py-0 shadow-none">
           <CardContent className="px-4 py-3">
             <p className="flex items-center gap-1 text-[11px] font-medium text-blue-700">
               <CalendarClock size={13} /> 스케줄 후보
@@ -320,7 +320,7 @@ export default function StabStatusPage() {
             <p className="mt-1 text-2xl font-bold tabular-nums text-blue-700">{stats.active}</p>
           </CardContent>
         </Card>
-        <Card className="rounded-xl border-emerald-100 bg-emerald-50/50 py-0 shadow-none">
+        <Card className="rounded-md border-emerald-100 bg-emerald-50/50 py-0 shadow-none">
           <CardContent className="px-4 py-3">
             <p className="flex items-center gap-1 text-[11px] font-medium text-emerald-700">
               <CheckCircle2 size={13} /> 완료
@@ -328,7 +328,7 @@ export default function StabStatusPage() {
             <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-700">{stats.completed}</p>
           </CardContent>
         </Card>
-        <Card className="rounded-xl border-violet-100 bg-violet-50/50 py-0 shadow-none">
+        <Card className="rounded-md border-violet-100 bg-violet-50/50 py-0 shadow-none">
           <CardContent className="px-4 py-3">
             <p className="flex items-center gap-1 text-[11px] font-medium text-violet-700">
               <FlaskConical size={13} /> 품목코드
@@ -336,7 +336,7 @@ export default function StabStatusPage() {
             <p className="mt-1 text-2xl font-bold tabular-nums text-violet-700">{stats.uniqueProducts}</p>
           </CardContent>
         </Card>
-        <Card className="col-span-2 rounded-xl border-slate-200 py-0 shadow-none lg:col-span-1">
+        <Card className="col-span-2 rounded-md border-slate-200 py-0 shadow-none lg:col-span-1">
           <CardContent className="px-4 py-3">
             <p className="flex items-center gap-1 text-[11px] font-medium text-slate-600">
               <DatabaseZap size={13} /> 의뢰 정보
@@ -346,7 +346,7 @@ export default function StabStatusPage() {
         </Card>
       </div>
 
-      <Card className="min-h-0 gap-0 overflow-hidden rounded-xl border-slate-200 bg-white py-0 shadow-none">
+      <Card className="min-h-0 gap-0 overflow-hidden rounded-md border-slate-200 bg-white py-0 shadow-none">
         <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-slate-800">시트 반영 목록</span>

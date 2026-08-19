@@ -59,7 +59,7 @@ type Category = (typeof CATEGORIES)[number]
 const CATEGORY_DOT: Record<string, string> = {
   "성상·포장": "bg-fuchsia-500",
   이화학: "bg-blue-500",
-  함량시험: "bg-indigo-500",
+  함량시험: "bg-blue-500",
   확인시험: "bg-cyan-500",
   기기분석: "bg-amber-500",
   안전성: "bg-red-500",
@@ -123,7 +123,7 @@ function DuoToggleButton({ row, onToggle, className }: { row: TestItemRow; onTog
     <button
       onClick={onToggle}
       className={cn(
-        "block max-w-full truncate rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
+        "block max-w-full truncate rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors",
         row.requiresDuo
           ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
           : "border-input bg-background text-muted-foreground hover:bg-muted/50",
@@ -140,9 +140,9 @@ function ActiveToggleButton({ row, onToggle, className }: { row: TestItemRow; on
     <button
       onClick={onToggle}
       className={cn(
-        "block max-w-full truncate rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors",
+        "block max-w-full truncate rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors",
         row.isActive
-          ? "border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+          ? "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
           : "border-input bg-background text-muted-foreground hover:bg-muted/50",
         className,
       )}
@@ -410,7 +410,7 @@ export default function TestMasterPage() {
         </Card>
         <Card className="gap-0.5 px-3 py-2">
           <span className="text-[10px] font-medium text-muted-foreground">활성 항목</span>
-          <span className="text-lg font-semibold tabular-nums text-indigo-600">{summary.active}</span>
+          <span className="text-lg font-semibold tabular-nums text-blue-600">{summary.active}</span>
         </Card>
         <Card className="gap-0.5 px-3 py-2">
           <span className="text-[10px] font-medium text-muted-foreground">평균 예상시간</span>
@@ -445,7 +445,7 @@ export default function TestMasterPage() {
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           {/* 탭 세그먼트 */}
-          <div className="inline-flex h-9 w-fit items-center gap-0.5 rounded-lg bg-muted p-0.5 text-muted-foreground flex-wrap">
+          <div className="inline-flex h-9 w-fit items-center gap-0.5 rounded-md bg-muted p-0.5 text-muted-foreground flex-wrap">
             {allTabs.map((tab) => (
               <button
                 key={tab}
@@ -483,7 +483,7 @@ export default function TestMasterPage() {
       </div>
 
       {error && !dialogOpen && !deleteOpen && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
           {error}
         </div>
       )}
@@ -495,7 +495,7 @@ export default function TestMasterPage() {
             <Card key={i} className="gap-2 px-3 py-3">
               <div className="flex items-center justify-between">
                 <Skeleton className="h-4 w-24" />
-                <Skeleton className="h-5 w-14 rounded-full" />
+                <Skeleton className="h-5 w-14 rounded-md" />
               </div>
               <Skeleton className="h-4 w-full" />
               <Skeleton className="h-4 w-3/4" />
@@ -513,7 +513,7 @@ export default function TestMasterPage() {
                   <div className="flex flex-wrap items-center gap-1.5">
                     <CategoryBadge category={row.category} />
                     <Badge variant="outline" className={cn("gap-1.5", row.isActive ? "" : "text-muted-foreground")}>
-                      <span className={cn("size-1.5 rounded-full", row.isActive ? "bg-indigo-500" : "bg-muted-foreground")} />
+                      <span className={cn("size-1.5 rounded-full", row.isActive ? "bg-blue-500" : "bg-muted-foreground")} />
                       {row.isActive ? "활성" : "비활성"}
                     </Badge>
                   </div>
@@ -557,7 +557,7 @@ export default function TestMasterPage() {
                 <button
                   onClick={() => void toggleDuo(row)}
                   className={cn(
-                    "rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors",
+                    "rounded-md border px-2 py-0.5 text-[10px] font-medium transition-colors",
                     row.requiresDuo
                       ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
                       : "border-input bg-background text-muted-foreground hover:bg-muted/50",
@@ -568,9 +568,9 @@ export default function TestMasterPage() {
                 <button
                   onClick={() => void toggleActive(row)}
                   className={cn(
-                    "rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors",
+                    "rounded-md border px-2 py-0.5 text-[10px] font-medium transition-colors",
                     row.isActive
-                      ? "border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+                      ? "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
                       : "border-input bg-background text-muted-foreground hover:bg-muted/50",
                   )}
                 >
@@ -606,7 +606,7 @@ export default function TestMasterPage() {
               Array.from({ length: 6 }).map((_, i) => (
                 <TableRow key={i}>
                   <TableCell className="px-3 py-2"><Skeleton className="h-4 w-36" /></TableCell>
-                  <TableCell className="px-3 py-2"><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
+                  <TableCell className="px-3 py-2"><Skeleton className="h-5 w-16 rounded-md" /></TableCell>
                   <TableCell className="px-3 py-2"><Skeleton className="h-4 w-8" /></TableCell>
                   <TableCell className="px-3 py-2"><Skeleton className="h-8 w-16" /></TableCell>
                   <TableCell className="px-1 py-2"><Skeleton className="mx-auto h-6 w-14" /></TableCell>
@@ -679,7 +679,7 @@ export default function TestMasterPage() {
           </DialogHeader>
 
           <DialogBody className="grid gap-4">
-              <section className="rounded-lg border bg-card p-3 sm:p-4">
+              <section className="rounded-md border bg-card p-3 sm:p-4">
                 <div className="mb-3 border-b pb-3">
                   <h3 className="text-sm font-semibold text-foreground">기본 정보</h3>
                 </div>
@@ -736,11 +736,11 @@ export default function TestMasterPage() {
                 </div>
               </section>
 
-              <section className="rounded-lg border bg-card p-3 sm:p-4">
+              <section className="rounded-md border bg-card p-3 sm:p-4">
                 <div className="mb-3 border-b pb-3">
                   <h3 className="text-sm font-semibold text-foreground">시험 설정</h3>
                 </div>
-                <label className="flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium text-foreground">
+                <label className="flex items-center gap-2 rounded-md border px-3 py-2.5 text-sm font-medium text-foreground">
                   <input
                     type="checkbox"
                     checked={form.requiresDuo}
@@ -757,7 +757,7 @@ export default function TestMasterPage() {
               </section>
 
               {error && (
-                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+                <div className="rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
                   {error}
                 </div>
               )}
@@ -789,7 +789,7 @@ export default function TestMasterPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="rounded-lg border bg-muted/50 p-3">
+          <div className="rounded-md border bg-muted/50 p-3">
             <p className="text-sm font-medium">{deleteTarget?.name}</p>
           </div>
 

@@ -319,13 +319,13 @@ export default function PretestChecklistPage() {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive">
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive">
           {error}
         </div>
       )}
 
       {okMsg && (
-        <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700">
+        <div className="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700">
           {okMsg}
         </div>
       )}
@@ -411,7 +411,7 @@ export default function PretestChecklistPage() {
 
               <div className="min-h-0 flex-1 overflow-auto p-3 md:p-4">
                 {/* 입력 폼 */}
-                <div className="mb-4 rounded-lg border bg-muted/30 p-3 md:p-4">
+                <div className="mb-4 rounded-md border bg-muted/30 p-3 md:p-4">
                   <div className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground">
                     <UserIcon className="size-3" /> 작성자
                     <span className="font-medium text-foreground">{myName}</span>
@@ -472,7 +472,7 @@ export default function PretestChecklistPage() {
                         {extraProducts.map(p => (
                           <span
                             key={p.id}
-                            className="inline-flex items-center gap-1 rounded-full border bg-muted/60 py-0.5 pr-1 pl-2 text-[11px] text-foreground"
+                            className="inline-flex items-center gap-1 rounded-md border bg-muted/60 py-0.5 pr-1 pl-2 text-[11px] text-foreground"
                           >
                             {p.name}
                             <button

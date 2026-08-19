@@ -112,7 +112,7 @@ export default function TesterEvaluationPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3 md:p-5">
       {/* 헤더 */}
-      <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm md:flex-row md:items-end md:justify-between md:py-4">
+      <div className="flex flex-col gap-3 rounded-md border border-slate-200 bg-white px-4 py-3 shadow-sm md:flex-row md:items-end md:justify-between md:py-4">
         <div>
           <h1 className="text-base font-bold text-slate-900 sm:text-lg">운영평가</h1>
           <p className="mt-1 text-xs font-medium text-slate-600">
@@ -130,7 +130,7 @@ export default function TesterEvaluationPage() {
           <button
             onClick={() => void load()}
             disabled={loading}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:opacity-50"
+            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:opacity-50"
           >
             {loading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
             새로고침
@@ -139,7 +139,7 @@ export default function TesterEvaluationPage() {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{error}</div>
+        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{error}</div>
       )}
 
       {loading ? (
@@ -147,9 +147,9 @@ export default function TesterEvaluationPage() {
           {/* KPI 카드 skeleton */}
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+              <div key={i} className="rounded-md border border-slate-200 bg-white px-4 py-3 shadow-sm">
                 <div className="flex items-center gap-2">
-                  <Skeleton className="h-7 w-7 rounded-lg" />
+                  <Skeleton className="h-7 w-7 rounded-md" />
                   <Skeleton className="h-3.5 w-20" />
                 </div>
                 <Skeleton className="mt-2 h-8 w-16" />
@@ -158,14 +158,14 @@ export default function TesterEvaluationPage() {
           </div>
 
           {/* 차트 skeleton */}
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
             <Skeleton className="h-4 w-48 mb-3" />
             <Skeleton className="h-40 w-full" />
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
             {Array.from({ length: 2 }).map((_, i) => (
-              <div key={i} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div key={i} className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
                 <Skeleton className="h-4 w-40 mb-3" />
                 <Skeleton className="h-40 w-full" />
               </div>
@@ -173,7 +173,7 @@ export default function TesterEvaluationPage() {
           </div>
 
           {/* 테이블 skeleton */}
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm gap-0 py-0">
+          <div className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm gap-0 py-0">
             <div className="border-b border-slate-100 px-4 py-3">
               <Skeleton className="h-4 w-24" />
             </div>
@@ -212,7 +212,7 @@ export default function TesterEvaluationPage() {
           </div>
         </>
       ) : !hasData ? (
-        <div className="rounded-xl border border-slate-200 bg-white px-3 py-16 text-center shadow-sm">
+        <div className="rounded-md border border-slate-200 bg-white px-3 py-16 text-center shadow-sm">
           <p className="text-sm font-medium text-slate-500">완료된 작업이 없어 표시할 실적이 없습니다.</p>
           <p className="mt-1 text-xs text-slate-400">시험자가 작업을 시작·완료하면 이 기간의 운영평가가 집계됩니다.</p>
         </div>
@@ -275,7 +275,7 @@ export default function TesterEvaluationPage() {
           </div>
 
           {/* 시험자별 상세 표 */}
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm gap-0 py-0">
+          <div className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm gap-0 py-0">
             <div className="border-b border-slate-100 px-4 py-3">
               <h2 className="text-sm font-bold text-slate-800">시험자별 상세</h2>
             </div>
@@ -342,9 +342,9 @@ function KpiCard({ icon, label, value, tint }: { icon: React.ReactNode; label: s
     amber:   "bg-amber-50 text-amber-600",
   }
   return (
-    <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+    <div className="rounded-md border border-slate-200 bg-white px-4 py-3 shadow-sm">
       <div className="flex items-center gap-2">
-        <span className={`inline-flex h-7 w-7 items-center justify-center rounded-lg ${tints[tint]}`}>{icon}</span>
+        <span className={`inline-flex h-7 w-7 items-center justify-center rounded-md ${tints[tint]}`}>{icon}</span>
         <span className="text-xs font-medium text-slate-500">{label}</span>
       </div>
       <p className="mt-2 text-2xl font-bold text-slate-900">{value}</p>
@@ -354,7 +354,7 @@ function KpiCard({ icon, label, value, tint }: { icon: React.ReactNode; label: s
 
 function ChartCard({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
       <h2 className="text-sm font-bold text-slate-800">{title}</h2>
       {hint && <p className="mt-0.5 mb-3 text-[11px] text-slate-400">{hint}</p>}
       {children}

@@ -84,7 +84,7 @@ function StageTrack({ status }: { status: string }) {
           <div key={s} className="flex min-w-0 flex-1 flex-col items-center gap-1">
             <div
               className={cn(
-                "h-1 w-full rounded-full",
+                "h-1 w-full rounded-md",
                 done ? "bg-emerald-400" : here ? stageStyle(s).dot : "bg-muted",
               )}
             />
@@ -199,28 +199,28 @@ export function JobDetailModal({
         <DialogBody className="flex flex-col gap-3">
           {loading ? (
             <>
-              <Skeleton className="h-20 w-full rounded-lg" />
-              <Skeleton className="h-16 w-full rounded-lg" />
+              <Skeleton className="h-20 w-full rounded-md" />
+              <Skeleton className="h-16 w-full rounded-md" />
               <div className="flex flex-col gap-1.5">
                 {Array.from({ length: 4 }).map((_, i) => (
-                  <Skeleton key={i} className="h-11 w-full rounded-lg" />
+                  <Skeleton key={i} className="h-11 w-full rounded-md" />
                 ))}
               </div>
             </>
           ) : error ? (
-            <div className="flex flex-col items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 py-10 text-center">
+            <div className="flex flex-col items-center gap-1 rounded-md border border-amber-200 bg-amber-50 py-10 text-center">
               <TriangleAlert className="mb-1 size-6 text-amber-500" />
               <p className="text-sm font-semibold text-amber-800">{error}</p>
             </div>
           ) : detail ? (
             <>
               {/* 단계 진행 막대 */}
-              <section className="rounded-lg border bg-card p-3 shadow-sm">
+              <section className="rounded-md border bg-card p-3 shadow-sm">
                 <StageTrack status={detail.status} />
               </section>
 
               {/* 작업 요약 */}
-              <section className="rounded-lg border bg-card p-3 shadow-sm">
+              <section className="rounded-md border bg-card p-3 shadow-sm">
                 <p className="truncate text-sm font-semibold text-foreground">
                   {detail.productName}
                   <span className="ml-1.5 font-mono text-xs font-normal text-muted-foreground">
@@ -240,7 +240,7 @@ export function JobDetailModal({
 
               {/* 현재 수행 항목 */}
               {currentItem ? (
-                <section className="rounded-lg border border-violet-200 bg-violet-50/60 p-3">
+                <section className="rounded-md border border-violet-200 bg-violet-50/60 p-3">
                   <p className="flex items-center gap-1.5 text-[11px] font-semibold text-violet-700">
                     <LoaderCircle className="size-3" />
                     현재 수행 중인 시험항목
@@ -261,7 +261,7 @@ export function JobDetailModal({
                   </p>
                 </section>
               ) : detail.items.length > 0 && cleared === total ? (
-                <section className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-3">
+                <section className="rounded-md border border-emerald-200 bg-emerald-50/60 p-3">
                   <p className="flex items-center gap-1.5 text-sm font-semibold text-emerald-800">
                     <CheckCircle2 className="size-4" />
                     모든 시험항목이 완료되었습니다.
@@ -274,10 +274,10 @@ export function JobDetailModal({
                 <span className="shrink-0 text-xs font-semibold text-muted-foreground">
                   시험항목 진행
                 </span>
-                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                <div className="h-1.5 flex-1 overflow-hidden rounded-md bg-muted">
                   <div
                     className={cn(
-                      "h-full rounded-full transition-all",
+                      "h-full rounded-md transition-all",
                       total > 0 && cleared === total ? "bg-emerald-500" : "bg-violet-500",
                     )}
                     style={{ width: `${pct}%` }}
@@ -290,7 +290,7 @@ export function JobDetailModal({
 
               {/* 항목 목록 */}
               {detail.items.length === 0 ? (
-                <p className="rounded-lg border border-dashed py-10 text-center text-sm text-muted-foreground">
+                <p className="rounded-md border border-dashed py-10 text-center text-sm text-muted-foreground">
                   등록된 시험항목이 없습니다. (품목-시험항목 매핑 확인 필요)
                 </p>
               ) : (
@@ -302,7 +302,7 @@ export function JobDetailModal({
                       <li
                         key={it.id}
                         className={cn(
-                          "flex items-center justify-between gap-2 rounded-lg border px-3 py-2.5",
+                          "flex items-center justify-between gap-2 rounded-md border px-3 py-2.5",
                           done && "border-emerald-200 bg-emerald-50/60",
                           isCurrent && "border-violet-300 bg-violet-50/60",
                         )}

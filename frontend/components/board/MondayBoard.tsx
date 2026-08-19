@@ -138,17 +138,17 @@ export default function MondayBoard({ groups, columns, emptyMessage, onCellChang
                 {isClosed
                   ? <ChevronRight size={16} className="text-slate-500 dark:text-slate-400" />
                   : <ChevronDown  size={16} className="text-slate-500 dark:text-slate-400" />}
-                <span className={`inline-block h-4 w-1.5 rounded-full ${group.color}`} />
+                <span className={`inline-block h-4 w-1.5 rounded-md ${group.color}`} />
                 <span className={`text-[15px] font-bold ${textColorFromBg(group.color)}`}>
                   {group.label}
                 </span>
-                <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                <span className="rounded-md bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
                   {group.rows.length}
                 </span>
               </button>
 
               {!isClosed && (
-                <div className={`overflow-x-auto rounded-r-lg border-l-[6px] ${borderLeftFromBg(group.color)} bg-white dark:bg-slate-900 shadow-[0_1px_3px_rgba(0,0,0,0.06)]`}>
+                <div className={`overflow-x-auto rounded-r-md border-l-[6px] ${borderLeftFromBg(group.color)} bg-white dark:bg-slate-900 shadow-[0_1px_3px_rgba(0,0,0,0.06)]`}>
                   <table className="w-full border-collapse">
                     <thead>
                       <tr className="border-b border-slate-200 dark:border-slate-700">
@@ -210,7 +210,7 @@ const CHIP_FILL: Record<string, string> = {
 const AVATAR_COLORS = [
   'bg-blue-500',  'bg-emerald-500', 'bg-violet-500', 'bg-amber-500',
   'bg-rose-500',  'bg-sky-500',     'bg-teal-500',   'bg-fuchsia-500',
-  'bg-indigo-500','bg-lime-500',    'bg-orange-500', 'bg-pink-500',
+  'bg-blue-500','bg-lime-500',    'bg-orange-500', 'bg-pink-500',
 ]
 function avatarColor(name: string): string {
   let h = 0

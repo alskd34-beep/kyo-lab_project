@@ -135,7 +135,7 @@ export default function ConcurrentItemsPage() {
       </div>
 
       {msg && (
-        <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">{msg}</div>
+        <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">{msg}</div>
       )}
 
       {/* 검색 */}
@@ -149,7 +149,7 @@ export default function ConcurrentItemsPage() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="품목군·품목명·코드 검색"
-            className="h-9 w-56 rounded-lg border border-input bg-background pl-8 pr-7 text-sm text-foreground shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+            className="h-9 w-56 rounded-md border border-input bg-background pl-8 pr-7 text-sm text-foreground shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
           />
           {search && (
             <button onClick={() => setSearch("")} title="검색어 지우기"
@@ -166,11 +166,11 @@ export default function ConcurrentItemsPage() {
           {Array.from({ length: 4 }).map((_, i) => (
             <Card key={i} className="gap-0 py-0">
               <div className="flex items-start gap-3 px-4 py-3">
-                <Skeleton className="mt-0.5 size-8 shrink-0 rounded-lg" />
+                <Skeleton className="mt-0.5 size-8 shrink-0 rounded-md" />
                 <div className="min-w-0 flex-1 space-y-2">
                   <div className="flex items-center gap-2">
                     <Skeleton className="h-4 w-32" />
-                    <Skeleton className="h-5 w-16 rounded-full" />
+                    <Skeleton className="h-5 w-16 rounded-md" />
                   </div>
                   <Skeleton className="h-3 w-48" />
                 </div>
@@ -202,7 +202,7 @@ export default function ConcurrentItemsPage() {
           {filtered.map(f => (
             <Card key={f.id} className="gap-0 py-0">
               <div className="flex items-start gap-3 px-4 py-3">
-                <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
                   <Layers className="size-4" />
                 </span>
                 <div className="min-w-0 flex-1">

@@ -256,7 +256,7 @@ export default function VacationPage() {
       {/* Header */}
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white">
+          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-blue-600 text-white">
             <CalendarDays size={20} />
           </div>
           <div>
@@ -267,13 +267,13 @@ export default function VacationPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setRangeCheck(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700 transition-colors hover:bg-indigo-100"
+            className="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-100"
           >
             <Sparkles size={16} /> 기간 가능 품목
           </button>
           <button
             onClick={() => openCreate(todayIso)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
+            className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
           >
             <Plus size={16} /> 휴가 등록
           </button>
@@ -281,26 +281,26 @@ export default function VacationPage() {
       </div>
 
       {msg && (
-        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm text-blue-700">{msg}</div>
+        <div className="rounded-md border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm text-blue-700">{msg}</div>
       )}
 
       {/* Month nav */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <button onClick={prevMonth} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><ChevronLeft size={18} /></button>
+          <button onClick={prevMonth} className="rounded-md p-2 text-slate-500 hover:bg-slate-100"><ChevronLeft size={18} /></button>
           <span className="min-w-32 text-center text-base font-bold text-slate-900">{year}년 {month + 1}월</span>
-          <button onClick={nextMonth} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><ChevronRight size={18} /></button>
-          <button onClick={goToday} className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50">오늘</button>
+          <button onClick={nextMonth} className="rounded-md p-2 text-slate-500 hover:bg-slate-100"><ChevronRight size={18} /></button>
+          <button onClick={goToday} className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50">오늘</button>
         </div>
         {/* 범례 */}
         <div className="flex items-center gap-3 text-[11px] font-medium text-slate-500">
           {(Object.keys(TYPE_LABEL) as ScheduleType[]).map(t => (
             <span key={t} className="inline-flex items-center gap-1.5">
-              <span className={`h-2.5 w-2.5 rounded-sm ${TYPE_BAR[t].split(" ")[0]}`} /> {TYPE_LABEL[t]}
+              <span className={`h-2.5 w-2.5 rounded-md ${TYPE_BAR[t].split(" ")[0]}`} /> {TYPE_LABEL[t]}
             </span>
           ))}
           <span className="inline-flex items-center gap-1.5 text-rose-600">
-            <span className="h-2.5 w-2.5 rounded-sm bg-rose-500" /> 공휴일
+            <span className="h-2.5 w-2.5 rounded-md bg-rose-500" /> 공휴일
           </span>
         </div>
       </div>
@@ -360,7 +360,7 @@ export default function VacationPage() {
                       return (
                         <div key={di} className="px-1.5 pt-1">
                           <span className={`inline-flex h-5 min-w-5 items-center justify-center px-1 text-[11px] font-semibold ${
-                            isToday ? "rounded-full bg-indigo-600 text-white"
+                            isToday ? "rounded-md bg-blue-600 text-white"
                             : holidayName ? "text-rose-600"
                             : inMonth ? (di === 0 ? "text-red-500" : di === 6 ? "text-blue-500" : "text-slate-600")
                             : "text-slate-300"
@@ -520,7 +520,7 @@ function EventDetail({
   onDelete: () => void
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
+    <div className="rounded-md border border-slate-200 bg-white p-4">
       <div className="flex items-center gap-2">
         <span className={`rounded-md border px-2 py-0.5 text-xs font-semibold ${TYPE_CLS[row.type]}`}>{TYPE_LABEL[row.type]}</span>
         <span className="text-base font-bold text-slate-900">{row.userName ?? "이름없음"}</span>
@@ -564,7 +564,7 @@ function RangeCheck() {
   const [end, setEnd] = useState(today)
   return (
     <>
-      <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <div className="rounded-md border border-slate-200 bg-white p-4">
         <div className="mb-2 flex items-center gap-1.5 text-sm font-bold text-slate-900">
           <Sparkles size={15} className="text-blue-600" /> 기간 가용성 점검
         </div>
@@ -605,15 +605,15 @@ function SuggestionPanel({ from, to }: { from: string; to: string }) {
   if (loading) {
     return (
       <div className="flex flex-col gap-3">
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <div className="rounded-md border border-slate-200 bg-white p-4">
           <Skeleton className="mb-3 h-4 w-36" />
           <div className="flex flex-wrap gap-1.5">
-            <Skeleton className="h-5 w-16 rounded-full" />
-            <Skeleton className="h-5 w-20 rounded-full" />
+            <Skeleton className="h-5 w-16 rounded-md" />
+            <Skeleton className="h-5 w-20 rounded-md" />
           </div>
           <Skeleton className="mt-2 h-3 w-24" />
         </div>
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <div className="overflow-hidden rounded-md border border-slate-200 bg-white">
           <div className="border-b border-slate-100 px-3 py-2">
             <Skeleton className="h-4 w-32" />
           </div>
@@ -624,7 +624,7 @@ function SuggestionPanel({ from, to }: { from: string; to: string }) {
                   <Skeleton className="h-4 w-40" />
                   <Skeleton className="h-3 w-28" />
                 </div>
-                <Skeleton className="h-5 w-12 rounded-full" />
+                <Skeleton className="h-5 w-12 rounded-md" />
               </div>
             ))}
           </div>
@@ -633,14 +633,14 @@ function SuggestionPanel({ from, to }: { from: string; to: string }) {
     )
   }
   if (error) {
-    return <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">{error}</div>
+    return <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">{error}</div>
   }
   if (!data) return null
 
   return (
     <div className="flex flex-col gap-3">
       {/* 인원 요약 */}
-      <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <div className="rounded-md border border-slate-200 bg-white p-4">
         <div className="mb-2 flex items-center gap-1.5 text-sm font-bold text-slate-900">
           <Users size={15} className="text-slate-500" /> {data.from} ~ {data.to} 인원
         </div>
@@ -648,7 +648,7 @@ function SuggestionPanel({ from, to }: { from: string; to: string }) {
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-xs font-medium text-slate-500">휴가/출장 제외:</span>
             {data.excludedTesters.map(t => (
-              <span key={t.id} className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">{t.name}</span>
+              <span key={t.id} className="rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">{t.name}</span>
             ))}
           </div>
         ) : (
@@ -671,7 +671,7 @@ function SuggestionPanel({ from, to }: { from: string; to: string }) {
               <div className="truncate text-sm font-medium text-slate-800">{p.productName}</div>
               <div className="truncate text-[11px] text-slate-400">{p.productCode} · {p.testItems.slice(0, 4).join(", ")}{p.testItems.length > 4 ? " 외" : ""}</div>
             </div>
-            <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">대기 {p.waitingCount}</span>
+            <span className="shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">대기 {p.waitingCount}</span>
           </li>
         ))}
       </Group>
@@ -691,7 +691,7 @@ function SuggestionPanel({ from, to }: { from: string; to: string }) {
                   <div className="truncate text-sm font-medium text-slate-800">{p.productName}</div>
                   <div className="truncate text-[11px] text-slate-400">{p.productCode}</div>
                 </div>
-                <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">대기 {p.waitingCount}</span>
+                <span className="shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">대기 {p.waitingCount}</span>
               </div>
               {p.recoverableBy && p.recoverableBy.length > 0 && (
                 <div className="mt-1 text-[11px] text-amber-700">복귀 시 가능: {p.recoverableBy.join(", ")}</div>
@@ -719,7 +719,7 @@ function SuggestionPanel({ from, to }: { from: string; to: string }) {
                   <div className="truncate text-sm font-medium text-slate-800">{p.productName}</div>
                   <div className="truncate text-[11px] text-slate-400">{p.productCode}</div>
                 </div>
-                <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">대기 {p.waitingCount}</span>
+                <span className="shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">대기 {p.waitingCount}</span>
               </div>
               {p.blockingCapabilities && p.blockingCapabilities.length > 0 && (
                 <div className="mt-0.5 text-[11px] text-slate-400">부족 역량: {p.blockingCapabilities.join(", ")}</div>
@@ -748,9 +748,9 @@ function Group({
   children: React.ReactNode
 }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+    <div className="overflow-hidden rounded-md border border-slate-200 bg-white">
       <div className={`flex items-center gap-1.5 border-b px-3 py-2 text-xs font-semibold ${GROUP_HEAD[tone]}`}>
-        {icon} {title} <span className="ml-auto rounded-full bg-white/70 px-1.5 py-0.5">{count}</span>
+        {icon} {title} <span className="ml-auto rounded-md bg-white/70 px-1.5 py-0.5">{count}</span>
       </div>
       {count === 0 && empty ? (
         <div className="flex items-center gap-2 px-3 py-4 text-xs text-slate-400">
@@ -812,7 +812,7 @@ function AddModal({
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-600">대상자</label>
               <Select value={userId || "self"} onValueChange={v => setUserId(v === "self" ? "" : v)}>
-                <SelectTrigger className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm">
+                <SelectTrigger className="h-10 w-full rounded-md border border-slate-200 px-3 text-sm">
                   <SelectValue placeholder="본인 (관리자)" />
                 </SelectTrigger>
                 <SelectContent>
@@ -832,7 +832,7 @@ function AddModal({
                 <button
                   key={t}
                   onClick={() => setType(t)}
-                  className={`flex-1 rounded-lg border px-2 py-2 text-sm font-medium transition-colors ${
+                  className={`flex-1 rounded-md border px-2 py-2 text-sm font-medium transition-colors ${
                     type === t ? TYPE_CLS[t] : "border-slate-200 text-slate-500 hover:bg-slate-50"
                   }`}
                 >{TYPE_LABEL[t]}</button>

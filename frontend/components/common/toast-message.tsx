@@ -132,7 +132,7 @@ export function ToastMessageProvider({ children }: { children: React.ReactNode }
               key={toast.id}
               role="status"
               className={cn(
-                "pointer-events-auto overflow-hidden rounded-2xl border bg-white shadow-lg shadow-slate-200/60 backdrop-blur",
+                "pointer-events-auto overflow-hidden rounded-md border bg-white shadow-lg shadow-slate-200/60 backdrop-blur",
                 style.ring
               )}
             >

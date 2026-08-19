@@ -16,5 +16,9 @@
 - 한국어가 제품 언어. 주석·UI 문자열·에러 메시지는 한국어, 코드 식별자는 영어.
 - 날짜 입력은 공통 `<DateField>` 사용(`/date-field` 스킬 참고), `<input type="date">` 직접 사용 금지.
 - 데이터 수정 UX는 인라인보다 모달/Dialog 기본.
-- 브랜드 메인 컬러는 보라빛 도는 파랑(indigo) 하나로 통일. 버튼·강조색은 `bg-primary` 등 시맨틱 클래스나 `indigo-*`만 쓰고 `blue-*`/`violet-*`/`purple-*`/`sky-*`를 새로 쓰지 않는다(상태·카테고리 팔레트, 정보/성공 배너 등 색 자체가 의미인 곳은 예외).
+- 임시/가비지 파일 관리: 스크린샷, 디버그 로그, 덤프 등 임시 파일은 루트나 소스 디렉토리가 아닌 `temp/` 디렉토리(`temp/screenshots/`, `temp/logs/` 등) 아래에만 생성한다.
+- 브랜드 메인 컬러는 파랑(blue) 하나로 통일. 버튼·강조색은 `bg-primary` 등 시맨틱 클래스나 `blue-*`만 쓰고 `indigo-*`/`violet-*`/`purple-*`/`sky-*`를 새로 쓰지 않는다(상태·카테고리 팔레트, 성공 배너 등 색 자체가 의미인 곳은 예외).
+- 타이포그래피는 Pretendard(변수 폰트) 하나로 통일. `app/layout.tsx`에서 `next/font/local`로 로드(`--font-sans`). 새 폰트 import 금지.
+- 모서리 둥글기는 `rounded-md` 하나로 고정. 아바타·점(dot)·원형 아이콘 버튼처럼 원형이 꼭 필요한 곳만 `rounded-full` 예외, 그 외 `rounded-sm`/`lg`/`xl`/`2xl`/`3xl`/`4xl`를 새로 쓰지 않는다.
 - 검증: `npm run typecheck`(필수) · `npm run lint` · 운영 영향 시 `npm run build`. dev 서버 포트 3300.
+

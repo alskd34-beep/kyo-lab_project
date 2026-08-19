@@ -48,9 +48,9 @@
 }
 
 /*
- * 브랜드 메인 컬러: 보라빛 도는 파랑(indigo, hue 273) 하나로 통일.
+ * 브랜드 메인 컬러: 파랑(blue, hue 262.88) 하나로 통일.
  * --primary / --ring / --sidebar-primary / --sidebar-accent / --secondary 가 전부 이 색이다.
- * 브랜드 강조가 필요하면 이 변수(bg-primary 등)를 쓰거나, 직접 Tailwind 색이 필요하면 indigo-* 만 쓴다.
+ * 브랜드 강조가 필요하면 이 변수(bg-primary 등)를 쓰거나, 직접 Tailwind 색이 필요하면 blue-* 만 쓴다.
  * 상태·카테고리 팔레트(검토중/진행중/완료/지연 등 색이 곧 의미인 곳)는 대상이 아니다.
  * 자세한 규칙: .claude/commands/design-standard.md
  */
@@ -61,10 +61,10 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.52 0.2 273);
+  --primary: oklch(0.52 0.2 262.88);
   --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.92 0.08 273);
-  --secondary-foreground: oklch(0.24 0.06 273);
+  --secondary: oklch(0.92 0.08 262.88);
+  --secondary-foreground: oklch(0.24 0.06 262.88);
   --muted: oklch(0.955 0.01 255);
   --muted-foreground: oklch(0.43 0.02 255);
   --accent: oklch(0.94 0.04 205);
@@ -72,8 +72,8 @@
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.86 0.006 260);
   --input: oklch(0.86 0.006 260);
-  --ring: oklch(0.62 0.16 273);
-  --chart-1: oklch(0.6 0.18 273);
+  --ring: oklch(0.62 0.16 262.88);
+  --chart-1: oklch(0.6 0.18 262.88);
   --chart-2: oklch(0.7 0.16 152);
   --chart-3: oklch(0.65 0.09 205);
   --chart-4: oklch(0.55 0.03 255);
@@ -81,12 +81,12 @@
   --radius: 0.625rem;
   --sidebar: oklch(0.97 0.01 255);
   --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.52 0.2 273);
+  --sidebar-primary: oklch(0.52 0.2 262.88);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.92 0.08 273);
-  --sidebar-accent-foreground: oklch(0.24 0.06 273);
+  --sidebar-accent: oklch(0.92 0.08 262.88);
+  --sidebar-accent-foreground: oklch(0.24 0.06 262.88);
   --sidebar-border: oklch(0.86 0.006 260);
-  --sidebar-ring: oklch(0.62 0.16 273);
+  --sidebar-ring: oklch(0.62 0.16 262.88);
 }
 
 .dark {
@@ -96,9 +96,9 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.73 0.15 273);
+  --primary: oklch(0.73 0.15 262.88);
   --primary-foreground: oklch(0.145 0 0);
-  --secondary: oklch(0.58 0.13 273);
+  --secondary: oklch(0.58 0.13 262.88);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0.01 255);
   --muted-foreground: oklch(0.708 0.01 255);
@@ -107,20 +107,20 @@
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.72 0.13 273);
-  --chart-1: oklch(0.7 0.15 273);
+  --ring: oklch(0.72 0.13 262.88);
+  --chart-1: oklch(0.7 0.15 262.88);
   --chart-2: oklch(0.7 0.16 152);
   --chart-3: oklch(0.62 0.1 205);
   --chart-4: oklch(0.52 0.03 255);
   --chart-5: oklch(0.45 0.02 152);
   --sidebar: oklch(0.205 0.01 255);
   --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.73 0.15 273);
+  --sidebar-primary: oklch(0.73 0.15 262.88);
   --sidebar-primary-foreground: oklch(0.145 0 0);
-  --sidebar-accent: oklch(0.58 0.13 273);
+  --sidebar-accent: oklch(0.58 0.13 262.88);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.72 0.13 273);
+  --sidebar-ring: oklch(0.72 0.13 262.88);
 }
 
 @layer base {

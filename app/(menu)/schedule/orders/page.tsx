@@ -244,7 +244,7 @@ function YearPicker({ year, years, onChange }: { year: string; years: string[]; 
     <Popover open={open} onOpenChange={handleOpen}>
       <PopoverTrigger asChild>
         <button
-          className="inline-flex h-9 items-center gap-2 rounded-lg border border-input bg-background px-3 text-sm text-foreground shadow-xs transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+          className="inline-flex h-9 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-xs transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
         >
           <CalendarDays className="size-3.5 text-muted-foreground" />
           {year ? `${year}년` : "연도 선택"}
@@ -659,7 +659,7 @@ export default function OrdersPage() {
         key={r.id}
         onClick={isAdmin ? () => setEditTarget(r) : undefined}
         className={cn(
-          "rounded-lg border bg-card p-3 shadow-xs transition-colors",
+          "rounded-md border bg-card p-3 shadow-xs transition-colors",
           isAdmin && "cursor-pointer active:bg-muted/50",
           dueSoon && "border-orange-200 bg-orange-50/60",
           r.locked && "border-amber-200 bg-amber-50/40",
@@ -918,11 +918,11 @@ export default function OrdersPage() {
       </div>
 
       {msg && (
-        <div className="shrink-0 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">{msg}</div>
+        <div className="shrink-0 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">{msg}</div>
       )}
 
       {/* 탭 (주차별 / 담당자별 / 상태별) */}
-      <div className="inline-flex h-9 w-fit shrink-0 items-center gap-0.5 rounded-lg bg-muted p-0.5 text-muted-foreground">
+      <div className="inline-flex h-9 w-fit shrink-0 items-center gap-0.5 rounded-md bg-muted p-0.5 text-muted-foreground">
         {TABS.map(t => (
           <button
             key={t.id}
@@ -948,7 +948,7 @@ export default function OrdersPage() {
         </Select>
 
         {/* 보기 모드: 최근 5주 / 연단위 (기간 범위) */}
-        <div className="inline-flex h-9 items-center gap-0.5 rounded-lg bg-muted p-0.5 text-muted-foreground">
+        <div className="inline-flex h-9 items-center gap-0.5 rounded-md bg-muted p-0.5 text-muted-foreground">
           <button
             onClick={() => setViewMode("recent")}
             className={cn("h-8 rounded-md px-3 text-sm font-medium transition-colors",
@@ -986,7 +986,7 @@ export default function OrdersPage() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="품목명·담당자·코드·제조번호"
-            className="h-9 w-56 rounded-lg border border-input bg-background pl-8 pr-7 text-sm text-foreground shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+            className="h-9 w-56 rounded-md border border-input bg-background pl-8 pr-7 text-sm text-foreground shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
           />
           {search && (
             <button
@@ -1011,7 +1011,7 @@ export default function OrdersPage() {
           {Array.from({ length: 4 }).map((_, i) => (
             <Card key={i} className="gap-0 overflow-hidden py-0">
               <div className="flex items-center gap-3 px-4 py-3">
-                <Skeleton className="h-3 w-1.5 rounded-full" />
+                <Skeleton className="h-3 w-1.5 rounded-md" />
                 <Skeleton className="h-4 w-32" />
                 <Skeleton className="ml-auto h-4 w-16" />
               </div>
@@ -1025,7 +1025,7 @@ export default function OrdersPage() {
                       <Skeleton className="h-4 w-20" />
                       <Skeleton className="h-4 w-16" />
                       <Skeleton className="h-4 w-16" />
-                      <Skeleton className="ml-auto h-5 w-14 rounded-full" />
+                      <Skeleton className="ml-auto h-5 w-14 rounded-md" />
                     </div>
                   ))}
                 </div>
@@ -1063,7 +1063,7 @@ export default function OrdersPage() {
                 >
                   {tab === "assignee" && g.label !== "미배정"
                     ? <TesterAvatar testerId={g.assigneeTesterId} name={g.label} size="md" />
-                    : <span className={cn("h-3 w-1.5 shrink-0 rounded-full", g.color)} />}
+                    : <span className={cn("h-3 w-1.5 shrink-0 rounded-md", g.color)} />}
                   <span className="flex-1 text-sm font-semibold text-foreground">
                     {g.label}
                     {g.isThisWeek && (
@@ -1084,7 +1084,7 @@ export default function OrdersPage() {
                           if (item.type === "single") return renderOrderCard(item.row)
                           const fc = famCollapsed.has(item.familyId)
                           return (
-                            <div key={item.familyId} className="rounded-lg border border-primary/20 bg-primary/5 p-2.5">
+                            <div key={item.familyId} className="rounded-md border border-primary/20 bg-primary/5 p-2.5">
                               <button onClick={() => toggleFamily(item.familyId)} className="flex w-full items-center gap-2 text-left">
                                 {fc
                                   ? <ChevronRight className="size-4 text-muted-foreground" />
@@ -1190,7 +1190,7 @@ export default function OrdersPage() {
         const unlockedCount = selected.size - lockedCount
         return (
           <div className="pointer-events-none fixed inset-x-0 bottom-5 z-40 flex justify-center px-4">
-            <div className="pointer-events-auto flex w-full max-w-3xl flex-wrap items-center gap-3 rounded-xl border bg-card px-4 py-2.5 shadow-lg">
+            <div className="pointer-events-auto flex w-full max-w-3xl flex-wrap items-center gap-3 rounded-md border bg-card px-4 py-2.5 shadow-lg">
               <div className="flex flex-col leading-tight">
                 <span className="text-sm font-semibold text-foreground tabular-nums">{selected.size}건 선택됨</span>
                 <span className="text-[11px] text-muted-foreground tabular-nums">확정 {lockedCount} · 미확정 {unlockedCount}</span>
@@ -1336,21 +1336,21 @@ function TestItemPickerDialog({
         <DialogBody className="flex flex-col gap-2">
           {rows === null ? (
             <div className="flex flex-col gap-1.5">
-              {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-11 w-full rounded-lg" />)}
+              {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-11 w-full rounded-md" />)}
             </div>
           ) : error ? (
-            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-6 text-center text-sm text-amber-800">
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-6 text-center text-sm text-amber-800">
               시험항목을 불러오지 못했습니다. {error}
             </p>
           ) : rows.length === 0 ? (
-            <p className="rounded-lg border border-dashed py-10 text-center text-sm text-muted-foreground">
+            <p className="rounded-md border border-dashed py-10 text-center text-sm text-muted-foreground">
               이 품목에 등록된 시험항목이 없습니다.
               <br />
               <span className="text-xs">기준 설정 › 품목별 시험항목 관리에서 먼저 등록하세요.</span>
             </p>
           ) : (
             <>
-              <label className="flex cursor-pointer items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-xs font-medium">
+              <label className="flex cursor-pointer items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs font-medium">
                 <input type="checkbox" checked={allOn} onChange={toggleAll} className="cb-custom" />
                 전체 선택 ({checked.size}/{rows.length})
               </label>
@@ -1358,7 +1358,7 @@ function TestItemPickerDialog({
                 {rows.map(r => (
                   <li key={r.testItemId}>
                     <label className={cn(
-                      "flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2.5",
+                      "flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2.5",
                       checked.has(r.testItemName) && "border-primary/40 bg-primary/5",
                     )}>
                       <input
@@ -1799,12 +1799,12 @@ function HistoryModal({ order, testers, onClose }: { order: OrderRow; testers: T
       {loading ? (
         <div className="flex flex-col gap-2.5 py-2">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="rounded-lg border bg-muted/40 px-3 py-2.5">
+            <div key={i} className="rounded-md border bg-muted/40 px-3 py-2.5">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5">
                   <Skeleton className="h-5 w-10 rounded-md" />
                   <Skeleton className="h-4 w-20" />
-                  <Skeleton className="h-5 w-14 rounded-full" />
+                  <Skeleton className="h-5 w-14 rounded-md" />
                 </div>
                 <Skeleton className="h-3 w-24" />
               </div>
@@ -1820,7 +1820,7 @@ function HistoryModal({ order, testers, onClose }: { order: OrderRow; testers: T
       ) : (
         <ul className="flex max-h-[60vh] flex-col gap-2.5 overflow-y-auto">
           {sessions.map((s, i) => (
-            <li key={s.key} className="rounded-lg border bg-muted/40 px-3 py-2.5">
+            <li key={s.key} className="rounded-md border bg-muted/40 px-3 py-2.5">
               {/* 헤더: 작성자 · 시각 · 변경 필드 수 */}
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5">
@@ -1932,14 +1932,14 @@ function IngestLogModal({ onClose }: { onClose: () => void }) {
                 <Skeleton className="h-3 w-12" />
               </div>
               <div className="mb-2 flex gap-1.5">
-                <Skeleton className="h-5 w-16 rounded-full" />
-                <Skeleton className="h-5 w-16 rounded-full" />
+                <Skeleton className="h-5 w-16 rounded-md" />
+                <Skeleton className="h-5 w-16 rounded-md" />
               </div>
               <div className="flex flex-col gap-1.5">
                 {Array.from({ length: 2 }).map((_, j) => (
-                  <div key={j} className="rounded-lg border bg-muted/30 px-3 py-2">
+                  <div key={j} className="rounded-md border bg-muted/30 px-3 py-2">
                     <div className="flex items-center gap-2">
-                      <Skeleton className="h-5 w-14 rounded-full" />
+                      <Skeleton className="h-5 w-14 rounded-md" />
                       <Skeleton className="h-4 w-40" />
                     </div>
                     <div className="mt-1 flex gap-2">
@@ -1977,7 +1977,7 @@ function IngestLogModal({ onClose }: { onClose: () => void }) {
                   {g.items.map(r => {
                     const meta = CHANGE_META[r.changeType] ?? CHANGE_META.new
                     return (
-                      <li key={r.id} className="rounded-lg border bg-muted/30 px-3 py-2">
+                      <li key={r.id} className="rounded-md border bg-muted/30 px-3 py-2">
                         <div className="flex items-center gap-2">
                           <Badge variant="outline" className={cn("shrink-0", meta.cls)}>{meta.label}</Badge>
                           <span className="truncate text-sm font-semibold text-foreground">{r.productName ?? "(품목명 미확인)"}</span>

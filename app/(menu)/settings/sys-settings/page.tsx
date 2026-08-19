@@ -40,7 +40,7 @@ export default function SysSettingsPage() {
       <h1 className="mb-1 text-lg font-semibold text-slate-800">시스템 설정</h1>
       <p className="mb-6 text-xs text-slate-500">로그인 사용자: {user?.username}</p>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4 md:p-6">
+      <section className="rounded-md border border-slate-200 bg-white p-4 md:p-6">
         <div className="mb-4 flex items-center gap-2">
           <Lock size={16} className="text-slate-500" />
           <h2 className="text-sm font-semibold text-slate-800">비밀번호 변경</h2>
@@ -60,7 +60,7 @@ export default function SysSettingsPage() {
           <button
             type="submit"
             disabled={busy || !current || !next1 || !next2}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
           >
             <Save size={13} />
             {busy ? '변경 중…' : '비밀번호 변경'}
@@ -81,7 +81,7 @@ function Field({ label, value, onChange, type = 'text' }: {
         type={type}
         value={value}
         onChange={e => onChange(e.target.value)}
-        className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+        className="w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
       />
     </label>
   )

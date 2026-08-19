@@ -67,9 +67,9 @@ export default function QcDashboardPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3 md:p-5">
       {/* 헤더 */}
-      <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm md:flex-row md:items-center md:justify-between md:py-4">
+      <div className="flex flex-col gap-3 rounded-md border border-slate-200 bg-white px-4 py-3 shadow-sm md:flex-row md:items-center md:justify-between md:py-4">
         <div className="flex items-center gap-2.5">
-          <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600 text-white">
+          <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-blue-600 text-white">
             <LayoutDashboard size={18} />
           </span>
           <div>
@@ -79,7 +79,7 @@ export default function QcDashboardPage() {
         </div>
         <button
           onClick={() => void load()} disabled={loading}
-          className="inline-flex h-9 items-center gap-1.5 self-start rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:opacity-50"
+          className="inline-flex h-9 items-center gap-1.5 self-start rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:opacity-50"
         >
           {loading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
           새로고침
@@ -87,7 +87,7 @@ export default function QcDashboardPage() {
       </div>
 
       {err && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{err}</div>
+        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{err}</div>
       )}
 
       {loading && !data ? (
@@ -95,8 +95,8 @@ export default function QcDashboardPage() {
           {/* KPI skeleton */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3.5 shadow-sm">
-                <Skeleton className="h-10 w-10 shrink-0 rounded-lg" />
+              <div key={i} className="flex items-center gap-3 rounded-md border border-slate-200 bg-white px-4 py-3.5 shadow-sm">
+                <Skeleton className="h-10 w-10 shrink-0 rounded-md" />
                 <div className="min-w-0 flex-1 space-y-2">
                   <Skeleton className="h-3 w-16" />
                   <Skeleton className="h-6 w-12" />
@@ -107,7 +107,7 @@ export default function QcDashboardPage() {
           {/* 차트 skeleton */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {Array.from({ length: 2 }).map((_, i) => (
-              <section key={i} className="rounded-xl border border-slate-200 bg-white shadow-sm">
+              <section key={i} className="rounded-md border border-slate-200 bg-white shadow-sm">
                 <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3">
                   <Skeleton className="h-4 w-4" />
                   <Skeleton className="h-4 w-32" />
@@ -116,7 +116,7 @@ export default function QcDashboardPage() {
                   {Array.from({ length: 5 }).map((_, j) => (
                     <div key={j} className="flex items-center gap-3">
                       <Skeleton className="h-4 w-20 shrink-0" />
-                      <Skeleton className="h-2.5 flex-1 rounded-full" />
+                      <Skeleton className="h-2.5 flex-1 rounded-md" />
                       <Skeleton className="h-4 w-14 shrink-0" />
                     </div>
                   ))}
@@ -132,8 +132,8 @@ export default function QcDashboardPage() {
             {kpis.map(k => {
               const Icon = k.icon
               return (
-                <div key={k.key} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3.5 shadow-sm">
-                  <span className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${k.tone}`}>
+                <div key={k.key} className="flex items-center gap-3 rounded-md border border-slate-200 bg-white px-4 py-3.5 shadow-sm">
+                  <span className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md ${k.tone}`}>
                     <Icon size={18} />
                   </span>
                   <div className="min-w-0">
@@ -147,7 +147,7 @@ export default function QcDashboardPage() {
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {/* 시험자별 보유 DAY */}
-            <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <section className="rounded-md border border-slate-200 bg-white shadow-sm">
               <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3">
                 <CalendarDays size={16} className="text-blue-600" />
                 <h2 className="text-sm font-bold text-slate-900">시험자별 보유 DAY</h2>
@@ -159,9 +159,9 @@ export default function QcDashboardPage() {
                 ) : data.byTesterDays.map(t => (
                   <div key={t.testerId} className="flex items-center gap-3">
                     <span className="w-20 shrink-0 truncate text-sm font-medium text-slate-700">{t.name}</span>
-                    <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+                    <div className="h-2.5 flex-1 overflow-hidden rounded-md bg-slate-100">
                       <div
-                        className="h-full rounded-full bg-indigo-600"
+                        className="h-full rounded-md bg-blue-600"
                         style={{ width: `${Math.max((t.days / maxDays) * 100, 4)}%` }}
                       />
                     </div>
@@ -172,7 +172,7 @@ export default function QcDashboardPage() {
             </section>
 
             {/* 시험자별 난이도 분포 */}
-            <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <section className="rounded-md border border-slate-200 bg-white shadow-sm">
               <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3">
                 <Layers size={16} className="text-blue-600" />
                 <h2 className="text-sm font-bold text-slate-900">시험자별 난이도 분포</h2>
@@ -193,7 +193,7 @@ export default function QcDashboardPage() {
                   return (
                     <div key={t.testerId} className="flex items-center gap-3">
                       <span className="w-20 shrink-0 truncate text-sm font-medium text-slate-700">{t.name}</span>
-                      <div className="flex h-2.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+                      <div className="flex h-2.5 flex-1 overflow-hidden rounded-md bg-slate-100">
                         {sum > 0 && (
                           <>
                             <div className="h-full bg-red-500" style={{ width: `${(t.high / sum) * 100}%` }} />

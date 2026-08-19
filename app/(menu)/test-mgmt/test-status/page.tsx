@@ -243,7 +243,7 @@ export default function TestStatusPage() {
                       className={`
                         group relative flex shrink-0 items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors
                         ${isActive
-                          ? 'text-indigo-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-indigo-600 after:rounded-t-full'
+                          ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600 after:rounded-t-full'
                           : 'text-slate-500 hover:text-slate-700'}
                       `}
                     >
@@ -298,7 +298,7 @@ export default function TestStatusPage() {
               <button
                 onClick={() => setStickyHeader(p => !p)}
                 title={stickyHeader ? '헤더 고정 해제' : '헤더 고정'}
-                className={`ml-2 shrink-0 flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition-colors ${
+                className={`ml-2 shrink-0 flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition-colors ${
                   stickyHeader
                     ? 'border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100'
                     : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
@@ -314,7 +314,7 @@ export default function TestStatusPage() {
               {kpis.map(kpi => (
                 <Card
                   key={kpi.label}
-                  className={`cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md ${kpi.bg} border ${kpi.border} shadow-none rounded-xl py-0`}
+                  className={`cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md ${kpi.bg} border ${kpi.border} shadow-none rounded-md py-0`}
                 >
                   <CardContent className="px-3.5 py-3">
                     <p className="text-[10px] font-medium text-slate-500 mb-0.5">{kpi.label}</p>
@@ -331,7 +331,7 @@ export default function TestStatusPage() {
 
           {/* ── Table section ────────────────────────────────────────────── */}
           <div className="flex-1 p-4 md:p-5">
-            <Card className="border border-slate-200 shadow-none rounded-xl bg-white gap-0 py-0 overflow-hidden">
+            <Card className="border border-slate-200 shadow-none rounded-md bg-white gap-0 py-0 overflow-hidden">
 
               {/* Toolbar */}
               <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-4 py-2.5">
@@ -340,7 +340,7 @@ export default function TestStatusPage() {
                   <PopoverTrigger asChild>
                     <button
                       type="button"
-                      className="flex w-full items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 transition-colors sm:w-auto"
+                      className="flex w-full items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 transition-colors sm:w-auto"
                     >
                       <CalendarIcon size={13} className="text-slate-400" />
                       <span className="tabular-nums">
@@ -365,7 +365,7 @@ export default function TestStatusPage() {
                 </Popover>
 
                 {/* Search */}
-                <div className="flex min-w-0 w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all sm:w-auto sm:flex-1 sm:max-w-[240px]">
+                <div className="flex min-w-0 w-full items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1.5 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all sm:w-auto sm:flex-1 sm:max-w-[240px]">
                   <Search size={13} className="text-slate-400 shrink-0" />
                   <input
                     type="text"
@@ -376,16 +376,16 @@ export default function TestStatusPage() {
                   />
                 </div>
 
-                <Button size="sm" className="h-7 px-4 text-xs font-medium rounded-lg shadow-none">
+                <Button size="sm" className="h-7 px-4 text-xs font-medium rounded-md shadow-none">
                   조회
                 </Button>
 
                 <div className="flex items-center gap-1.5 sm:ml-auto">
-                  <Button size="sm" variant="outline" className="h-7 gap-1.5 px-3 text-xs text-slate-600 rounded-lg border-slate-200 shadow-none">
+                  <Button size="sm" variant="outline" className="h-7 gap-1.5 px-3 text-xs text-slate-600 rounded-md border-slate-200 shadow-none">
                     <Filter size={12} />
                     필터
                   </Button>
-                  <Button size="sm" variant="outline" className="h-7 gap-1.5 px-3 text-xs text-emerald-600 border-emerald-200 hover:bg-emerald-50 rounded-lg shadow-none">
+                  <Button size="sm" variant="outline" className="h-7 gap-1.5 px-3 text-xs text-emerald-600 border-emerald-200 hover:bg-emerald-50 rounded-md shadow-none">
                     <Download size={12} />
                     Excel
                   </Button>
@@ -410,7 +410,7 @@ export default function TestStatusPage() {
                       <div
                         key={row.id}
                         onClick={() => toggleRow(row.id)}
-                        className={`rounded-lg border p-3 transition-colors cursor-pointer ${
+                        className={`rounded-md border p-3 transition-colors cursor-pointer ${
                           isSelected ? 'bg-blue-50/60 border-blue-200' : 'bg-white border-slate-200 hover:bg-slate-50/70'
                         }`}
                       >
@@ -428,7 +428,7 @@ export default function TestStatusPage() {
                                 row.category === '완제품' ? 'bg-slate-100 text-slate-600' : 'bg-sky-50 text-sky-700'
                               }`}>{row.category}</span>
                               <span className="text-[10px] text-slate-500">{row.type}</span>
-                              <span className={`ml-auto inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${status.cls}`}>
+                              <span className={`ml-auto inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-semibold ${status.cls}`}>
                                 {status.label}
                               </span>
                             </div>
@@ -549,7 +549,7 @@ export default function TestStatusPage() {
                           />
                         </TableCell>
                         <TableCell className="px-3 py-2">
-                          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${status.cls}`}>
+                          <span className={`inline-flex items-center rounded-md px-2.5 py-0.5 text-[11px] font-semibold ${status.cls}`}>
                             {status.label}
                           </span>
                         </TableCell>
@@ -571,7 +571,7 @@ export default function TestStatusPage() {
                     </span>
                   )}
                   {loadError && (
-                    <span className="ml-2 inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-medium text-red-700 border border-red-200">
+                    <span className="ml-2 inline-flex items-center rounded-md bg-red-50 px-2 py-0.5 text-[10px] font-medium text-red-700 border border-red-200">
                       조회 실패
                     </span>
                   )}

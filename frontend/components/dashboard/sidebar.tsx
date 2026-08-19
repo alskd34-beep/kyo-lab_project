@@ -380,7 +380,7 @@ export default function Sidebar({
         )}
       >
         <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-sm font-bold tracking-tight text-white shadow-sm">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-blue-600 text-sm font-bold tracking-tight text-white shadow-sm">
             KD
           </div>
           {!collapsed && (
@@ -396,7 +396,7 @@ export default function Sidebar({
           <button
             onClick={() => setCollapsed(true)}
             title="사이드바 접기"
-            className="hidden rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 lg:block"
+            className="hidden rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 lg:block"
           >
             <PanelLeftClose size={18} />
           </button>
@@ -408,7 +408,7 @@ export default function Sidebar({
         <button
           onClick={() => setCollapsed(false)}
           title="사이드바 펼치기"
-          className="mx-auto mt-2 hidden rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 lg:block"
+          className="mx-auto mt-2 hidden rounded-md p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 lg:block"
         >
           <PanelLeft size={18} />
         </button>
@@ -437,7 +437,7 @@ export default function Sidebar({
                       onClick={() => handleNavClick(item)}
                       title={collapsed ? item.label : undefined}
                       className={cn(
-                        "group relative flex w-full items-center rounded-lg text-left transition-colors",
+                        "group relative flex w-full items-center rounded-md text-left transition-colors",
                         collapsed
                           ? "lg:h-10 lg:w-10 lg:justify-center lg:mx-auto lg:px-0 px-3 py-2.5 gap-3"
                           : "gap-3 px-3 py-2.5",
@@ -528,7 +528,7 @@ export default function Sidebar({
           <button
             title={collapsed ? "도움말" : undefined}
             className={cn(
-              "flex items-center rounded-lg text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900",
+              "flex items-center rounded-md text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900",
               collapsed
                 ? "lg:h-10 lg:w-10 lg:justify-center lg:mx-auto lg:px-0 gap-3 px-3 py-2.5"
                 : "gap-3 px-3 py-2.5"
@@ -541,7 +541,7 @@ export default function Sidebar({
             onClick={() => void logout()}
             title={collapsed ? "로그아웃" : undefined}
             className={cn(
-              "flex items-center rounded-lg text-slate-700 transition-colors hover:bg-red-50 hover:text-red-600",
+              "flex items-center rounded-md text-slate-700 transition-colors hover:bg-red-50 hover:text-red-600",
               collapsed
                 ? "lg:h-10 lg:w-10 lg:justify-center lg:mx-auto lg:px-0 gap-3 px-3 py-2.5"
                 : "gap-3 px-3 py-2.5"

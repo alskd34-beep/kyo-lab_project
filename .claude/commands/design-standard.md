@@ -26,15 +26,23 @@
 > **⚡ 자동 적용 규칙**: 화면에 데이터를 불러올 때는 **항상 Skeleton**을 사용한다.
 > `"불러오는 중..."` 텍스트, `<Loader2>` 스피너, 빈 카드 등 모든 로딩 표현을 Skeleton으로 교체한다.
 
-> **🎨 자동 적용 규칙 — 브랜드 메인 컬러**: 보라빛 도는 파랑(indigo) 하나로 통일한다.
+> **🎨 자동 적용 규칙 — 브랜드 메인 컬러**: 파랑(blue) 하나로 통일한다.
 > `app/globals.css`의 `--primary` / `--ring` / `--sidebar-primary` / `--sidebar-accent` / `--secondary`가
-> 전부 이 색(`oklch(.. .. 273)`)이다.
+> 전부 이 색(`oklch(.. .. 262.88)`, Tailwind `blue-600` 기준)이다.
 > - 버튼·아이콘 칩·포커스 링·선택된 탭/메뉴·"활성" 상태처럼 브랜드·인터랙션 강조색이 필요하면
 >   먼저 시맨틱 클래스(`bg-primary`, `text-primary`, `ring-ring`, `<Button>` 기본 variant)를 쓴다 — 자동으로 통일된다.
-> - 직접 Tailwind 색을 써야 하면 반드시 `indigo-*`를 쓴다. `blue-*` / `violet-*` / `purple-*` / `sky-*` 등
+> - 직접 Tailwind 색을 써야 하면 반드시 `blue-*`를 쓴다. `indigo-*` / `violet-*` / `purple-*` / `sky-*` 등
 >   다른 파랑·보라 계열을 브랜드 강조색으로 새로 쓰지 않는다.
-> - **예외(바꾸지 않는다)**: 검토중/진행중/완료/지연처럼 여러 색이 순환하는 상태·카테고리 팔레트,
->   정보 배너(파랑=안내), 성공 토스트(초록), 요일 색(토·일) 등 색상 자체가 의미인 곳.
+> - **예외(바꾸지 않는다)**: 검토중/진행중/완료/지연처럼 여러 색이 순환하는 상태·카테고리 팔레트
+>   (`Tag`의 `indigo`="공지" 포함), 성공 토스트(초록), 요일 색(토·일) 등 색상 자체가 의미인 곳.
+
+> **🔤 자동 적용 규칙 — 타이포그래피**: Pretendard(변수 폰트) 하나로 통일한다.
+> `app/layout.tsx`에서 `next/font/local`로 `pretendard` 패키지의 `PretendardVariable.woff2`를 로드해
+> `--font-sans`에 매핑한다. 새 폰트를 추가로 import하지 않는다. 고정폭은 기존 `--font-mono`(Geist Mono) 유지.
+
+> **⬜ 자동 적용 규칙 — 모서리 둥글기**: `rounded-md` 하나로 고정한다. `rounded-sm`/`lg`/`xl`/`2xl`/`3xl`/`4xl`를
+> 새로 쓰지 않는다. 예외는 **원형이 기능상 꼭 필요한 곳**뿐이다 — 아바타, 상태 점(dot), 원형 아이콘 버튼,
+> 알림 카운트 뱃지(`h-N min-w-N` + `rounded-full`). 진행률 바·칩/배지·직접 만든 달력 셀 등은 전부 `rounded-md`.
 
 ---
 
@@ -121,6 +129,35 @@
 - 코드/숫자: `font-mono text-xs text-muted-foreground`
 - 행 클릭 → 수정 Sheet 오픈 (`cursor-pointer hover:bg-muted/40`)
 - 행 내 버튼: `e.stopPropagation()` 필수
+
+### 상태 표시 컬러 — Tag 컴포넌트 (bizday 가이드라인 기준)
+
+> 출처: [bizday UI Guideline — Table](http://localhost:3000/bizday-ui-guideline/table) (사내 디자인 시스템 레퍼런스, 로컬 실행 시에만 접근 가능).
+> `frontend/components/ui/tag.tsx` — 솔리드 배지 전용 컴포넌트. `import { Tag } from '@frontend/components/ui/tag'`.
+> 기존 `Badge`(outline/soft 스타일)는 그대로 두고, **상태 표시**는 이 `Tag`를 우선 사용한다.
+
+```tsx
+<Tag color="green">완료</Tag>
+<Tag color="blue" dot>처리중</Tag>   {/* 동적으로 계속 바뀌는 상태는 dot 추가 */}
+```
+
+셀 안에서 상태를 표시할 때는 아래 색상↔의미 매핑을 `Tag`의 `color`에 우선 적용한다. 인라인 스타일이나 임시 Tailwind 색 조합을 즉흥적으로 고르지 않는다.
+
+| 색 | 의미 | 비고 |
+|----|------|------|
+| blue | 처리중 / 진행중 | 동적으로 계속 바뀌는 상태는 `dot` 추가 권장. 브랜드 메인 컬러와 같은 색 계열이라 과용 주의 |
+| green | 완료 / 승인 | |
+| yellow(amber) | 검토중 / 대기 | |
+| red | 반려 / 취소 / 오류 | |
+| mono(slate/muted) | 보류 | 임시저장 등 |
+| indigo | 공지 | |
+| slate | 분류 / 기타 | |
+
+- 동적 상태(계속 진행 중임을 알려야 하는 상태)는 `dot` prop을 추가한다.
+- 적용 예: `app/(menu)/settings/users/page.tsx`의 역할(관리자=indigo/시험자=slate)·상태(활성=green/비활성=mono) 배지.
+- **예외**: QC 작업 5단계 워크플로(진행중/검토전/검토중/승인전/승인완료 + 지연/대기)는 이미 `types/qc-status.ts`의 `STAGE_STYLE`로 확립된 자체 팔레트가 있다 — 위 매핑으로 재도장하지 않는다. 이 매핑은 그 외 상태 배지(활성/비활성, 승인/반려류 등)에 적용한다.
+- 컨테이너 외곽선(bizday의 `outline` 옵션 개념): 이 프로젝트는 `Card` 래퍼가 항상 테두리·라운드를 제공해 사실상 `outline=true`가 기본이다. 목록형(외곽선 없이 위/아래 굵은 라인 + 가로 행 라인만)이 필요하면 `Card` 없이 `border-y-2` 유틸로 직접 표현한다.
+- 필수 컬럼 표시(bizday의 `TableHead required` 개념): 이 프로젝트 Table엔 아직 없는 기능이다. 폼 필수 마커와 동일 규격(5px dot · 간격 10px)으로 필요해지면 이 문서를 갱신한다.
 
 ### 빈 상태
 

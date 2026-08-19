@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { ImagePlus, Pencil, Save, Trash2, Upload, UserPlus, X } from 'lucide-react'
 import { Skeleton } from '@frontend/components/ui/skeleton'
+import { Tag } from '@frontend/components/ui/tag'
 import { useAuth } from '@frontend/lib/auth-context'
 import { TesterAvatar, invalidateTesterProfileCache, primePeopleCacheFromUsers, upsertPersonProfile } from '@frontend/lib/tester-profiles'
 import { useConfirmMessage } from '@frontend/components/common/confirm-message'
@@ -161,7 +162,7 @@ export default function UsersAdminPage() {
   if (me && me.role !== 'admin') {
     return (
       <div className="p-8">
-        <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+        <p className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
           관리자만 접근할 수 있습니다.
         </p>
       </div>
@@ -215,7 +216,7 @@ export default function UsersAdminPage() {
           />
           <button
             onClick={() => setCreating(true)}
-            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 md:flex-none"
+            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 md:flex-none"
           >
             <UserPlus size={13} />
             사용자 추가
@@ -278,12 +279,12 @@ export default function UsersAdminPage() {
                   <TableRow key={i}>
                     <TableCell className="px-3 py-2">
                       <div className="flex items-center gap-2">
-                        <Skeleton className="size-8 shrink-0 rounded-xl" />
+                        <Skeleton className="size-8 shrink-0 rounded-md" />
                         <Skeleton className="h-8 w-28" />
                       </div>
                     </TableCell>
-                    <TableCell className="px-3 py-2"><Skeleton className="h-5 w-14 rounded-full" /></TableCell>
-                    <TableCell className="px-3 py-2"><Skeleton className="h-5 w-12 rounded-full" /></TableCell>
+                    <TableCell className="px-3 py-2"><Skeleton className="h-5 w-14 rounded-md" /></TableCell>
+                    <TableCell className="px-3 py-2"><Skeleton className="h-5 w-12 rounded-md" /></TableCell>
                     <TableCell className="px-3 py-2"><Skeleton className="h-4 w-28" /></TableCell>
                     <TableCell className="px-1 py-2"><Skeleton className="ml-auto h-4 w-16" /></TableCell>
                   </TableRow>
@@ -344,17 +345,17 @@ export default function UsersAdminPage() {
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto md:hidden">
         {loading
           ? Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="rounded-lg border border-slate-200 bg-white p-3 space-y-2">
+              <div key={i} className="rounded-md border border-slate-200 bg-white p-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-5 w-14 rounded-full" />
+                  <Skeleton className="h-5 w-14 rounded-md" />
                 </div>
                 <Skeleton className="h-4 w-full" />
                 <Skeleton className="h-4 w-3/4" />
               </div>
             ))
           : users.map(u => (
-          <div key={u.id} className="rounded-lg border border-slate-200 bg-white p-3">
+          <div key={u.id} className="rounded-md border border-slate-200 bg-white p-3">
             <div className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2">
                 <UserAvatar user={u} />
@@ -412,28 +413,24 @@ function UserAvatar({ user }: { user: UserRow }) {
       name={user.displayName ?? user.testerName ?? user.username}
       avatarUrl={user.avatarUrl}
       size="md"
-      className="rounded-xl"
+      className="rounded-md"
     />
   )
 }
 
 function RoleBadge({ role }: { role: UserRow['role'] }) {
   return (
-    <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-      role === 'admin' ? 'bg-violet-50 text-violet-700' : 'bg-blue-50 text-blue-700'
-    }`}>
+    <Tag color={role === 'admin' ? 'indigo' : 'slate'}>
       {role === 'admin' ? '관리자' : '시험자'}
-    </span>
+    </Tag>
   )
 }
 
 function StatusBadge({ isActive }: { isActive: boolean }) {
   return (
-    <span className={`rounded-full px-2 py-0.5 text-[11px] ${
-      isActive ? 'bg-indigo-50 text-indigo-700' : 'bg-red-50 text-red-700'
-    }`}>
+    <Tag color={isActive ? 'green' : 'mono'}>
       {isActive ? '활성' : '비활성'}
-    </span>
+    </Tag>
   )
 }
 
@@ -468,7 +465,7 @@ function CreateForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: 
   }
 
   return (
-    <form onSubmit={submit} className="mb-4 grid grid-cols-1 gap-2 rounded-lg border border-blue-200 bg-blue-50/40 p-3 text-xs sm:grid-cols-2 md:grid-cols-5">
+    <form onSubmit={submit} className="mb-4 grid grid-cols-1 gap-2 rounded-md border border-blue-200 bg-blue-50/40 p-3 text-xs sm:grid-cols-2 md:grid-cols-5">
       <input className="rounded border border-slate-200 bg-white px-2 py-1.5" placeholder="아이디" value={username} onChange={e => setU(e.target.value)} />
       <input className="rounded border border-slate-200 bg-white px-2 py-1.5" placeholder="비밀번호" type="password" value={password} onChange={e => setP(e.target.value)} />
       <input className="rounded border border-slate-200 bg-white px-2 py-1.5" placeholder="이름" value={displayName} onChange={e => setD(e.target.value)} />
@@ -482,7 +479,7 @@ function CreateForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: 
         </SelectContent>
       </Select>
       <div className="flex gap-1">
-        <button type="submit" disabled={busy || !username || !password} className="flex-1 rounded bg-indigo-600 px-2 py-1.5 text-white disabled:opacity-50">생성</button>
+        <button type="submit" disabled={busy || !username || !password} className="flex-1 rounded bg-blue-600 px-2 py-1.5 text-white disabled:opacity-50">생성</button>
         <button type="button" onClick={onCancel} className="rounded border border-slate-200 bg-white px-2 py-1.5"><X size={12} /></button>
       </div>
       {err && <p className="text-red-600 sm:col-span-2 md:col-span-5">{err}</p>}
@@ -565,7 +562,7 @@ function EditUserDialog({
         </DialogHeader>
 
         <DialogBody className="grid gap-5 md:grid-cols-[140px_1fr]">
-          <div className="flex flex-col items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <div className="flex flex-col items-center gap-3 rounded-md border border-slate-200 bg-slate-50 p-4">
             <TesterAvatar
               testerId={user.testerId}
               name={displayName || user.testerName || user.username}

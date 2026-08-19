@@ -378,7 +378,7 @@ export default function MonthlySchedulePage() {
 
         {/* Header */}
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 shadow-md shadow-indigo-600/30">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-blue-600 shadow-md shadow-blue-600/30">
             <Calendar size={20} className="text-white" />
           </div>
           <div className="min-w-0">
@@ -394,7 +394,7 @@ export default function MonthlySchedulePage() {
           <Card className="border-violet-200 dark:border-violet-800 bg-violet-50/70 dark:bg-violet-950/30">
             <CardContent className="flex flex-wrap items-center justify-between gap-3 py-3 text-xs">
               <div className="flex flex-wrap items-center gap-3">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-600 text-white">
+                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-violet-600 text-white">
                   <Calendar size={14} />
                 </div>
                 <span className={`font-semibold ${TXT_PRIMARY}`}>PCT 생산관리 배정 표시 중</span>
@@ -456,7 +456,7 @@ export default function MonthlySchedulePage() {
               type="month"
               value={month}
               onChange={e => setMonth(e.target.value)}
-              className={`h-9 w-full rounded-lg border sm:w-auto ${BORDER} bg-white dark:bg-slate-800 px-3 text-sm tabular-nums outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 dark:focus:ring-violet-900/40 ${TXT_PRIMARY} [color-scheme:light] dark:[color-scheme:dark]`}
+              className={`h-9 w-full rounded-md border sm:w-auto ${BORDER} bg-white dark:bg-slate-800 px-3 text-sm tabular-nums outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 dark:focus:ring-violet-900/40 ${TXT_PRIMARY} [color-scheme:light] dark:[color-scheme:dark]`}
             />
           </CardContent>
         </Card>
@@ -531,7 +531,7 @@ export default function MonthlySchedulePage() {
             </div>
 
             {/* 뷰 전환 탭 */}
-            <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-1.5">
+            <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-1.5">
               {([
                 { key: 'monthly',  label: '월간 그리드', icon: LayoutGrid,    hint: '시험자 × 날짜' },
                 { key: 'weekly',   label: '주간 보드',   icon: CalendarRange, hint: '주차별' },
@@ -543,9 +543,9 @@ export default function MonthlySchedulePage() {
                   <button
                     key={t.key}
                     onClick={() => setView(t.key)}
-                    className={`inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold transition-colors ${
+                    className={`inline-flex items-center gap-1.5 rounded-md px-3.5 py-2 text-sm font-semibold transition-colors ${
                       active
-                        ? 'bg-indigo-600 text-white shadow-sm'
+                        ? 'bg-blue-600 text-white shadow-sm'
                         : `${TXT_TERTIARY} hover:bg-slate-100 dark:hover:bg-slate-800`
                     }`}
                   >
@@ -637,7 +637,7 @@ export default function MonthlySchedulePage() {
                                         <div
                                           key={`${r.id}-${d}`}
                                           title={`${r.product_name} (배치 ${r.batch_no ?? r.batch_id})\n시험항목: ${r.test_items?.join(', ') ?? '-'}\n공수: ${r.avg_hours != null && r.avg_hours > 0 ? `${r.avg_hours.toFixed(1)}h (${r.workdays}일)` : `${r.workdays}일`}\n${r.note ?? ''}`}
-                                          className={`truncate rounded-sm border px-1 py-0.5 text-[9px] font-medium cursor-help transition-colors ${style.bg} ${style.border} ${TXT_PRIMARY}`}
+                                          className={`truncate rounded-md border px-1 py-0.5 text-[9px] font-medium cursor-help transition-colors ${style.bg} ${style.border} ${TXT_PRIMARY}`}
                                         >
                                           {r.product_name.slice(0, 6)}
                                         </div>
@@ -661,23 +661,23 @@ export default function MonthlySchedulePage() {
               <CardContent className="flex flex-wrap items-center gap-4 py-3 text-xs">
                 <span className={`font-semibold ${TXT_MUTED}`}>범례:</span>
                 <div className="flex items-center gap-1.5">
-                  <span className="inline-block h-3 w-3 rounded-sm border border-emerald-300 bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-900/40" />
+                  <span className="inline-block h-3 w-3 rounded-md border border-emerald-300 bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-900/40" />
                   <span className={TXT_TERTIARY}>일반</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <span className="inline-block h-3 w-3 rounded-sm border border-red-300 bg-red-200 dark:border-red-800 dark:bg-red-900/60" />
+                  <span className="inline-block h-3 w-3 rounded-md border border-red-300 bg-red-200 dark:border-red-800 dark:bg-red-900/60" />
                   <span className={TXT_TERTIARY}>긴급</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <span className="inline-block h-3 w-3 rounded-sm border border-blue-300 bg-blue-200 dark:border-blue-800 dark:bg-blue-900/60" />
+                  <span className="inline-block h-3 w-3 rounded-md border border-blue-300 bg-blue-200 dark:border-blue-800 dark:bg-blue-900/60" />
                   <span className={TXT_TERTIARY}>듀오</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <span className="inline-block h-3 w-3 rounded-sm border border-dashed border-violet-400 bg-violet-200 dark:border-violet-700 dark:bg-violet-900/60" />
+                  <span className="inline-block h-3 w-3 rounded-md border border-dashed border-violet-400 bg-violet-200 dark:border-violet-700 dark:bg-violet-900/60" />
                   <span className={TXT_TERTIARY}>PCT 생산관리 출처</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <span className="inline-block h-3 w-3 rounded-sm bg-slate-200 dark:bg-slate-700" />
+                  <span className="inline-block h-3 w-3 rounded-md bg-slate-200 dark:bg-slate-700" />
                   <span className={TXT_TERTIARY}>주말</span>
                 </div>
                 <span className={`ml-auto text-[10px] italic ${TXT_MUTED}`}>

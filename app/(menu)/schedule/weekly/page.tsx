@@ -243,7 +243,7 @@ export default function SchedulerPage() {
 
         {/* ── Header ─────────────────────────────────────────────────────── */}
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 shadow-md shadow-indigo-600/30">
+          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-blue-600 shadow-md shadow-blue-600/30">
             <Sparkles size={20} className="text-white" />
           </div>
           <div>
@@ -315,7 +315,7 @@ export default function SchedulerPage() {
               {/* 요약 카드 행 */}
               <div className="grid grid-cols-4 gap-3">
                 {[...Array(4)].map((_, i) => (
-                  <Skeleton key={i} className="h-[68px] w-full rounded-xl" />
+                  <Skeleton key={i} className="h-[68px] w-full rounded-md" />
                 ))}
               </div>
               {/* 칸반 보드 헤더 */}
@@ -324,10 +324,10 @@ export default function SchedulerPage() {
               <div className="flex gap-3">
                 {[...Array(3)].map((_, i) => (
                   <div key={i} className="flex w-72 shrink-0 flex-col gap-2">
-                    <Skeleton className="h-10 w-full rounded-xl" />
-                    <Skeleton className="h-24 w-full rounded-xl" />
-                    <Skeleton className="h-20 w-full rounded-xl" />
-                    <Skeleton className="h-16 w-full rounded-xl" />
+                    <Skeleton className="h-10 w-full rounded-md" />
+                    <Skeleton className="h-24 w-full rounded-md" />
+                    <Skeleton className="h-20 w-full rounded-md" />
+                    <Skeleton className="h-16 w-full rounded-md" />
                   </div>
                 ))}
               </div>
@@ -405,7 +405,7 @@ export default function SchedulerPage() {
                       return (
                         <div
                           key={group.tester_id}
-                          className={`flex w-72 shrink-0 flex-col gap-2 rounded-xl border ${BORDER} bg-slate-100/60 dark:bg-slate-800/40 p-3`}
+                          className={`flex w-72 shrink-0 flex-col gap-2 rounded-md border ${BORDER} bg-slate-100/60 dark:bg-slate-800/40 p-3`}
                         >
                           {/* 컬럼 헤더 */}
                           <div className="flex items-center justify-between">
@@ -424,7 +424,7 @@ export default function SchedulerPage() {
                           </div>
 
                           {/* 진행률 바 */}
-                          <div className="h-1 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+                          <div className="h-1 w-full overflow-hidden rounded-md bg-slate-200 dark:bg-slate-700">
                             <div
                               className={`h-full transition-all ${
                                 progressPct === 100 ? 'bg-emerald-500' : 'bg-blue-500'
@@ -465,7 +465,7 @@ export default function SchedulerPage() {
                               return (
                                 <div
                                   key={key}
-                                  className={`rounded-lg border ${cardBorder} ${cardBg} p-3 transition-colors`}
+                                  className={`rounded-md border ${cardBorder} ${cardBg} p-3 transition-colors`}
                                 >
                                   {/* 카드 헤더 */}
                                   <div className="mb-2 flex items-start justify-between gap-2">
@@ -479,12 +479,12 @@ export default function SchedulerPage() {
                                     </div>
                                     <div className="flex shrink-0 flex-col items-end gap-1">
                                       {item.is_urgent && (
-                                        <span className="inline-flex items-center gap-1 rounded-full border border-red-300 bg-red-100 px-1.5 py-0.5 text-[9px] font-bold text-red-700 dark:border-red-800 dark:bg-red-900/50 dark:text-red-300">
+                                        <span className="inline-flex items-center gap-1 rounded-md border border-red-300 bg-red-100 px-1.5 py-0.5 text-[9px] font-bold text-red-700 dark:border-red-800 dark:bg-red-900/50 dark:text-red-300">
                                           <AlertTriangle size={9} /> 긴급
                                         </span>
                                       )}
                                       {item.is_duo && (
-                                        <span className="inline-flex items-center gap-1 rounded-full border border-blue-300 bg-blue-100 px-1.5 py-0.5 text-[9px] font-bold text-blue-700 dark:border-blue-800 dark:bg-blue-900/50 dark:text-blue-300">
+                                        <span className="inline-flex items-center gap-1 rounded-md border border-blue-300 bg-blue-100 px-1.5 py-0.5 text-[9px] font-bold text-blue-700 dark:border-blue-800 dark:bg-blue-900/50 dark:text-blue-300">
                                           <Users size={9} /> 듀오
                                         </span>
                                       )}
@@ -539,7 +539,7 @@ export default function SchedulerPage() {
                                     {allDone && !isSubmitted && (
                                       <button
                                         onClick={() => submitForReview(key)}
-                                        className="inline-flex items-center gap-1 rounded-md bg-indigo-600 px-2 py-1 text-[10px] font-semibold text-white hover:bg-indigo-700 transition-colors"
+                                        className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-2 py-1 text-[10px] font-semibold text-white hover:bg-blue-700 transition-colors"
                                       >
                                         <Send size={9} />
                                         검토 요청
@@ -610,13 +610,13 @@ export default function SchedulerPage() {
                           </TableCell>
                           <TableCell className="px-3 py-2.5 text-center">
                             {item.is_urgent && (
-                              <span className="inline-flex items-center gap-1 rounded-full border border-red-300 bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700 dark:border-red-800 dark:bg-red-900/50 dark:text-red-300">
+                              <span className="inline-flex items-center gap-1 rounded-md border border-red-300 bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700 dark:border-red-800 dark:bg-red-900/50 dark:text-red-300">
                                 긴급
                               </span>
                             )}
                           </TableCell>
                           <TableCell className="px-3 py-2.5 text-center">
-                            <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-700 dark:bg-violet-900/50 dark:text-violet-300">
+                            <span className="inline-flex items-center gap-1 rounded-md bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-700 dark:bg-violet-900/50 dark:text-violet-300">
                               <Loader2 size={10} className="animate-spin" />
                               검토 대기
                             </span>
@@ -688,7 +688,7 @@ export default function SchedulerPage() {
                   <CardTitle className={`text-base ${TXT_TERTIARY}`}>원본 응답 (JSON 파싱 실패)</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <pre className="overflow-x-auto rounded-lg bg-slate-900 dark:bg-slate-950 p-3 text-xs text-slate-100 dark:text-slate-200 border border-slate-700">
+                  <pre className="overflow-x-auto rounded-md bg-slate-900 dark:bg-slate-950 p-3 text-xs text-slate-100 dark:text-slate-200 border border-slate-700">
                     {result.data.raw}
                   </pre>
                 </CardContent>

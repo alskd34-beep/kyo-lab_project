@@ -77,9 +77,9 @@ function ProgressBar({ cleared, total }: { cleared: number; total: number }) {
   const done = total > 0 && cleared === total
   return (
     <div className="flex items-center gap-2">
-      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+      <div className="h-1.5 flex-1 overflow-hidden rounded-md bg-muted">
         <div
-          className={cn("h-full rounded-full transition-all", done ? "bg-emerald-500" : "bg-violet-500")}
+          className={cn("h-full rounded-md transition-all", done ? "bg-emerald-500" : "bg-violet-500")}
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -176,7 +176,7 @@ export default function ProdStatusPage() {
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <div className="inline-flex h-9 w-fit items-center gap-0.5 rounded-lg bg-muted p-0.5 text-muted-foreground">
+          <div className="inline-flex h-9 w-fit items-center gap-0.5 rounded-md bg-muted p-0.5 text-muted-foreground">
             <button
               type="button"
               onClick={() => setOnlyWorking(true)}
@@ -225,10 +225,10 @@ export default function ProdStatusPage() {
             <Card key={i} className="gap-3 px-4 py-4">
               <div className="flex items-center justify-between">
                 <Skeleton className="h-5 w-28" />
-                <Skeleton className="h-5 w-20 rounded-full" />
+                <Skeleton className="h-5 w-20 rounded-md" />
               </div>
-              <Skeleton className="h-12 w-full rounded-lg" />
-              <Skeleton className="h-12 w-full rounded-lg" />
+              <Skeleton className="h-12 w-full rounded-md" />
+              <Skeleton className="h-12 w-full rounded-md" />
             </Card>
           ))}
         </div>
@@ -271,7 +271,7 @@ export default function ProdStatusPage() {
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openDetail(j.jobId) }
                       }}
-                      className="cursor-pointer rounded-lg border bg-card p-2.5 transition-colors hover:border-violet-300 hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                      className="cursor-pointer rounded-md border bg-card p-2.5 transition-colors hover:border-violet-300 hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex min-w-0 items-center gap-1.5">
@@ -298,7 +298,7 @@ export default function ProdStatusPage() {
 
                 {/* 시작 대기 오더 */}
                 {w.pendingOrders.length > 0 && (
-                  <div className="mt-1 rounded-lg border border-dashed bg-muted/40 p-2.5">
+                  <div className="mt-1 rounded-md border border-dashed bg-muted/40 p-2.5">
                     <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
                       <Clock className="size-3" />시작 대기 {w.pendingCount}건
                     </p>

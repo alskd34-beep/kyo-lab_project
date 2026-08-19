@@ -31,7 +31,7 @@ export function StatusFilterTabs({
   return (
     <div
       className={cn(
-        "inline-flex h-9 items-center gap-0.5 rounded-lg bg-muted p-0.5 text-muted-foreground",
+        "inline-flex h-9 items-center gap-0.5 rounded-md bg-muted p-0.5 text-muted-foreground",
         className,
       )}
     >

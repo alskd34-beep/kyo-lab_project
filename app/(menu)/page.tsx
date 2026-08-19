@@ -228,7 +228,7 @@ export default function QCDashboard() {
           {/* ── KPI + Tab header (optionally sticky) ─────────────────────── */}
           <div className={cn('z-10 border-b bg-background', stickyHeader && 'sticky top-0')}>
             <div className="flex items-center gap-2 px-4 py-3 md:px-6">
-              <div className="inline-flex h-9 w-fit items-center gap-0.5 overflow-x-auto rounded-lg bg-muted p-0.5 text-muted-foreground">
+              <div className="inline-flex h-9 w-fit items-center gap-0.5 overflow-x-auto rounded-md bg-muted p-0.5 text-muted-foreground">
                 {sortedTabs.map(tab => {
                   const isPinned = pinnedTabs.has(tab)
                   const isActive = activeTab === tab
@@ -412,7 +412,7 @@ export default function QCDashboard() {
                       <TableCell className="px-3 py-2"><Skeleton className="h-8 w-32" /></TableCell>
                       <TableCell className="px-3 py-2"><Skeleton className="h-8 w-24" /></TableCell>
                       <TableCell className="px-3 py-2"><Skeleton className="h-8 w-24" /></TableCell>
-                      <TableCell className="px-3 py-2"><Skeleton className="h-5 w-14 rounded-full" /></TableCell>
+                      <TableCell className="px-3 py-2"><Skeleton className="h-5 w-14 rounded-md" /></TableCell>
                     </TableRow>
                   ))}
                   {!isLoading && sortedData.length === 0 && (

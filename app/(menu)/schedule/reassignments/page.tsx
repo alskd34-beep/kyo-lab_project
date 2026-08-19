@@ -114,7 +114,7 @@ function TypeBadge({ type }: { type: HistoryType }) {
 
 function StatCard({ title, value, tone }: { title: string; value: number; tone: string }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+    <div className="rounded-md border border-slate-200 bg-white px-4 py-3 shadow-sm">
       <p className="text-xs font-semibold text-slate-500">{title}</p>
       <p className={cn("mt-1 text-2xl font-black tabular-nums", tone)}>{value.toLocaleString("ko-KR")}</p>
     </div>
@@ -125,7 +125,7 @@ function LoadingRows() {
   return Array.from({ length: 7 }).map((_, i) => (
     <TableRow key={i} className="border-b border-slate-100 last:border-0">
       <TableCell className="px-3 py-3"><Skeleton className="h-4 w-28" /></TableCell>
-      <TableCell className="px-3 py-3"><Skeleton className="h-6 w-20 rounded-full" /></TableCell>
+      <TableCell className="px-3 py-3"><Skeleton className="h-6 w-20 rounded-md" /></TableCell>
       <TableCell className="px-3 py-3"><Skeleton className="h-4 w-36" /></TableCell>
       <TableCell className="px-3 py-3"><Skeleton className="h-4 w-56" /></TableCell>
       <TableCell className="px-3 py-3"><Skeleton className="h-4 w-24" /></TableCell>
@@ -226,7 +226,7 @@ export default function ReassignmentsPage() {
   if (!isAdmin) {
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3 md:p-5">
-        <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm font-medium text-amber-700">
+        <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-4 py-4 text-sm font-medium text-amber-700">
           <ShieldAlert size={18} /> 관리자만 접근할 수 있는 화면입니다.
         </div>
       </div>
@@ -235,7 +235,7 @@ export default function ReassignmentsPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3 md:p-5">
-      <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm md:flex-row md:items-center md:justify-between md:py-4">
+      <div className="flex flex-col gap-3 rounded-md border border-slate-200 bg-white px-4 py-3 shadow-sm md:flex-row md:items-center md:justify-between md:py-4">
         <div>
           <h1 className="text-base font-bold text-slate-900 sm:text-lg">AI 스케줄 전체 이력</h1>
           <p className="mt-1 text-xs font-medium text-slate-600">
@@ -245,7 +245,7 @@ export default function ReassignmentsPage() {
         <button
           onClick={() => void load()}
           disabled={loading}
-          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:opacity-50"
+          className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:opacity-50"
         >
           {loading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
           새로고침
@@ -253,7 +253,7 @@ export default function ReassignmentsPage() {
       </div>
 
       {msg && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{msg}</div>
+        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{msg}</div>
       )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -263,7 +263,7 @@ export default function ReassignmentsPage() {
         <StatCard title="자동 적재" value={stats.ingests} tone="text-emerald-700" />
       </div>
 
-      <div className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-col gap-2 rounded-md border border-slate-200 bg-white p-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap gap-1.5">
             {FILTERS.map(item => (
@@ -271,7 +271,7 @@ export default function ReassignmentsPage() {
                 key={item.id}
                 onClick={() => setFilter(item.id)}
                 className={cn(
-                  "h-8 rounded-lg border px-3 text-xs font-semibold transition-colors",
+                  "h-8 rounded-md border px-3 text-xs font-semibold transition-colors",
                   filter === item.id
                     ? "border-slate-900 bg-slate-900 text-white"
                     : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
@@ -309,12 +309,12 @@ export default function ReassignmentsPage() {
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder="품목명, 제조번호, 변경내용 검색"
-            className="h-9 w-full rounded-lg border border-slate-300 bg-white pl-8 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus-visible:border-blue-600 focus-visible:ring-2 focus-visible:ring-blue-200 focus-visible:outline-none"
+            className="h-9 w-full rounded-md border border-slate-300 bg-white pl-8 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus-visible:border-blue-600 focus-visible:ring-2 focus-visible:ring-blue-200 focus-visible:outline-none"
           />
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white py-0 shadow-sm">
+      <div className="overflow-hidden rounded-md border border-slate-200 bg-white py-0 shadow-sm">
         <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
           <div className="flex items-center gap-1.5">
             <History className="size-4 text-slate-400" />

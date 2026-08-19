@@ -86,7 +86,7 @@ export function ConfirmMessageDialog({
         <DialogHeader>
           <div
             className={cn(
-              "mb-1 flex size-10 items-center justify-center rounded-lg",
+              "mb-1 flex size-10 items-center justify-center rounded-md",
               style.iconClassName,
             )}
           >
@@ -97,7 +97,7 @@ export function ConfirmMessageDialog({
         </DialogHeader>
 
         {error && (
-          <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <p role="alert" className="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {error}
           </p>
         )}

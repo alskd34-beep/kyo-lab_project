@@ -86,7 +86,7 @@ export default function GroupsPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3 md:p-5">
       {/* 헤더 */}
-      <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm md:flex-row md:items-center md:justify-between md:py-4">
+      <div className="flex flex-col gap-3 rounded-md border border-slate-200 bg-white px-4 py-3 shadow-sm md:flex-row md:items-center md:justify-between md:py-4">
         <div>
           <h1 className="flex items-center gap-1.5 text-base font-bold text-slate-900 sm:text-lg">
             <Layers size={18} className="text-blue-600" /> 동시분석 그룹
@@ -99,7 +99,7 @@ export default function GroupsPage() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={rebuild} disabled={busy !== null}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-indigo-600 px-3 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-50"
+              className="inline-flex h-9 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
             >
               {busy === "rebuild" ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
               그룹 재생성
@@ -109,7 +109,7 @@ export default function GroupsPage() {
       </div>
 
       {msg && (
-        <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">{msg}</div>
+        <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">{msg}</div>
       )}
 
       <span className="text-xs font-medium text-slate-500">총 {rows.length}개 그룹</span>
@@ -118,14 +118,14 @@ export default function GroupsPage() {
       {loading ? (
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div key={i} className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
               <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-3">
-                <Skeleton className="h-8 w-1.5 shrink-0 rounded-full" />
+                <Skeleton className="h-8 w-1.5 shrink-0 rounded-md" />
                 <div className="flex-1 space-y-2">
                   <Skeleton className="h-4 w-36" />
                   <Skeleton className="h-3 w-24" />
                 </div>
-                <Skeleton className="h-8 w-16 rounded-lg" />
+                <Skeleton className="h-8 w-16 rounded-md" />
               </div>
               <ul className="divide-y divide-slate-100">
                 {Array.from({ length: 3 }).map((_, j) => (
@@ -141,7 +141,7 @@ export default function GroupsPage() {
           ))}
         </div>
       ) : rows.length === 0 ? (
-        <div className="rounded-xl border border-slate-200 bg-white px-3 py-10 text-center text-slate-400 shadow-sm">
+        <div className="rounded-md border border-slate-200 bg-white px-3 py-10 text-center text-slate-400 shadow-sm">
           생성된 그룹이 없습니다. {isAdmin && "\"그룹 재생성\"으로 묶어보세요."}
         </div>
       ) : (
@@ -149,14 +149,14 @@ export default function GroupsPage() {
           {rows.map((g, idx) => {
             const bar = g.groupLock ? "bg-slate-400" : CARD_BARS[idx % CARD_BARS.length]
             return (
-              <div key={g.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              <div key={g.id} className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
                 {/* 카드 헤더 */}
                 <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-3">
-                  <span className={`h-8 w-1.5 shrink-0 rounded-full ${bar}`} />
+                  <span className={`h-8 w-1.5 shrink-0 rounded-md ${bar}`} />
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       {g.groupLock && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                        <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
                           <Lock size={10} /> 잠김
                         </span>
                       )}
@@ -171,7 +171,7 @@ export default function GroupsPage() {
                     <button
                       onClick={() => void toggleLock(g)} disabled={busy !== null}
                       title={g.groupLock ? "잠금 해제" : "잠금"}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:opacity-50"
+                      className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:opacity-50"
                     >
                       {busy === g.id
                         ? <Loader2 size={14} className="animate-spin" />

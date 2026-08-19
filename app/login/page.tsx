@@ -97,7 +97,7 @@ function LoginForm() {
     <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
       <Card className="w-full max-w-sm gap-0 p-6 shadow-sm">
         <div className="mb-6 flex flex-col items-center gap-2">
-          <div className="flex size-11 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+          <div className="flex size-11 items-center justify-center rounded-md bg-primary text-primary-foreground">
             <FlaskConical size={20} />
           </div>
           <p className="text-[11px] font-medium tracking-widest text-muted-foreground uppercase">광동제약</p>
@@ -168,7 +168,7 @@ function LoginForm() {
           </div>
 
           {error && (
-            <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">{error}</p>
+            <p className="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">{error}</p>
           )}
 
           <Button type="submit" disabled={busy || !username || !password} className="w-full">

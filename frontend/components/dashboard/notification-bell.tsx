@@ -65,7 +65,7 @@ export default function NotificationBell() {
     <div className="relative" ref={ref}>
       <button
         onClick={() => { setOpen(o => !o); if (!open) void load() }}
-        className="relative rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+        className="relative rounded-md p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
         aria-label="알림"
       >
         <Bell size={16} />
@@ -77,7 +77,7 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-40 mt-1 w-[min(92vw,360px)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+        <div className="absolute right-0 top-full z-40 mt-1 w-[min(92vw,360px)] overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg">
           <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
             <span className="text-sm font-bold text-slate-900">알림</span>
             {unread > 0 && (

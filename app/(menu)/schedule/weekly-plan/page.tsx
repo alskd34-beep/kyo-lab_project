@@ -233,7 +233,7 @@ export default function WeeklyPlanPage() {
 
         {/* Header */}
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 shadow-md shadow-indigo-600/30">
+          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-blue-600 shadow-md shadow-blue-600/30">
             <CalendarRange size={20} className="text-white" />
           </div>
           <div>
@@ -410,7 +410,7 @@ export default function WeeklyPlanPage() {
                       return (
                         <div
                           key={g.name}
-                          className={`flex w-72 shrink-0 flex-col gap-2 rounded-xl border ${BORDER} bg-slate-50 dark:bg-slate-800/40 p-3`}
+                          className={`flex w-72 shrink-0 flex-col gap-2 rounded-md border ${BORDER} bg-slate-50 dark:bg-slate-800/40 p-3`}
                         >
                           {/* 컬럼 헤더 */}
                           <div className="flex items-center justify-between">
@@ -438,7 +438,7 @@ export default function WeeklyPlanPage() {
                                   ? 'bg-violet-50/70 dark:bg-violet-950/20'
                                   : CARD_BG
                               return (
-                                <div key={a.key} className={`rounded-lg border ${borderCls} ${bgCls} p-2.5 transition-colors`}>
+                                <div key={a.key} className={`rounded-md border ${borderCls} ${bgCls} p-2.5 transition-colors`}>
                                   {/* 헤더: 품목명 */}
                                   <div className="mb-1.5 flex items-start justify-between gap-2">
                                     <div className="min-w-0 flex-1">
@@ -451,16 +451,16 @@ export default function WeeklyPlanPage() {
                                     </div>
                                     <div className="flex shrink-0 flex-col items-end gap-1">
                                       {a.isUrgent && (
-                                        <span className="inline-flex items-center gap-1 rounded-full border border-red-300 bg-red-100 px-1.5 py-0.5 text-[9px] font-bold text-red-700 dark:border-red-800 dark:bg-red-900/50 dark:text-red-300">
+                                        <span className="inline-flex items-center gap-1 rounded-md border border-red-300 bg-red-100 px-1.5 py-0.5 text-[9px] font-bold text-red-700 dark:border-red-800 dark:bg-red-900/50 dark:text-red-300">
                                           <AlertTriangle size={9} /> 긴급
                                         </span>
                                       )}
                                       {a.isStabilityLinked && (
-                                        <span className="inline-flex items-center gap-1 rounded-full border border-violet-300 bg-violet-100 px-1.5 py-0.5 text-[9px] font-bold text-violet-700 dark:border-violet-800 dark:bg-violet-900/50 dark:text-violet-300">
+                                        <span className="inline-flex items-center gap-1 rounded-md border border-violet-300 bg-violet-100 px-1.5 py-0.5 text-[9px] font-bold text-violet-700 dark:border-violet-800 dark:bg-violet-900/50 dark:text-violet-300">
                                           <FlaskConical size={9} /> 안정성
                                         </span>
                                       )}
-                                      <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-bold ${
+                                      <span className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[9px] font-bold ${
                                         a.method === '전항목'
                                           ? 'border-blue-300 bg-blue-100 text-blue-700 dark:border-blue-800 dark:bg-blue-900/50 dark:text-blue-300'
                                           : 'border-violet-300 bg-violet-100 text-violet-700 dark:border-violet-800 dark:bg-violet-900/50 dark:text-violet-300'

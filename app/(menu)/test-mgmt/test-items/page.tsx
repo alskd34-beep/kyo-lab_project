@@ -52,7 +52,7 @@ type Category = (typeof CATEGORIES)[number]
 const CATEGORY_COLORS: Record<string, string> = {
   "성상·포장": "border-fuchsia-300 bg-fuchsia-100 text-fuchsia-800",
   이화학: "border-blue-300 bg-blue-100 text-blue-800",
-  함량시험: "border-indigo-300 bg-indigo-100 text-indigo-800",
+  함량시험: "border-blue-300 bg-blue-100 text-blue-800",
   확인시험: "border-cyan-300 bg-cyan-100 text-cyan-800",
   기기분석: "border-amber-300 bg-amber-100 text-amber-800",
   안전성: "border-rose-300 bg-rose-100 text-rose-800",
@@ -532,7 +532,7 @@ export default function TestItemsPage() {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive">
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive">
           {error}
         </div>
       )}
@@ -595,7 +595,7 @@ export default function TestItemsPage() {
                           </span>
                           {product.isActive ? (
                             <Badge variant="outline" className="gap-1 text-[10px]">
-                              <span className="size-1.5 rounded-full bg-indigo-500" />
+                              <span className="size-1.5 rounded-full bg-blue-500" />
                               활성
                             </Badge>
                           ) : (
@@ -923,7 +923,7 @@ export default function TestItemsPage() {
                     {tab}
                     <span
                       className={cn(
-                        "ml-1.5 rounded-full px-1.5 py-0.5 text-[10px]",
+                        "ml-1.5 rounded-md px-1.5 py-0.5 text-[10px]",
                         dialogTab === tab
                           ? "bg-primary-foreground/20 text-primary-foreground"
                           : "bg-muted text-muted-foreground"
@@ -970,7 +970,7 @@ export default function TestItemsPage() {
                         <li key={i} className="flex items-center gap-3 px-4 py-2.5">
                           <Skeleton className="h-4 w-4 rounded" />
                           <Skeleton className="h-4 flex-1" />
-                          <Skeleton className="h-4 w-14 rounded-full" />
+                          <Skeleton className="h-4 w-14 rounded-md" />
                         </li>
                       ))}
                     </ul>
@@ -996,7 +996,7 @@ export default function TestItemsPage() {
                             </span>
                             <span
                               className={cn(
-                                "rounded-full border px-2 py-0.5 text-[10px] font-medium",
+                                "rounded-md border px-2 py-0.5 text-[10px] font-medium",
                                 CATEGORY_COLORS[item.category] ??
                                   CATEGORY_COLORS["기타"]
                               )}
@@ -1051,7 +1051,7 @@ export default function TestItemsPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="rounded-lg border bg-muted/50 p-3">
+          <div className="rounded-md border bg-muted/50 p-3">
             <p className="text-sm font-medium">
               {unlinkTarget?.testItemName}
             </p>
@@ -1271,7 +1271,7 @@ export default function TestItemsPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="rounded-lg border bg-muted/50 p-3">
+          <div className="rounded-md border bg-muted/50 p-3">
             <p className="text-sm font-medium">
               {selectedLinked.size}개 시험항목
             </p>

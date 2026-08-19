@@ -426,7 +426,7 @@ export default function TestersPage() {
 
         <div className="flex flex-wrap items-center gap-2">
           {/* Tab switcher */}
-          <div className="inline-flex h-9 w-fit items-center gap-0.5 rounded-lg bg-muted p-0.5 text-muted-foreground">
+          <div className="inline-flex h-9 w-fit items-center gap-0.5 rounded-md bg-muted p-0.5 text-muted-foreground">
             {[
               { id: "testers", label: "시험자 관리" },
               { id: "capability", label: "시험자 역량" },
@@ -468,11 +468,11 @@ export default function TestersPage() {
             </span>
           </span>
         </Card>
-        <Card className="gap-0.5 border-l-4 border-l-indigo-500 px-3 py-2">
+        <Card className="gap-0.5 border-l-4 border-l-blue-500 px-3 py-2">
           <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
             단독 가능
           </span>
-          <span className="text-lg font-semibold tabular-nums text-indigo-600">
+          <span className="text-lg font-semibold tabular-nums text-blue-600">
             {summary.solo}
           </span>
         </Card>
@@ -506,7 +506,7 @@ export default function TestersPage() {
                 <Card key={i} className="gap-2 px-3 py-3">
                   <div className="flex items-center justify-between">
                     <Skeleton className="h-4 w-24" />
-                    <Skeleton className="h-5 w-14 rounded-full" />
+                    <Skeleton className="h-5 w-14 rounded-md" />
                   </div>
                   <Skeleton className="h-4 w-full" />
                   <Skeleton className="h-4 w-3/4" />
@@ -536,7 +536,7 @@ export default function TestersPage() {
                           <span
                             className={cn(
                               "size-1.5 rounded-full",
-                              tester.isActive ? "bg-indigo-500" : "bg-muted-foreground"
+                              tester.isActive ? "bg-blue-500" : "bg-muted-foreground"
                             )}
                           />
                           {tester.isActive ? "활성" : "비활성"}
@@ -561,8 +561,8 @@ export default function TestersPage() {
                   {/* 가능한 항목만 노출 — '불가'는 표시하지 않는다 */}
                   <div className="flex flex-wrap items-center gap-1.5 border-t pt-2">
                     {tester.canSolo && (
-                      <Badge variant="outline" className="gap-1.5 border-indigo-200 text-[10px] text-indigo-700">
-                        <span className="size-1.5 rounded-full bg-indigo-500" />
+                      <Badge variant="outline" className="gap-1.5 border-blue-200 text-[10px] text-blue-700">
+                        <span className="size-1.5 rounded-full bg-blue-500" />
                         단독 가능
                       </Badge>
                     )}
@@ -622,7 +622,7 @@ export default function TestersPage() {
                         <TableCell className="px-3 py-2"><Skeleton className="h-4 w-6" /></TableCell>
                         <TableCell className="px-3 py-2"><Skeleton className="h-8 w-28" /></TableCell>
                         <TableCell className="px-3 py-2"><Skeleton className="h-8 w-20" /></TableCell>
-                        <TableCell className="px-3 py-2"><Skeleton className="h-5 w-12 rounded-full" /></TableCell>
+                        <TableCell className="px-3 py-2"><Skeleton className="h-5 w-12 rounded-md" /></TableCell>
                         <TableCell className="px-1 py-2"><Skeleton className="mx-auto h-6 w-6" /></TableCell>
                       </TableRow>
                     ))
@@ -653,7 +653,7 @@ export default function TestersPage() {
                       </TableCell>
                       <TableCell className="px-3 py-2">
                         <CellStack
-                          primary={tester.canSolo ? <StatusLine color="bg-indigo-500" label="단독 가능" /> : "—"}
+                          primary={tester.canSolo ? <StatusLine color="bg-blue-500" label="단독 가능" /> : "—"}
                           secondary={tester.canDuo ? <StatusLine color="bg-amber-500" label="2인 가능" /> : undefined}
                         />
                       </TableCell>
@@ -661,9 +661,9 @@ export default function TestersPage() {
                         <button
                           onClick={(e) => { e.stopPropagation(); void toggleActive(tester) }}
                           className={cn(
-                            "rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors hover:bg-muted/50",
+                            "rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors hover:bg-muted/50",
                             tester.isActive
-                              ? "border-indigo-200 text-indigo-700"
+                              ? "border-blue-200 text-blue-700"
                               : "border-input text-muted-foreground"
                           )}
                         >
@@ -726,7 +726,7 @@ export default function TestersPage() {
                 <Card key={i} className="gap-2 px-3 py-3">
                   <div className="flex items-center justify-between">
                     <Skeleton className="h-4 w-24" />
-                    <Skeleton className="h-5 w-14 rounded-full" />
+                    <Skeleton className="h-5 w-14 rounded-md" />
                   </div>
                   <Skeleton className="h-4 w-full" />
                   <Skeleton className="h-4 w-3/4" />
@@ -766,7 +766,7 @@ export default function TestersPage() {
                               onClick={() => void cycleLevel(tester, capability)}
                               disabled={isSaving}
                               className={cn(
-                                "flex items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors",
+                                "flex items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-left transition-colors",
                                 isSaving
                                   ? "cursor-wait opacity-50"
                                   : "hover:border-ring hover:bg-muted/50"
@@ -880,7 +880,7 @@ export default function TestersPage() {
           </DialogHeader>
 
           <DialogBody className="grid gap-4">
-              <section className="rounded-lg border bg-card p-3 shadow-sm sm:p-4">
+              <section className="rounded-md border bg-card p-3 shadow-sm sm:p-4">
                 <div className="mb-3 border-b pb-3">
                   <h3 className="text-sm font-semibold text-foreground">기본 정보</h3>
                 </div>
@@ -918,12 +918,12 @@ export default function TestersPage() {
                 </div>
               </section>
 
-              <section className="rounded-lg border bg-card p-3 shadow-sm sm:p-4">
+              <section className="rounded-md border bg-card p-3 shadow-sm sm:p-4">
                 <div className="mb-3 border-b pb-3">
                   <h3 className="text-sm font-semibold text-foreground">시험 가능 범위</h3>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <label className="flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium text-foreground">
+                  <label className="flex items-center gap-2 rounded-md border px-3 py-2.5 text-sm font-medium text-foreground">
                     <input
                       type="checkbox"
                       checked={form.canSolo}
@@ -937,7 +937,7 @@ export default function TestersPage() {
                     />
                     단독 시험 가능
                   </label>
-                  <label className="flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium text-foreground">
+                  <label className="flex items-center gap-2 rounded-md border px-3 py-2.5 text-sm font-medium text-foreground">
                     <input
                       type="checkbox"
                       checked={form.canDuo}
@@ -955,7 +955,7 @@ export default function TestersPage() {
               </section>
 
               {error && (
-                <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive">
+                <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive">
                   {error}
                 </div>
               )}
@@ -995,10 +995,10 @@ export default function TestersPage() {
           <div className="flex-1 overflow-y-auto bg-muted/30 px-5 py-4">
             <div className="grid gap-4">
               {/* 기본 정보 — 읽기 전용 */}
-              <section className="rounded-lg border bg-card p-4 shadow-sm">
+              <section className="rounded-md border bg-card p-4 shadow-sm">
                 <h3 className="mb-3 border-b pb-2 text-sm font-semibold text-foreground">기본 정보</h3>
                 <div className="flex flex-col gap-2">
-                  <div className="flex items-center gap-2 rounded-lg border border-dashed bg-muted/40 px-3 py-2.5">
+                  <div className="flex items-center gap-2 rounded-md border border-dashed bg-muted/40 px-3 py-2.5">
                     <Lock size={13} className="shrink-0 text-muted-foreground" />
                     <span className="text-xs text-muted-foreground">사번</span>
                     <span className="font-mono text-sm font-semibold text-foreground">
@@ -1006,7 +1006,7 @@ export default function TestersPage() {
                     </span>
                     <span className="ml-auto text-[10px] text-muted-foreground">변경 불가</span>
                   </div>
-                  <div className="flex items-center gap-2 rounded-lg border border-dashed bg-muted/40 px-3 py-2.5">
+                  <div className="flex items-center gap-2 rounded-md border border-dashed bg-muted/40 px-3 py-2.5">
                     <Lock size={13} className="shrink-0 text-muted-foreground" />
                     <span className="text-xs text-muted-foreground">이름</span>
                     <span className="text-sm font-semibold text-foreground">
@@ -1018,10 +1018,10 @@ export default function TestersPage() {
               </section>
 
               {/* 시험 가능 범위 */}
-              <section className="rounded-lg border bg-card p-4 shadow-sm">
+              <section className="rounded-md border bg-card p-4 shadow-sm">
                 <h3 className="mb-3 border-b pb-2 text-sm font-semibold text-foreground">시험 가능 범위</h3>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <label className="flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium text-foreground cursor-pointer hover:bg-muted/30">
+                  <label className="flex items-center gap-2 rounded-md border px-3 py-2.5 text-sm font-medium text-foreground cursor-pointer hover:bg-muted/30">
                     <input
                       type="checkbox"
                       checked={form.canSolo}
@@ -1030,7 +1030,7 @@ export default function TestersPage() {
                     />
                     단독 시험 가능
                   </label>
-                  <label className="flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium text-foreground cursor-pointer hover:bg-muted/30">
+                  <label className="flex items-center gap-2 rounded-md border px-3 py-2.5 text-sm font-medium text-foreground cursor-pointer hover:bg-muted/30">
                     <input
                       type="checkbox"
                       checked={form.canDuo}
@@ -1043,7 +1043,7 @@ export default function TestersPage() {
               </section>
 
               {error && (
-                <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive">
+                <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive">
                   {error}
                 </div>
               )}
@@ -1070,7 +1070,7 @@ export default function TestersPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="rounded-lg border bg-muted/50 p-3">
+          <div className="rounded-md border bg-muted/50 p-3">
             <p className="text-sm font-medium">{selected?.name}</p>
             <p className="mt-0.5 font-mono text-xs text-muted-foreground">
               {selected?.employeeNo}

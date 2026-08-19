@@ -83,7 +83,7 @@ export function DateRangeField({
           <button
             type="button"
             disabled={disabled}
-            className="flex w-full items-stretch overflow-hidden rounded-lg border border-input bg-background text-left outline-none transition-colors hover:bg-muted/30 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex w-full items-stretch overflow-hidden rounded-md border border-input bg-background text-left outline-none transition-colors hover:bg-muted/30 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {cell("시작일", startDate)}
             <span className="flex items-center px-1 text-muted-foreground">~</span>

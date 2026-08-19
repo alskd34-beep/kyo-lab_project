@@ -335,7 +335,7 @@ const ProductTableRow = memo(function ProductTableRow({
       </TableCell>
       <TableCell className="px-3 py-2">
         <StatusLine
-          color={row.isActive ? "bg-indigo-500" : "bg-muted-foreground"}
+          color={row.isActive ? "bg-blue-500" : "bg-muted-foreground"}
           label={row.isActive ? "활성" : "비활성"}
         />
       </TableCell>
@@ -395,7 +395,7 @@ const ProductCard = memo(function ProductCard({
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="font-mono text-[11px] text-muted-foreground">{row.productCode}</span>
             <Badge variant="outline" className="gap-1.5 text-[10px]">
-              <span className={cn("size-1.5 rounded-full", row.isActive ? "bg-indigo-500" : "bg-muted-foreground")} />
+              <span className={cn("size-1.5 rounded-full", row.isActive ? "bg-blue-500" : "bg-muted-foreground")} />
               {row.isActive ? "활성" : "비활성"}
             </Badge>
             <DifficultyBadge difficulty={row.difficulty} />
@@ -453,7 +453,7 @@ function FormFields({
   return (
     <>
       {/* 식별 정보 */}
-      <section className="rounded-lg border bg-card p-4 shadow-sm">
+      <section className="rounded-md border bg-card p-4 shadow-sm">
         <h3 className="mb-3 border-b pb-2 text-sm font-semibold text-foreground">식별 정보</h3>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="flex flex-col gap-1.5 sm:col-span-2">
@@ -472,7 +472,7 @@ function FormFields({
       </section>
 
       {/* 분류 및 시험 속성 */}
-      <section className="rounded-lg border bg-card p-4 shadow-sm">
+      <section className="rounded-md border bg-card p-4 shadow-sm">
         <h3 className="mb-3 border-b pb-2 text-sm font-semibold text-foreground">분류 및 시험 속성</h3>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="flex flex-col gap-1.5">
@@ -522,7 +522,7 @@ function FormFields({
       </section>
 
       {/* 제품 상세 */}
-      <section className="rounded-lg border bg-card p-4 shadow-sm">
+      <section className="rounded-md border bg-card p-4 shadow-sm">
         <h3 className="mb-3 border-b pb-2 text-sm font-semibold text-foreground">제품 상세</h3>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="flex flex-col gap-1.5">
@@ -537,7 +537,7 @@ function FormFields({
       </section>
 
       {/* 공수 정보 */}
-      <section className="rounded-lg border bg-card p-4 shadow-sm">
+      <section className="rounded-md border bg-card p-4 shadow-sm">
         <h3 className="mb-3 border-b pb-2 text-sm font-semibold text-foreground">공수 정보</h3>
         <div className="flex flex-col gap-1.5">
           <label className={labelClass}>공수(일) <span className="text-destructive">*</span></label>
@@ -709,7 +709,7 @@ const ProductMasterList = memo(function ProductMasterList({
               <Card key={i} className="mb-2 gap-2 px-3 py-3">
                 <div className="flex items-center justify-between">
                   <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-5 w-14 rounded-full" />
+                  <Skeleton className="h-5 w-14 rounded-md" />
                 </div>
                 <Skeleton className="h-4 w-full" />
                 <Skeleton className="h-4 w-3/4" />
@@ -945,7 +945,7 @@ export function ProductTestWorkspace() {
               <span className="text-lg font-semibold tabular-nums text-foreground">
                 {summary.total}
                 <span className="ml-2 text-[11px] font-normal text-muted-foreground">
-                  활성 <span className="font-semibold text-indigo-600">{summary.active}</span>
+                  활성 <span className="font-semibold text-blue-600">{summary.active}</span>
                   {" · "}
                   비활성 {summary.total - summary.active}
                 </span>
@@ -1008,7 +1008,7 @@ export function ProductTestWorkspace() {
       />
 
       {error && (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive">
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive">
           {error}
         </div>
       )}
@@ -1033,7 +1033,7 @@ export function ProductTestWorkspace() {
           </DialogHeader>
 
           <DialogBody className="grid gap-4">
-              <section className="rounded-lg border bg-card p-4 shadow-sm">
+              <section className="rounded-md border bg-card p-4 shadow-sm">
                 <h3 className="mb-3 border-b pb-2 text-sm font-semibold text-foreground">식별 정보</h3>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="flex flex-col gap-1.5">
@@ -1079,7 +1079,7 @@ export function ProductTestWorkspace() {
               />
 
               {error && (
-                <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive">
+                <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive">
                   {error}
                 </div>
               )}
@@ -1109,9 +1109,9 @@ export function ProductTestWorkspace() {
           <div className="flex-1 overflow-y-auto bg-muted/30 px-5 py-4">
             <div className="grid gap-4">
               {/* 품목코드 읽기 전용 */}
-              <section className="rounded-lg border bg-card p-4 shadow-sm">
+              <section className="rounded-md border bg-card p-4 shadow-sm">
                 <h3 className="mb-3 border-b pb-2 text-sm font-semibold text-foreground">식별 정보</h3>
-                <div className="flex items-center gap-2 rounded-lg border border-dashed bg-muted/40 px-3 py-2.5">
+                <div className="flex items-center gap-2 rounded-md border border-dashed bg-muted/40 px-3 py-2.5">
                   <Lock size={13} className="shrink-0 text-muted-foreground" />
                   <span className="text-xs text-muted-foreground">품목코드</span>
                   <span className="font-mono text-sm font-semibold text-foreground">
@@ -1129,7 +1129,7 @@ export function ProductTestWorkspace() {
               />
 
               {error && (
-                <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive">
+                <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive">
                   {error}
                 </div>
               )}
@@ -1160,7 +1160,7 @@ export function ProductTestWorkspace() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="rounded-lg border bg-muted/50 p-3">
+          <div className="rounded-md border bg-muted/50 p-3">
             <p className="text-sm font-medium">{deleteTarget?.name}</p>
             <p className="mt-0.5 font-mono text-xs text-muted-foreground">{deleteTarget?.productCode}</p>
           </div>

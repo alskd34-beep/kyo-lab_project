@@ -21,12 +21,24 @@
 # misc
 .DS_Store
 *.pem
+.omc/state/
 
-# debug
+
+# debug & logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+*.log
+/.playwright-mcp/
+
+# temporary & garbage files
+/temp/*
+!/temp/README.md
+/*.png
+/*.jpg
+/*.jpeg
+/*.webp
 
 # env files
 #.env*.local
@@ -34,3 +46,4 @@ pnpm-debug.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+

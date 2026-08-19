@@ -7,45 +7,39 @@ import { Skeleton } from '@frontend/components/ui/skeleton'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@frontend/components/ui/table'
 import { CellStack } from '@frontend/components/ui/table-cell-stack'
 import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from '@frontend/components/ui/table-sort'
-import { Avatar, AvatarFallback } from '@frontend/components/ui/avatar'
+import { TesterAvatar, primeTesterProfileCache } from '@frontend/lib/tester-profiles'
 import { cn } from '@frontend/lib/utils'
+import { OPEN_STATUSES } from '@shared/qc-status'
 import type { BatchSummary, BatchStatus, DashboardStats } from '@shared/pqm'
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface Tester {
+interface TesterLoad {
+  id: string
   name: string
-  init: string
-  color: string
-  assignedToday: number
+  assigned: number
 }
 
-// ─── Demo Data ────────────────────────────────────────────────────────────────
-
-const DEMO_UPCOMING: BatchSummary[] = [
-  { id: 1, product_code: '21081', product_name: '(사향)광동우황청심원현탁액(신)', spec: '50ML', batch_no: '26002', dosage_form: '현탁제', packaging_date: '2026-04-10', record_review_deadline: '2026-04-24', qc_completion_deadline: '2026-04-24', is_urgent: false, status: 'completed', dDayRecord: -13, dDayQc: -13, note: null, created_at: '', process_order: null, validation_type: '일반' },
-  { id: 2, product_code: '21350', product_name: '슬라임캡슐', spec: '120C', batch_no: '26001', dosage_form: '내용고형제', packaging_date: '2026-03-30', record_review_deadline: '2026-04-27', qc_completion_deadline: '2026-04-27', is_urgent: false, status: 'completed', dDayRecord: -10, dDayQc: -10, note: null, created_at: '', process_order: null, validation_type: '일반' },
-  { id: 3, product_code: '23263', product_name: '베니톨정', spec: '500T', batch_no: '26023', dosage_form: '내용고형제', packaging_date: '2026-04-16', record_review_deadline: '2026-04-30', qc_completion_deadline: '2026-04-30', is_urgent: false, status: 'in_progress', dDayRecord: -7, dDayQc: -7, note: null, created_at: '', process_order: null, validation_type: '일반' },
-  { id: 4, product_code: '23263', product_name: '베니톨정', spec: '500T', batch_no: '26024', dosage_form: '내용고형제', packaging_date: '2026-04-16', record_review_deadline: '2026-04-30', qc_completion_deadline: '2026-04-30', is_urgent: false, status: 'in_progress', dDayRecord: -7, dDayQc: -7, note: null, created_at: '', process_order: null, validation_type: '일반' },
-  { id: 5, product_code: '21391', product_name: '알도셉트정5mg', spec: '30T', batch_no: '26001-A', dosage_form: '내용고형제', packaging_date: '2026-04-06', record_review_deadline: '2026-04-30', qc_completion_deadline: '2026-04-30', is_urgent: false, status: 'in_progress', dDayRecord: -7, dDayQc: -7, note: null, created_at: '', process_order: null, validation_type: '일반' },
-  { id: 6, product_code: '21080', product_name: '(사향)광동우황청심원(신)', spec: '1환', batch_no: '26010', dosage_form: '환제', packaging_date: '2026-04-25', record_review_deadline: '2026-05-07', qc_completion_deadline: '2026-05-07', is_urgent: false, status: 'pending', dDayRecord: 0, dDayQc: 0, note: null, created_at: '', process_order: null, validation_type: '일반' },
-  { id: 7, product_code: '27045', product_name: '(베트남수출용)광동우황청심원(영묘향)', spec: '1환', batch_no: '26011', dosage_form: '환제', packaging_date: '2026-04-28', record_review_deadline: '2026-05-10', qc_completion_deadline: '2026-05-10', is_urgent: false, status: 'pending', dDayRecord: 3, dDayQc: 3, note: null, created_at: '', process_order: null, validation_type: '일반' },
-]
-
-const DEMO_STATS: DashboardStats = {
-  totalBatches: 129, pending: 97, inProgress: 15, completed: 17,
-  dueSoon7: 23, dueSoon3: 8, overdueCount: 5,
+interface TesterApiRow {
+  id: string
+  name: string
+  employeeNo?: string | null
+  avatarUrl?: string | null
+  userId?: string | null
 }
 
-const DEMO_TESTERS: Tester[] = [
-  { name: '김태훈', init: '김', color: 'bg-blue-500',    assignedToday: 3 },
-  { name: '박성호', init: '박', color: 'bg-violet-500',  assignedToday: 2 },
-  { name: '권택균', init: '권', color: 'bg-emerald-500', assignedToday: 1 },
-  { name: '장재훈', init: '장', color: 'bg-amber-500',   assignedToday: 4 },
-  { name: '지건희', init: '지', color: 'bg-rose-500',    assignedToday: 2 },
-]
+interface PctOrderApiRow {
+  assigneeTesterId: string | null
+  status: string
+}
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+const EMPTY_STATS: DashboardStats = {
+  totalBatches: 0,
+  pending: 0,
+  inProgress: 0,
+  completed: 0,
+  dueSoon7: 0,
+  dueSoon3: 0,
+  overdueCount: 0,
+}
 
 const STATUS_CONFIG: Record<BatchStatus, { label: string; dot: string }> = {
   pending:     { label: '대기중', dot: 'bg-muted-foreground' },
@@ -70,7 +64,11 @@ function dDayLabel(dDayQc: number | null): string {
   return `D-${dDayQc}`
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T> {
+  const res = await fetch(url, { signal, credentials: 'include' })
+  if (!res.ok) throw new Error(await res.text())
+  return res.json() as Promise<T>
+}
 
 type SortField = 'product_name' | 'batch_no' | 'qc_completion_deadline' | 'dDayQc' | 'status'
 
@@ -95,12 +93,13 @@ const SORT_COLUMNS: SortColumnDef<SortField>[] = [
 ]
 
 export default function HomePage() {
-  const [upcoming, setUpcoming]   = useState<BatchSummary[]>(DEMO_UPCOMING)
-  const [stats, setStats]         = useState<DashboardStats>(DEMO_STATS)
-  const [usingDemo, setUsingDemo] = useState(true)
+  const [upcoming, setUpcoming] = useState<BatchSummary[]>([])
+  const [stats, setStats] = useState<DashboardStats>(EMPTY_STATS)
+  const [testers, setTesters] = useState<TesterLoad[]>([])
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [sortField, setSortField] = useState<SortField>('qc_completion_deadline')
-  const [sortDir, setSortDir]     = useState<SortDir>('asc')
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
 
   function pickSort(field: SortField, dir: SortDir) {
     setSortField(field)
@@ -128,23 +127,47 @@ export default function HomePage() {
     setIsLoading(true)
 
     try {
-      const [statsData, batchData] = await Promise.all([
-        fetch('/api/dashboard', { signal }).then(async r => {
-          if (!r.ok) throw new Error(await r.text())
-          return r.json() as Promise<DashboardStats>
-        }),
-        fetch('/api/batches?limit=10', { signal }).then(async r => {
-          if (!r.ok) throw new Error(await r.text())
-          return r.json() as Promise<{ rows: BatchSummary[] }>
-        }),
+      const [statsResult, batchResult, testerResult, orderResult] = await Promise.allSettled([
+        fetchJson<DashboardStats>('/api/dashboard', signal),
+        fetchJson<{ rows: BatchSummary[] }>('/api/batches?limit=10', signal),
+        fetchJson<{ rows: TesterApiRow[] }>('/api/testers?activeOnly=1', signal),
+        fetchJson<{ rows: PctOrderApiRow[] }>('/api/pct-orders', signal),
       ])
-      if (!signal?.aborted) {
-        setStats(statsData)
-        setUpcoming(batchData.rows.length > 0 ? batchData.rows : DEMO_UPCOMING)
-        setUsingDemo(false)
+      if (signal?.aborted) return
+
+      const statsData = statsResult.status === 'fulfilled' ? statsResult.value : null
+      const batchData = batchResult.status === 'fulfilled' ? batchResult.value : null
+      const testerData = testerResult.status === 'fulfilled' ? testerResult.value : null
+      const orderData = orderResult.status === 'fulfilled' ? orderResult.value : null
+
+      const assignedByTester = new Map<string, number>()
+      for (const order of orderData?.rows ?? []) {
+        if (!order.assigneeTesterId || !OPEN_STATUSES.has(order.status)) continue
+        assignedByTester.set(
+          order.assigneeTesterId,
+          (assignedByTester.get(order.assigneeTesterId) ?? 0) + 1,
+        )
       }
+
+      if (testerData) primeTesterProfileCache(testerData.rows)
+      setStats(statsData ?? EMPTY_STATS)
+      setUpcoming(batchData?.rows ?? [])
+      setTesters((testerData?.rows ?? []).map(row => ({
+        id: row.id,
+        name: row.name,
+        assigned: assignedByTester.get(row.id) ?? 0,
+      })))
+      setLoadError(
+        [statsResult, batchResult, testerResult, orderResult].some(r => r.status === 'rejected')
+          ? '홈 데이터를 불러오지 못했습니다.'
+          : null,
+      )
     } catch {
-      if (!signal?.aborted) setUsingDemo(true)
+      if (signal?.aborted) return
+      setStats(EMPTY_STATS)
+      setUpcoming([])
+      setTesters([])
+      setLoadError('홈 데이터를 불러오지 못했습니다.')
     } finally {
       if (!signal?.aborted) setIsLoading(false)
     }
@@ -193,8 +216,8 @@ export default function HomePage() {
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <h1 className="text-xl font-semibold text-foreground">홈</h1>
         <p className="text-sm text-muted-foreground">기한 임박 배치와 오늘 시험 배정을 한눈에 봅니다.</p>
-        {usingDemo && (
-          <Badge variant="outline" className="border-amber-200 text-amber-700">데모 모드</Badge>
+        {loadError && (
+          <Badge variant="outline" className="border-amber-200 text-amber-700">조회 실패</Badge>
         )}
       </div>
 
@@ -221,7 +244,6 @@ export default function HomePage() {
             ))}
       </div>
 
-      {/* ── 중단: 기한임박 배치 + 상태 요약 ──────────────────────────── */}
       <div className="flex flex-col lg:flex-row gap-4 min-h-0">
 
         <Card className="flex-[3] gap-0 overflow-hidden py-0">
@@ -260,8 +282,18 @@ export default function HomePage() {
                       <TableCell className="px-3 py-2"><Skeleton className="h-5 w-14 rounded-full" /></TableCell>
                     </TableRow>
                   ))
+                : sortedData.length === 0
+                  ? (
+                      <TableRow className="hover:bg-transparent">
+                        <TableCell colSpan={3} className="py-14 text-center text-sm text-muted-foreground">
+                          {loadError
+                            ? `목록을 불러오지 못했습니다. ${loadError}`
+                            : '기한 임박 배치가 없습니다.'}
+                        </TableCell>
+                      </TableRow>
+                    )
                 : sortedData.slice(0, 10).map(row => {
-                    const statusCfg = STATUS_CONFIG[row.status]
+                    const statusCfg = STATUS_CONFIG[row.status] ?? STATUS_CONFIG.pending
                     return (
                       <TableRow key={row.id} className="cursor-pointer hover:bg-muted/40">
                         <TableCell className="px-3 py-2">
@@ -338,26 +370,40 @@ export default function HomePage() {
           <span className="text-sm font-semibold text-foreground">오늘의 시험 배정 현황</span>
         </div>
         <CardContent className="px-4 py-3">
-          <div className="flex flex-wrap items-center gap-3">
-            {DEMO_TESTERS.map(tester => (
-              <div
-                key={tester.name}
-                className="flex items-center gap-2.5 rounded-lg border bg-muted/30 px-3.5 py-2.5"
-              >
-                <Avatar className="h-8 w-8 shrink-0">
-                  <AvatarFallback className={`text-xs font-bold text-white ${tester.color}`}>
-                    {tester.init}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <p className="text-xs font-semibold text-foreground">{tester.name}</p>
-                  <p className="text-[11px] text-muted-foreground">
-                    오늘 <span className="font-semibold text-foreground">{tester.assignedToday}</span>건 배정
-                  </p>
+          {isLoading ? (
+            <div className="flex flex-wrap items-center gap-3">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-2.5 rounded-md border bg-muted/30 px-3.5 py-2.5">
+                  <Skeleton className="h-8 w-8 rounded-md" />
+                  <div className="flex flex-col gap-1">
+                    <Skeleton className="h-3 w-14" />
+                    <Skeleton className="h-3 w-20" />
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : testers.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              {loadError ? '시험 배정 현황을 불러오지 못했습니다.' : '등록된 시험자가 없습니다.'}
+            </p>
+          ) : (
+            <div className="flex flex-wrap items-center gap-3">
+              {testers.map(tester => (
+                <div
+                  key={tester.id}
+                  className="flex items-center gap-2.5 rounded-md border bg-muted/30 px-3.5 py-2.5"
+                >
+                  <TesterAvatar testerId={tester.id} name={tester.name} size="md" />
+                  <div>
+                    <p className="text-xs font-semibold text-foreground">{tester.name}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      배정 <span className="font-semibold text-foreground">{tester.assigned}</span>건
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 

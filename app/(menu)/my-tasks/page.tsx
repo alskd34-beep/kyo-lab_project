@@ -92,7 +92,7 @@ function ReadinessModal({
       <DialogContent size="md">
         <DialogHeader>
           <div className={cn(
-            "mb-1 flex size-10 items-center justify-center rounded-lg",
+            "mb-1 flex size-10 items-center justify-center rounded-md",
             isBlocked ? "bg-destructive/10 text-destructive" : "bg-amber-50 text-amber-600",
           )}>
             {isBlocked ? <XCircle className="size-5" /> : <ShieldAlert className="size-5" />}
@@ -110,7 +110,7 @@ function ReadinessModal({
           {blocked.length > 0 && (
             <ul className="flex flex-col gap-2">
               {blocked.map(c => (
-                <li key={c.code} className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs">
+                <li key={c.code} className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs">
                   <XCircle size={14} className="mt-0.5 shrink-0 text-red-500" />
                   <div>
                     {/* 마스터 미등록 장비는 name이 없으므로 코드로 대체 */}
@@ -128,7 +128,7 @@ function ReadinessModal({
               </p>
               <ul className="flex flex-col gap-2">
                 {warnings.map(c => (
-                  <li key={c.code} className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs">
+                  <li key={c.code} className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs">
                     <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-500" />
                     <div>
                       {/* 마스터 미등록 장비는 name이 없으므로 코드로 대체 */}
@@ -148,7 +148,7 @@ function ReadinessModal({
               </p>
               <ul className="flex flex-col gap-2">
                 {notes.map(n => (
-                  <li key={n.id} className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs">
+                  <li key={n.id} className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs">
                     <p className="font-semibold text-sky-900">{n.content}</p>
                     {n.remark && <p className="mt-0.5 text-sky-700">특이사항: {n.remark}</p>}
                     {(n.issueLot || n.createdByName) && (
@@ -422,7 +422,7 @@ export default function MyTasksPage() {
   if (loading) return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 md:p-6">
       {/* 헤더 */}
-      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+      <div className="rounded-md border border-slate-200 bg-white px-4 py-3 shadow-sm">
         <Skeleton className="h-5 w-24" />
         <Skeleton className="mt-1.5 h-3 w-72" />
       </div>
@@ -431,7 +431,7 @@ export default function MyTasksPage() {
         <Skeleton className="mb-2 h-3 w-36" />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+            <div key={i} className="rounded-md border border-slate-200 bg-white p-3 shadow-sm">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <Skeleton className="h-4 w-3/4" />
@@ -442,7 +442,7 @@ export default function MyTasksPage() {
                 <Skeleton className="h-3 w-20" />
                 <Skeleton className="h-3 w-24" />
               </div>
-              <Skeleton className="mt-3 h-9 w-full rounded-lg" />
+              <Skeleton className="mt-3 h-9 w-full rounded-md" />
             </div>
           ))}
         </div>
@@ -452,21 +452,21 @@ export default function MyTasksPage() {
         <Skeleton className="mb-2 h-3 w-24" />
         <div className="flex flex-col gap-3">
           {Array.from({ length: 2 }).map((_, i) => (
-            <div key={i} className="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div key={i} className="rounded-md border border-slate-200 bg-white shadow-sm">
               <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3">
                 <Skeleton className="h-4 w-32" />
                 <Skeleton className="h-4 w-56" />
                 <div className="flex gap-2">
-                  <Skeleton className="h-8 w-36 rounded-lg" />
-                  <Skeleton className="h-8 w-36 rounded-lg" />
-                  <Skeleton className="h-8 w-20 rounded-full" />
+                  <Skeleton className="h-8 w-36 rounded-md" />
+                  <Skeleton className="h-8 w-36 rounded-md" />
+                  <Skeleton className="h-8 w-20 rounded-md" />
                 </div>
               </div>
               <div className="px-4 py-3">
                 <Skeleton className="mb-2 h-3 w-32" />
                 <div className="flex flex-col gap-1">
                   {Array.from({ length: 3 }).map((_, j) => (
-                    <div key={j} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
+                    <div key={j} className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2">
                       <div className="flex items-center gap-2">
                         <Skeleton className="h-4 w-4 rounded-full" />
                         <Skeleton className="h-4 w-32" />
@@ -486,7 +486,7 @@ export default function MyTasksPage() {
   if (!linked) {
     return (
       <div className="p-4 md:p-6">
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-6 text-center">
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-6 text-center">
           <AlertTriangle className="mx-auto mb-2 text-amber-500" size={24} />
           <p className="text-sm font-semibold text-amber-800">계정에 시험자(담당자)가 연결되어 있지 않습니다.</p>
           <p className="mt-1 text-xs text-amber-700">관리자에게 계정-시험자 연결을 요청하세요.</p>
@@ -514,7 +514,7 @@ export default function MyTasksPage() {
 
         {msg && (
           <div className={cn(
-            "rounded-lg border px-3 py-2 text-sm font-medium",
+            "rounded-md border px-3 py-2 text-sm font-medium",
             msgType === "error"
               ? "border-destructive/20 bg-destructive/10 text-destructive"
               : "border-primary/20 bg-primary/5 text-foreground",
@@ -622,7 +622,7 @@ export default function MyTasksPage() {
                   전체 선택
                 </label>
                 <Select value={bulkStatus} onValueChange={setBulkStatus}>
-                  <SelectTrigger className="h-8 w-[88px] rounded-lg border-slate-200 text-xs">
+                  <SelectTrigger className="h-8 w-[88px] rounded-md border-slate-200 text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -732,7 +732,7 @@ export default function MyTasksPage() {
                 value={job.status}
                 onValueChange={v => patchJob(job.id, { status: v })}
               >
-                <SelectTrigger className={`h-8 shrink-0 rounded-full border px-2.5 text-[11px] font-semibold focus-visible:outline-none ${statusCls(job.status)}`}>
+                <SelectTrigger className={`h-8 shrink-0 rounded-md border px-2.5 text-[11px] font-semibold focus-visible:outline-none ${statusCls(job.status)}`}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -743,7 +743,7 @@ export default function MyTasksPage() {
               <span
                 title="검토·승인 단계는 관리자가 변경합니다."
                 className={cn(
-                  'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-semibold',
+                  'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-[11px] font-semibold',
                   statusCls(job.status),
                 )}
               >
@@ -769,7 +769,7 @@ export default function MyTasksPage() {
                   <li
                     key={it.id}
                     className={cn(
-                      "flex items-center justify-between rounded-lg border px-3 py-2",
+                      "flex items-center justify-between rounded-md border px-3 py-2",
                       done && "border-emerald-200 bg-emerald-50/60",
                     )}
                   >

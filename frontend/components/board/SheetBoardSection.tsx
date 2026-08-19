@@ -145,7 +145,7 @@ export default function SheetBoardSection() {
               value={fileId}
               onChange={e => setFileId(e.target.value)}
               disabled={loading}
-              className="h-9 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-xs font-mono outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 dark:focus:ring-emerald-900/40 text-slate-900 dark:text-slate-50 disabled:opacity-60"
+              className="h-9 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-xs font-mono outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 dark:focus:ring-emerald-900/40 text-slate-900 dark:text-slate-50 disabled:opacity-60"
               placeholder="시트 URL의 /d/ 다음 ID"
             />
           </div>
@@ -160,7 +160,7 @@ export default function SheetBoardSection() {
         </div>
 
         {error && (
-          <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/40 p-3">
+          <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/40 p-3">
             <AlertCircle size={14} className="mt-0.5 shrink-0 text-red-600 dark:text-red-400" />
             <p className="text-xs text-red-700 dark:text-red-300">{error}</p>
           </div>

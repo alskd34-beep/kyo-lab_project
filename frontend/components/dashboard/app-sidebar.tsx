@@ -227,7 +227,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild className="data-[slot=sidebar-menu-button]:!p-1.5">
               <Link href="/home" onClick={closeOnMobile}>
-                <span className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">KD</span>
+                <span className="flex aspect-square size-8 items-center justify-center rounded-md bg-primary text-sm font-bold text-primary-foreground">KD</span>
                 <div className="grid flex-1 text-left leading-tight">
                   <span className="truncate font-bold">QC 관리</span>
                   <span className="truncate text-[11px] text-muted-foreground">Quality Control</span>
@@ -311,7 +311,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
             {authLoading ? (
               // 로그인 사용자 확인 전엔 "게스트"로 잘못 표시하지 않고 스켈레톤을 보여준다
               <div className="flex items-center gap-2 p-2">
-                <Skeleton className="size-8 shrink-0 rounded-lg" />
+                <Skeleton className="size-8 shrink-0 rounded-md" />
                 <div className="grid flex-1 gap-1.5">
                   <Skeleton className="h-3.5 w-20" />
                   <Skeleton className="h-3 w-12" />
@@ -325,7 +325,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                     name={name}
                     avatarUrl={user?.avatarUrl}
                     size="md"
-                    className="rounded-lg"
+                    className="rounded-md"
                   />
                   <div className="grid flex-1 text-left text-sm leading-tight">
                     <span className="truncate font-medium">{name}</span>
@@ -341,7 +341,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                   <ChevronsUpDown className="ml-auto size-4" />
                 </SidebarMenuButton>
               </DropdownMenuTrigger>
-              <DropdownMenuContent side="right" align="end" sideOffset={8} className="min-w-56 rounded-lg">
+              <DropdownMenuContent side="right" align="end" sideOffset={8} className="min-w-56 rounded-md">
                 <DropdownMenuItem asChild>
                   <Link href="/settings/sys-settings" onClick={closeOnMobile}>비밀번호 변경</Link>
                 </DropdownMenuItem>

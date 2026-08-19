@@ -54,7 +54,7 @@ const STATUS_LABEL: Record<EquipmentStatus, string> = {
 }
 
 const STATUS_DOT: Record<EquipmentStatus, string> = {
-  active:         "bg-indigo-500",
+  active:         "bg-blue-500",
   calibrating:    "bg-amber-500",
   out_of_service: "bg-red-500",
 }
@@ -215,7 +215,7 @@ export default function EquipmentMasterPage() {
       {/* 헤더 */}
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
             <ClipboardList size={18} />
           </div>
           <div>
@@ -232,7 +232,7 @@ export default function EquipmentMasterPage() {
 
       {/* 플래시 메시지 */}
       {msg && (
-        <div className={`rounded-lg border px-4 py-2.5 text-sm ${
+        <div className={`rounded-md border px-4 py-2.5 text-sm ${
           msg.type === "error"
             ? "border-red-200 bg-red-50 text-red-600"
             : "border-blue-200 bg-blue-50 text-blue-700"
@@ -295,7 +295,7 @@ export default function EquipmentMasterPage() {
                         <TableCell className="px-3 py-2"><Skeleton className="h-8 w-28" /></TableCell>
                         <TableCell className="px-3 py-2"><Skeleton className="h-8 w-24" /></TableCell>
                         <TableCell className="px-3 py-2"><Skeleton className="h-8 w-24" /></TableCell>
-                        <TableCell className="px-3 py-2"><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
+                        <TableCell className="px-3 py-2"><Skeleton className="h-5 w-16 rounded-md" /></TableCell>
                         {isAdmin && <TableCell className="px-1 py-2"><Skeleton className="mx-auto h-6 w-6 rounded" /></TableCell>}
                       </TableRow>
                     ))

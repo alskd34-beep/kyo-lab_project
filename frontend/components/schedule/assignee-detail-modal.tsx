@@ -180,9 +180,9 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
         {/* ── 좌측: 배정 현황 ─────────────────────────────────────────────── */}
         <div className="flex min-w-0 flex-1 flex-col overflow-y-auto overscroll-contain p-4 md:p-5">
           {/* 헤더 */}
-          <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-3 rounded-md border border-slate-200 bg-white px-4 py-3 shadow-sm md:flex-row md:items-center md:justify-between">
             <div className="flex items-center gap-3">
-              <TesterAvatar testerId={testerId} name={testerName} size="md" className="size-11 rounded-xl text-2xl" />
+              <TesterAvatar testerId={testerId} name={testerName} size="md" className="size-11 rounded-md text-2xl" />
               <div>
                 <h2 className="text-lg font-black tracking-tight text-slate-900">{testerName}</h2>
                 <p className="text-xs font-medium text-slate-500">QC 과제 배정 현황</p>
@@ -193,10 +193,10 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
               <StatChip label="총 과제" value={`${totalCount}건`} />
               <StatChip label="긴급" value={`${urgentCount}건`} tone="red" />
               <StatChip label="대기" value={`${waitingCount}건`} />
-              <button onClick={() => void load()} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-100">
+              <button onClick={() => void load()} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-100">
                 {loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}새로고침
               </button>
-              <div className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700">
+              <div className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700">
                 <SlidersHorizontal className="size-4 shrink-0" />
                 <Select value={statusFilter || 'all'} onValueChange={v => setStatusFilter(v === 'all' ? '' : v)}>
                   <SelectTrigger className="h-auto border-0 p-0 shadow-none focus:ring-0 text-sm font-medium text-slate-700 bg-transparent">
@@ -214,19 +214,19 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
           {/* 그룹 목록 */}
           <div className="mt-4 flex flex-col gap-3">
             {loading ? (
-              <div className="rounded-2xl border border-slate-200 bg-white py-12 text-center text-sm text-slate-400 shadow-sm">불러오는 중…</div>
+              <div className="rounded-md border border-slate-200 bg-white py-12 text-center text-sm text-slate-400 shadow-sm">불러오는 중…</div>
             ) : groups.length === 0 ? (
-              <div className="rounded-2xl border border-slate-200 bg-white py-12 text-center text-sm text-slate-400 shadow-sm">배정된 과제가 없습니다.</div>
+              <div className="rounded-md border border-slate-200 bg-white py-12 text-center text-sm text-slate-400 shadow-sm">배정된 과제가 없습니다.</div>
             ) : groups.map(g => {
               const isCol = collapsed.has(g.key)
               return (
-                <div key={g.key} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div key={g.key} className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
                   <button onClick={() => toggle(g.key)} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50">
                     {isCol ? <ChevronRight className="size-4 text-slate-400" /> : <ChevronDown className="size-4 text-slate-400" />}
                     <Layers className="size-4 text-blue-600" />
                     <span className="text-sm font-bold text-slate-900">{g.label}</span>
                     {g.isFamily && (
-                      <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">동시분석 {g.rows.length}건</span>
+                      <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">동시분석 {g.rows.length}건</span>
                     )}
                     <div className="ml-auto flex items-center gap-4 text-xs font-medium text-slate-500">
                       <span>총 과제 <b className="text-slate-800">{g.rows.length}건</b></span>
@@ -255,7 +255,7 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
                               <td className="px-3 py-2.5">{r.packagingDate ?? "-"}</td>
                               <td className={cn("px-3 py-2.5", r.dueDate && "font-semibold text-red-500")}>{r.dueDate ?? "-"}</td>
                               <td className="px-3 py-2.5">
-                                {r.isUrgent ? <span className="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-600">긴급</span> : <span className="text-slate-400">-</span>}
+                                {r.isUrgent ? <span className="inline-flex items-center rounded-md bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-600">긴급</span> : <span className="text-slate-400">-</span>}
                               </td>
                               <td className="px-3 py-2.5">{r.method}</td>
                               <td className="px-3 py-2.5">{r.workdays != null ? `${r.workdays}일` : "-"}</td>
@@ -282,7 +282,7 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
           <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4">
             {/* 프로필 */}
             <div className="flex items-center gap-3">
-              <TesterAvatar testerId={testerId} name={testerName} size="md" className="size-12 rounded-xl text-2xl" />
+              <TesterAvatar testerId={testerId} name={testerName} size="md" className="size-12 rounded-md text-2xl" />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-base font-bold text-slate-900">{testerName}</p>
                 <p className="truncate text-xs text-slate-500">{subtitle ?? "QC 시험팀"}</p>
@@ -292,11 +292,11 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
 
             {/* 공수/과제 카드 */}
             <div className="mt-4 grid grid-cols-4 gap-2">
-              <div className="col-span-1 rounded-xl border border-slate-200 px-2.5 py-2">
+              <div className="col-span-1 rounded-md border border-slate-200 px-2.5 py-2">
                 <p className="text-[10px] font-bold text-slate-400">오늘 공수</p>
                 <p className="mt-1 text-sm font-black text-slate-900">{todayLoad}<span className="text-slate-400"> / {DAILY_CAPACITY}일</span></p>
-                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100">
-                  <div className="h-full rounded-full bg-indigo-600" style={{ width: `${loadPct}%` }} />
+                <div className="mt-1.5 h-1.5 overflow-hidden rounded-md bg-slate-100">
+                  <div className="h-full rounded-md bg-blue-600" style={{ width: `${loadPct}%` }} />
                 </div>
                 <p className="mt-1 text-[10px] text-slate-400">{loadPct}%</p>
               </div>
@@ -311,7 +311,7 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
                 <p className="text-sm font-bold text-slate-900">일정 요약</p>
                 <span className="inline-flex items-center gap-1 text-[11px] text-slate-400"><Calendar className="size-3" />주간</span>
               </div>
-              <div className="rounded-xl border border-slate-200 px-3 py-3">
+              <div className="rounded-md border border-slate-200 px-3 py-3">
                 <div className="mb-1.5 grid grid-cols-[40px_repeat(7,1fr)] gap-1 text-center text-[10px] text-slate-400">
                   <span />{["월", "화", "수", "목", "금", "토", "일"].map(d => <span key={d}>{d}</span>)}
                 </div>
@@ -323,14 +323,14 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
                     <div key={w.key} className="mb-1 grid grid-cols-[40px_repeat(7,1fr)] items-center gap-1">
                       <span className="text-[10px] font-medium text-slate-500">{w.label}</span>
                       {Array.from({ length: 7 }).map((_, i) => (
-                        <span key={i} className={cn("h-3.5 rounded-sm", i < filled ? "bg-blue-500" : "bg-slate-100")} />
+                        <span key={i} className={cn("h-3.5 rounded-md", i < filled ? "bg-blue-500" : "bg-slate-100")} />
                       ))}
                     </div>
                   )
                 })}
                 <div className="mt-2 flex items-center gap-3 text-[10px] text-slate-400">
-                  <span className="inline-flex items-center gap-1"><span className="size-2 rounded-sm bg-blue-500" />배정 공수</span>
-                  <span className="inline-flex items-center gap-1"><span className="size-2 rounded-sm bg-slate-100" />여유 공수</span>
+                  <span className="inline-flex items-center gap-1"><span className="size-2 rounded-md bg-blue-500" />배정 공수</span>
+                  <span className="inline-flex items-center gap-1"><span className="size-2 rounded-md bg-slate-100" />여유 공수</span>
                 </div>
               </div>
             </div>
@@ -348,13 +348,13 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
                   const fam = familyByCode.get(r.productCode)
                   const accent = accentOf.get(fam ? `fam:${fam.id}` : `code:${r.productCode}`) ?? "bg-slate-300"
                   return (
-                    <div key={r.id} className="relative overflow-hidden rounded-lg border border-slate-200 bg-white px-3 py-2 pl-4">
+                    <div key={r.id} className="relative overflow-hidden rounded-md border border-slate-200 bg-white px-3 py-2 pl-4">
                       <span className={cn("absolute inset-y-0 left-0 w-1", accent)} />
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <p className="flex items-center gap-1.5 text-[13px] font-semibold text-slate-800">
                             <span className="truncate">{r.productName} (제조 {r.batchNo})</span>
-                            {r.isUrgent && <span className="shrink-0 rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-600">긴급</span>}
+                            {r.isUrgent && <span className="shrink-0 rounded-md bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-600">긴급</span>}
                           </p>
                           <p className="mt-0.5 text-[11px] text-slate-500">완료예정 {r.dueDate ?? "-"} · 공수 {r.workdays ?? "-"}일</p>
                         </div>
@@ -370,11 +370,11 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
           {/* 푸터 */}
           <div className="flex items-center gap-2 border-t border-slate-100 px-4 py-3">
             <button onClick={onOpenDetail} disabled={!onOpenDetail}
-              className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-slate-300 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-40">
+              className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-40">
               <ExternalLink className="size-4" />상세보기
             </button>
             <button onClick={onReassign} disabled={!onReassign}
-              className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl bg-indigo-600 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-40">
+              className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-md bg-blue-600 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-40">
               <ArrowLeftRight className="size-4" />배정 변경
             </button>
           </div>
@@ -388,7 +388,7 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
 // ─── 소형 UI ────────────────────────────────────────────────────────────────────
 function StatChip({ label, value, tone }: { label: string; value: string | number; tone?: "red" }) {
   return (
-    <div className="rounded-xl border border-slate-200 px-3 py-1.5 text-center">
+    <div className="rounded-md border border-slate-200 px-3 py-1.5 text-center">
       <p className="text-[10px] font-bold text-slate-400">{label}</p>
       <p className={cn("text-sm font-black", tone === "red" ? "text-red-500" : "text-slate-900")}>{value}</p>
     </div>
@@ -396,7 +396,7 @@ function StatChip({ label, value, tone }: { label: string; value: string | numbe
 }
 function MiniStat({ label, value, tone }: { label: string; value: string; tone?: "red" }) {
   return (
-    <div className="rounded-xl border border-slate-200 px-2.5 py-2">
+    <div className="rounded-md border border-slate-200 px-2.5 py-2">
       <p className="text-[10px] font-bold text-slate-400">{label}</p>
       <p className={cn("mt-1 text-sm font-black", tone === "red" ? "text-red-500" : "text-slate-900")}>{value}</p>
     </div>
@@ -404,7 +404,7 @@ function MiniStat({ label, value, tone }: { label: string; value: string; tone?:
 }
 function StatusBadge({ status }: { status: string }) {
   return (
-    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
       <span className={cn("size-1.5 rounded-full", statusDot(status))} />{status}
     </span>
   )
