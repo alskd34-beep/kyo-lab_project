@@ -5,8 +5,8 @@ import { useAuth } from "@frontend/lib/auth-context"
 import { Wrench, Plus, Trash2, Loader2, CheckCircle2, Ban } from "lucide-react"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import { DateField } from "@frontend/components/ui/date-field"
-import { cn } from "@frontend/lib/utils"
 import { Badge } from "@frontend/components/ui/badge"
+import { Tag } from "@frontend/components/ui/tag"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
 import { CellStack } from "@frontend/components/ui/table-cell-stack"
@@ -44,11 +44,11 @@ interface ReservationRow {
 const STATUS_LABEL: Record<ReservationStatus, string> = {
   RESERVED: "예약", WAITING: "대기", CANCELLED: "취소", COMPLETED: "완료",
 }
-const STATUS_DOT: Record<ReservationStatus, string> = {
-  RESERVED:  "bg-emerald-500",
-  WAITING:   "bg-muted-foreground",
-  CANCELLED: "bg-red-500",
-  COMPLETED: "bg-blue-500",
+const STATUS_TAG_COLOR: Record<ReservationStatus, "blue" | "yellow" | "red" | "green"> = {
+  RESERVED:  "blue",
+  WAITING:   "yellow",
+  CANCELLED: "red",
+  COMPLETED: "green",
 }
 
 type SortField = "status" | "equipmentId" | "startDate" | "endDate" | "userName"
@@ -282,11 +282,10 @@ export default function EquipmentReservationPage() {
                 return (
                   <TableRow key={r.id}>
                     <TableCell className="px-3 py-2">
-                      <Badge variant="outline" className="gap-1.5">
-                        <span className={cn("size-1.5 rounded-full", STATUS_DOT[r.status])} />
+                      <Tag color={STATUS_TAG_COLOR[r.status]} dot={r.status === "RESERVED" || r.status === "WAITING"}>
                         {STATUS_LABEL[r.status]}
                         {r.status === "WAITING" && r.waitOrder != null && ` #${r.waitOrder}`}
-                      </Badge>
+                      </Tag>
                     </TableCell>
                     <TableCell className="px-3 py-2">
                       <CellStack

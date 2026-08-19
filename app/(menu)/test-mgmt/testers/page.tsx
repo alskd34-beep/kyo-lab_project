@@ -11,6 +11,7 @@ import {
 
 import { cn } from "@frontend/lib/utils"
 import { Badge } from "@frontend/components/ui/badge"
+import { Tag } from "@frontend/components/ui/tag"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
@@ -532,15 +533,9 @@ export default function TestersPage() {
                         <span className="font-mono text-[11px] font-semibold text-foreground">
                           {tester.employeeNo}
                         </span>
-                        <Badge variant="outline" className="gap-1.5 text-[10px]">
-                          <span
-                            className={cn(
-                              "size-1.5 rounded-full",
-                              tester.isActive ? "bg-blue-500" : "bg-muted-foreground"
-                            )}
-                          />
+                        <Tag color={tester.isActive ? "green" : "mono"} className="text-[10px]">
                           {tester.isActive ? "활성" : "비활성"}
-                        </Badge>
+                        </Tag>
                       </div>
                       <div className="mt-1 flex items-center gap-2">
                         <TesterAvatar testerId={tester.id} name={tester.name} avatarUrl={tester.avatarUrl} size="sm" />
@@ -661,10 +656,8 @@ export default function TestersPage() {
                         <button
                           onClick={(e) => { e.stopPropagation(); void toggleActive(tester) }}
                           className={cn(
-                            "rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors hover:bg-muted/50",
-                            tester.isActive
-                              ? "border-blue-200 text-blue-700"
-                              : "border-input text-muted-foreground"
+                            "rounded-md px-2 py-0.5 text-[11px] font-medium text-white transition-opacity hover:opacity-90",
+                            tester.isActive ? "bg-green-500" : "bg-slate-500"
                           )}
                         >
                           {tester.isActive ? "활성" : "비활성"}

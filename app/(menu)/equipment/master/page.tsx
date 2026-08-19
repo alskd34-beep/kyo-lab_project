@@ -6,7 +6,7 @@ import { ClipboardList, Plus, Pencil, Trash2, Loader2 } from "lucide-react"
 import { DateField } from "@frontend/components/ui/date-field"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
-import { Badge } from "@frontend/components/ui/badge"
+import { Tag } from "@frontend/components/ui/tag"
 import { Input } from "@frontend/components/ui/input"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import { CellStack } from "@frontend/components/ui/table-cell-stack"
@@ -53,10 +53,10 @@ const STATUS_LABEL: Record<EquipmentStatus, string> = {
   out_of_service:  "사용 불가",
 }
 
-const STATUS_DOT: Record<EquipmentStatus, string> = {
-  active:         "bg-blue-500",
-  calibrating:    "bg-amber-500",
-  out_of_service: "bg-red-500",
+const STATUS_TAG_COLOR: Record<EquipmentStatus, "green" | "yellow" | "red"> = {
+  active:         "green",
+  calibrating:    "yellow",
+  out_of_service: "red",
 }
 
 // ─── 검교정 만료 판정 ─────────────────────────────────────────────────────────
@@ -333,10 +333,9 @@ export default function EquipmentMasterPage() {
                         />
                       </TableCell>
                       <TableCell className="px-3 py-2">
-                        <Badge variant="outline" className="gap-1.5">
-                          <span className={`size-1.5 rounded-full ${STATUS_DOT[row.status]}`} />
+                        <Tag color={STATUS_TAG_COLOR[row.status]} dot={row.status === "calibrating"}>
                           {STATUS_LABEL[row.status]}
-                        </Badge>
+                        </Tag>
                       </TableCell>
                       {isAdmin && (
                         <TableCell className="px-1 py-2 text-center">

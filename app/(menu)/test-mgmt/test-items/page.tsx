@@ -13,6 +13,7 @@ import {
 import { cn } from "@frontend/lib/utils"
 
 import { Badge } from "@frontend/components/ui/badge"
+import { Tag } from "@frontend/components/ui/tag"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
 import { Skeleton } from "@frontend/components/ui/skeleton"
@@ -594,15 +595,9 @@ export default function TestItemsPage() {
                             {product.productCode}
                           </span>
                           {product.isActive ? (
-                            <Badge variant="outline" className="gap-1 text-[10px]">
-                              <span className="size-1.5 rounded-full bg-blue-500" />
-                              활성
-                            </Badge>
+                            <Tag color="green" className="text-[10px]">활성</Tag>
                           ) : (
-                            <Badge variant="outline" className="gap-1 text-[10px]">
-                              <span className="size-1.5 rounded-full bg-muted-foreground" />
-                              비활성
-                            </Badge>
+                            <Tag color="mono" className="text-[10px]">비활성</Tag>
                           )}
                         </div>
                         <p

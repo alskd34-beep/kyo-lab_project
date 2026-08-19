@@ -13,6 +13,7 @@ import {
 
 import { cn } from "@frontend/lib/utils"
 import { Badge } from "@frontend/components/ui/badge"
+import { Tag } from "@frontend/components/ui/tag"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
 import {
@@ -140,10 +141,8 @@ function ActiveToggleButton({ row, onToggle, className }: { row: TestItemRow; on
     <button
       onClick={onToggle}
       className={cn(
-        "block max-w-full truncate rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors",
-        row.isActive
-          ? "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
-          : "border-input bg-background text-muted-foreground hover:bg-muted/50",
+        "block max-w-full truncate rounded-md px-2 py-0.5 text-[11px] font-medium text-white transition-opacity hover:opacity-90",
+        row.isActive ? "bg-green-500" : "bg-slate-500",
         className,
       )}
     >
@@ -512,10 +511,9 @@ export default function TestMasterPage() {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <CategoryBadge category={row.category} />
-                    <Badge variant="outline" className={cn("gap-1.5", row.isActive ? "" : "text-muted-foreground")}>
-                      <span className={cn("size-1.5 rounded-full", row.isActive ? "bg-blue-500" : "bg-muted-foreground")} />
+                    <Tag color={row.isActive ? "green" : "mono"}>
                       {row.isActive ? "활성" : "비활성"}
-                    </Badge>
+                    </Tag>
                   </div>
                   <div className="mt-1 text-sm font-semibold break-words text-foreground">
                     {row.name}

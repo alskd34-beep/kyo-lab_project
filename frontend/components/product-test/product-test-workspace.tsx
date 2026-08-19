@@ -16,6 +16,7 @@ import { useIsMobile } from "@frontend/hooks/use-mobile"
 import { useVirtualWindow } from "@frontend/hooks/use-virtual-window"
 
 import { Badge } from "@frontend/components/ui/badge"
+import { Tag } from "@frontend/components/ui/tag"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
 import {
@@ -334,10 +335,7 @@ const ProductTableRow = memo(function ProductTableRow({
         />
       </TableCell>
       <TableCell className="px-3 py-2">
-        <StatusLine
-          color={row.isActive ? "bg-blue-500" : "bg-muted-foreground"}
-          label={row.isActive ? "활성" : "비활성"}
-        />
+        <Tag color={row.isActive ? "green" : "mono"}>{row.isActive ? "활성" : "비활성"}</Tag>
       </TableCell>
 
       <TableCell className="px-1 py-2 text-center">
@@ -394,10 +392,9 @@ const ProductCard = memo(function ProductCard({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="font-mono text-[11px] text-muted-foreground">{row.productCode}</span>
-            <Badge variant="outline" className="gap-1.5 text-[10px]">
-              <span className={cn("size-1.5 rounded-full", row.isActive ? "bg-blue-500" : "bg-muted-foreground")} />
+            <Tag color={row.isActive ? "green" : "mono"} className="text-[10px]">
               {row.isActive ? "활성" : "비활성"}
-            </Badge>
+            </Tag>
             <DifficultyBadge difficulty={row.difficulty} />
           </div>
           <div className="mt-1 break-words text-sm font-semibold text-foreground">
