@@ -819,7 +819,7 @@ export default function OrdersPage() {
                 <Skeleton className="h-px flex-1" />
                 <Skeleton className="h-3 w-14" />
               </div>
-              <div className="grid w-full grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))] gap-2">
+              <div className="grid w-full justify-start grid-cols-[repeat(auto-fit,minmax(min(100%,300px),400px))] gap-2">
                 {Array.from({ length: 3 }).map((_, j) => (
                   <Card key={j} className="gap-3 p-3">
                     <div className="flex items-start gap-2.5">
@@ -890,7 +890,7 @@ export default function OrdersPage() {
                 </div>
 
                 {!isCollapsed && (
-                  <div className="grid w-full grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))] gap-2 p-0.5">
+                  <div className="grid w-full justify-start grid-cols-[repeat(auto-fit,minmax(min(100%,300px),400px))] gap-2 p-0.5">
                     {buildRowTree(g.key, g.rows).map(item => {
                       if (item.type === "single") return renderOrderCard(item.row)
                       const fc = famCollapsed.has(item.familyId)
@@ -910,7 +910,7 @@ export default function OrdersPage() {
                             <Badge variant="secondary">동시분석 {item.rows.length}건</Badge>
                           </button>
                           {!fc && (
-                            <div className="mt-2 grid w-full grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))] gap-2 border-t border-primary/15 pt-2">
+                            <div className="mt-2 grid w-full justify-start grid-cols-[repeat(auto-fit,minmax(min(100%,300px),400px))] gap-2 border-t border-primary/15 pt-2">
                               {item.rows.map(r => renderOrderCard(r, true))}
                             </div>
                           )}
