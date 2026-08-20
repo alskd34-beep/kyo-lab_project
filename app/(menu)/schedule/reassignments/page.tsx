@@ -287,6 +287,7 @@ export default function ReassignmentsPage() {
                 label="조회기간"
                 startDate={fromDate}
                 endDate={toDate}
+                numberOfMonths={2}
                 onChange={(start, end) => {
                   setFromDate(start)
                   setToDate(end)

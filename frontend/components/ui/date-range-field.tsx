@@ -34,6 +34,7 @@ interface Props {
   onChange: (start: string, end: string) => void
   label?: string
   disabled?: boolean
+  numberOfMonths?: number
 }
 
 export function DateRangeField({
@@ -42,6 +43,7 @@ export function DateRangeField({
   onChange,
   label,
   disabled,
+  numberOfMonths = 1,
 }: Props) {
   const [open, setOpen] = useState(false)
 
@@ -103,7 +105,7 @@ export function DateRangeField({
             onSelect={handleSelect}
             defaultMonth={toDate(startDate)}
             locale={ko}
-            numberOfMonths={1}
+            numberOfMonths={numberOfMonths}
           />
         </PopoverContent>
       </Popover>
