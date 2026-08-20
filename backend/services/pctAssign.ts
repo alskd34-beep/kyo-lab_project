@@ -517,7 +517,7 @@ export async function autoAssign(orderIds?: string[]): Promise<AssignResult> {
   return { mode: resolved.mode, ...applied }
 }
 
-/** 수동 단일 배정 (담당자 변경 시 재배정 이력 기록) */
+/** 수동 단일 배정·배정 해제(testerId=null). 담당자가 실제로 바뀌면 재배정 이력 기록 */
 export async function assignManually(
   orderId: string,
   testerId: string | null,
@@ -526,13 +526,18 @@ export async function assignManually(
   // 비활성 시험자에게는 수동으로도 배정할 수 없다(계정 비활성 = 업무 제외).
   await assertTesterAssignable(testerId)
 
-  // 변경 전 담당자 조회 → 재배정 이력용
+  // 변경 전 담당자 조회 → 재배정 이력용 (locked 컬럼까지 받기 위해 select('*'))
   const { data: before } = await supabaseAdmin
     .from('pct_orders')
-    .select('assignee_tester_id')
+    .select('*')
     .eq('id', orderId)
     .maybeSingle()
   const beforeUser = (before?.assignee_tester_id as string) ?? null
+
+  // [원칙3] 확정(LOCK)된 오더는 배정·해제 대상에서 제외한다.
+  if (before?.locked && beforeUser !== testerId) {
+    throw new Error('확정(LOCK)된 오더는 담당자를 변경할 수 없습니다. 확정 해제 후 다시 시도해 주세요.')
+  }
 
   const { error } = await supabaseAdmin.from('pct_orders').update({ assignee_tester_id: testerId }).eq('id', orderId)
   if (error) throw error

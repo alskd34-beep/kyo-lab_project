@@ -62,6 +62,11 @@ function displayEditValue(field: string, value: string | null, testerNames: Map<
   return value
 }
 
+/** 담당자 변경 1건을 식별하는 키 (오더 · 변경 전 · 변경 후 시험자). */
+function assigneeChangeKey(orderId: string | null, before: string | null, after: string | null): string {
+  return `${orderId ?? ''}|${before ?? ''}|${after ?? ''}`
+}
+
 function startOfDayIso(date: string): string {
   return `${date}T00:00:00.000Z`
 }
@@ -160,8 +165,24 @@ export async function listAiScheduleHistory(
   if (editRes.error) throw editRes.error
   if (reassignRes.error) throw reassignRes.error
 
-  const editRaw = (editRes.data ?? []) as Record<string, unknown>[]
   const reassignRaw = (reassignRes.data ?? []) as Record<string, unknown>[]
+
+  // 담당자 변경은 reassignment_history 를 정본으로 본다.
+  // 수정 다이얼로그를 거친 변경은 pct_order_edits 에도 같은 내용이 남으므로,
+  // 짝이 있는 담당자 수정 행은 걸러 이력이 두 줄로 보이지 않게 한다.
+  const reassignKeys = new Set(reassignRaw.map(row => assigneeChangeKey(
+    (row.order_id as string) ?? null,
+    (row.before_user as string) ?? null,
+    (row.after_user as string) ?? null,
+  )))
+  const editRaw = ((editRes.data ?? []) as Record<string, unknown>[]).filter(row => {
+    if (row.field !== 'assigneeTesterId') return true
+    return !reassignKeys.has(assigneeChangeKey(
+      (row.order_id as string) ?? null,
+      (row.old_value as string) ?? null,
+      (row.new_value as string) ?? null,
+    ))
+  })
 
   const orderIds = Array.from(new Set([
     ...editRaw.map(row => row.order_id as string | null),

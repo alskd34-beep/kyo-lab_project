@@ -5,7 +5,7 @@ import { useAuth } from "@frontend/lib/auth-context"
 import {
   RefreshCw, Sparkles, History, AlertCircle, X, Loader2, Database, Plus,
   ChevronDown, ChevronRight, ChevronLeft, Lock, LockOpen, Search, CalendarDays, Users, ListChecks, Layers,
-  Check,
+  Check, UserMinus,
 } from "lucide-react"
 import { CLOSED_STAGE, JOB_STAGES, stageStyle } from "@shared/qc-status"
 import { cn } from "@frontend/lib/utils"
@@ -306,38 +306,60 @@ export default function OrdersPage() {
     } finally { setBusy(null) }
   }
 
-  // 선택된 오더에 담당자 일괄 배정 — 확정(LOCK)된 건은 제외(확정 해제된 것만 변경 가능)
-  const applyAssign = async () => {
-    if (!bulkTester) return
-    const realId = bulkTester === "none" ? null : bulkTester
-    const ids = Array.from(selected).filter(id => {
-      const r = rows.find(x => x.id === id)
-      return r && !r.locked
-    })
-    if (ids.length === 0) { flash("확정 해제된 오더만 담당자 변경이 가능합니다."); return }
-    setBusy("assign-bulk")
+  /**
+   * 선택된 오더의 담당자를 일괄 변경한다. testerId=null 이면 배정 해제.
+   * 확정(LOCK)된 건은 제외한다(확정 해제된 것만 변경 가능 — 서버에서도 동일하게 막는다).
+   */
+  const applyAssignTo = async (
+    testerId: string | null,
+    opts: { busyKey: string; reason: string; onlyAssigned?: boolean },
+  ) => {
+    const targets = Array.from(selected)
+      .map(id => rows.find(x => x.id === id))
+      .filter((r): r is OrderRow => !!r && !r.locked && (!opts.onlyAssigned || !!r.assigneeTesterId))
+    if (targets.length === 0) {
+      flash(opts.onlyAssigned
+        ? "해제할 담당자가 있는 미확정 오더가 없습니다."
+        : "확정 해제된 오더만 담당자 변경이 가능합니다.")
+      return
+    }
+    setBusy(opts.busyKey)
     try {
-      const results = await Promise.all(ids.map(async id => {
+      const results = await Promise.all(targets.map(async ({ id }) => {
         const res = await fetch("/api/pct-orders", {
           method: "PATCH", credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id, patch: { assigneeTesterId: realId }, reason: "일괄 담당자 배정" }),
+          body: JSON.stringify({ id, patch: { assigneeTesterId: testerId }, reason: opts.reason }),
         })
         return { id, ok: res.ok }
       }))
       const okIds = new Set(results.filter(r => r.ok).map(r => r.id))
       const failed = results.length - okIds.size
-      const name = realId ? (testers.find(t => t.id === realId)?.name ?? "") : "미배정"
+      const name = testerId ? (testers.find(t => t.id === testerId)?.name ?? "") : "미배정"
       setRows(prev => prev.map(r => okIds.has(r.id)
-        ? { ...r, assigneeTesterId: realId, assigneeName: realId ? name : null }
+        ? { ...r, assigneeTesterId: testerId, assigneeName: testerId ? name : null }
         : r))
       setSelected(new Set())
       setBulkTester("")
-      flash(`${okIds.size}건 담당자 '${name}' 배정 완료${failed > 0 ? ` (실패 ${failed}건)` : ""}`)
+      const done = testerId ? `담당자 '${name}' 배정 완료` : "배정 해제 완료"
+      flash(`${okIds.size}건 ${done}${failed > 0 ? ` (실패 ${failed}건)` : ""}`)
     } catch (e) {
-      flash(`담당자 배정 실패: ${e instanceof Error ? e.message : ""}`)
+      const what = testerId ? "담당자 배정" : "배정 해제"
+      flash(`${what} 실패: ${e instanceof Error ? e.message : ""}`)
     } finally { setBusy(null) }
   }
+
+  const applyAssign = async () => {
+    if (!bulkTester) return
+    await applyAssignTo(bulkTester === "none" ? null : bulkTester, {
+      busyKey: "assign-bulk",
+      reason: bulkTester === "none" ? "일괄 배정 해제" : "일괄 담당자 배정",
+    })
+  }
+
+  // AI 배정 결과만 지우기 — 오더는 남기고 담당자만 미배정으로 되돌린다
+  const applyUnassign = () =>
+    applyAssignTo(null, { busyKey: "unassign-bulk", reason: "배정 해제", onlyAssigned: true })
 
   const runAutoAssign = async () => {
     setBusy("assign")
@@ -971,10 +993,13 @@ export default function OrdersPage() {
       )}
       {showLog && <IngestLogModal onClose={() => setShowLog(false)} />}
 
-      {/* 선택 시 하단 미니 모달 — 담당자 배정 / 확정·해제 */}
+      {/* 선택 시 하단 미니 모달 — 담당자 배정·해제 / 확정·해제 */}
       {selected.size > 0 && (() => {
-        const lockedCount = Array.from(selected).filter(id => rows.find(r => r.id === id)?.locked).length
+        const selectedRows = Array.from(selected).map(id => rows.find(r => r.id === id)).filter((r): r is OrderRow => !!r)
+        const lockedCount = selectedRows.filter(r => r.locked).length
         const unlockedCount = selected.size - lockedCount
+        // 배정 해제 대상 = 미확정이면서 담당자가 있는 건
+        const unassignableCount = selectedRows.filter(r => !r.locked && !!r.assigneeTesterId).length
         return (
           <div className="pointer-events-none fixed inset-x-0 bottom-5 z-40 flex justify-center px-4">
             <div className="pointer-events-auto flex w-full max-w-3xl flex-wrap items-center gap-3 rounded-md border bg-card px-4 py-2.5 shadow-lg">
@@ -1007,6 +1032,16 @@ export default function OrdersPage() {
                     disabled={busy !== null || !bulkTester}
                   >
                     {busy === "assign-bulk" ? <Loader2 className="animate-spin" /> : <Users />}배정
+                  </Button>
+                  <Button
+                    size="default"
+                    variant="outline"
+                    onClick={applyUnassign}
+                    disabled={busy !== null || unassignableCount === 0}
+                    title="선택한 오더의 담당자 배정만 지웁니다 (오더는 그대로 유지)"
+                  >
+                    {busy === "unassign-bulk" ? <Loader2 className="animate-spin" /> : <UserMinus />}
+                    배정 해제{unassignableCount > 0 ? ` ${unassignableCount}` : ""}
                   </Button>
                 </div>
               )}
@@ -1528,8 +1563,13 @@ function EditModal({ order, testers, onClose, onSaved }: {
             </SelectContent>
           </Select>
         </Field>
+        {/* 담당자 — '미배정' 선택이 곧 배정 해제. 확정(LOCK)된 오더는 변경 불가(원칙3) */}
         <Field label="담당자">
-          <Select value={form.assigneeTesterId || "none"} onValueChange={v => setForm({ ...form, assigneeTesterId: v === "none" ? "" : v })}>
+          <Select
+            value={form.assigneeTesterId || "none"}
+            disabled={order.locked}
+            onValueChange={v => setForm({ ...form, assigneeTesterId: v === "none" ? "" : v })}
+          >
             <SelectTrigger className="!h-9 w-full px-3"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="none">미배정</SelectItem>
@@ -1540,6 +1580,11 @@ function EditModal({ order, testers, onClose, onSaved }: {
               ))}
             </SelectContent>
           </Select>
+          {order.locked && (
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              확정(LOCK)된 오더입니다. 확정 해제 후 배정을 변경·해제할 수 있습니다.
+            </p>
+          )}
         </Field>
         <Field label="비고" full><input value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} className={inputCls} /></Field>
       </div>

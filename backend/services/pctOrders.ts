@@ -4,6 +4,7 @@
 
 import { supabaseAdmin } from '@backend/lib/supabase'
 import { assertTesterAssignable } from '@backend/services/testers'
+import { logReassignment } from '@backend/services/reassignmentHistory'
 import {
   METHOD_PARTIAL, normalizeForMethod, replaceForOrder,
   type OrderTestItemInput,
@@ -243,6 +244,8 @@ export async function setOrderLock(orderId: string, lock: boolean, userId: strin
 
 /**
  * 사유 필수 수정. 변경된 각 필드마다 pct_order_edits 이력을 남긴다.
+ * 담당자(assigneeTesterId) 변경·해제는 재배정 이력(reassignment_history)에도 함께 적재한다 —
+ * AI 자동배정/수동배정과 같은 저장소를 써야 재배정 통계가 누락되지 않는다.
  */
 export async function updateOrderWithReason(
   id: string,
@@ -255,10 +258,10 @@ export async function updateOrderWithReason(
   // 담당자를 바꾸는 수정이면 비활성 시험자 지정을 차단한다
   if (patch.assigneeTesterId) await assertTesterAssignable(String(patch.assigneeTesterId))
 
-  // 현재값 로드
+  // 현재값 로드 (locked 컬럼까지 받기 위해 select('*') — 0015 미적용 환경에서는 자동 누락)
   const { data: current, error: curErr } = await supabaseAdmin
     .from('pct_orders')
-    .select('product_code, product_name, batch_no, dosage_form, packaging_date, due_date, is_urgent, method, status, note, assignee_tester_id, ingest_state')
+    .select('*')
     .eq('id', id)
     .single()
   if (curErr) throw curErr
@@ -285,6 +288,12 @@ export async function updateOrderWithReason(
 
   if (edits.length === 0) return  // 변경 없음
 
+  // [원칙3] 확정(LOCK)된 오더의 담당자는 서버에서도 변경·해제를 막는다
+  const assigneeEdit = edits.find(e => e.field === 'assigneeTesterId')
+  if (assigneeEdit && currentRow.locked) {
+    throw new Error('확정(LOCK)된 오더는 담당자를 변경할 수 없습니다. 확정 해제 후 다시 시도해 주세요.')
+  }
+
   const { error: updErr } = await supabaseAdmin.from('pct_orders').update(dbPatch).eq('id', id)
   if (updErr) throw updErr
 
@@ -292,6 +301,18 @@ export async function updateOrderWithReason(
     edits.map(e => ({ order_id: id, field: e.field, old_value: e.old_value, new_value: e.new_value, reason: trimmedReason, edited_by: editedBy })),
   )
   if (logErr) throw logErr
+
+  // 담당자 변경·해제는 재배정 이력에도 남긴다(자동배정/수동배정과 동일 저장소).
+  // 이력 적재 실패가 수정 자체를 되돌리지는 않는다.
+  if (assigneeEdit) {
+    await logReassignment({
+      orderId:    id,
+      beforeUser: assigneeEdit.old_value,
+      afterUser:  assigneeEdit.new_value,
+      reason:     trimmedReason,
+      changedBy:  editedBy,
+    }).catch(() => {})
+  }
 }
 
 export interface OrderEditRow {
