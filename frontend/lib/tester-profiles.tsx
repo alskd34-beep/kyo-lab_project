@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useSyncExternalStore } from 'react'
+import Image from 'next/image'
 import { cn } from '@frontend/lib/utils'
 
 export interface TesterProfile {
@@ -270,11 +271,18 @@ export function TesterAvatar({
     md: 'size-8 rounded-md text-[18px]',
     lg: 'size-24 rounded-md text-5xl',
   }[size]
+  const sizePx = { xs: 20, sm: 28, md: 32, lg: 96 }[size]
 
   if (resolvedUrl) {
     return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src={resolvedUrl} alt="" className={cn('shrink-0 object-cover ring-1 ring-border', sizeClass, className)} />
+      <Image
+        src={resolvedUrl}
+        alt={label}
+        width={sizePx}
+        height={sizePx}
+        unoptimized
+        className={cn('shrink-0 object-cover ring-1 ring-border', sizeClass, className)}
+      />
     )
   }
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import Image from 'next/image'
 import { X, Send, Sparkles, Trash2, Bot, ImagePlus, Loader2 } from 'lucide-react'
 import { useAuth } from '@frontend/lib/auth-context'
 import { ConfirmMessageDialog } from '@frontend/components/common/confirm-message'
@@ -392,8 +393,15 @@ export default function Chatbot() {
                 {msg.images && msg.images.length > 0 && (
                   <div className="flex flex-wrap justify-end gap-1.5">
                     {msg.images.map((src, i) => (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img key={i} src={src} alt="첨부 이미지" className="h-20 w-20 rounded-md border border-slate-200 object-cover" />
+                      <Image
+                        key={i}
+                        src={src}
+                        alt="첨부 이미지"
+                        width={80}
+                        height={80}
+                        unoptimized
+                        className="h-20 w-20 rounded-md border border-slate-200 object-cover"
+                      />
                     ))}
                   </div>
                 )}
@@ -430,8 +438,14 @@ export default function Chatbot() {
             <div className="mb-2 flex flex-wrap gap-2">
               {attachments.map(a => (
                 <div key={a.id} className="relative">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={a.url} alt={a.name} className="h-14 w-14 rounded-md border border-slate-200 object-cover" />
+                  <Image
+                    src={a.url}
+                    alt={a.name}
+                    width={56}
+                    height={56}
+                    unoptimized
+                    className="h-14 w-14 rounded-md border border-slate-200 object-cover"
+                  />
                   <button
                     onClick={() => removeAttachment(a.id)}
                     title="첨부 제거"

@@ -3,7 +3,7 @@ import { ArrowLeft, Home } from "lucide-react"
 
 export default function NotFound() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-white px-4 py-10">
+    <div className="flex min-h-[100dvh] items-center justify-center bg-white px-4 py-10">
       <div className="w-full max-w-lg rounded-md border border-slate-200 bg-white p-6 text-center shadow-[0_18px_60px_rgba(15,23,42,0.08)]">
         <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-md bg-blue-600 text-white shadow-lg shadow-blue-200/60">
           <Home size={24} />

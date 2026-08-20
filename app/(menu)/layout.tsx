@@ -21,6 +21,12 @@ export default function MenuLayout({ children }: { children: React.ReactNode }) 
     <SidebarProvider
       style={{ '--sidebar-width': 'calc(var(--spacing) * 68)' } as CSSProperties}
     >
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-primary-foreground"
+      >
+        본문으로 건너뛰기
+      </a>
       <AppSidebar variant="inset" collapsible="icon" />
       <SidebarInset
         className={cn(
@@ -46,7 +52,7 @@ export default function MenuLayout({ children }: { children: React.ReactNode }) 
         </header>
 
         {/* 본문 — 높이를 고정해 각 페이지가 조회조건/목록 스크롤을 나눈다 */}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <div id="main-content" tabIndex={-1} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden outline-none">
           {children}
         </div>
       </SidebarInset>

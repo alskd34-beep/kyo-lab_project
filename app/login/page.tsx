@@ -94,7 +94,7 @@ function LoginForm() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
+    <div className="flex min-h-[100dvh] items-center justify-center bg-muted/40 p-4">
       <Card className="w-full max-w-sm gap-0 p-6 shadow-sm">
         <div className="mb-6 flex flex-col items-center gap-2">
           <div className="flex size-11 items-center justify-center rounded-md bg-primary text-primary-foreground">
@@ -188,7 +188,7 @@ function LoginForm() {
 // useSearchParams()는 CSR 바일아웃 → 정적 프리렌더를 위해 Suspense 경계로 감싼다
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-muted/40 p-4" />}>
+    <Suspense fallback={<div className="flex min-h-[100dvh] items-center justify-center bg-muted/40 p-4" />}>
       <LoginForm />
     </Suspense>
   )
