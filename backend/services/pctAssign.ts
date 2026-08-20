@@ -51,10 +51,32 @@ interface OrderForAssign {
   is_urgent: boolean
   method: string
   assignee_tester_id: string | null
+  note: string | null
 }
 
 /** 배정 선택 함수 — 오더 1건 → 시험자(또는 null) */
 type PickFn = (order: OrderForAssign) => { id: string; name: string } | null
+
+const AUTO_UNASSIGNED_NOTE_PREFIX = '자동배정 미배정 사유:'
+
+function withoutAutoUnassignedNote(note: string | null): string | null {
+  const kept = (note ?? '')
+    .split(/\r?\n/)
+    .filter(line => !line.trim().startsWith(AUTO_UNASSIGNED_NOTE_PREFIX))
+    .join('\n')
+    .trim()
+  return kept || null
+}
+
+function withAutoUnassignedNote(note: string | null, reason: string): string {
+  return [withoutAutoUnassignedNote(note), `${AUTO_UNASSIGNED_NOTE_PREFIX} ${reason}`]
+    .filter(Boolean)
+    .join('\n')
+}
+
+function orderKey(order: OrderForAssign): string {
+  return `${order.product_code}|${order.batch_no}`
+}
 
 /** 대상 오더 로드 (orderIds 미지정 시 미배정 '대기' 전체) */
 async function loadTargetOrders(orderIds?: string[]): Promise<OrderForAssign[]> {
@@ -230,6 +252,7 @@ async function highDifficultyPenalty(): Promise<Record<string, number>> {
 async function applyAssignments(
   orders: OrderForAssign[],
   pick: (order: OrderForAssign) => { id: string; name: string } | null,
+  reasonFor: (order: OrderForAssign) => string,
 ): Promise<Omit<AssignResult, 'mode'>> {
   const details: AssignResult['details'] = []
   let assigned = 0
@@ -237,12 +260,19 @@ async function applyAssignments(
     const hit = pick(o)
     // [규칙1] 향정신성 의약품(자이렌정·아디펙스정)은 강지윤·김정호 배정 불가
     if (hit?.id && isPsychotropic(o.product_name) && PSYCHOTROPIC_EXCLUDED_NAMES.includes(hit.name as never)) {
-      details.push({ orderId: o.id, testerId: null, testerName: null, note: '향정신성 제외 대상(배정 불가)' })
+      const note = withAutoUnassignedNote(o.note, '향정신성 의약품 제외 대상(배정 불가)')
+      const { error } = await supabaseAdmin.from('pct_orders').update({ note }).eq('id', o.id)
+      if (error) throw error
+      details.push({ orderId: o.id, testerId: null, testerName: null, note: '향정신성 의약품 제외 대상(배정 불가)' })
       continue
     }
     if (hit?.id) {
       const beforeUser = (o.assignee_tester_id as string | null) ?? null
-      await supabaseAdmin.from('pct_orders').update({ assignee_tester_id: hit.id }).eq('id', o.id)
+      const { error } = await supabaseAdmin
+        .from('pct_orders')
+        .update({ assignee_tester_id: hit.id, note: withoutAutoUnassignedNote(o.note) })
+        .eq('id', o.id)
+      if (error) throw error
       assigned++
       details.push({ orderId: o.id, testerId: hit.id, testerName: hit.name, note: '배정됨' })
       if (beforeUser !== hit.id) {
@@ -265,7 +295,11 @@ async function applyAssignments(
         }).catch(() => {})
       }
     } else {
-      details.push({ orderId: o.id, testerId: null, testerName: null, note: '배정 가능한 담당자 없음' })
+      const reason = reasonFor(o)
+      const note = withAutoUnassignedNote(o.note, reason)
+      const { error } = await supabaseAdmin.from('pct_orders').update({ note }).eq('id', o.id)
+      if (error) throw error
+      details.push({ orderId: o.id, testerId: null, testerName: null, note: reason })
     }
   }
   return { assigned, unassigned: orders.length - assigned, details }
@@ -276,7 +310,7 @@ interface CodexAssignResponse {
   assignments: Array<{ orderId: string; testerId: string | null }>
 }
 
-async function autoAssignCodex(orders: OrderForAssign[], excludedTesterIds: Set<string>): Promise<{ mode: 'codex'; pick: PickFn }> {
+async function autoAssignCodex(orders: OrderForAssign[], excludedTesterIds: Set<string>): Promise<{ mode: 'codex'; pick: PickFn; reasonByKey: Map<string, string> }> {
   const [allTesters, capabilities, matrix, itemsByCode, workload] = await Promise.all([
     listTesters({ activeOnly: true }), listCapabilities(), listCapabilityMatrix(), productItemsByCode(), currentWorkload(),
   ])
@@ -340,14 +374,14 @@ async function autoAssignCodex(orders: OrderForAssign[], excludedTesterIds: Set<
     testers: testers.map(t => ({ id: t.id, name: t.name })),
     weekIndex: isoWeekIndex(new Date()),
   })
-  return { mode: 'codex', pick }
+  return { mode: 'codex', pick, reasonByKey: new Map() }
 }
 
 // ─── 규칙엔진 배분 (폴백) ──────────────────────────────────────────────────────
 async function autoAssignRule(
   orders: OrderForAssign[],
   absences: Array<{ testerId: string; from: string; to: string; type: string }>,
-): Promise<{ mode: 'rule'; pick: PickFn }> {
+): Promise<{ mode: 'rule'; pick: PickFn; reasonByKey: Map<string, string> }> {
   const [allTesters, capabilities, matrix, productsRes, ptiRes, testItemsRes, equipRes, workloadRes] =
     await Promise.all([
       listTesters({ activeOnly: true }),
@@ -427,13 +461,15 @@ async function autoAssignRule(
 
   const testerByKey = new Map<string, { id: string; name: string }>()
   for (const a of engine.assignments) testerByKey.set(`${a.productCode}|${a.batchNo}`, { id: a.testerId, name: a.testerName })
+  const reasonByKey = new Map<string, string>()
+  for (const item of engine.unassigned) reasonByKey.set(`${item.productCode}|${item.batchNo}`, item.reason)
 
   // [규칙2] 개별 중금속 금요일 순환 강제배정을 엔진 결과 위에 덧씌운다.
   const pick = withForcedRules(
     (o) => testerByKey.get(`${o.product_code}|${o.batch_no}`) ?? null,
     { itemsByCode, testers: testers.map(t => ({ id: t.id, name: t.name })), weekIndex: isoWeekIndex(new Date()) },
   )
-  return { mode: 'rule', pick }
+  return { mode: 'rule', pick, reasonByKey }
 }
 
 /**
@@ -460,7 +496,7 @@ export async function autoAssign(orderIds?: string[]): Promise<AssignResult> {
     absences.filter(a => a.type !== 'HALF_DAY').map(a => a.testerId),
   )
 
-  let resolved: { mode: 'codex' | 'rule'; pick: PickFn } | null = null
+  let resolved: { mode: 'codex' | 'rule'; pick: PickFn; reasonByKey: Map<string, string> } | null = null
   if (codexAssignEnabled()) {
     try {
       resolved = await autoAssignCodex(reps, excludedTesterIds)
@@ -472,7 +508,12 @@ export async function autoAssign(orderIds?: string[]): Promise<AssignResult> {
 
   // [동시분석] 각 멤버는 자신이 속한 그룹 대표의 배정 결과를 따른다(한 시험자가 동시분석).
   const groupPick: PickFn = (o) => resolved!.pick(memberToRep.get(o.id) ?? o)
-  const applied = await applyAssignments(orders, groupPick)
+  const reasonFor = (o: OrderForAssign) => {
+    const representative = memberToRep.get(o.id) ?? o
+    return resolved!.reasonByKey.get(orderKey(representative))
+      ?? '자동배정 조건을 만족하는 담당자를 찾지 못했습니다. 담당자 역량·휴가·업무량을 확인해 주세요.'
+  }
+  const applied = await applyAssignments(orders, groupPick, reasonFor)
   return { mode: resolved.mode, ...applied }
 }
 

@@ -100,6 +100,17 @@ const GROUP_COLORS = [
   "bg-amber-500", "bg-rose-500", "bg-teal-500", "bg-fuchsia-500",
 ]
 
+const AUTO_UNASSIGNED_NOTE_PREFIX = "자동배정 미배정 사유:"
+
+function getAutoUnassignedReason(note: string | null): string | null {
+  const line = (note ?? "")
+    .split(/\r?\n/)
+    .find(value => value.trim().startsWith(AUTO_UNASSIGNED_NOTE_PREFIX))
+  if (!line) return null
+  const reason = line.trim().slice(AUTO_UNASSIGNED_NOTE_PREFIX.length).trim()
+  return reason || null
+}
+
 // ─── Utils ───────────────────────────────────────────────────────────────────
 function isoToWeek(iso: string | null): { weekKey: string; weekLabel: string } {
   if (!iso) return { weekKey: "no-date", weekLabel: "기간 미정" }
@@ -547,6 +558,7 @@ export default function OrdersPage() {
   // 단일 오더 행 렌더 (트리 들여쓰기 옵션)
   const renderOrderCard = (r: OrderRow, indented = false) => {
     const dueSoon = isDueSoon(r.dueDate, r.status)
+    const unassignedReason = !r.assigneeName ? getAutoUnassignedReason(r.note) : null
     return (
       <article
         key={r.id}
@@ -643,6 +655,13 @@ export default function OrdersPage() {
             </dd>
           </div>
         </dl>
+
+        {unassignedReason && (
+          <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-800">
+            <p className="font-semibold">미배정 사유</p>
+            <p className="mt-0.5 break-words">{unassignedReason}</p>
+          </div>
+        )}
 
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-2.5">
           <div className="flex items-center gap-1">
