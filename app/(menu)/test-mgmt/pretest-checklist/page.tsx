@@ -17,6 +17,7 @@ import { useAuth } from "@frontend/lib/auth-context"
 import { Badge } from "@frontend/components/ui/badge"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
+import { Skeleton } from "@frontend/components/ui/skeleton"
 import { Input } from "@frontend/components/ui/input"
 import { CellStack } from "@frontend/components/ui/table-cell-stack"
 import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from "@frontend/components/ui/table-sort"
@@ -26,6 +27,7 @@ import {
 import {
   Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@frontend/components/ui/dialog"
+import { ManagementDrawer } from "@frontend/components/common/management-drawer"
 
 interface ProductRow {
   id: string
@@ -124,12 +126,15 @@ export default function PretestChecklistPage() {
   const myName = user?.displayName || user?.username || "본인"
 
   const [products, setProducts] = useState<ProductRow[]>([])
+  const [productsLoading, setProductsLoading] = useState(true)
   const [selected, setSelected] = useState<ProductRow | null>(null)
   const [notes, setNotes] = useState<NoteRow[]>([])
+  const [notesLoading, setNotesLoading] = useState(false)
   const [search, setSearch] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [okMsg, setOkMsg] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [noteTarget, setNoteTarget] = useState<NoteRow | null>(null)
 
   // 유사 품목 동시 적용
   const [extraIds, setExtraIds] = useState<Set<string>>(new Set())
@@ -162,6 +167,7 @@ export default function PretestChecklistPage() {
   }, [selected])
 
   async function loadProducts() {
+    setProductsLoading(true)
     try {
       const res = await fetch("/api/products")
       if (!res.ok) throw new Error(await resError(res, "품목 목록을 불러오지 못했습니다."))
@@ -169,10 +175,13 @@ export default function PretestChecklistPage() {
       setProducts(data.rows)
     } catch (e) {
       setError(msgOf(e))
+    } finally {
+      setProductsLoading(false)
     }
   }
 
   async function loadNotes(productId: string) {
+    setNotesLoading(true)
     try {
       const res = await fetch(`/api/product-pretest-notes?productId=${productId}`)
       if (!res.ok) throw new Error(await resError(res, "확인사항을 불러오지 못했습니다."))
@@ -180,6 +189,8 @@ export default function PretestChecklistPage() {
       setNotes(data.rows)
     } catch (e) {
       setError(msgOf(e))
+    } finally {
+      setNotesLoading(false)
     }
   }
 
@@ -298,6 +309,7 @@ export default function PretestChecklistPage() {
       })
       if (!res.ok) throw new Error(await resError(res, "삭제에 실패했습니다."))
       if (selected) await loadNotes(selected.id)
+      setNoteTarget(current => current?.id === id ? null : current)
     } catch (e) {
       setError(msgOf(e))
     } finally {
@@ -347,7 +359,16 @@ export default function PretestChecklistPage() {
             </div>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
-            {filtered.length === 0 ? (
+            {productsLoading ? (
+              <ul className="divide-y">
+                {Array.from({ length: 7 }, (_, index) => (
+                  <li key={index} className="space-y-2 px-4 py-3">
+                    <Skeleton className="h-2.5 w-16" />
+                    <Skeleton className="h-4 w-4/5" />
+                  </li>
+                ))}
+              </ul>
+            ) : filtered.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">
                 품목이 없습니다.
               </p>
@@ -508,7 +529,6 @@ export default function PretestChecklistPage() {
                       <col />
                       <col className="w-[14%]" />
                       <col className="w-[18%]" />
-                      <col className="w-[8%]" />
                     </colgroup>
                     <TableHeader>
                       <TableRow className="hover:bg-transparent">
@@ -522,19 +542,37 @@ export default function PretestChecklistPage() {
                             />
                           </TableHead>
                         ))}
-                        <TableHead className="w-14 px-3 text-center text-muted-foreground">삭제</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {notes.length === 0 ? (
+                      {notesLoading ? (
+                        Array.from({ length: 5 }, (_, index) => (
+                          <TableRow key={index} className="hover:bg-transparent">
+                            <TableCell className="px-3 py-3"><Skeleton className="h-4 w-24" /></TableCell>
+                            <TableCell className="px-3 py-3">
+                              <div className="space-y-2">
+                                <Skeleton className="h-4 w-3/4" />
+                                <Skeleton className="h-3 w-1/2" />
+                              </div>
+                            </TableCell>
+                            <TableCell className="px-3 py-3"><Skeleton className="h-4 w-16" /></TableCell>
+                            <TableCell className="px-3 py-3">
+                              <div className="space-y-2">
+                                <Skeleton className="h-4 w-20" />
+                                <Skeleton className="h-3 w-24" />
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      ) : notes.length === 0 ? (
                         <TableRow className="hover:bg-transparent">
-                          <TableCell colSpan={5} className="py-12 text-center text-sm text-muted-foreground">
+                          <TableCell colSpan={4} className="py-12 text-center text-sm text-muted-foreground">
                             등록된 시험 전 확인사항이 없습니다. 위 입력란에서 등록하세요.
                           </TableCell>
                         </TableRow>
                       ) : (
                         sortedNotes.map((n) => (
-                          <TableRow key={n.id}>
+                          <TableRow key={n.id} className="cursor-pointer hover:bg-muted/40" onClick={() => setNoteTarget(n)}>
                             <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">
                               <span className="block truncate" title={fmtDT(n.occurredAt)}>{fmtDT(n.occurredAt)}</span>
                             </TableCell>
@@ -556,18 +594,6 @@ export default function PretestChecklistPage() {
                                 title={`${n.createdByName || "—"} / ${fmtDT(n.createdAt)}`}
                               />
                             </TableCell>
-                            <TableCell className="px-3 py-2.5 text-center">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => void handleDelete(n.id)}
-                                disabled={busy}
-                                title="삭제"
-                                className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                              >
-                                <Trash2 className="size-3.5" />
-                              </Button>
-                            </TableCell>
                           </TableRow>
                         ))
                       )}
@@ -579,6 +605,54 @@ export default function PretestChecklistPage() {
           )}
         </Card>
       </div>
+
+      {noteTarget && (
+        <ManagementDrawer
+          open
+          onOpenChange={(open) => { if (!open) setNoteTarget(null) }}
+          size="md"
+          title="시험 전 확인사항 상세"
+          description="목록 상태를 유지하면서 확인사항을 확인하고 삭제할 수 있습니다."
+          footer={(
+            <>
+              <Button
+                variant="ghost"
+                className="mr-auto text-destructive hover:text-destructive"
+                onClick={() => void handleDelete(noteTarget.id)}
+                disabled={busy}
+              >
+                <Trash2 /> 삭제
+              </Button>
+              <Button variant="outline" onClick={() => setNoteTarget(null)}>닫기</Button>
+            </>
+          )}
+        >
+          <dl className="grid gap-3 rounded-md border p-4 text-sm">
+            <div className="grid gap-1">
+              <dt className="text-xs text-muted-foreground">확인사항</dt>
+              <dd className="font-medium text-foreground">{noteTarget.content}</dd>
+            </div>
+            <div className="grid gap-1">
+              <dt className="text-xs text-muted-foreground">특이사항</dt>
+              <dd className="whitespace-pre-wrap text-foreground">{noteTarget.remark || "-"}</dd>
+            </div>
+            <div className="grid gap-1 sm:grid-cols-2 sm:gap-4">
+              <div>
+                <dt className="text-xs text-muted-foreground">발생 일시</dt>
+                <dd className="mt-1 font-mono text-xs text-foreground">{fmtDT(noteTarget.occurredAt)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">이슈 로트</dt>
+                <dd className="mt-1 font-mono text-xs text-foreground">{noteTarget.issueLot || "-"}</dd>
+              </div>
+            </div>
+            <div className="grid gap-1">
+              <dt className="text-xs text-muted-foreground">작성</dt>
+              <dd className="text-foreground">{noteTarget.createdByName || "-"} · {fmtDT(noteTarget.createdAt)}</dd>
+            </div>
+          </dl>
+        </ManagementDrawer>
+      )}
 
       {/* 유사 품목 선택 모달 */}
       <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>

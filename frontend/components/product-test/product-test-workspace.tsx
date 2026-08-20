@@ -2,7 +2,6 @@
 
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from "react"
 import {
-  AlertTriangle,
   Box,
   Lock,
   Plus,
@@ -21,13 +20,13 @@ import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
 import {
   Dialog,
-  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@frontend/components/ui/dialog"
+import { ManagementDrawer } from "@frontend/components/common/management-drawer"
 import { Input } from "@frontend/components/ui/input"
 import { CellStack } from "@frontend/components/ui/table-cell-stack"
 import { SortColumnHeader, type SortColumnDef, type SortDir } from "@frontend/components/ui/table-sort"
@@ -39,14 +38,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@frontend/components/ui/select"
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@frontend/components/ui/sheet"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import {
   Table,
@@ -282,11 +273,9 @@ function StatusLine({
 const ProductTableRow = memo(function ProductTableRow({
   row,
   onEdit,
-  onDelete,
 }: {
   row: ProductRow
   onEdit: (row: ProductRow) => void
-  onDelete: (row: ProductRow) => void
 }) {
   return (
     <TableRow className="cursor-pointer hover:bg-muted/40" onClick={() => onEdit(row)}>
@@ -338,17 +327,6 @@ const ProductTableRow = memo(function ProductTableRow({
         <Tag color={row.isActive ? "green" : "mono"}>{row.isActive ? "활성" : "비활성"}</Tag>
       </TableCell>
 
-      <TableCell className="px-1 py-2 text-center">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={(e) => { e.stopPropagation(); onDelete(row) }}
-          className="text-destructive hover:text-destructive"
-          title="삭제"
-        >
-          <Trash2 className="size-3.5" />
-        </Button>
-      </TableCell>
     </TableRow>
   )
 })
@@ -377,11 +355,9 @@ function EmptyRow({ children }: { children: ReactNode }) {
 const ProductCard = memo(function ProductCard({
   row,
   onEdit,
-  onDelete,
 }: {
   row: ProductRow
   onEdit: (row: ProductRow) => void
-  onDelete: (row: ProductRow) => void
 }) {
   return (
     <Card
@@ -405,15 +381,6 @@ const ProductCard = memo(function ProductCard({
             <div className="font-mono text-[11px] text-muted-foreground">약호: {row.abbreviation}</div>
           )}
         </div>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={(e) => { e.stopPropagation(); onDelete(row) }}
-          className="text-destructive hover:text-destructive"
-          title="삭제"
-        >
-          <Trash2 className="size-3.5" />
-        </Button>
       </div>
       <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 border-t pt-2 text-[11px] text-muted-foreground">
         <div><span className="font-medium text-foreground">품목구분:</span> {row.categoryName ?? "—"}</div>
@@ -562,14 +529,12 @@ const ProductMasterList = memo(function ProductMasterList({
   statusFilter,
   onAdd,
   onEdit,
-  onDelete,
 }: {
   rows: ProductRow[]
   loading: boolean
   statusFilter: StatusFilterValue
   onAdd: () => void
   onEdit: (row: ProductRow) => void
-  onDelete: (row: ProductRow) => void
 }) {
   const [search, setSearch] = useState("")
   const deferredSearch = useDeferredValue(search)
@@ -643,7 +608,7 @@ const ProductMasterList = memo(function ProductMasterList({
       <Card className="hidden min-h-0 flex-1 flex-col overflow-hidden py-0 md:flex">
         <Table
           containerRef={containerRef}
-          containerClassName="min-w-0 overflow-x-hidden overflow-y-auto border-b border-border/60"
+           containerClassName="min-w-0 overflow-x-auto overflow-y-auto border-b border-border/60"
           className="w-full"
         >
           <TableHeader>
@@ -660,9 +625,6 @@ const ProductMasterList = memo(function ProductMasterList({
                   ) : null}
                 </TableHead>
               ))}
-              <TableHead className="px-1 text-center text-muted-foreground">
-                <span className="sr-only">관리</span>
-              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -672,7 +634,6 @@ const ProductMasterList = memo(function ProductMasterList({
                     {columns.map((col) => (
                       <TableCell key={col.key} className="px-3 py-2"><Skeleton className="h-8 w-full" /></TableCell>
                     ))}
-                    <TableCell className="px-1 py-2"><Skeleton className="mx-auto h-6 w-6 rounded" /></TableCell>
                   </TableRow>
                 ))
               : sorted.length === 0
@@ -687,7 +648,6 @@ const ProductMasterList = memo(function ProductMasterList({
                       key={row.id}
                       row={row}
                       onEdit={onEdit}
-                      onDelete={onDelete}
                     />
                   ))}
                   <VirtualPad height={padBottom} />
@@ -723,7 +683,7 @@ const ProductMasterList = memo(function ProductMasterList({
               {padTop > 0 && <div aria-hidden style={{ height: padTop }} />}
               <div className="flex flex-col gap-2">
                 {windowedRows.map((row) => (
-                  <ProductCard key={row.id} row={row} onEdit={onEdit} onDelete={onDelete} />
+                  <ProductCard key={row.id} row={row} onEdit={onEdit} />
                 ))}
               </div>
               {padBottom > 0 && <div aria-hidden style={{ height: padBottom }} />}
@@ -1016,20 +976,26 @@ export function ProductTestWorkspace() {
         statusFilter={statusFilter}
         onAdd={openAdd}
         onEdit={openEdit}
-        onDelete={requestDelete}
       />
 
       {addOpen && (
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent size="lg">
-          <DialogHeader>
-            <DialogTitle>품목 추가</DialogTitle>
-            <DialogDescription>
-              새 시험 품목을 등록합니다.
-            </DialogDescription>
-          </DialogHeader>
-
-          <DialogBody className="grid gap-4">
+      <ManagementDrawer
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        size="lg"
+        title="품목 추가"
+        description="새 시험 품목을 등록합니다."
+        footer={(
+          <>
+            <Button variant="outline" onClick={() => setAddOpen(false)}>취소</Button>
+            <Button onClick={() => void handleAdd()} disabled={saving}>
+              <Save />
+              {saving ? "저장 중..." : "추가"}
+            </Button>
+          </>
+        )}
+      >
+          <div className="grid gap-4">
               <section className="rounded-md border bg-card p-4 shadow-sm">
                 <h3 className="mb-3 border-b pb-2 text-sm font-semibold text-foreground">식별 정보</h3>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -1080,31 +1046,38 @@ export function ProductTestWorkspace() {
                   {error}
                 </div>
               )}
-          </DialogBody>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAddOpen(false)}>취소</Button>
-            <Button onClick={() => void handleAdd()} disabled={saving}>
-              <Save />
-              {saving ? "저장 중..." : "추가"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </div>
+      </ManagementDrawer>
       )}
 
       {editOpen && (
-      <Sheet open={editOpen} onOpenChange={setEditOpen}>
-        <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
-          <SheetHeader className="border-b px-5 py-4">
-            <SheetTitle className="text-base font-semibold">품목 수정</SheetTitle>
-            <SheetDescription className="text-xs text-muted-foreground">
-              품목 정보를 수정합니다.
-            </SheetDescription>
-          </SheetHeader>
-
-          <div className="flex-1 overflow-y-auto bg-muted/30 px-5 py-4">
-            <div className="grid gap-4">
+      <ManagementDrawer
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        size="lg"
+        title="품목 수정"
+        description="품목 정보를 수정합니다."
+        footer={(
+          <>
+            {editTarget && (
+              <Button
+                variant="ghost"
+                className="mr-auto text-destructive hover:text-destructive"
+                onClick={() => { setEditOpen(false); requestDelete(editTarget) }}
+                disabled={saving}
+              >
+                <Trash2 /> 삭제
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => setEditOpen(false)}>취소</Button>
+            <Button onClick={() => void handleEdit()} disabled={saving}>
+              <Save />
+              {saving ? "저장 중..." : "저장"}
+            </Button>
+          </>
+        )}
+      >
+          <div className="grid gap-4">
               {/* 품목코드 읽기 전용 */}
               <section className="rounded-md border bg-card p-4 shadow-sm">
                 <h3 className="mb-3 border-b pb-2 text-sm font-semibold text-foreground">식별 정보</h3>
@@ -1130,18 +1103,8 @@ export function ProductTestWorkspace() {
                   {error}
                 </div>
               )}
-            </div>
           </div>
-
-          <SheetFooter className="border-t bg-card px-5 py-4">
-            <Button variant="outline" onClick={() => setEditOpen(false)}>취소</Button>
-            <Button onClick={() => void handleEdit()} disabled={saving}>
-              <Save />
-              {saving ? "저장 중..." : "저장"}
-            </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+      </ManagementDrawer>
       )}
 
       {deleteTarget && (

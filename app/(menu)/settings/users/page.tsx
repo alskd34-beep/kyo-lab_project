@@ -1,24 +1,15 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
-import { ImagePlus, Pencil, Save, Trash2, Upload, UserPlus, X } from 'lucide-react'
+import { ImagePlus, Save, Trash2, Upload, UserPlus } from 'lucide-react'
 import { Skeleton } from '@frontend/components/ui/skeleton'
 import { Tag } from '@frontend/components/ui/tag'
 import { useAuth } from '@frontend/lib/auth-context'
 import { TesterAvatar, invalidateTesterProfileCache, primePeopleCacheFromUsers, upsertPersonProfile } from '@frontend/lib/tester-profiles'
 import { useConfirmMessage } from '@frontend/components/common/confirm-message'
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@frontend/components/ui/dialog'
+import { ManagementDrawer } from '@frontend/components/common/management-drawer'
 import { Button } from '@frontend/components/ui/button'
 import { Card } from '@frontend/components/ui/card'
-import { Input } from '@frontend/components/ui/input'
 import { CellStack } from '@frontend/components/ui/table-cell-stack'
 import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from '@frontend/components/ui/table-sort'
 import { StatusFilterTabs, type StatusFilterValue } from '@frontend/components/ui/status-filter-tabs'
@@ -183,6 +174,7 @@ export default function UsersAdminPage() {
     if (r.ok) {
       invalidateTesterProfileCache()
       setUsers(prev => prev.filter(user => user.id !== id))
+      setEditingUser(current => current?.id === id ? null : current)
     } else {
       setError((await r.json().catch(() => ({}))).error ?? '삭제 실패')
     }
@@ -236,10 +228,7 @@ export default function UsersAdminPage() {
       )}
 
       <Card className="hidden min-h-0 flex-1 flex-col overflow-hidden py-0 md:flex">
-        {/* colgroup 고정폭 금지 — 사용자명 칸이 사용자명/사번으로 펼쳐지면 실제 칸 수가 늘어나
-            고정 colgroup과 어긋나 마지막 관리 칸이 폭 0으로 밀린다. 폭은 Table이 헤더·셀 자수로 계산한다.
-            pinLastColumn={false} — 마지막 칸이 아이콘 전용이 아니라 "수정"/"삭제" 텍스트 버튼이라
-            기본값(48px 고정)이면 삭제 버튼이 잘려 안 보인다. */}
+        {/* 마지막 칸이 관리 액션이 아닌 로그인 데이터이므로 액션 열 고정을 끈다. */}
         <Table className="w-full text-sm" pinLastColumn={false}>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
@@ -268,9 +257,6 @@ export default function UsersAdminPage() {
                   onPick={pickSort}
                 />
               </TableHead>
-              <TableHead className="px-1 text-center text-muted-foreground">
-                <span className="sr-only">관리</span>
-              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -286,11 +272,14 @@ export default function UsersAdminPage() {
                     <TableCell className="px-3 py-2"><Skeleton className="h-5 w-14 rounded-md" /></TableCell>
                     <TableCell className="px-3 py-2"><Skeleton className="h-5 w-12 rounded-md" /></TableCell>
                     <TableCell className="px-3 py-2"><Skeleton className="h-4 w-28" /></TableCell>
-                    <TableCell className="px-1 py-2"><Skeleton className="ml-auto h-4 w-16" /></TableCell>
                   </TableRow>
                 ))
               : filteredUsers.map(u => (
-              <TableRow key={u.id} className="border-t border-slate-100">
+              <TableRow
+                key={u.id}
+                className="cursor-pointer border-t border-slate-100 hover:bg-muted/40"
+                onClick={() => setEditingUser(u)}
+              >
                 <TableCell className="px-3 py-2">
                   {/* 아바타는 CellStack 바깥이 아니라 primary 안에 둔다.
                       CellStack 루트는 @container(container-type:inline-size)라 고유 폭이 0이다.
@@ -318,24 +307,6 @@ export default function UsersAdminPage() {
                     {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('ko-KR') : '-'}
                   </div>
                 </TableCell>
-                <TableCell className="px-1 py-2 text-right">
-                  <button
-                    onClick={() => setEditingUser(u)}
-                    className="mr-1 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-blue-600 hover:bg-blue-50"
-                  >
-                    <Pencil size={12} />
-                    수정
-                  </button>
-                  {u.id !== me?.id && (
-                    <button
-                      onClick={() => remove(u.id)}
-                      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-red-600 hover:bg-red-50"
-                    >
-                      <Trash2 size={12} />
-                      삭제
-                    </button>
-                  )}
-                </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -355,8 +326,12 @@ export default function UsersAdminPage() {
               </div>
             ))
           : users.map(u => (
-          <div key={u.id} className="rounded-md border border-slate-200 bg-white p-3">
-            <div className="flex items-start justify-between gap-3">
+          <div
+            key={u.id}
+            className="cursor-pointer rounded-md border border-slate-200 bg-white p-3 transition-colors hover:bg-muted/30"
+            onClick={() => setEditingUser(u)}
+          >
+            <div className="flex items-start gap-3">
               <div className="flex min-w-0 items-center gap-2">
                 <UserAvatar user={u} />
                 <div className="min-w-0">
@@ -364,24 +339,6 @@ export default function UsersAdminPage() {
                   <p className="truncate font-mono text-xs text-slate-500">{u.username}</p>
                   <p className="font-mono text-[10px] text-slate-400">#{fmtCustomerNo(u.customerNo)}</p>
                 </div>
-              </div>
-              <div className="flex shrink-0 gap-1">
-                <button
-                  onClick={() => setEditingUser(u)}
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-blue-600 hover:bg-blue-50"
-                  aria-label="사용자 수정"
-                >
-                  <Pencil size={14} />
-                </button>
-                {u.id !== me?.id && (
-                  <button
-                    onClick={() => remove(u.id)}
-                    className="inline-flex h-7 w-7 items-center justify-center rounded-md text-red-600 hover:bg-red-50"
-                    aria-label="사용자 삭제"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                )}
               </div>
             </div>
             <div className="mt-3 flex flex-wrap gap-1.5">
@@ -401,6 +358,8 @@ export default function UsersAdminPage() {
         open={editingUser !== null}
         onOpenChange={(open) => { if (!open) setEditingUser(null) }}
         onSaved={handleSaved}
+        onDelete={remove}
+        canDelete={editingUser?.id !== me?.id}
       />
     </div>
   )
@@ -465,25 +424,46 @@ function CreateForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: 
   }
 
   return (
-    <form onSubmit={submit} className="mb-4 grid grid-cols-1 gap-2 rounded-md border border-blue-200 bg-blue-50/40 p-3 text-xs sm:grid-cols-2 md:grid-cols-5">
-      <input className="rounded border border-slate-200 bg-white px-2 py-1.5" placeholder="아이디" value={username} onChange={e => setU(e.target.value)} />
-      <input className="rounded border border-slate-200 bg-white px-2 py-1.5" placeholder="비밀번호" type="password" value={password} onChange={e => setP(e.target.value)} />
-      <input className="rounded border border-slate-200 bg-white px-2 py-1.5" placeholder="이름" value={displayName} onChange={e => setD(e.target.value)} />
-      <Select value={role} onValueChange={v => setR(v as 'admin' | 'tester')}>
-        <SelectTrigger className="h-9 w-full px-3">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="tester">시험자</SelectItem>
-          <SelectItem value="admin">관리자</SelectItem>
-        </SelectContent>
-      </Select>
-      <div className="flex gap-1">
-        <button type="submit" disabled={busy || !username || !password} className="flex-1 rounded bg-blue-600 px-2 py-1.5 text-white disabled:opacity-50">생성</button>
-        <button type="button" onClick={onCancel} className="rounded border border-slate-200 bg-white px-2 py-1.5"><X size={12} /></button>
-      </div>
-      {err && <p className="text-red-600 sm:col-span-2 md:col-span-5">{err}</p>}
-    </form>
+    <ManagementDrawer
+      open
+      onOpenChange={(open) => { if (!open && !busy) onCancel() }}
+      title="사용자 추가"
+      description="새 사용자 계정과 역할을 등록합니다."
+      footer={(
+        <>
+          <Button type="button" variant="outline" onClick={onCancel} disabled={busy}>취소</Button>
+          <Button type="submit" form="create-user-form" disabled={busy || !username || !password}>
+            {busy ? '생성 중...' : '생성'}
+          </Button>
+        </>
+      )}
+    >
+      <form id="create-user-form" onSubmit={submit} className="grid gap-4 text-sm">
+        <label className="grid gap-1.5 text-xs font-medium text-foreground">
+          아이디
+          <input className="h-9 rounded-md border border-input bg-background px-3 text-sm" placeholder="아이디" value={username} onChange={e => setU(e.target.value)} />
+        </label>
+        <label className="grid gap-1.5 text-xs font-medium text-foreground">
+          비밀번호
+          <input className="h-9 rounded-md border border-input bg-background px-3 text-sm" placeholder="비밀번호" type="password" value={password} onChange={e => setP(e.target.value)} />
+        </label>
+        <label className="grid gap-1.5 text-xs font-medium text-foreground">
+          이름
+          <input className="h-9 rounded-md border border-input bg-background px-3 text-sm" placeholder="이름" value={displayName} onChange={e => setD(e.target.value)} />
+        </label>
+        <label className="grid gap-1.5 text-xs font-medium text-foreground">
+          역할
+          <Select value={role} onValueChange={v => setR(v as 'admin' | 'tester')}>
+            <SelectTrigger className="h-9 w-full px-3"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="tester">시험자</SelectItem>
+              <SelectItem value="admin">관리자</SelectItem>
+            </SelectContent>
+          </Select>
+        </label>
+        {err && <p className="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">{err}</p>}
+      </form>
+    </ManagementDrawer>
   )
 }
 
@@ -492,11 +472,15 @@ function EditUserDialog({
   open,
   onOpenChange,
   onSaved,
+  onDelete,
+  canDelete,
 }: {
   user: UserRow | null
   open: boolean
   onOpenChange: (open: boolean) => void
   onSaved: (user: UserRow) => void | Promise<void>
+  onDelete: (id: string) => Promise<void>
+  canDelete: boolean
 }) {
   const [displayName, setDisplayName] = useState(user?.displayName ?? '')
   const [avatarUrl, setAvatarUrl] = useState<string | null>(user?.avatarUrl ?? null)
@@ -505,6 +489,7 @@ function EditUserDialog({
   const [password, setPassword] = useState('')
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   if (!user) return null
 
@@ -548,20 +533,48 @@ function EditUserDialog({
     await onSaved(data.user)
   }
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="lg">
-        <DialogHeader>
-          <DialogTitle>사용자 수정</DialogTitle>
-          <DialogDescription>
-            {user.username} 계정 정보를 수정합니다.
-            {user.customerNo != null && (
-              <span className="ml-2 font-mono text-[11px] text-muted-foreground">고객번호 {fmtCustomerNo(user.customerNo)}</span>
-            )}
-          </DialogDescription>
-        </DialogHeader>
+  const removeUser = async () => {
+    setDeleting(true)
+    try {
+      await onDelete(user.id)
+    } finally {
+      setDeleting(false)
+    }
+  }
 
-        <DialogBody className="grid gap-5 md:grid-cols-[140px_1fr]">
+  return (
+    <ManagementDrawer
+      open={open}
+      onOpenChange={onOpenChange}
+      size="lg"
+      title="사용자 수정"
+      description={(
+        <>
+          {user.username} 계정 정보를 수정합니다.
+          {user.customerNo != null && (
+            <span className="ml-2 font-mono text-[11px] text-muted-foreground">고객번호 {fmtCustomerNo(user.customerNo)}</span>
+          )}
+        </>
+      )}
+      footer={(
+        <div className="flex w-full items-center justify-between gap-2">
+          {canDelete ? (
+            <Button type="button" variant="destructive" onClick={() => void removeUser()} disabled={busy || deleting}>
+              <Trash2 />
+              삭제
+            </Button>
+          ) : <span />}
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={deleting}>취소</Button>
+            <Button type="button" onClick={save} disabled={busy || deleting}>
+              <Save />
+              저장
+            </Button>
+          </div>
+        </div>
+      )}
+    >
+        <div className="grid gap-5 md:grid-cols-[120px_1fr]">
           <div className="flex flex-col items-center gap-3 rounded-md border border-slate-200 bg-slate-50 p-4">
             <TesterAvatar
               testerId={user.testerId}
@@ -637,26 +650,7 @@ function EditUserDialog({
             </label>
             {err && <p className="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">{err}</p>}
           </div>
-        </DialogBody>
-
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
-            취소
-          </Button>
-          <Button
-            type="button"
-            onClick={save}
-            disabled={busy}
-          >
-            <Save />
-            저장
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+    </ManagementDrawer>
   )
 }

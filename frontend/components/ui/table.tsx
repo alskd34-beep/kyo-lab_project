@@ -34,8 +34,8 @@ type AdaptiveTableContextValue = {
 const AdaptiveTableContext = React.createContext<AdaptiveTableContextValue | null>(null)
 const LogicalColContext = React.createContext(0)
 const LastColContext = React.createContext(false)
-/** 마지막 칸을 오른쪽 고정 액션 칸(PIN_END)으로 처리할지. 관리/삭제 아이콘 칸이 아닌 표는 끈다. */
-const PinLastColContext = React.createContext(true)
+/** 마지막 칸을 오른쪽 고정 액션 칸(PIN_END)으로 처리할지. 기본값은 일반 데이터 열이다. */
+const PinLastColContext = React.createContext(false)
 const InHeaderContext = React.createContext(false)
 
 /** 현재 펼쳐진 실제 칸 수. colSpan 은 이 값만 쓴다 — 더 큰 값을 쓰면 표 오른쪽에 빈 칸이 생긴다. */
@@ -45,6 +45,14 @@ export function useTableColSpan(): number {
 
 const PIN_END =
   "sticky right-0 z-[11] w-12 min-w-12 max-w-12 bg-card px-1 text-center"
+
+function setRefValue<T>(ref: React.Ref<T> | undefined, value: T | null) {
+  if (typeof ref === "function") {
+    ref(value)
+  } else if (ref) {
+    Reflect.set(ref, "current", value)
+  }
+}
 
 function displayNameOf(type: unknown): string {
   if (typeof type === "function") {
@@ -113,7 +121,7 @@ function Table({
   containerRef,
   layout = "fluid",
   adaptive,
-  pinLastColumn = true,
+  pinLastColumn = false,
   ...props
 }: React.ComponentProps<"table"> & {
   containerClassName?: string
@@ -126,9 +134,9 @@ function Table({
    */
   adaptive?: boolean
   /**
-   * 마지막 칸을 오른쪽 고정 액션 칸(48px)으로 만든다. 기본 true.
-   * 마지막 칸이 관리/삭제 아이콘이 아니라 상태 배지·텍스트인 표는 false 로 끈다
-   * (48px 로 눌려 내용이 잘린다).
+   * 마지막 칸을 오른쪽 고정 액션 칸(48px)으로 만든다. 기본 false.
+   * 관리/삭제 아이콘처럼 고정이 필요한 액션 칸에서만 true로 켠다.
+   * 상태 배지·텍스트 열을 액션 칸으로 오인해 내용이 잘리는 것을 막는다.
    */
   pinLastColumn?: boolean
 }) {
@@ -148,8 +156,7 @@ function Table({
 
   const setContainer = React.useCallback((node: HTMLDivElement | null) => {
     setEl(node)
-    if (typeof containerRef === "function") containerRef(node)
-    else if (containerRef) (containerRef as React.MutableRefObject<HTMLDivElement | null>).current = node
+    setRefValue(containerRef, node)
   }, [containerRef])
 
   const bump = React.useCallback(() => {
@@ -289,7 +296,7 @@ function Table({
 
   const containerOverflow =
     layout === "content" ? "overflow-x-hidden overflow-y-visible"
-    : layout === "fluid" ? "overflow-x-hidden overflow-y-auto"
+    : layout === "fluid" ? "overflow-x-auto overflow-y-auto"
     : "overflow-auto"
 
   return (

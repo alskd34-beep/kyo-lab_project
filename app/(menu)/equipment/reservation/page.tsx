@@ -16,15 +16,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@frontend/components/ui/table"
 import { useConfirmMessage } from "@frontend/components/common/confirm-message"
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@frontend/components/ui/dialog"
+import { ManagementDrawer } from "@frontend/components/common/management-drawer"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 type ReservationStatus = "RESERVED" | "WAITING" | "CANCELLED" | "COMPLETED"
@@ -80,6 +72,7 @@ export default function EquipmentReservationPage() {
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
+  const [detailTarget, setDetailTarget] = useState<ReservationRow | null>(null)
   const [sortField, setSortField] = useState<SortField>("startDate")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
 
@@ -240,7 +233,6 @@ export default function EquipmentReservationPage() {
             <col className="w-[22%]" />
             <col className="w-[22%]" />
             <col className="w-[16%]" />
-            <col className="w-[26%]" />
           </colgroup>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
@@ -254,9 +246,6 @@ export default function EquipmentReservationPage() {
                   />
                 </TableHead>
               ))}
-              <TableHead className="px-1 text-center text-muted-foreground">
-                <span className="sr-only">관리</span>
-              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -267,20 +256,22 @@ export default function EquipmentReservationPage() {
                   <TableCell className="px-3 py-2"><Skeleton className="h-8 w-28" /></TableCell>
                   <TableCell className="px-3 py-2"><Skeleton className="h-8 w-24" /></TableCell>
                   <TableCell className="px-3 py-2"><Skeleton className="h-4 w-16" /></TableCell>
-                  <TableCell className="px-1 py-2"><Skeleton className="ml-auto h-6 w-20" /></TableCell>
                 </TableRow>
               ))
             ) : rows.length === 0 ? (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={5} className="py-16 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={4} className="py-16 text-center text-sm text-muted-foreground">
                   등록된 예약이 없습니다.
                 </TableCell>
               </TableRow>
             ) : (
               sortedData.map(r => {
-                const canModify = (isAdmin || r.userId === user?.id) && (r.status === "RESERVED" || r.status === "WAITING")
                 return (
-                  <TableRow key={r.id}>
+                  <TableRow
+                    key={r.id}
+                    className="cursor-pointer hover:bg-muted/40"
+                    onClick={() => setDetailTarget(r)}
+                  >
                     <TableCell className="px-3 py-2">
                       <Tag color={STATUS_TAG_COLOR[r.status]} dot={r.status === "RESERVED" || r.status === "WAITING"}>
                         {STATUS_LABEL[r.status]}
@@ -315,43 +306,6 @@ export default function EquipmentReservationPage() {
                         title={r.userName ?? "이름없음"}
                       />
                     </TableCell>
-                    <TableCell className="px-1 py-2">
-                      <div className="flex items-center justify-end gap-1.5">
-                        {canModify && r.status === "RESERVED" && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => void complete(r.id)}
-                            disabled={busy === r.id}
-                            className="h-7 gap-1 px-2 text-xs text-emerald-700 border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
-                          >
-                            <CheckCircle2 size={12} /> 완료
-                          </Button>
-                        )}
-                        {canModify && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => void cancel(r.id)}
-                            disabled={busy === r.id}
-                            className="h-7 gap-1 px-2 text-xs"
-                          >
-                            <Ban size={12} /> 취소
-                          </Button>
-                        )}
-                        {isAdmin && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => void remove(r.id)}
-                            disabled={busy === r.id}
-                            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                          >
-                            {busy === r.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
                   </TableRow>
                 )
               })
@@ -372,6 +326,80 @@ export default function EquipmentReservationPage() {
         }}
         onError={flash}
       />
+      )}
+
+      {detailTarget && (
+        <ManagementDrawer
+          open
+          onOpenChange={(next) => { if (!next) setDetailTarget(null) }}
+          size="sm"
+          title="장비 예약 상세"
+          description="예약 상태와 기간을 확인하고 가능한 작업을 선택합니다."
+          footer={(
+            <>
+              <Button variant="outline" onClick={() => setDetailTarget(null)}>닫기</Button>
+              {((isAdmin || detailTarget.userId === user?.id) && detailTarget.status === "RESERVED") && (
+                <Button
+                  variant="outline"
+                  className="text-emerald-700"
+                  onClick={() => { setDetailTarget(null); void complete(detailTarget.id) }}
+                  disabled={busy === detailTarget.id}
+                >
+                  <CheckCircle2 /> 완료 처리
+                </Button>
+              )}
+              {((isAdmin || detailTarget.userId === user?.id) && (detailTarget.status === "RESERVED" || detailTarget.status === "WAITING")) && (
+                <Button
+                  variant="outline"
+                  onClick={() => { setDetailTarget(null); void cancel(detailTarget.id) }}
+                  disabled={busy === detailTarget.id}
+                >
+                  <Ban /> 예약 취소
+                </Button>
+              )}
+              {isAdmin && (
+                <Button
+                  variant="ghost"
+                  className="mr-auto text-destructive hover:text-destructive"
+                  onClick={() => { setDetailTarget(null); void remove(detailTarget.id) }}
+                  disabled={busy === detailTarget.id}
+                >
+                  {busy === detailTarget.id ? <Loader2 className="animate-spin" /> : <Trash2 />}
+                  삭제
+                </Button>
+              )}
+            </>
+          )}
+        >
+          <div className="space-y-4">
+            <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-3">
+              <span className="text-xs text-muted-foreground">상태</span>
+              <Tag color={STATUS_TAG_COLOR[detailTarget.status]} dot={detailTarget.status === "RESERVED" || detailTarget.status === "WAITING"}>
+                {STATUS_LABEL[detailTarget.status]}
+              </Tag>
+            </div>
+            <dl className="grid gap-3 rounded-md border p-4 text-sm">
+              <div className="flex items-center justify-between gap-4">
+                <dt className="text-muted-foreground">장비</dt>
+                <dd className="font-medium text-foreground">{detailTarget.equipmentId}</dd>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <dt className="text-muted-foreground">예약자</dt>
+                <dd className="font-medium text-foreground">{detailTarget.userName ?? "이름없음"}</dd>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <dt className="text-muted-foreground">기간</dt>
+                <dd className="font-mono text-xs text-foreground">{detailTarget.startDate} ~ {detailTarget.endDate}</dd>
+              </div>
+              {detailTarget.waitOrder != null && (
+                <div className="flex items-center justify-between gap-4">
+                  <dt className="text-muted-foreground">대기 순번</dt>
+                  <dd className="font-semibold text-foreground">#{detailTarget.waitOrder}</dd>
+                </div>
+              )}
+            </dl>
+          </div>
+        </ManagementDrawer>
       )}
     </div>
   )
@@ -410,13 +438,22 @@ function AddModal({
   }
 
   return (
-    <Dialog open={open} onOpenChange={(next) => { if (!next && !saving) onClose() }}>
-      <DialogContent size="md">
-        <DialogHeader>
-          <DialogTitle>장비 예약 등록</DialogTitle>
-          <DialogDescription>장비와 기간을 지정해 예약합니다. 기간이 겹치면 대기로 등록됩니다.</DialogDescription>
-        </DialogHeader>
-        <DialogBody className="grid gap-3">
+    <ManagementDrawer
+      open={open}
+      onOpenChange={(next) => { if (!next && !saving) onClose() }}
+      size="md"
+      title="장비 예약 등록"
+      description="장비와 기간을 지정해 예약합니다. 기간이 겹치면 대기로 등록됩니다."
+      footer={(
+        <>
+          <Button variant="outline" onClick={onClose} disabled={saving}>취소</Button>
+          <Button onClick={() => void submit()} disabled={saving}>
+            {saving && <Loader2 className="animate-spin" />} 등록
+          </Button>
+        </>
+      )}
+    >
+        <div className="grid gap-3">
           <div>
             <label className="mb-1 block text-xs font-medium text-muted-foreground">장비</label>
             <input
@@ -439,14 +476,7 @@ function AddModal({
           <p className="text-[11px] text-muted-foreground">
             같은 장비에 기간이 겹치는 예약이 있으면 대기(WAITING)로 등록됩니다.
           </p>
-        </DialogBody>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={saving}>취소</Button>
-          <Button onClick={() => void submit()} disabled={saving}>
-            {saving && <Loader2 className="animate-spin" />} 등록
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+    </ManagementDrawer>
   )
 }

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
-import { ClipboardList, Plus, Pencil, Trash2, Loader2 } from "lucide-react"
+import { ClipboardList, Plus, Trash2, Loader2 } from "lucide-react"
 import { DateField } from "@frontend/components/ui/date-field"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
@@ -19,15 +19,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@frontend/components/ui/select"
 import { useConfirmMessage } from "@frontend/components/common/confirm-message"
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@frontend/components/ui/dialog"
+import { ManagementDrawer } from "@frontend/components/common/management-drawer"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -121,7 +113,6 @@ export default function EquipmentMasterPage() {
 
   const [rows, setRows] = useState<EquipmentMasterRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ text: string; type: "info" | "error" } | null>(null)
 
   const [sortField, setSortField] = useState<SortField>("name")
@@ -196,7 +187,6 @@ export default function EquipmentMasterPage() {
     })
     if (!confirmed) return
 
-    setBusy(row.id)
     try {
       const res = await fetch(`/api/equipment-master/${row.id}`, {
         method: "DELETE",
@@ -205,8 +195,9 @@ export default function EquipmentMasterPage() {
       if (!res.ok) { const d = await res.json() as { error?: string }; flash(d.error ?? "삭제 실패", "error"); return }
       flash("삭제되었습니다.")
       setRows(prev => prev.filter(r => r.id !== row.id))
-    } finally {
-      setBusy(null)
+      setEditTarget(current => current?.id === row.id ? null : current)
+    } catch {
+      flash("삭제 실패", "error")
     }
   }
 
@@ -263,11 +254,10 @@ export default function EquipmentMasterPage() {
         ) : (
             <Table>
               <colgroup>
-                <col className={isAdmin ? "w-[30%]" : "w-[32%]"} />
-                <col className={isAdmin ? "w-[22%]" : "w-[24%]"} />
-                <col className={isAdmin ? "w-[24%]" : "w-[26%]"} />
-                <col className={isAdmin ? "w-[16%]" : "w-[18%]"} />
-                {isAdmin && <col className="w-[8%]" />}
+                <col className="w-[30%]" />
+                <col className="w-[22%]" />
+                <col className="w-[24%]" />
+                <col className="w-[24%]" />
               </colgroup>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
@@ -281,11 +271,6 @@ export default function EquipmentMasterPage() {
                       />
                     </TableHead>
                   ))}
-                  {isAdmin && (
-                    <TableHead className="px-1 text-center text-muted-foreground">
-                      <span className="sr-only">관리</span>
-                    </TableHead>
-                  )}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -296,7 +281,6 @@ export default function EquipmentMasterPage() {
                         <TableCell className="px-3 py-2"><Skeleton className="h-8 w-24" /></TableCell>
                         <TableCell className="px-3 py-2"><Skeleton className="h-8 w-24" /></TableCell>
                         <TableCell className="px-3 py-2"><Skeleton className="h-5 w-16 rounded-md" /></TableCell>
-                        {isAdmin && <TableCell className="px-1 py-2"><Skeleton className="mx-auto h-6 w-6 rounded" /></TableCell>}
                       </TableRow>
                     ))
                   : sortedRows.map(row => {
@@ -305,7 +289,11 @@ export default function EquipmentMasterPage() {
                     urgency === "expired" ? "bg-red-50/40" :
                     urgency === "soon"    ? "bg-amber-50/40" : ""
                   return (
-                    <TableRow key={row.id} className={rowHighlight}>
+                    <TableRow
+                      key={row.id}
+                      className={`${rowHighlight} ${isAdmin ? "cursor-pointer hover:bg-muted/40" : ""}`}
+                      onClick={isAdmin ? () => setEditTarget(row) : undefined}
+                    >
                       <TableCell className="px-3 py-2">
                         <CellStack
                           primary={row.name}
@@ -337,33 +325,6 @@ export default function EquipmentMasterPage() {
                           {STATUS_LABEL[row.status]}
                         </Tag>
                       </TableCell>
-                      {isAdmin && (
-                        <TableCell className="px-1 py-2 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              onClick={() => setEditTarget(row)}
-                              title="수정"
-                              className="text-muted-foreground"
-                            >
-                              <Pencil />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              onClick={() => void handleDelete(row)}
-                              disabled={busy === row.id}
-                              title="삭제"
-                              className="text-muted-foreground hover:text-destructive"
-                            >
-                              {busy === row.id
-                                ? <Loader2 className="animate-spin" />
-                                : <Trash2 />}
-                            </Button>
-                          </div>
-                        </TableCell>
-                      )}
                     </TableRow>
                   )
                 })}
@@ -382,14 +343,15 @@ export default function EquipmentMasterPage() {
             setShowAdd(false)
             setEditTarget(null)
           }}
-          onSaved={() => {
+           onSaved={() => {
             const wasEdit = !!editTarget
             setShowAdd(false)
             setEditTarget(null)
             flash(wasEdit ? "수정되었습니다." : "장비가 등록되었습니다.")
-            void load()
-          }}
-          onError={(m) => flash(m, "error")}
+             void load()
+           }}
+           onDelete={editTarget ? () => void handleDelete(editTarget) : undefined}
+           onError={(m) => flash(m, "error")}
         />
       )}
     </div>
@@ -404,12 +366,13 @@ interface ModalProps {
   initial?: EquipmentMasterRow
   onClose: () => void
   onSaved: () => void
+  onDelete?: () => void
   onError: (msg: string) => void
 }
 
 const inputCls = "h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
 
-function EquipmentModal({ open, mode, initial, onClose, onSaved, onError }: ModalProps) {
+function EquipmentModal({ open, mode, initial, onClose, onSaved, onDelete, onError }: ModalProps) {
   const [code,               setCode]               = useState(initial?.code ?? "")
   const [name,               setName]               = useState(initial?.name ?? "")
   const [category,           setCategory]           = useState(initial?.category ?? "")
@@ -465,15 +428,28 @@ function EquipmentModal({ open, mode, initial, onClose, onSaved, onError }: Moda
   }
 
   return (
-    <Dialog open={open} onOpenChange={(next) => { if (!next && !saving) onClose() }}>
-      <DialogContent size="lg">
-        <DialogHeader>
-          <DialogTitle>{mode === "add" ? "장비 등록" : "장비 수정"}</DialogTitle>
-          <DialogDescription>
-            장비 코드와 검교정 정보를 입력합니다.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogBody className="grid gap-4">
+    <ManagementDrawer
+      open={open}
+      onOpenChange={(next) => { if (!next && !saving) onClose() }}
+      size="lg"
+      title={mode === "add" ? "장비 등록" : "장비 수정"}
+      description="장비 코드와 검교정 정보를 입력합니다."
+      footer={(
+        <>
+          {mode === "edit" && onDelete && (
+            <Button variant="ghost" className="mr-auto text-destructive hover:text-destructive" onClick={onDelete} disabled={saving}>
+              <Trash2 /> 삭제
+            </Button>
+          )}
+          <Button variant="outline" onClick={onClose} disabled={saving}>취소</Button>
+          <Button onClick={() => void submit()} disabled={saving}>
+            {saving && <Loader2 className="animate-spin" />}
+            {mode === "add" ? "등록" : "저장"}
+          </Button>
+        </>
+      )}
+    >
+        <div className="grid gap-4">
           {/* 코드 / 장비명 */}
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -562,15 +538,7 @@ function EquipmentModal({ open, mode, initial, onClose, onSaved, onError }: Moda
               className={`${inputCls} py-2 resize-none`}
             />
           </div>
-        </DialogBody>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={saving}>취소</Button>
-          <Button onClick={() => void submit()} disabled={saving}>
-            {saving && <Loader2 className="animate-spin" />}
-            {mode === "add" ? "등록" : "저장"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+    </ManagementDrawer>
   )
 }

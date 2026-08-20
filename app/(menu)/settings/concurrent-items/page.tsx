@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
 import {
-  Plus, Pencil, Trash2, X, Loader2, Search, Sparkles, Layers, AlertCircle,
+  Plus, Trash2, X, Loader2, Search, Sparkles, Layers, AlertCircle,
 } from "lucide-react"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import { cn } from "@frontend/lib/utils"
@@ -11,15 +11,7 @@ import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
 import { Badge } from "@frontend/components/ui/badge"
 import { Input } from "@frontend/components/ui/input"
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@frontend/components/ui/dialog"
+import { ManagementDrawer } from "@frontend/components/common/management-drawer"
 import { useConfirmMessage } from "@frontend/components/common/confirm-message"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -200,7 +192,11 @@ export default function ConcurrentItemsPage() {
       ) : (
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           {filtered.map(f => (
-            <Card key={f.id} className="gap-0 py-0">
+            <Card
+              key={f.id}
+              className={cn("gap-0 py-0", isAdmin && "cursor-pointer transition-colors hover:border-primary/40 hover:bg-muted/20")}
+              onClick={isAdmin ? () => setEditTarget(f) : undefined}
+            >
               <div className="flex items-start gap-3 px-4 py-3">
                 <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
                   <Layers className="size-4" />
@@ -212,17 +208,6 @@ export default function ConcurrentItemsPage() {
                   </div>
                   {f.note && <p className="mt-0.5 truncate text-xs text-muted-foreground">{f.note}</p>}
                 </div>
-                {isAdmin && (
-                  <div className="flex shrink-0 items-center gap-1">
-                    <Button variant="ghost" size="icon-sm" onClick={() => setEditTarget(f)} title="수정" className="text-muted-foreground">
-                      <Pencil />
-                    </Button>
-                    <Button variant="ghost" size="icon-sm" onClick={() => remove(f)} disabled={busy === `del-${f.id}`} title="삭제"
-                      className="text-muted-foreground hover:text-destructive">
-                      {busy === `del-${f.id}` ? <Loader2 className="animate-spin" /> : <Trash2 />}
-                    </Button>
-                  </div>
-                )}
               </div>
               <div className="flex flex-wrap gap-1.5 border-t px-4 py-3">
                 {f.members.map(m => (
@@ -243,6 +228,7 @@ export default function ConcurrentItemsPage() {
           open
           family={editTarget === "new" ? null : editTarget}
           onClose={() => setEditTarget(null)}
+          onDelete={editTarget !== "new" ? () => void remove(editTarget) : undefined}
           onSaved={() => { setEditTarget(null); flash("저장되었습니다."); void load() }}
         />
       )}
@@ -251,8 +237,8 @@ export default function ConcurrentItemsPage() {
 }
 
 // ─── 추가/수정 모달 ───────────────────────────────────────────────────────────
-function FamilyModal({ open, family, onClose, onSaved }: {
-  open: boolean; family: FamilyRow | null; onClose: () => void; onSaved: () => void
+function FamilyModal({ open, family, onClose, onDelete, onSaved }: {
+  open: boolean; family: FamilyRow | null; onClose: () => void; onDelete?: () => void; onSaved: () => void
 }) {
   const [name, setName] = useState(family?.name ?? "")
   const [note, setNote] = useState(family?.note ?? "")
@@ -307,13 +293,27 @@ function FamilyModal({ open, family, onClose, onSaved }: {
   }
 
   return (
-    <Dialog open={open} onOpenChange={(next) => { if (!next && !saving) onClose() }}>
-      <DialogContent size="lg">
-        <DialogHeader>
-          <DialogTitle>{family ? "동시분석 품목군 수정" : "새 동시분석 품목군"}</DialogTitle>
-          <DialogDescription>같은 시험에 묶을 품목을 2개 이상 구성합니다.</DialogDescription>
-        </DialogHeader>
-        <DialogBody className="grid gap-3">
+    <ManagementDrawer
+      open={open}
+      onOpenChange={(next) => { if (!next && !saving) onClose() }}
+      size="lg"
+      title={family ? "동시분석 품목군 수정" : "새 동시분석 품목군"}
+      description="같은 시험에 묶을 품목을 2개 이상 구성합니다."
+      footer={(
+        <>
+          {family && onDelete && (
+            <Button variant="ghost" className="mr-auto text-destructive hover:text-destructive" onClick={onDelete} disabled={saving}>
+              <Trash2 /> 삭제
+            </Button>
+          )}
+          <Button variant="outline" onClick={onClose} disabled={saving}>취소</Button>
+          <Button onClick={save} disabled={saving}>
+            {saving && <Loader2 className="animate-spin" />}저장
+          </Button>
+        </>
+      )}
+    >
+        <div className="grid gap-3">
           <div>
             <label className="mb-1 block text-xs font-semibold text-foreground">품목군 이름 <span className="text-destructive">*</span></label>
             <Input value={name} onChange={e => setName(e.target.value)} placeholder="예: 네비레트엠 계열" />
@@ -371,16 +371,7 @@ function FamilyModal({ open, family, onClose, onSaved }: {
               <AlertCircle className="size-3.5" />{err}
             </p>
           )}
-        </DialogBody>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={saving}>취소</Button>
-          <Button onClick={save} disabled={saving}>
-            {saving && <Loader2 className="animate-spin" />}저장
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+    </ManagementDrawer>
   )
 }
-
-const inputCls = "h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"

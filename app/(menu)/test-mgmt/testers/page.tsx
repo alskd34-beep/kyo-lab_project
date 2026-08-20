@@ -20,21 +20,13 @@ import { SortColumnHeader, type SortColumnDef, type SortDir } from "@frontend/co
 import { StatusFilterTabs, type StatusFilterValue } from "@frontend/components/ui/status-filter-tabs"
 import {
   Dialog,
-  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@frontend/components/ui/dialog"
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@frontend/components/ui/sheet"
+import { ManagementDrawer } from "@frontend/components/common/management-drawer"
 import { Input } from "@frontend/components/ui/input"
 import { TesterAvatar, primeTesterProfileCache } from "@frontend/lib/tester-profiles"
 import {
@@ -146,6 +138,7 @@ export default function TestersPage() {
     name: "",
     canSolo: true,
     canDuo: false,
+    isActive: true,
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
@@ -161,7 +154,7 @@ export default function TestersPage() {
   async function fetchTesters() {
     setLoading(true)
     try {
-      const res = await fetch("/api/testers")
+      const res = await fetch("/api/testers?onlyTesterRole=1")
       const json = (await res.json()) as { rows?: TesterRow[] }
       const rows = json.rows ?? []
       setTesters(rows)
@@ -192,12 +185,6 @@ export default function TestersPage() {
     if (activeTab === "capability") void fetchCapabilities()
   }, [activeTab, fetchCapabilities])
 
-  function openAdd() {
-    setForm({ employeeNo: "", name: "", canSolo: true, canDuo: false })
-    setError("")
-    setAddOpen(true)
-  }
-
   function openEdit(row: TesterRow) {
     setSelected(row)
     setForm({
@@ -205,6 +192,7 @@ export default function TestersPage() {
       name: row.name,
       canSolo: row.canSolo,
       canDuo: row.canDuo,
+      isActive: row.isActive,
     })
     setError("")
     setEditOpen(true)
@@ -227,7 +215,7 @@ export default function TestersPage() {
       const res = await fetch("/api/testers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ employeeNo: form.employeeNo, name: form.name, canSolo: form.canSolo, canDuo: form.canDuo }),
       })
       const json = (await res.json()) as { error?: string; row?: TesterRow }
       if (!res.ok) {
@@ -249,7 +237,7 @@ export default function TestersPage() {
       const res = await fetch("/api/testers", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: selected.id, canSolo: form.canSolo, canDuo: form.canDuo }),
+        body: JSON.stringify({ id: selected.id, canSolo: form.canSolo, canDuo: form.canDuo, isActive: form.isActive }),
       })
       const json = (await res.json()) as { error?: string }
       if (!res.ok) {
@@ -286,19 +274,6 @@ export default function TestersPage() {
     }
   }
 
-  async function toggleActive(row: TesterRow) {
-    const next = !row.isActive
-    setTesters((prev) =>
-      prev.map((tester) =>
-        tester.id === row.id ? { ...tester, isActive: next } : tester
-      )
-    )
-    await fetch("/api/testers", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: row.id, isActive: next }),
-    })
-  }
 
   function getLevel(testerId: string, capabilityId: string): ProficiencyLevel {
     return (
@@ -542,15 +517,6 @@ export default function TestersPage() {
                         <span className="text-sm font-semibold text-foreground">{tester.name}</span>
                       </div>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={(e) => { e.stopPropagation(); openDelete(tester) }}
-                      title="삭제"
-                      className="text-destructive hover:text-destructive"
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
                   </div>
 
                   {/* 가능한 항목만 노출 — '불가'는 표시하지 않는다 */}
@@ -570,12 +536,6 @@ export default function TestersPage() {
                     {!tester.canSolo && !tester.canDuo && (
                       <span className="text-[10px] text-muted-foreground/50">—</span>
                     )}
-                    <button
-                      onClick={(e) => { e.stopPropagation(); void toggleActive(tester) }}
-                      className="ml-auto rounded-md border border-input bg-background px-2 py-0.5 text-[10px] font-medium text-foreground transition-colors hover:bg-muted/50"
-                    >
-                      상태 전환
-                    </button>
                   </div>
                 </Card>
               ))
@@ -588,9 +548,8 @@ export default function TestersPage() {
               <colgroup>
                 <col className="w-[8%]" />
                 <col className="w-[42%]" />
-                <col className="w-[24%]" />
-                <col className="w-[14%]" />
-                <col className="w-[12%]" />
+                <col className="w-[32%]" />
+                <col className="w-[18%]" />
               </colgroup>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
@@ -605,9 +564,6 @@ export default function TestersPage() {
                       />
                     </TableHead>
                   ))}
-                  <TableHead className="px-1 text-center text-muted-foreground">
-                    <span className="sr-only">관리</span>
-                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -618,7 +574,6 @@ export default function TestersPage() {
                         <TableCell className="px-3 py-2"><Skeleton className="h-8 w-28" /></TableCell>
                         <TableCell className="px-3 py-2"><Skeleton className="h-8 w-20" /></TableCell>
                         <TableCell className="px-3 py-2"><Skeleton className="h-5 w-12 rounded-md" /></TableCell>
-                        <TableCell className="px-1 py-2"><Skeleton className="mx-auto h-6 w-6" /></TableCell>
                       </TableRow>
                     ))
                   : filteredTesters.map((tester, idx) => (
@@ -652,34 +607,12 @@ export default function TestersPage() {
                           secondary={tester.canDuo ? <StatusLine color="bg-amber-500" label="2인 가능" /> : undefined}
                         />
                       </TableCell>
-                      <TableCell className="px-3 py-2">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); void toggleActive(tester) }}
-                          className={cn(
-                            "rounded-md px-2 py-0.5 text-[11px] font-medium text-white transition-opacity hover:opacity-90",
-                            tester.isActive ? "bg-green-500" : "bg-slate-500"
-                          )}
-                        >
-                          {tester.isActive ? "활성" : "비활성"}
-                        </button>
-                      </TableCell>
-                      <TableCell className="px-1 py-2 text-center">
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={(e) => { e.stopPropagation(); openDelete(tester) }}
-                          title="삭제"
-                          className="text-destructive hover:text-destructive"
-                        >
-                          <Trash2 className="size-3.5" />
-                        </Button>
-                      </TableCell>
                     </TableRow>
                   ))}
                 {!loading && filteredTesters.length === 0 && (
                   <TableRow className="hover:bg-transparent">
                     <TableCell
-                      colSpan={5}
+                      colSpan={4}
                       className="py-16 text-center text-sm text-muted-foreground"
                     >
                       {statusFilter === "all" ? "등록된 시험자가 없습니다." : "조건에 맞는 시험자가 없습니다."}
@@ -863,16 +796,23 @@ export default function TestersPage() {
       )}
 
       {/* Add Dialog */}
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent size="lg">
-          <DialogHeader>
-            <DialogTitle>시험자 추가</DialogTitle>
-            <DialogDescription>
-              시험자 기본 정보와 시험 가능 범위를 등록합니다.
-            </DialogDescription>
-          </DialogHeader>
-
-          <DialogBody className="grid gap-4">
+      <ManagementDrawer
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        size="lg"
+        title="시험자 추가"
+        description="시험자 기본 정보와 시험 가능 범위를 등록합니다."
+        footer={(
+          <>
+            <Button variant="outline" onClick={() => setAddOpen(false)}>취소</Button>
+            <Button onClick={() => void handleAdd()} disabled={saving}>
+              <Save />
+              {saving ? "저장 중..." : "추가"}
+            </Button>
+          </>
+        )}
+      >
+          <div className="grid gap-4">
               <section className="rounded-md border bg-card p-3 shadow-sm sm:p-4">
                 <div className="mb-3 border-b pb-3">
                   <h3 className="text-sm font-semibold text-foreground">기본 정보</h3>
@@ -952,41 +892,42 @@ export default function TestersPage() {
                   {error}
                 </div>
               )}
-          </DialogBody>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setAddOpen(false)}
-            >
-              취소
-            </Button>
-            <Button
-              onClick={() => void handleAdd()}
-              disabled={saving}
-            >
-              <Save />
-              {saving ? "저장 중..." : "추가"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </div>
+      </ManagementDrawer>
 
       {/* Edit Sheet */}
-      <Sheet open={editOpen} onOpenChange={setEditOpen}>
-        <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
-          <SheetHeader className="border-b px-5 py-4">
-            <SheetTitle className="flex items-center gap-2 text-base font-semibold">
-              <TesterAvatar testerId={selected?.id} name={selected?.name} avatarUrl={selected?.avatarUrl} size="sm" />
-              시험자 수정
-            </SheetTitle>
-            <SheetDescription className="text-xs text-muted-foreground">
-              시험 가능 범위를 수정합니다.
-            </SheetDescription>
-          </SheetHeader>
-
-          <div className="flex-1 overflow-y-auto bg-muted/30 px-5 py-4">
-            <div className="grid gap-4">
+      <ManagementDrawer
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        size="lg"
+        title={(
+          <span className="flex items-center gap-2">
+            <TesterAvatar testerId={selected?.id} name={selected?.name} avatarUrl={selected?.avatarUrl} size="sm" />
+            시험자 수정
+          </span>
+        )}
+        description="시험 가능 범위를 수정합니다."
+        footer={(
+          <>
+            {selected && (
+              <Button
+                variant="ghost"
+                className="mr-auto text-destructive hover:text-destructive"
+                onClick={() => { setEditOpen(false); openDelete(selected) }}
+                disabled={saving}
+              >
+                <Trash2 /> 삭제
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => setEditOpen(false)}>취소</Button>
+            <Button onClick={() => void handleEdit()} disabled={saving}>
+              <Save />
+              {saving ? "저장 중..." : "저장"}
+            </Button>
+          </>
+        )}
+      >
+          <div className="grid gap-4">
               {/* 기본 정보 — 읽기 전용 */}
               <section className="rounded-md border bg-card p-4 shadow-sm">
                 <h3 className="mb-3 border-b pb-2 text-sm font-semibold text-foreground">기본 정보</h3>
@@ -1032,6 +973,15 @@ export default function TestersPage() {
                     />
                     2인 시험 가능
                   </label>
+                  <label className="flex items-center gap-2 rounded-md border px-3 py-2.5 text-sm font-medium text-foreground cursor-pointer hover:bg-muted/30 sm:col-span-2">
+                    <input
+                      type="checkbox"
+                      checked={form.isActive}
+                      onChange={(e) => setForm((prev) => ({ ...prev, isActive: e.target.checked }))}
+                      className="cb-custom"
+                    />
+                    활성 상태
+                  </label>
                 </div>
               </section>
 
@@ -1040,18 +990,8 @@ export default function TestersPage() {
                   {error}
                 </div>
               )}
-            </div>
           </div>
-
-          <SheetFooter className="border-t bg-card px-5 py-4">
-            <Button variant="outline" onClick={() => setEditOpen(false)}>취소</Button>
-            <Button onClick={() => void handleEdit()} disabled={saving}>
-              <Save />
-              {saving ? "저장 중..." : "저장"}
-            </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+      </ManagementDrawer>
 
       {/* Delete Dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>

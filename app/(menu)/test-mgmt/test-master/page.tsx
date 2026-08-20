@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { CellStack } from "@frontend/components/ui/table-cell-stack"
 import {
   ClipboardList,
-  Pencil,
   Plus,
   Save,
   Search,
@@ -18,13 +17,13 @@ import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
 import {
   Dialog,
-  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@frontend/components/ui/dialog"
+import { ManagementDrawer } from "@frontend/components/common/management-drawer"
 import { Input } from "@frontend/components/ui/input"
 import {
   Select,
@@ -82,6 +81,7 @@ interface FormState {
   category: Category
   estimatedHours: string
   requiresDuo: boolean
+  isActive: boolean
 }
 
 const EMPTY_FORM: FormState = {
@@ -89,6 +89,7 @@ const EMPTY_FORM: FormState = {
   category: "기타",
   estimatedHours: "",
   requiresDuo: false,
+  isActive: true,
 }
 
 type SortField = "name" | "category" | "estimatedHours" | "requiresDuo" | "isActive"
@@ -116,38 +117,6 @@ function CategoryBadge({ category }: { category: string }) {
       <span className={cn("size-1.5 rounded-full", dot)} />
       {category || "기타"}
     </Badge>
-  )
-}
-
-function DuoToggleButton({ row, onToggle, className }: { row: TestItemRow; onToggle: () => void; className?: string }) {
-  return (
-    <button
-      onClick={onToggle}
-      className={cn(
-        "block max-w-full truncate rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors",
-        row.requiresDuo
-          ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
-          : "border-input bg-background text-muted-foreground hover:bg-muted/50",
-        className,
-      )}
-    >
-      {row.requiresDuo ? "2인 사용" : "2인 미사용"}
-    </button>
-  )
-}
-
-function ActiveToggleButton({ row, onToggle, className }: { row: TestItemRow; onToggle: () => void; className?: string }) {
-  return (
-    <button
-      onClick={onToggle}
-      className={cn(
-        "block max-w-full truncate rounded-md px-2 py-0.5 text-[11px] font-medium text-white transition-opacity hover:opacity-90",
-        row.isActive ? "bg-green-500" : "bg-slate-500",
-        className,
-      )}
-    >
-      {row.isActive ? "활성" : "비활성"}
-    </button>
   )
 }
 
@@ -270,34 +239,6 @@ export default function TestMasterPage() {
     )
   }
 
-  async function toggleDuo(row: TestItemRow) {
-    const next = !row.requiresDuo
-    setRows((prev) =>
-      prev.map((item) =>
-        item.id === row.id ? { ...item, requiresDuo: next } : item
-      )
-    )
-    try {
-      await patchItem(row.id, { requiresDuo: next })
-    } catch {
-      await loadItems()
-    }
-  }
-
-  async function toggleActive(row: TestItemRow) {
-    const next = !row.isActive
-    setRows((prev) =>
-      prev.map((item) =>
-        item.id === row.id ? { ...item, isActive: next } : item
-      )
-    )
-    try {
-      await patchItem(row.id, { isActive: next })
-    } catch {
-      await loadItems()
-    }
-  }
-
   function openAddDialog() {
     setEditTarget(null)
     setForm(EMPTY_FORM)
@@ -315,6 +256,7 @@ export default function TestMasterPage() {
       estimatedHours:
         row.estimatedHours != null ? String(row.estimatedHours) : "",
       requiresDuo: row.requiresDuo,
+      isActive: row.isActive,
     })
     setError(null)
     setDialogOpen(true)
@@ -347,6 +289,7 @@ export default function TestMasterPage() {
           category: form.category,
           estimatedHours,
           requiresDuo: form.requiresDuo,
+          isActive: form.isActive,
         })
       } else {
         const res = await fetch("/api/test-items", {
@@ -519,25 +462,6 @@ export default function TestMasterPage() {
                     {row.name}
                   </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => openEditDialog(row)}
-                    title="수정"
-                  >
-                    <Pencil className="size-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => openDeleteDialog(row)}
-                    title="삭제"
-                    className="text-destructive hover:text-destructive"
-                  >
-                    <Trash2 className="size-3.5" />
-                  </Button>
-                </div>
               </div>
 
               <div className="mt-2 grid grid-cols-1 gap-x-2 gap-y-1 border-t pt-2 text-[11px] text-muted-foreground min-[420px]:grid-cols-2">
@@ -552,28 +476,22 @@ export default function TestMasterPage() {
               </div>
 
               <div className="mt-2 flex flex-wrap gap-1.5">
-                <button
-                  onClick={() => void toggleDuo(row)}
-                  className={cn(
-                    "rounded-md border px-2 py-0.5 text-[10px] font-medium transition-colors",
+                <span className={cn(
+                    "rounded-md border px-2 py-0.5 text-[10px] font-medium",
                     row.requiresDuo
-                      ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
-                      : "border-input bg-background text-muted-foreground hover:bg-muted/50",
-                  )}
-                >
+                      ? "border-amber-200 bg-amber-50 text-amber-700"
+                      : "border-input bg-background text-muted-foreground",
+                  )}>
                   {row.requiresDuo ? "2인시험 사용" : "2인시험 미사용"}
-                </button>
-                <button
-                  onClick={() => void toggleActive(row)}
-                  className={cn(
-                    "rounded-md border px-2 py-0.5 text-[10px] font-medium transition-colors",
+                </span>
+                <span className={cn(
+                    "rounded-md border px-2 py-0.5 text-[10px] font-medium",
                     row.isActive
-                      ? "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
-                      : "border-input bg-background text-muted-foreground hover:bg-muted/50",
-                  )}
-                >
-                  {row.isActive ? "활성 유지" : "활성 전환"}
-                </button>
+                      ? "border-blue-200 bg-blue-50 text-blue-700"
+                      : "border-input bg-background text-muted-foreground",
+                  )}>
+                  {row.isActive ? "활성" : "비활성"}
+                </span>
               </div>
             </Card>
           ))
@@ -594,9 +512,6 @@ export default function TestMasterPage() {
                   />
                 </TableHead>
               ))}
-              <TableHead className="px-1 text-center text-muted-foreground">
-                <span className="sr-only">액션</span>
-              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -607,7 +522,6 @@ export default function TestMasterPage() {
                   <TableCell className="px-3 py-2"><Skeleton className="h-5 w-16 rounded-md" /></TableCell>
                   <TableCell className="px-3 py-2"><Skeleton className="h-4 w-8" /></TableCell>
                   <TableCell className="px-3 py-2"><Skeleton className="h-8 w-16" /></TableCell>
-                  <TableCell className="px-1 py-2"><Skeleton className="mx-auto h-6 w-14" /></TableCell>
                 </TableRow>
               ))
             ) : filtered.length === 0 ? (
@@ -618,7 +532,7 @@ export default function TestMasterPage() {
               </TableRow>
             ) : (
               sortedData.map((row) => (
-                <TableRow key={row.id}>
+                <TableRow key={row.id} className="cursor-pointer hover:bg-muted/40" onClick={() => openEditDialog(row)}>
                   <TableCell className="px-3 py-2">
                     <div className="truncate font-medium text-foreground" title={row.name}>
                       {row.name}
@@ -632,30 +546,17 @@ export default function TestMasterPage() {
                   </TableCell>
                   <TableCell className="px-3 py-2">
                     <CellStack
-                      primary={<DuoToggleButton row={row} onToggle={() => void toggleDuo(row)} />}
-                      secondary={<ActiveToggleButton row={row} onToggle={() => void toggleActive(row)} />}
+                      primary={(
+                        <Tag color={row.requiresDuo ? "yellow" : "mono"}>
+                          {row.requiresDuo ? "2인 사용" : "2인 미사용"}
+                        </Tag>
+                      )}
+                      secondary={(
+                        <Tag color={row.isActive ? "green" : "mono"}>
+                          {row.isActive ? "활성" : "비활성"}
+                        </Tag>
+                      )}
                     />
-                  </TableCell>
-                  <TableCell className="px-1 py-2 text-center">
-                    <div className="flex items-center justify-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => openEditDialog(row)}
-                        title="수정"
-                      >
-                        <Pencil className="size-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => openDeleteDialog(row)}
-                        title="삭제"
-                        className="text-destructive hover:text-destructive"
-                      >
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                    </div>
                   </TableCell>
                 </TableRow>
               ))
@@ -665,18 +566,33 @@ export default function TestMasterPage() {
       </Card>
 
       {/* 추가/수정 다이얼로그 */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent size="lg">
-          <DialogHeader>
-            <DialogTitle>
-              {editTarget ? "시험항목 수정" : "시험항목 추가"}
-            </DialogTitle>
-            <DialogDescription>
-              시험항목 기본 정보와 2인시험 여부를 관리합니다.
-            </DialogDescription>
-          </DialogHeader>
-
-          <DialogBody className="grid gap-4">
+      <ManagementDrawer
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        size="lg"
+        title={editTarget ? "시험항목 수정" : "시험항목 추가"}
+        description="시험항목 기본 정보와 2인시험 여부를 관리합니다."
+        footer={(
+          <>
+            {editTarget && (
+              <Button
+                variant="ghost"
+                className="mr-auto text-destructive hover:text-destructive"
+                onClick={() => { setDialogOpen(false); openDeleteDialog(editTarget) }}
+                disabled={saving}
+              >
+                <Trash2 /> 삭제
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>취소</Button>
+            <Button onClick={handleSave} disabled={saving}>
+              <Save />
+              {saving ? "저장 중..." : "저장"}
+            </Button>
+          </>
+        )}
+      >
+          <div className="grid gap-4">
               <section className="rounded-md border bg-card p-3 sm:p-4">
                 <div className="mb-3 border-b pb-3">
                   <h3 className="text-sm font-semibold text-foreground">기본 정보</h3>
@@ -685,7 +601,7 @@ export default function TestMasterPage() {
                   <div className="flex flex-col gap-1.5 sm:col-span-2">
                     <label className="text-xs font-medium text-muted-foreground">
                       시험항목명 <span className="text-destructive">*</span>
-                    </label>
+                  </label>
                     <Input
                       value={form.name}
                       onChange={(e) =>
@@ -717,7 +633,16 @@ export default function TestMasterPage() {
                   <div className="flex flex-col gap-1.5">
                     <label className="text-xs font-medium text-muted-foreground">
                       예상시간 (h)
-                    </label>
+                  </label>
+                  <label className="mt-2 flex items-center gap-2 rounded-md border px-3 py-2.5 text-sm font-medium text-foreground">
+                    <input
+                      type="checkbox"
+                      checked={form.isActive}
+                      onChange={(e) => setForm((prev) => ({ ...prev, isActive: e.target.checked }))}
+                      className="cb-custom"
+                    />
+                    활성 상태
+                  </label>
                     <Input
                       type="number"
                       min={0}
@@ -759,23 +684,8 @@ export default function TestMasterPage() {
                   {error}
                 </div>
               )}
-          </DialogBody>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDialogOpen(false)}
-              disabled={saving}
-            >
-              취소
-            </Button>
-            <Button onClick={handleSave} disabled={saving}>
-              <Save />
-              {saving ? "저장 중..." : "저장"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </div>
+      </ManagementDrawer>
 
       {/* 삭제 확인 다이얼로그 */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>

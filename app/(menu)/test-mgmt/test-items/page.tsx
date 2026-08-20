@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react"
 import {
-  AlertTriangle,
   Copy,
   Link2,
   PackagePlus,
@@ -26,6 +25,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@frontend/components/ui/dialog"
+import { ManagementDrawer } from "@frontend/components/common/management-drawer"
 import { Input } from "@frontend/components/ui/input"
 import { SortColumnHeader, sortCol, type SortDir } from "@frontend/components/ui/table-sort"
 import { StatusFilterTabs, type StatusFilterValue } from "@frontend/components/ui/status-filter-tabs"
@@ -107,6 +107,7 @@ export default function TestItemsPage() {
   const [unlinkTarget, setUnlinkTarget] = useState<ProductTestItemRow | null>(
     null
   )
+  const [linkedDetailTarget, setLinkedDetailTarget] = useState<ProductTestItemRow | null>(null)
   const [unlinkLoading, setUnlinkLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // 선택 일괄 삭제
@@ -711,7 +712,8 @@ export default function TestItemsPage() {
                       .map((item, idx) => (
                         <Card
                           key={item.testItemId}
-                          className="gap-0 px-3 py-3"
+                          className="cursor-pointer gap-0 px-3 py-3 transition-colors hover:bg-muted/30"
+                          onClick={() => setLinkedDetailTarget(item)}
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0 flex-1">
@@ -720,9 +722,8 @@ export default function TestItemsPage() {
                                   type="checkbox"
                                   className="cb-custom"
                                   checked={selectedLinked.has(item.testItemId)}
-                                  onChange={() =>
-                                    toggleSelectLinked(item.testItemId)
-                                  }
+                                  onClick={(event) => event.stopPropagation()}
+                                  onChange={() => toggleSelectLinked(item.testItemId)}
                                 />
                                 <span className="text-[11px] text-muted-foreground">
                                   {idx + 1}
@@ -743,15 +744,6 @@ export default function TestItemsPage() {
                                 {item.testItemName}
                               </p>
                             </div>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              onClick={() => setUnlinkTarget(item)}
-                              title="연결 해제"
-                              className="size-8 text-muted-foreground hover:text-destructive"
-                            >
-                              <Trash2 className="size-4" />
-                            </Button>
                           </div>
                         </Card>
                       ))
@@ -766,7 +758,6 @@ export default function TestItemsPage() {
                       <col className="w-[10%]" />
                       <col />
                       <col className="w-[16%]" />
-                      <col className="w-[10%]" />
                     </colgroup>
                     <TableHeader>
                       <TableRow className="hover:bg-transparent">
@@ -800,16 +791,13 @@ export default function TestItemsPage() {
                             </div>
                           </TableHead>
                         ))}
-                        <TableHead className="w-20 px-3 text-center text-muted-foreground">
-                          삭제
-                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {linkedItems.length === 0 ? (
                         <TableRow className="hover:bg-transparent">
                           <TableCell
-                            colSpan={5}
+                            colSpan={4}
                             className="py-16 text-center text-sm text-muted-foreground"
                           >
                             연결된 시험항목이 없습니다. 우측 상단에서
@@ -823,16 +811,16 @@ export default function TestItemsPage() {
                             return (
                               <TableRow
                                 key={item.testItemId}
-                                className={cn(isSelected && "bg-primary/5")}
+                                className={cn("cursor-pointer hover:bg-muted/40", isSelected && "bg-primary/5")}
+                                onClick={() => setLinkedDetailTarget(item)}
                               >
                                 <TableCell className="px-3 py-2.5">
                                   <input
                                     type="checkbox"
                                     className="cb-custom"
                                     checked={isSelected}
-                                    onChange={() =>
-                                      toggleSelectLinked(item.testItemId)
-                                    }
+                                    onClick={(event) => event.stopPropagation()}
+                                    onChange={() => toggleSelectLinked(item.testItemId)}
                                   />
                                 </TableCell>
                                 <TableCell className="px-3 py-2.5 text-center text-xs text-muted-foreground">
@@ -856,17 +844,6 @@ export default function TestItemsPage() {
                                     </Badge>
                                   )}
                                 </TableCell>
-                                <TableCell className="px-3 py-2.5 text-center">
-                                  <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    onClick={() => setUnlinkTarget(item)}
-                                    title="연결 해제"
-                                    className="size-8 text-muted-foreground hover:text-destructive"
-                                  >
-                                    <Trash2 className="size-4" />
-                                  </Button>
-                                </TableCell>
                               </TableRow>
                             )
                           })
@@ -880,17 +857,66 @@ export default function TestItemsPage() {
         </Card>
       </div>
 
-      {/* 시험항목 추가 다이얼로그 */}
-      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-        <DialogContent size="xl">
-          <DialogHeader>
-            <DialogTitle>시험항목 추가</DialogTitle>
-            <DialogDescription>
-              활성 시험항목 중 현재 품목에 연결할 항목을 선택합니다.
-            </DialogDescription>
-          </DialogHeader>
+      {linkedDetailTarget && (
+        <ManagementDrawer
+          open
+          onOpenChange={(open) => { if (!open) setLinkedDetailTarget(null) }}
+          size="sm"
+          title="시험항목 연결 상세"
+          description="현재 품목과 연결된 시험항목을 확인하고 연결을 해제합니다."
+          footer={(
+            <>
+              <Button
+                variant="ghost"
+                className="mr-auto text-destructive hover:text-destructive"
+                onClick={() => {
+                  setUnlinkTarget(linkedDetailTarget)
+                  setLinkedDetailTarget(null)
+                }}
+              >
+                <Trash2 /> 연결 해제
+              </Button>
+              <Button variant="outline" onClick={() => setLinkedDetailTarget(null)}>닫기</Button>
+            </>
+          )}
+        >
+          <dl className="grid gap-3 rounded-md border p-4 text-sm">
+            <div className="flex items-center justify-between gap-4">
+              <dt className="text-muted-foreground">시험항목</dt>
+              <dd className="font-medium text-foreground">{linkedDetailTarget.testItemName}</dd>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <dt className="text-muted-foreground">순서</dt>
+              <dd className="font-semibold tabular-nums text-foreground">{linkedDetailTarget.sequenceOrder}</dd>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <dt className="text-muted-foreground">필수 여부</dt>
+              <dd>
+                <Badge variant="outline">{linkedDetailTarget.isMandatory ? "필수" : "선택"}</Badge>
+              </dd>
+            </div>
+          </dl>
+        </ManagementDrawer>
+      )}
 
-          <DialogBody className="grid gap-4">
+      {/* 시험항목 추가 다이얼로그 */}
+      <ManagementDrawer
+        open={addDialogOpen}
+        onOpenChange={setAddDialogOpen}
+        size="lg"
+        title="시험항목 추가"
+        description="활성 시험항목 중 현재 품목에 연결할 항목을 선택합니다."
+        footer={(
+          <>
+            <Button variant="outline" onClick={() => setAddDialogOpen(false)} disabled={addLoading}>취소</Button>
+            <Button onClick={() => void handleAddItems()} disabled={addLoading || selectedToAdd.size === 0}>
+              <Plus />
+              {addLoading ? "추가 중..." : `추가 (${selectedToAdd.size})`}
+            </Button>
+          </>
+        )}
+      >
+          <div className="grid gap-4">
               <div className="relative">
                 <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -1010,26 +1036,8 @@ export default function TestItemsPage() {
                   )}
                 </div>
               </Card>
-          </DialogBody>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setAddDialogOpen(false)}
-              disabled={addLoading}
-            >
-              취소
-            </Button>
-            <Button
-              onClick={() => void handleAddItems()}
-              disabled={addLoading || selectedToAdd.size === 0}
-            >
-              <Plus />
-              {addLoading ? "추가 중..." : `추가 (${selectedToAdd.size})`}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </div>
+      </ManagementDrawer>
 
       {/* 연결 해제 확인 다이얼로그 */}
       <Dialog

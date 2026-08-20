@@ -13,15 +13,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@frontend/components/ui/table"
 import { Input } from "@frontend/components/ui/input"
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@frontend/components/ui/dialog"
+import { ManagementDrawer } from "@frontend/components/common/management-drawer"
 import { useConfirmMessage } from "@frontend/components/common/confirm-message"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -60,6 +52,7 @@ export default function HolidaysPage() {
   const [msg, setMsg] = useState<string | null>(null)
   const [msgType, setMsgType] = useState<"ok" | "err">("ok")
   const [showAdd, setShowAdd] = useState(false)
+  const [detailTarget, setDetailTarget] = useState<HolidayRow | null>(null)
   const [sortField, setSortField] = useState<SortField>("date")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
 
@@ -122,6 +115,7 @@ export default function HolidaysPage() {
       }
       flash("삭제되었습니다.")
       setRows(prev => prev.filter(row => row.date !== date))
+      setDetailTarget(current => current?.date === date ? null : current)
     } finally {
       setBusy(null)
     }
@@ -222,7 +216,6 @@ export default function HolidaysPage() {
             <col className="w-[24%]" />
             <col />
             <col className="w-[16%]" />
-            {isAdmin && <col className="w-[10%]" />}
           </colgroup>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
@@ -236,7 +229,6 @@ export default function HolidaysPage() {
                   />
                 </TableHead>
               ))}
-              {isAdmin && <TableHead className="text-center">관리</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -246,19 +238,18 @@ export default function HolidaysPage() {
                     <TableCell><Skeleton className="h-4 w-28" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-full" /></TableCell>
                     <TableCell><Skeleton className="h-5 w-12 rounded-md" /></TableCell>
-                    {isAdmin && <TableCell><Skeleton className="mx-auto h-6 w-6 rounded" /></TableCell>}
                   </TableRow>
                 ))
               : rows.length === 0
                 ? (
                     <TableRow className="hover:bg-transparent">
-                      <TableCell colSpan={isAdmin ? 4 : 3} className="py-16 text-center text-sm text-muted-foreground">
+                      <TableCell colSpan={3} className="py-16 text-center text-sm text-muted-foreground">
                         {year}년에 등록된 공휴일이 없습니다.
                       </TableCell>
                     </TableRow>
                   )
                 : sortedRows.map(r => (
-                    <TableRow key={r.date}>
+                      <TableRow key={r.date} className="cursor-pointer hover:bg-muted/40" onClick={() => setDetailTarget(r)}>
                       <TableCell className="font-mono text-xs text-muted-foreground">{r.date}</TableCell>
                       <TableCell className="font-medium text-foreground">
                         <span className="block truncate" title={r.description || undefined}>{r.description || "—"}</span>
@@ -266,20 +257,6 @@ export default function HolidaysPage() {
                       <TableCell>
                         <Badge variant="outline">{r.source === "api" ? "API" : "수동"}</Badge>
                       </TableCell>
-                      {isAdmin && (
-                        <TableCell className="text-center">
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            onClick={() => void remove(r.date)}
-                            disabled={busy === r.date}
-                            className="text-destructive hover:text-destructive"
-                            title="삭제"
-                          >
-                            {busy === r.date ? <Loader2 className="animate-spin" /> : <Trash2 className="size-3.5" />}
-                          </Button>
-                        </TableCell>
-                      )}
                     </TableRow>
                   ))}
           </TableBody>
@@ -298,6 +275,47 @@ export default function HolidaysPage() {
         }}
         onError={(m) => flash(m, "err")}
       />
+      )}
+
+      {detailTarget && (
+        <ManagementDrawer
+          open
+          onOpenChange={(open) => { if (!open) setDetailTarget(null) }}
+          size="sm"
+          title="공휴일 상세"
+          description="공휴일 정보를 확인하고 필요한 작업을 선택합니다."
+          footer={(
+            <>
+              {isAdmin && (
+                <Button
+                  variant="ghost"
+                  className="mr-auto text-destructive hover:text-destructive"
+                  onClick={() => void remove(detailTarget.date)}
+                  disabled={busy === detailTarget.date}
+                >
+                  {busy === detailTarget.date ? <Loader2 className="animate-spin" /> : <Trash2 />}
+                  삭제
+                </Button>
+              )}
+              <Button variant="outline" onClick={() => setDetailTarget(null)}>닫기</Button>
+            </>
+          )}
+        >
+          <dl className="grid gap-3 rounded-md border p-4 text-sm">
+            <div className="flex items-center justify-between gap-4">
+              <dt className="text-muted-foreground">날짜</dt>
+              <dd className="font-mono font-medium text-foreground">{detailTarget.date}</dd>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <dt className="text-muted-foreground">공휴일명</dt>
+              <dd className="font-medium text-foreground">{detailTarget.description || "-"}</dd>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <dt className="text-muted-foreground">등록 구분</dt>
+              <dd><Badge variant="outline">{detailTarget.source === "api" ? "API" : "수동"}</Badge></dd>
+            </div>
+          </dl>
+        </ManagementDrawer>
       )}
     </div>
   )
@@ -341,13 +359,23 @@ function AddModal({
   }
 
   return (
-    <Dialog open={open} onOpenChange={(next) => { if (!next && !saving) onClose() }}>
-      <DialogContent size="sm">
-        <DialogHeader>
-          <DialogTitle>공휴일 추가</DialogTitle>
-          <DialogDescription>날짜와 설명을 입력해 공휴일을 등록합니다.</DialogDescription>
-        </DialogHeader>
-        <DialogBody className="grid gap-3">
+    <ManagementDrawer
+      open={open}
+      onOpenChange={(next) => { if (!next && !saving) onClose() }}
+      size="sm"
+      title="공휴일 추가"
+      description="날짜와 설명을 입력해 공휴일을 등록합니다."
+      footer={(
+        <>
+          <Button variant="outline" onClick={onClose} disabled={saving}>취소</Button>
+          <Button onClick={() => void submit()} disabled={saving}>
+            {saving && <Loader2 className="animate-spin" />}
+            추가
+          </Button>
+        </>
+      )}
+    >
+        <div className="grid gap-3">
           <DateField label="날짜" value={date} onChange={setDate} />
           <div>
             <label className="mb-1 block text-xs font-medium text-muted-foreground">설명</label>
@@ -357,15 +385,7 @@ function AddModal({
               placeholder="예) 설날, 어린이날"
             />
           </div>
-        </DialogBody>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={saving}>취소</Button>
-          <Button onClick={() => void submit()} disabled={saving}>
-            {saving && <Loader2 className="animate-spin" />}
-            추가
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+    </ManagementDrawer>
   )
 }
