@@ -587,10 +587,10 @@ export default function OrdersPage() {
               )}
               {r.isUrgent && <Badge variant="outline" className="border-red-200 text-red-700">긴급</Badge>}
             </div>
-            <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
-              <span className="font-mono">품목코드 {r.productCode}</span>
+            <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+              <span className="font-mono font-semibold">품목코드 {r.productCode}</span>
               <span aria-hidden="true" className="text-border">·</span>
-              <span className="font-mono">제조번호 {r.batchNo}</span>
+              <span className="font-mono font-semibold">제조번호 {r.batchNo}</span>
             </div>
           </div>
 
@@ -607,29 +607,29 @@ export default function OrdersPage() {
         <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 border-t pt-3 text-xs">
           <div className="min-w-0">
             <dt className="text-muted-foreground">제형</dt>
-            <dd className="mt-0.5 truncate font-medium text-foreground">{r.dosageForm ?? "-"}</dd>
+            <dd className="mt-0.5 truncate text-sm font-semibold text-foreground">{r.dosageForm ?? "-"}</dd>
           </div>
           <div className="min-w-0">
             <dt className="text-muted-foreground">진행방법</dt>
-            <dd className="mt-0.5 truncate font-medium text-foreground">{r.method}</dd>
+            <dd className="mt-0.5 truncate text-sm font-semibold text-foreground">{r.method}</dd>
           </div>
           <div>
             <dt className="text-muted-foreground">포장일</dt>
-            <dd className="mt-0.5 font-medium text-foreground">{r.packagingDate ?? "-"}</dd>
+            <dd className="mt-0.5 text-sm font-semibold text-foreground">{r.packagingDate ?? "-"}</dd>
           </div>
           <div>
             <dt className="text-muted-foreground">완료예정</dt>
-            <dd className={cn("mt-0.5 font-medium text-foreground", dueSoon && "font-semibold text-orange-700")}>
+            <dd className={cn("mt-0.5 text-sm font-semibold text-foreground", dueSoon && "text-orange-700")}>
               {r.dueDate ?? "-"}
             </dd>
           </div>
           <div>
             <dt className="text-muted-foreground">공수</dt>
-            <dd className="mt-0.5 font-medium text-foreground">{r.workdays != null ? `${r.workdays}일` : "-"}</dd>
+            <dd className="mt-0.5 text-sm font-semibold text-foreground">{r.workdays != null ? `${r.workdays}일` : "-"}</dd>
           </div>
           <div className="min-w-0">
             <dt className="text-muted-foreground">담당자</dt>
-            <dd className="mt-0.5 truncate font-medium text-foreground">
+            <dd className="mt-0.5 truncate text-sm font-semibold text-foreground">
               {r.assigneeName && r.assigneeTesterId
                 ? <button
                     onClick={(e) => { e.stopPropagation(); setAssigneeTarget({ id: r.assigneeTesterId!, name: r.assigneeName! }) }}
@@ -819,7 +819,7 @@ export default function OrdersPage() {
                 <Skeleton className="h-px flex-1" />
                 <Skeleton className="h-3 w-14" />
               </div>
-              <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
+              <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,22rem),1fr))] gap-2">
                 {Array.from({ length: 3 }).map((_, j) => (
                   <Card key={j} className="gap-3 p-3">
                     <div className="flex items-start gap-2.5">
@@ -890,7 +890,7 @@ export default function OrdersPage() {
                 </div>
 
                 {!isCollapsed && (
-                  <div className="grid grid-cols-1 gap-2 p-0.5 xl:grid-cols-2">
+                  <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,22rem),1fr))] gap-2 p-0.5">
                     {buildRowTree(g.key, g.rows).map(item => {
                       if (item.type === "single") return renderOrderCard(item.row)
                       const fc = famCollapsed.has(item.familyId)
@@ -910,7 +910,7 @@ export default function OrdersPage() {
                             <Badge variant="secondary">동시분석 {item.rows.length}건</Badge>
                           </button>
                           {!fc && (
-                            <div className="mt-2 grid grid-cols-1 gap-2 border-t border-primary/15 pt-2 xl:grid-cols-2">
+                            <div className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(min(100%,22rem),1fr))] gap-2 border-t border-primary/15 pt-2">
                               {item.rows.map(r => renderOrderCard(r, true))}
                             </div>
                           )}
