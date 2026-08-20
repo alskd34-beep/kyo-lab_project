@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
 import {
   RefreshCw, Sparkles, History, AlertCircle, X, Loader2, Database, Plus,
@@ -9,17 +9,12 @@ import {
 } from "lucide-react"
 import { CLOSED_STAGE, JOB_STAGES, stageStyle } from "@shared/qc-status"
 import { cn } from "@frontend/lib/utils"
+import { ManagementDrawer } from "@frontend/components/common/management-drawer"
 import { AssigneeDetailModal } from "@frontend/components/schedule/assignee-detail-modal"
 import { TesterAvatar, TesterOptionLabel, primeTesterProfileCache } from "@frontend/lib/tester-profiles"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
 import { Badge } from "@frontend/components/ui/badge"
-import { CellStack } from "@frontend/components/ui/table-cell-stack"
-import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from "@frontend/components/ui/table-sort"
-
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow, useTableColSpan,
-} from "@frontend/components/ui/table"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@frontend/components/ui/select"
@@ -37,13 +32,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@frontend/components/ui/dialog"
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@frontend/components/ui/sheet"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 interface OrderRow {
@@ -95,6 +83,7 @@ const TABS: { id: TabId; label: string; icon: typeof CalendarDays }[] = [
 
 // 오더 상태 = 대기 + 작업 단계(진행중→검토전→검토중→승인전→승인완료) + 지연 (types/qc-status.ts)
 const STATUS_OPTIONS = ["대기", ...JOB_STAGES, "지연"]
+const STATUS_SUMMARY_OPTIONS = ["", ...STATUS_OPTIONS, "삭제"]
 const METHOD_OPTIONS = ["전항목", "개별항목"]
 
 // 상태 점 색 (템플릿 스타일의 outline 뱃지 + 컬러 도트)
@@ -105,79 +94,6 @@ const FIELD_LABEL: Record<string, string> = {
   packagingDate: "포장일", dueDate: "완료예정일", isUrgent: "긴급",
   method: "진행방법", status: "상태", note: "비고", assigneeTesterId: "담당자",
 }
-
-type SortField =
-  | "productName"
-  | "productCode"
-  | "batchNo"
-  | "dosageForm"
-  | "method"
-  | "packagingDate"
-  | "dueDate"
-  | "isUrgent"
-  | "workdays"
-  | "assigneeName"
-  | "status"
-
-const ORDER_COLUMNS: { key: string; def?: SortColumnDef<SortField>; head?: string }[] = [
-  { key: "lock", head: "확정" },
-  { key: "name", def: sortCol("productName", "품목명") },
-  {
-    key: "code",
-    def: {
-      key: "code",
-      label: "품목코드",
-      fields: [
-        { id: "productCode", label: "품목코드" },
-        { id: "batchNo", label: "제조번호" },
-      ],
-    },
-  },
-  {
-    key: "form",
-    def: {
-      key: "form",
-      label: "제형",
-      fields: [
-        { id: "dosageForm", label: "제형" },
-        { id: "method", label: "진행방법" },
-      ],
-    },
-  },
-  {
-    key: "dates",
-    def: {
-      key: "dates",
-      label: "일정",
-      fields: [
-        { id: "packagingDate", label: "포장일" },
-        { id: "dueDate", label: "완료예정" },
-      ],
-    },
-  },
-  {
-    key: "load",
-    def: {
-      key: "load",
-      label: "공수",
-      fields: [
-        { id: "workdays", label: "공수" },
-        { id: "isUrgent", label: "긴급" },
-      ],
-    },
-  },
-  {
-    key: "assignee",
-    def: {
-      key: "assignee",
-      label: "담당자",
-      fields: [
-        { id: "assigneeName", label: "담당자" },
-        { id: "status", label: "상태" },
-      ],
-    },
-  },
-]
 
 const GROUP_COLORS = [
   "bg-blue-500", "bg-emerald-500", "bg-violet-500",
@@ -209,11 +125,6 @@ function thisWeekKey(): string {
 
 const pushTo = (m: Map<string, OrderRow[]>, k: string, r: OrderRow) => {
   const arr = m.get(k); if (arr) arr.push(r); else m.set(k, [r])
-}
-
-function FamilySpanCell({ children }: { children: ReactNode }) {
-  const colSpan = useTableColSpan()
-  return <TableCell colSpan={colSpan} className="px-3 py-2">{children}</TableCell>
 }
 
 // 완료예정일 임박 여부 (오늘 기준 3일 이내·기한 경과 포함, 완료·삭제 제외)
@@ -316,21 +227,12 @@ export default function OrdersPage() {
   const [bulkTester, setBulkTester] = useState("")
   const [families, setFamilies] = useState<{ id: string; name: string; codes: string[] }[]>([])
   const [famCollapsed, setFamCollapsed] = useState<Set<string>>(new Set())
-  const [sortField, setSortField] = useState<SortField | null>(null)
-  const [sortDir, setSortDir] = useState<SortDir>("asc")
-  const columns = ORDER_COLUMNS
-
-  const pickSort = (field: SortField, dir: SortDir) => {
-    setSortField(field)
-    setSortDir(dir)
-  }
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const qs = statusFilter ? `?status=${encodeURIComponent(statusFilter)}` : ""
       const [oRes, tRes, fRes] = await Promise.all([
-        fetch(`/api/pct-orders${qs}`, { credentials: "include" }),
+        fetch("/api/pct-orders", { credentials: "include" }),
         fetch(`/api/testers`, { credentials: "include" }),
         fetch(`/api/concurrent-product-families`, { credentials: "include" }),
       ])
@@ -347,7 +249,7 @@ export default function OrdersPage() {
     } finally {
       setLoading(false)
     }
-  }, [statusFilter])
+  }, [])
 
   useEffect(() => { void load() }, [load])
 
@@ -447,7 +349,7 @@ export default function OrdersPage() {
   const unsyncedCount = rows.filter(r => r.source === "auto" && !r.productSynced).length
 
   // ─── 이름 검색 (품목명·담당자·품목코드·제조번호) ──────────────────────────
-  const filteredRows = useMemo(() => {
+  const searchRows = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return rows
     return rows.filter(r =>
@@ -457,6 +359,17 @@ export default function OrdersPage() {
       (r.assigneeName ?? "").toLowerCase().includes(q)
     )
   }, [rows, search])
+
+  const filteredRows = useMemo(
+    () => statusFilter ? searchRows.filter(r => r.status === statusFilter) : searchRows,
+    [searchRows, statusFilter],
+  )
+
+  const statusCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const row of searchRows) counts.set(row.status, (counts.get(row.status) ?? 0) + 1)
+    return counts
+  }, [searchRows])
 
   // ─── 주차별 그룹 (정렬: 이번주 최상단 → 최신순) ────────────────────────────
   const weekGroups = useMemo(() => {
@@ -589,23 +502,6 @@ export default function OrdersPage() {
   type RowItem =
     | { type: "single"; row: OrderRow }
     | { type: "family"; familyId: string; familyName: string; rows: OrderRow[] }
-  // 컬럼 정렬용 행 비교 함수
-  const sortRowsBy = useCallback((arr: OrderRow[]): OrderRow[] => {
-    if (!sortField) return arr
-    const dir = sortDir === "asc" ? 1 : -1
-    return [...arr].sort((a, b) => {
-      const av = a[sortField]
-      const bv = b[sortField]
-      // null/undefined는 항상 맨 뒤
-      if (av == null && bv == null) return 0
-      if (av == null) return 1
-      if (bv == null) return -1
-      if (typeof av === "boolean" && typeof bv === "boolean") return (av === bv ? 0 : av ? -1 : 1) * dir
-      if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir
-      return String(av).localeCompare(String(bv), "ko") * dir
-    })
-  }, [sortField, sortDir])
-
   const buildRowTree = (groupKey: string, rows: OrderRow[]): RowItem[] => {
     const famRows = new Map<string, OrderRow[]>()
     for (const r of rows) {
@@ -642,12 +538,9 @@ export default function OrdersPage() {
         singleItems.push({ item: { type: "single", row: r }, assignee: asgKey(r.assigneeName), name: r.productName })
       }
     }
-    // 컬럼 정렬이 활성화된 경우 내부 정렬 대신 입력 순서를 보존
-    if (!sortField) {
-      const byAssigneeThenName = (a: Sortable, b: Sortable) => byKo(a.assignee, b.assignee) || byKo(a.name, b.name)
-      familyItems.sort(byAssigneeThenName)
-      singleItems.sort(byAssigneeThenName)
-    }
+    const byAssigneeThenName = (a: Sortable, b: Sortable) => byKo(a.assignee, b.assignee) || byKo(a.name, b.name)
+    familyItems.sort(byAssigneeThenName)
+    singleItems.sort(byAssigneeThenName)
     return [...familyItems, ...singleItems].map(x => x.item)
   }
 
@@ -766,118 +659,6 @@ export default function OrdersPage() {
     )
   }
 
-  const renderOrderRow = (r: OrderRow, indented = false) => {
-    const dueSoon = isDueSoon(r.dueDate, r.status)
-    return (
-      <TableRow
-        key={r.id}
-        onClick={isAdmin ? () => setEditTarget(r) : undefined}
-        className={cn(
-          isAdmin && "cursor-pointer",
-          dueSoon && "bg-orange-50 hover:bg-orange-100/70",
-          r.locked && "bg-amber-50/40",
-          selected.has(r.id) && "bg-primary/5",
-        )}
-      >
-        <TableCell className="px-3 py-2.5 text-center" onClick={e => e.stopPropagation()}>
-          <input
-            type="checkbox"
-            className="cb-custom"
-            checked={selected.has(r.id)}
-            disabled={!isAdmin}
-            onChange={() => setSelected(prev => {
-              const next = new Set(prev)
-              next.has(r.id) ? next.delete(r.id) : next.add(r.id)
-              return next
-            })}
-            title="선택"
-            aria-label="선택"
-          />
-        </TableCell>
-        <TableCell className="px-3 py-2.5">
-          <div className={cn("flex min-w-0 items-center gap-1.5", indented && "pl-5")}>
-            {indented && <span className="shrink-0 text-muted-foreground/60">└</span>}
-            <span className="min-w-0 truncate font-medium text-foreground" title={r.productName}>{r.productName}</span>
-            <SourceBadge source={r.source} />
-            {r.source === "auto" && !r.productSynced && (
-              <Badge variant="outline" className="shrink-0 border-amber-200 text-amber-700">미동기화</Badge>
-            )}
-          </div>
-        </TableCell>
-        <TableCell className="px-3 py-2.5">
-          <CellStack
-            primary={r.productCode}
-            secondary={r.batchNo}
-            primaryClass="font-mono text-xs text-muted-foreground"
-            title={`${r.productCode} · ${r.batchNo}`}
-          />
-        </TableCell>
-        <TableCell className="px-3 py-2.5">
-          <CellStack
-            primary={r.dosageForm ?? "—"}
-            secondary={r.method}
-            title={[r.dosageForm, r.method].filter(Boolean).join(" / ")}
-          />
-        </TableCell>
-        <TableCell className="px-3 py-2.5">
-          <CellStack
-            primary={r.packagingDate ?? "—"}
-            secondary={
-              <span className={cn(dueSoon && "font-semibold text-orange-700")}>{r.dueDate ?? "—"}</span>
-            }
-            title={`포장 ${r.packagingDate ?? "—"} / 완료 ${r.dueDate ?? "—"}`}
-          />
-        </TableCell>
-        <TableCell className="px-3 py-2.5">
-          <CellStack
-            primary={r.workdays != null ? `${r.workdays}일` : "—"}
-            secondary={r.isUrgent ? "긴급" : "일반"}
-          />
-        </TableCell>
-        <TableCell className="px-3 py-2.5">
-          <CellStack
-            primary={
-              r.assigneeName && r.assigneeTesterId
-                ? (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setAssigneeTarget({ id: r.assigneeTesterId!, name: r.assigneeName! }) }}
-                    title={`${r.assigneeName} 담당 오더 보기`}
-                    className="inline-flex max-w-full items-center gap-1.5 font-medium text-foreground hover:text-primary"
-                  >
-                    <TesterAvatar testerId={r.assigneeTesterId} name={r.assigneeName} size="sm" />
-                    <span className="min-w-0 truncate underline-offset-2 hover:underline">{r.assigneeName}</span>
-                  </button>
-                )
-                : "미배정"
-            }
-            secondary={
-              <span className="inline-flex items-center gap-1">
-                <StatusBadge status={r.status} />
-                {r.locked && (
-                  <Badge variant="outline" className="gap-0.5 border-amber-200 text-amber-700">
-                    <Lock className="size-2.5" />확정
-                  </Badge>
-                )}
-              </span>
-            }
-            secondaryLabel="상태"
-          />
-        </TableCell>
-        <TableCell className="px-3 py-2.5">
-          <div className="flex items-center justify-end gap-1">
-            <Button
-              variant="ghost" size="icon-sm"
-              onClick={(e) => { e.stopPropagation(); setHistoryTarget(r) }}
-              title="수정이력" className="text-muted-foreground"
-            >
-              <History />
-            </Button>
-          </div>
-        </TableCell>
-      </TableRow>
-    )
-  }
-
   // 카운트 라벨 (탭별 단위)
   const groupUnit =
     tab === "week"
@@ -937,15 +718,37 @@ export default function OrdersPage() {
         ))}
       </div>
 
-      {/* 필터 */}
+      {/* 상태 요약 — 숫자를 누르면 해당 상태만 즉시 필터링 */}
+      <div className="grid shrink-0 grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8">
+        {STATUS_SUMMARY_OPTIONS.map(status => {
+          const active = statusFilter === status
+          const count = status ? (statusCounts.get(status) ?? 0) : searchRows.length
+          const dot = status ? statusDot(status) : "bg-primary"
+          return (
+            <button
+              key={status || "all"}
+              type="button"
+              aria-pressed={active}
+              onClick={() => setStatusFilter(status)}
+              className={cn(
+                "flex min-h-16 items-center justify-between gap-2 rounded-md border bg-card px-3 py-2 text-left transition-colors",
+                active
+                  ? "border-primary bg-primary/5 ring-1 ring-primary/20"
+                  : "border-border hover:border-primary/40 hover:bg-muted/30",
+              )}
+            >
+              <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <span className={cn("size-2 shrink-0 rounded-full", dot)} />
+                <span className="truncate">{status || "전체"}</span>
+              </span>
+              <span className="text-lg font-semibold tabular-nums text-foreground">{count}</span>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* 기간·검색 필터 */}
       <div className="flex shrink-0 flex-wrap items-center gap-2">
-        <Select value={statusFilter || "all"} onValueChange={v => setStatusFilter(v === "all" ? "" : v)}>
-          <SelectTrigger className="!h-9 px-3"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">전체 상태</SelectItem>
-            {STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-          </SelectContent>
-        </Select>
 
         {/* 보기 모드: 최근 5주 / 연단위 (기간 범위) */}
         <div className="inline-flex h-9 items-center gap-0.5 rounded-md bg-muted p-0.5 text-muted-foreground">
@@ -1009,28 +812,34 @@ export default function OrdersPage() {
         {/* [&>*]:shrink-0 — 없으면 카드들이 컨테이너 높이에 맞춰 찌그러져 스크롤이 생기지 않는다 */}
         <div className="absolute inset-0 flex flex-col gap-3 overflow-y-auto overscroll-contain [&>*]:shrink-0">
           {Array.from({ length: 4 }).map((_, i) => (
-            <Card key={i} className="gap-0 overflow-hidden py-0">
-              <div className="flex items-center gap-3 px-4 py-3">
-                <Skeleton className="h-3 w-1.5 rounded-md" />
+            <div key={i} className="space-y-2">
+              <div className="flex items-center gap-2 px-1">
+                <Skeleton className="size-2 rounded-full" />
                 <Skeleton className="h-4 w-32" />
-                <Skeleton className="ml-auto h-4 w-16" />
+                <Skeleton className="h-px flex-1" />
+                <Skeleton className="h-3 w-14" />
               </div>
-              <div className="border-t px-4 py-3">
-                <div className="flex flex-col gap-2.5">
-                  {Array.from({ length: 3 }).map((_, j) => (
-                    <div key={j} className="flex items-center gap-3">
-                      <Skeleton className="h-4 w-8" />
-                      <Skeleton className="h-4 w-40" />
-                      <Skeleton className="h-4 w-20" />
-                      <Skeleton className="h-4 w-20" />
-                      <Skeleton className="h-4 w-16" />
-                      <Skeleton className="h-4 w-16" />
-                      <Skeleton className="ml-auto h-5 w-14 rounded-md" />
+              <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
+                {Array.from({ length: 3 }).map((_, j) => (
+                  <Card key={j} className="gap-3 p-3">
+                    <div className="flex items-start gap-2.5">
+                      <Skeleton className="size-4 rounded-sm" />
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <Skeleton className="h-4 w-2/3" />
+                        <Skeleton className="h-3 w-1/2" />
+                      </div>
+                      <Skeleton className="size-7 rounded-md" />
                     </div>
-                  ))}
+                    <div className="grid grid-cols-2 gap-2 border-t pt-3">
+                      <Skeleton className="h-8 w-full" />
+                      <Skeleton className="h-8 w-full" />
+                      <Skeleton className="h-8 w-full" />
+                      <Skeleton className="h-8 w-full" />
+                    </div>
+                  </Card>
+                ))}
                 </div>
-              </div>
-            </Card>
+            </div>
           ))}
         </div>
         </div>
@@ -1049,109 +858,68 @@ export default function OrdersPage() {
           {renderGroups.map(g => {
             const isCollapsed = collapsed.has(g.key)
             return (
-              <Card
+              <section
                 key={g.key}
-                className={cn("gap-0 overflow-hidden py-0", g.isThisWeek && "border-primary/40 ring-1 ring-primary/20")}
+                className={cn("space-y-2", g.isThisWeek && "rounded-md bg-primary/[0.03] p-1.5")}
               >
-                {/* 그룹 헤더 */}
-                <button
-                  onClick={() => toggleGroup(g.key)}
-                  className={cn(
-                    "flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50",
-                    g.isThisWeek && "bg-primary/5",
-                  )}
-                >
+                {/* 날짜 기간 구분선 */}
+                <div className="flex items-center gap-2 px-1">
                   {tab === "assignee" && g.label !== "미배정"
                     ? <TesterAvatar testerId={g.assigneeTesterId} name={g.label} size="md" />
-                    : <span className={cn("h-3 w-1.5 shrink-0 rounded-md", g.color)} />}
-                  <span className="flex-1 text-sm font-semibold text-foreground">
-                    {g.label}
-                    {g.isThisWeek && (
-                      <Badge className="ml-2 align-middle">이번주</Badge>
-                    )}
-                  </span>
-                  <span className="text-xs text-muted-foreground tabular-nums">{g.meta}</span>
-                  {isCollapsed
-                    ? <ChevronRight className="size-4 text-muted-foreground" />
-                    : <ChevronDown className="size-4 text-muted-foreground" />}
-                </button>
+                    : <span className={cn("size-2 shrink-0 rounded-full", g.color)} />}
+                  <button
+                    type="button"
+                    aria-expanded={!isCollapsed}
+                    onClick={() => toggleGroup(g.key)}
+                    className="min-w-0 text-left text-sm font-semibold text-foreground hover:text-primary"
+                  >
+                    <span className="truncate">{g.label}</span>
+                    {g.isThisWeek && <Badge className="ml-2 align-middle">이번주</Badge>}
+                  </button>
+                  <span className="h-px flex-1 bg-border" />
+                  <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{g.meta}</span>
+                  <button
+                    type="button"
+                    aria-label={`${g.label} ${isCollapsed ? "펼치기" : "접기"}`}
+                    aria-expanded={!isCollapsed}
+                    onClick={() => toggleGroup(g.key)}
+                    className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    {isCollapsed ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}
+                  </button>
+                </div>
 
-                {/* 테이블 */}
                 {!isCollapsed && (
-                  <div className="border-t">
-                      <div className="space-y-2 p-3 md:hidden">
-                        {buildRowTree(g.key, sortRowsBy(g.rows)).map(item => {
-                          if (item.type === "single") return renderOrderCard(item.row)
-                          const fc = famCollapsed.has(item.familyId)
-                          return (
-                            <div key={item.familyId} className="rounded-md border border-primary/20 bg-primary/5 p-2.5">
-                              <button onClick={() => toggleFamily(item.familyId)} className="flex w-full items-center gap-2 text-left">
-                                {fc
-                                  ? <ChevronRight className="size-4 text-muted-foreground" />
-                                  : <ChevronDown className="size-4 text-muted-foreground" />}
-                                <Layers className="size-3.5 text-primary" />
-                                <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">{item.familyName}</span>
-                                <Badge variant="secondary">동시분석 {item.rows.length}건</Badge>
-                              </button>
-                              {!fc && (
-                                <div className="mt-2 flex flex-col gap-2 border-t border-primary/15 pt-2">
-                                  {item.rows.map(r => renderOrderCard(r, true))}
-                                </div>
-                              )}
+                  <div className="grid grid-cols-1 gap-2 p-0.5 xl:grid-cols-2">
+                    {buildRowTree(g.key, g.rows).map(item => {
+                      if (item.type === "single") return renderOrderCard(item.row)
+                      const fc = famCollapsed.has(item.familyId)
+                      return (
+                        <div key={item.familyId} className="rounded-md border border-primary/20 bg-primary/5 p-2.5 xl:col-span-2">
+                          <button
+                            type="button"
+                            aria-expanded={!fc}
+                            onClick={() => toggleFamily(item.familyId)}
+                            className="flex w-full items-center gap-2 text-left"
+                          >
+                            {fc
+                              ? <ChevronRight className="size-4 text-muted-foreground" />
+                              : <ChevronDown className="size-4 text-muted-foreground" />}
+                            <Layers className="size-3.5 text-primary" />
+                            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">{item.familyName}</span>
+                            <Badge variant="secondary">동시분석 {item.rows.length}건</Badge>
+                          </button>
+                          {!fc && (
+                            <div className="mt-2 grid grid-cols-1 gap-2 border-t border-primary/15 pt-2 xl:grid-cols-2">
+                              {item.rows.map(r => renderOrderCard(r, true))}
                             </div>
-                          )
-                        })}
-                      </div>
-
-                      <div className="hidden md:block">
-                    <Table layout="content">
-                      <TableHeader>
-                        <TableRow className="hover:bg-transparent">
-                          {columns.map((col) =>
-                            col.def ? (
-                              <TableHead key={col.key} className="px-3 text-muted-foreground">
-                                <SortColumnHeader
-                                  col={col.def}
-                                  sortField={sortField}
-                                  sortDir={sortDir}
-                                  onPick={pickSort}
-                                />
-                              </TableHead>
-                            ) : (
-                              <TableHead key={col.key} className="w-12 px-3 text-center text-muted-foreground">{col.head}</TableHead>
-                            )
                           )}
-                          <TableHead className="px-3 text-right text-muted-foreground">관리</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {buildRowTree(g.key, sortRowsBy(g.rows)).map(item => {
-                          if (item.type === "single") return renderOrderRow(item.row)
-                          const fc = famCollapsed.has(item.familyId)
-                          return (
-                            <Fragment key={item.familyId}>
-                              <TableRow className="bg-primary/5 hover:bg-primary/10">
-                                <FamilySpanCell>
-                                  <button onClick={() => toggleFamily(item.familyId)} className="flex items-center gap-2 text-left">
-                                    {fc
-                                      ? <ChevronRight className="size-4 text-muted-foreground" />
-                                      : <ChevronDown className="size-4 text-muted-foreground" />}
-                                    <Layers className="size-3.5 text-primary" />
-                                    <span className="text-sm font-semibold text-foreground">{item.familyName}</span>
-                                    <Badge variant="secondary">동시분석 {item.rows.length}건</Badge>
-                                  </button>
-                                </FamilySpanCell>
-                              </TableRow>
-                              {!fc && item.rows.map(r => renderOrderRow(r, true))}
-                            </Fragment>
-                          )
-                        })}
-                      </TableBody>
-                    </Table>
-                      </div>
-                    </div>
+                        </div>
+                      )
+                    })}
+                  </div>
                 )}
-              </Card>
+              </section>
             )
           })}
         </div>
@@ -1479,7 +1247,18 @@ function CreateModal({ testers, onClose, onCreated }: {
   }
 
   return (
-    <SlideOver title="오더 추가" onClose={onClose}>
+    <SlideOver
+      title="오더 추가"
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="outline" size="lg" onClick={onClose}>취소</Button>
+          <Button size="lg" onClick={save} disabled={saving}>
+            {saving ? <Loader2 className="animate-spin" /> : <Plus />}오더 추가
+          </Button>
+        </>
+      }
+    >
       <p className="mb-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] text-blue-700">
         제조 시트 적재가 아닌 수동 등록 오더입니다. 등록 후 담당자를 지정하세요.
       </p>
@@ -1605,13 +1384,6 @@ function CreateModal({ testers, onClose, onCreated }: {
 
       {err && <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">{err}</p>}
 
-      <div className="mt-4 flex justify-end gap-2">
-        <Button variant="outline" size="lg" onClick={onClose}>취소</Button>
-        <Button size="lg" onClick={save} disabled={saving}>
-          {saving ? <Loader2 className="animate-spin" /> : <Plus />}오더 추가
-        </Button>
-      </div>
-
       {pickerOpen && productId && (
         <TestItemPickerDialog
           productId={productId}
@@ -1683,7 +1455,18 @@ function EditModal({ order, testers, onClose, onSaved }: {
   }
 
   return (
-    <SlideOver title={`오더 수정 — ${order.productName}`} onClose={onClose}>
+    <SlideOver
+      title={`오더 수정 — ${order.productName}`}
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="outline" size="lg" onClick={onClose}>취소</Button>
+          <Button size="lg" onClick={save} disabled={saving}>
+            {saving && <Loader2 className="animate-spin" />}저장
+          </Button>
+        </>
+      }
+    >
       <p className={cn(
         "mb-3 rounded-md border px-3 py-2 text-[11px]",
         isAutoOrder
@@ -1751,12 +1534,6 @@ function EditModal({ order, testers, onClose, onSaved }: {
 
       {err && <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">{err}</p>}
 
-      <div className="mt-4 flex justify-end gap-2">
-        <Button variant="outline" size="lg" onClick={onClose}>취소</Button>
-        <Button size="lg" onClick={save} disabled={saving}>
-          {saving && <Loader2 className="animate-spin" />}저장
-        </Button>
-      </div>
     </SlideOver>
   )
 }
@@ -2022,29 +1799,41 @@ function Field({ label, full, children }: { label: string; full?: boolean; child
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
-    <Dialog open onOpenChange={(next) => { if (!next) onClose() }}>
-      <DialogContent size="lg">
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription className="sr-only">{title}</DialogDescription>
-        </DialogHeader>
-        <DialogBody>{children}</DialogBody>
-      </DialogContent>
-    </Dialog>
+    <ManagementDrawer
+      open
+      onOpenChange={(next) => { if (!next) onClose() }}
+      size="lg"
+      title={title}
+      description={title}
+      footer={<Button variant="outline" onClick={onClose}>닫기</Button>}
+    >
+      {children}
+    </ManagementDrawer>
   )
 }
 
 // ─── 우측 슬라이드오버(드로어) — 수정 모달용 ─────────────────────────────────────
-function SlideOver({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+function SlideOver({
+  title,
+  onClose,
+  children,
+  footer,
+}: {
+  title: string
+  onClose: () => void
+  children: React.ReactNode
+  footer: React.ReactNode
+}) {
   return (
-    <Sheet open onOpenChange={(next) => { if (!next) onClose() }}>
-      <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
-        <SheetHeader className="border-b">
-          <SheetTitle>{title}</SheetTitle>
-          <SheetDescription className="sr-only">{title}</SheetDescription>
-        </SheetHeader>
-        <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4">{children}</div>
-      </SheetContent>
-    </Sheet>
+    <ManagementDrawer
+      open
+      onOpenChange={(next) => { if (!next) onClose() }}
+      size="lg"
+      title={title}
+      description={title}
+      footer={footer}
+    >
+      {children}
+    </ManagementDrawer>
   )
 }

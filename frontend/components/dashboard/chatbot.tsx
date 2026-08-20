@@ -287,7 +287,7 @@ export default function Chatbot() {
       {/* ── Floating Button ───────────────────────────────────────────────── */}
       <button
         onClick={() => (open ? handleClose() : setOpen(true))}
-        className="fixed bottom-6 right-6 z-[60] flex h-14 w-14 items-center justify-center rounded-full shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95"
+        className={`fixed right-6 z-30 flex h-14 w-14 items-center justify-center rounded-full shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 ${open ? 'bottom-6' : 'bottom-24'}`}
         style={{
           background: 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)',
           boxShadow: '0 0 0 0 rgba(37, 99, 235, 0.4)',
@@ -311,7 +311,7 @@ export default function Chatbot() {
       */}
       <div
         className={`
-          fixed z-[55] flex flex-col overflow-hidden bg-white shadow-2xl transition-all duration-300
+          fixed z-30 flex flex-col overflow-hidden bg-white shadow-2xl transition-all duration-300
           inset-0 rounded-none border-0
           md:inset-auto md:bottom-24 md:right-6 md:rounded-md md:border md:border-slate-200
           md:w-[440px] md:h-[70vh] md:max-h-[600px]
