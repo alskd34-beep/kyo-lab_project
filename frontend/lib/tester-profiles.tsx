@@ -275,14 +275,16 @@ export function TesterAvatar({
 
   if (resolvedUrl) {
     return (
-      <Image
-        src={resolvedUrl}
-        alt={label}
-        width={sizePx}
-        height={sizePx}
-        unoptimized
-        className={cn('shrink-0 object-cover ring-1 ring-border', sizeClass, className)}
-      />
+      <span className={cn('inline-block shrink-0 overflow-hidden ring-1 ring-border', sizeClass, className)}>
+        <Image
+          src={resolvedUrl}
+          alt={label}
+          width={sizePx}
+          height={sizePx}
+          unoptimized
+          className="size-full object-cover"
+        />
+      </span>
     )
   }
 

@@ -19,10 +19,7 @@ import { JOB_STAGES, stageStyle } from "@shared/qc-status"
 import { cn } from "@frontend/lib/utils"
 import { Badge } from "@frontend/components/ui/badge"
 import { Button } from "@frontend/components/ui/button"
-import {
-  Dialog, DialogBody, DialogContent, DialogDescription,
-  DialogFooter, DialogHeader, DialogTitle,
-} from "@frontend/components/ui/dialog"
+import { ManagementDrawer } from "@frontend/components/common/management-drawer"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 
 // ─── Types (백엔드 JobDetail 과 동일) ────────────────────────────────────────
@@ -176,10 +173,12 @@ export function JobDetailModal({
     : null
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="lg" className="max-h-[85dvh]">
-        <DialogHeader>
-          <DialogTitle className="flex flex-wrap items-center gap-2">
+    <ManagementDrawer
+      open={open}
+      onOpenChange={onOpenChange}
+      size="lg"
+      title={(
+        <span className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-blue-700">QC {detail?.qcNo ?? ""}</span>
             {statusMeta && (
               <Badge variant="outline" className={cn("gap-1.5", statusMeta.cls)}>
@@ -190,13 +189,29 @@ export function JobDetailModal({
             {detail?.isUrgent && (
               <Badge variant="outline" className="border-red-200 text-red-700">긴급</Badge>
             )}
-          </DialogTitle>
-          <DialogDescription>
-            수행 중인 시험항목과 항목별 진행 내역을 확인합니다.
-          </DialogDescription>
-        </DialogHeader>
-
-        <DialogBody className="flex flex-col gap-3">
+        </span>
+      )}
+      description="수행 중인 시험항목과 항목별 진행 내역을 확인합니다."
+      footer={(
+        <div className="flex w-full flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+          {advanceError && (
+            <p className="min-w-0 flex-1 text-left text-xs font-medium text-destructive sm:mr-auto">
+              {advanceError}
+            </p>
+          )}
+          <Button variant="outline" onClick={() => onOpenChange(false)}>닫기</Button>
+          {canAdvance && detail?.nextStage && detail.nextStageLabel && (
+            <Button onClick={() => void advance()} disabled={advancing}>
+              {advancing
+                ? <LoaderCircle className="animate-spin" />
+                : <ArrowRight />}
+              {advancing ? "처리 중..." : `${detail.nextStageLabel} → ${detail.nextStage}`}
+            </Button>
+          )}
+        </div>
+      )}
+    >
+        <div className="flex flex-col gap-3">
           {loading ? (
             <>
               <Skeleton className="h-20 w-full rounded-md" />
@@ -353,25 +368,7 @@ export function JobDetailModal({
               </p>
             </>
           ) : null}
-        </DialogBody>
-
-        <DialogFooter className="flex-col items-stretch gap-2 sm:flex-row sm:items-center">
-          {advanceError && (
-            <p className="min-w-0 flex-1 text-left text-xs font-medium text-destructive sm:mr-auto">
-              {advanceError}
-            </p>
-          )}
-          <Button variant="outline" onClick={() => onOpenChange(false)}>닫기</Button>
-          {canAdvance && detail?.nextStage && detail.nextStageLabel && (
-            <Button onClick={() => void advance()} disabled={advancing}>
-              {advancing
-                ? <LoaderCircle className="animate-spin" />
-                : <ArrowRight />}
-              {advancing ? "처리 중..." : `${detail.nextStageLabel} → ${detail.nextStage}`}
-            </Button>
-          )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+    </ManagementDrawer>
   )
 }

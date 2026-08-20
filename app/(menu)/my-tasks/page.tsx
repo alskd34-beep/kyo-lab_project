@@ -11,15 +11,7 @@ import { DateField } from "@frontend/components/ui/date-field"
 import { Badge } from "@frontend/components/ui/badge"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@frontend/components/ui/dialog"
+import { ManagementDrawer } from "@frontend/components/common/management-drawer"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@frontend/components/ui/select"
 
 interface JobItem {
@@ -88,25 +80,37 @@ function ReadinessModal({
   const isBlocked = !result.ok && blocked.length > 0
 
   return (
-    <Dialog open onOpenChange={(next) => { if (!next && !confirming) onCancel() }}>
-      <DialogContent size="md">
-        <DialogHeader>
-          <div className={cn(
-            "mb-1 flex size-10 items-center justify-center rounded-md",
+    <ManagementDrawer
+      open
+      onOpenChange={(next) => { if (!next && !confirming) onCancel() }}
+      size="md"
+      title={(
+        <span className="flex items-center gap-2">
+          <span className={cn(
+            "flex size-8 items-center justify-center rounded-md",
             isBlocked ? "bg-destructive/10 text-destructive" : "bg-amber-50 text-amber-600",
           )}>
-            {isBlocked ? <XCircle className="size-5" /> : <ShieldAlert className="size-5" />}
-          </div>
-          <DialogTitle>
-            {isBlocked ? "장비 검증 실패 — 시작 불가" : "시작 전 확인 — 확인 후 시작 가능"}
-          </DialogTitle>
-          <DialogDescription>
-            {isBlocked
-              ? "아래 장비 문제를 해결한 후 다시 시도하세요."
-              : "장비 경고·시험 전 확인사항을 확인하고 계속 진행할 수 있습니다."}
-          </DialogDescription>
-        </DialogHeader>
-        <DialogBody className="grid gap-3">
+            {isBlocked ? <XCircle className="size-4" /> : <ShieldAlert className="size-4" />}
+          </span>
+          <span>{isBlocked ? "장비 검증 실패 — 시작 불가" : "시작 전 확인 — 확인 후 시작 가능"}</span>
+        </span>
+      )}
+      description={isBlocked
+        ? "아래 장비 문제를 해결한 후 다시 시도하세요."
+        : "장비 경고·시험 전 확인사항을 확인하고 계속 진행할 수 있습니다."}
+      footer={(
+        <>
+          <Button variant="outline" onClick={onCancel} disabled={confirming}>취소</Button>
+          {!isBlocked && (
+            <Button onClick={onConfirm} disabled={confirming}>
+              {confirming ? <Loader2 className="animate-spin" /> : <Play />}
+              확인 후 시작
+            </Button>
+          )}
+        </>
+      )}
+    >
+        <div className="grid gap-3">
           {blocked.length > 0 && (
             <ul className="flex flex-col gap-2">
               {blocked.map(c => (
@@ -162,18 +166,8 @@ function ReadinessModal({
               </ul>
             </div>
           )}
-        </DialogBody>
-        <DialogFooter>
-          <Button variant="outline" onClick={onCancel} disabled={confirming}>취소</Button>
-          {!isBlocked && (
-            <Button onClick={onConfirm} disabled={confirming}>
-              {confirming ? <Loader2 className="animate-spin" /> : <Play />}
-              확인 후 시작
-            </Button>
-          )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+    </ManagementDrawer>
   )
 }
 

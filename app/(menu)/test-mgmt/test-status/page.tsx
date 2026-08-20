@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import type { StatusKey, TestRow, KpiItem } from '@shared/qc'
 import { Button } from '@frontend/components/ui/button'
 import { Card, CardContent } from '@frontend/components/ui/card'
+import { Skeleton } from '@frontend/components/ui/skeleton'
 import {
   Table,
   TableBody,
@@ -394,13 +395,28 @@ export default function TestStatusPage() {
 
               {/* Mobile card view */}
               <div className="md:hidden flex flex-col gap-2 p-3">
-                {sortedData.length === 0 ? (
+                {isLoading ? (
+                  Array.from({ length: 4 }, (_, index) => (
+                    <div key={index} className="space-y-3 rounded-md border p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-2">
+                          <Skeleton className="h-3 w-20" />
+                          <Skeleton className="h-4 w-40" />
+                        </div>
+                        <Skeleton className="h-5 w-14" />
+                      </div>
+                      <Skeleton className="h-3 w-28" />
+                      <div className="flex items-center justify-between">
+                        <Skeleton className="h-3 w-24" />
+                        <Skeleton className="h-3 w-20" />
+                      </div>
+                    </div>
+                  ))
+                ) : sortedData.length === 0 ? (
                   <p className="py-12 text-center text-sm text-slate-500">
-                    {isLoading
-                      ? '불러오는 중…'
-                      : loadError
-                        ? `목록을 불러오지 못했습니다. ${loadError}`
-                        : '조회 조건에 해당하는 시험이 없습니다.'}
+                    {loadError
+                      ? `목록을 불러오지 못했습니다. ${loadError}`
+                      : '조회 조건에 해당하는 시험이 없습니다.'}
                   </p>
                 ) : (
                   sortedData.map(row => {
@@ -480,14 +496,32 @@ export default function TestStatusPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(isLoading || sortedData.length === 0) && (
+                  {isLoading && Array.from({ length: 7 }, (_, index) => (
+                    <TableRow key={`skeleton-${index}`} className="hover:bg-transparent border-slate-100">
+                      <TableCell className="px-3 py-3"><Skeleton className="size-4" /></TableCell>
+                      <TableCell className="px-3 py-3">
+                        <div className="space-y-2">
+                          <Skeleton className="h-4 w-36" />
+                          <Skeleton className="h-3 w-24" />
+                        </div>
+                      </TableCell>
+                      <TableCell className="px-3 py-3">
+                        <div className="space-y-2">
+                          <Skeleton className="h-4 w-24" />
+                          <Skeleton className="h-3 w-32" />
+                        </div>
+                      </TableCell>
+                      <TableCell className="px-3 py-3"><Skeleton className="h-4 w-28" /></TableCell>
+                      <TableCell className="px-3 py-3"><Skeleton className="h-4 w-20" /></TableCell>
+                      <TableCell className="px-3 py-3"><Skeleton className="h-5 w-14" /></TableCell>
+                    </TableRow>
+                  ))}
+                  {(!isLoading && sortedData.length === 0) && (
                     <TableRow className="hover:bg-transparent border-slate-100">
                       <FullWidthCell>
-                        {isLoading
-                          ? '불러오는 중…'
-                          : loadError
-                            ? `목록을 불러오지 못했습니다. ${loadError}`
-                            : '조회 조건에 해당하는 시험이 없습니다.'}
+                        {loadError
+                          ? `목록을 불러오지 못했습니다. ${loadError}`
+                          : '조회 조건에 해당하는 시험이 없습니다.'}
                       </FullWidthCell>
                     </TableRow>
                   )}

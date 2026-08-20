@@ -35,6 +35,8 @@ interface Props {
   label?: string
   disabled?: boolean
   numberOfMonths?: number
+  /** 필터 툴바용. 라벨·시작·종료를 한 줄로 압축한다. */
+  compact?: boolean
 }
 
 export function DateRangeField({
@@ -44,6 +46,7 @@ export function DateRangeField({
   label,
   disabled,
   numberOfMonths = 1,
+  compact = false,
 }: Props) {
   const [open, setOpen] = useState(false)
 
@@ -75,40 +78,72 @@ export function DateRangeField({
     </span>
   )
 
+  const trigger = compact ? (
+    <button
+      type="button"
+      disabled={disabled}
+      className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-input bg-background px-3 text-xs outline-none transition-colors hover:bg-muted/30 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      <CalendarIcon className="size-3.5 shrink-0 text-muted-foreground" />
+      <span className={cn("tabular-nums", startDate ? "font-medium text-foreground" : "text-muted-foreground")}>
+        {startDate ? fmt(startDate) : "시작일"}
+      </span>
+      <span className="text-muted-foreground">~</span>
+      <span className={cn("tabular-nums", endDate ? "font-medium text-foreground" : "text-muted-foreground")}>
+        {endDate ? fmt(endDate) : "종료일"}
+      </span>
+    </button>
+  ) : (
+    <button
+      type="button"
+      disabled={disabled}
+      className="flex w-full items-stretch overflow-hidden rounded-md border border-input bg-background text-left outline-none transition-colors hover:bg-muted/30 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      {cell("시작일", startDate)}
+      <span className="flex items-center px-1 text-muted-foreground">~</span>
+      {cell("종료일", endDate)}
+    </button>
+  )
+
+  const picker = (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      <PopoverContent align="start" className="w-auto p-0">
+        <PopoverHeader className="px-3 pt-3">
+          <PopoverTitle>기간 선택</PopoverTitle>
+          <PopoverDescription>
+            시작일을 클릭한 뒤 종료일을 클릭하세요. 하루만 필요하면 시작일만 선택합니다.
+          </PopoverDescription>
+        </PopoverHeader>
+        <Calendar
+          mode="range"
+          selected={range}
+          onSelect={handleSelect}
+          defaultMonth={toDate(startDate)}
+          locale={ko}
+          numberOfMonths={numberOfMonths}
+        />
+      </PopoverContent>
+    </Popover>
+  )
+
+  if (compact) {
+    return (
+      <div className="flex items-center gap-1.5">
+        {label && (
+          <span className="shrink-0 text-xs font-medium text-muted-foreground">{label}</span>
+        )}
+        {picker}
+      </div>
+    )
+  }
+
   return (
     <div className="grid gap-1.5">
       {label && (
         <label className="text-xs font-medium text-foreground">{label}</label>
       )}
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            disabled={disabled}
-            className="flex w-full items-stretch overflow-hidden rounded-md border border-input bg-background text-left outline-none transition-colors hover:bg-muted/30 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {cell("시작일", startDate)}
-            <span className="flex items-center px-1 text-muted-foreground">~</span>
-            {cell("종료일", endDate)}
-          </button>
-        </PopoverTrigger>
-        <PopoverContent align="start" className="w-auto p-0">
-          <PopoverHeader className="px-3 pt-3">
-            <PopoverTitle>기간 선택</PopoverTitle>
-            <PopoverDescription>
-              시작일을 클릭한 뒤 종료일을 클릭하세요. 하루만 필요하면 시작일만 선택합니다.
-            </PopoverDescription>
-          </PopoverHeader>
-          <Calendar
-            mode="range"
-            selected={range}
-            onSelect={handleSelect}
-            defaultMonth={toDate(startDate)}
-            locale={ko}
-            numberOfMonths={numberOfMonths}
-          />
-        </PopoverContent>
-      </Popover>
+      {picker}
     </div>
   )
 }

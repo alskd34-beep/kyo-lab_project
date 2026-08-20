@@ -49,12 +49,60 @@ function mapTester(r: Record<string, unknown>, link?: { userId: string; username
 }
 
 /**
+ * 설정 > 사용자에서 역할이 "시험자"(admin 이 아님)인데 아직 testers 레코드가 없는 계정을
+ * 위해 시험자 레코드를 찾거나 새로 만들어 연결한다(사번=username 매칭 우선).
+ * 원래 시험자 계정은 testers 레코드 생성(`ensureLinkedUser`) 또는 역할 전환
+ * (`users.ensureLinkedTester`) 시 자동 연결되지만, 마이그레이션/시드로 users 만
+ * 직접 생성된 계정은 연결이 비어 있을 수 있어 조회 시점에 보정한다.
+ */
+async function backfillTesterLinks(): Promise<void> {
+  const { data: unlinked } = await supabase
+    .from('users')
+    .select('id, username, display_name')
+    .is('tester_id', null)
+    .neq('role', 'admin')
+  for (const u of (unlinked ?? []) as Record<string, unknown>[]) {
+    const userId = u.id as string
+    const username = u.username as string
+    const displayName = (u.display_name as string | null) || username
+
+    const { data: existing } = await supabase
+      .from('testers')
+      .select('id')
+      .eq('employee_no', username)
+      .maybeSingle()
+
+    let testerId: string
+    if (existing) {
+      testerId = (existing as Record<string, unknown>).id as string
+      // 다른 사용자가 이 시험자를 이미 점유하고 있으면 먼저 해제 (1:1 유니크 제약)
+      await supabase.from('users').update({ tester_id: null }).eq('tester_id', testerId).neq('id', userId)
+    } else {
+      const { data: created, error } = await supabase
+        .from('testers')
+        .insert({ employee_no: username, name: displayName, can_solo: true, can_duo: false, is_active: true })
+        .select('id')
+        .single()
+      if (error || !created) continue
+      testerId = (created as Record<string, unknown>).id as string
+    }
+    await supabase.from('users').update({ tester_id: testerId }).eq('id', userId)
+  }
+}
+
+/**
  * 시험자 목록.
  * @param opts.activeOnly true 면 비활성(is_active=false) 시험자를 제외한다.
  *   배정 후보·담당자 선택 목록처럼 "일할 사람"만 필요한 곳은 반드시 true 로 호출한다.
  *   시험자 관리 화면처럼 비활성자도 편집해야 하는 곳은 기본값(전체)을 쓴다.
+ * @param opts.onlyTesterRole true 면 설정 > 사용자에서 역할이 "시험자"(admin 이 아님)인
+ *   계정과 연결된 시험자만 반환한다(연결이 없으면 `backfillTesterLinks`로 보정 후 반환).
+ *   시험자 관리 화면 전용 — 배정 엔진 등 다른 호출부는 기존 동작(연결 여부와 무관하게 전체)을
+ *   유지하기 위해 기본값 false 를 쓴다.
  */
-export async function listTesters(opts: { activeOnly?: boolean } = {}): Promise<TesterRow[]> {
+export async function listTesters(opts: { activeOnly?: boolean; onlyTesterRole?: boolean } = {}): Promise<TesterRow[]> {
+  if (opts.onlyTesterRole) await backfillTesterLinks()
+
   let query = supabase
     .from('testers')
     .select('id, employee_no, name, can_solo, can_duo, is_active')
@@ -65,10 +113,12 @@ export async function listTesters(opts: { activeOnly?: boolean } = {}): Promise<
   const rows = (data ?? []) as Record<string, unknown>[]
 
   // 연결된 사용자 계정(1:1) 매핑
-  const { data: users } = await supabase
+  let userQuery = supabase
     .from('users')
     .select('id, username, tester_id, customer_no, avatar_url')
     .not('tester_id', 'is', null)
+  if (opts.onlyTesterRole) userQuery = userQuery.neq('role', 'admin')
+  const { data: users } = await userQuery
   const linkByTester = new Map<string, { userId: string; username: string; customerNo: number | null; avatarUrl: string | null }>()
   for (const u of (users ?? []) as Record<string, unknown>[]) {
     linkByTester.set(u.tester_id as string, {
@@ -79,7 +129,8 @@ export async function listTesters(opts: { activeOnly?: boolean } = {}): Promise<
     })
   }
 
-  return rows.map(r => mapTester(r, linkByTester.get(r.id as string)))
+  const scopedRows = opts.onlyTesterRole ? rows.filter(r => linkByTester.has(r.id as string)) : rows
+  return scopedRows.map(r => mapTester(r, linkByTester.get(r.id as string)))
 }
 
 /**

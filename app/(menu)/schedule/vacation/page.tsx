@@ -17,22 +17,7 @@ import { Input } from "@frontend/components/ui/input"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@frontend/components/ui/table"
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@frontend/components/ui/dialog"
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@frontend/components/ui/sheet"
+import { ManagementDrawer } from "@frontend/components/common/management-drawer"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 type ScheduleType = "ANNUAL" | "HALF_DAY" | "BUSINESS_TRIP"
@@ -496,15 +481,16 @@ export default function VacationPage() {
 // ─── 우측 슬라이드 패널 ──────────────────────────────────────────────────────────
 function RightDrawer({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   return (
-    <Sheet open onOpenChange={(next) => { if (!next) onClose() }}>
-      <SheetContent side="right" className="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-md">
-        <SheetHeader className="border-b">
-          <SheetTitle>일정 상세 · 가능 품목</SheetTitle>
-          <SheetDescription>휴가·출장 일정과 가능한 품목을 확인합니다.</SheetDescription>
-        </SheetHeader>
-        <div className="flex flex-col gap-4 p-4">{children}</div>
-      </SheetContent>
-    </Sheet>
+    <ManagementDrawer
+      open
+      onOpenChange={(next) => { if (!next) onClose() }}
+      size="md"
+      title="일정 상세 · 가능 품목"
+      description="휴가·출장 일정과 가능한 품목을 확인합니다."
+      footer={<Button variant="outline" onClick={onClose}>닫기</Button>}
+    >
+      <div className="flex flex-col gap-4">{children}</div>
+    </ManagementDrawer>
   )
 }
 
@@ -801,13 +787,22 @@ function AddModal({
   }
 
   return (
-    <Dialog open={open} onOpenChange={(next) => { if (!next && !saving) onClose() }}>
-      <DialogContent size="md">
-        <DialogHeader>
-          <DialogTitle>휴가 / 출장 등록</DialogTitle>
-          <DialogDescription>기간과 유형을 지정해 일정을 등록합니다.</DialogDescription>
-        </DialogHeader>
-        <DialogBody className="grid gap-3">
+    <ManagementDrawer
+      open={open}
+      onOpenChange={(next) => { if (!next && !saving) onClose() }}
+      size="md"
+      title="휴가 / 출장 등록"
+      description="기간과 유형을 지정해 일정을 등록합니다."
+      footer={(
+        <>
+          <Button variant="outline" onClick={onClose} disabled={saving}>취소</Button>
+          <Button onClick={() => void submit()} disabled={saving}>
+            {saving && <Loader2 className="animate-spin" />} 등록
+          </Button>
+        </>
+      )}
+    >
+        <div className="grid gap-3">
           {isAdmin && (
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-600">대상자</label>
@@ -858,14 +853,7 @@ function AddModal({
               placeholder="선택 입력"
             />
           </div>
-        </DialogBody>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={saving}>취소</Button>
-          <Button onClick={() => void submit()} disabled={saving}>
-            {saving && <Loader2 className="animate-spin" />} 등록
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+    </ManagementDrawer>
   )
 }

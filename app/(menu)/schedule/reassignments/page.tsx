@@ -264,45 +264,40 @@ export default function ReassignmentsPage() {
       </div>
 
       <div className="flex flex-col gap-2 rounded-md border border-slate-200 bg-white p-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-wrap gap-1.5">
-            {FILTERS.map(item => (
-              <button
-                key={item.id}
-                onClick={() => setFilter(item.id)}
-                className={cn(
-                  "h-8 rounded-md border px-3 text-xs font-semibold transition-colors",
-                  filter === item.id
-                    ? "border-slate-900 bg-slate-900 text-white"
-                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
-                )}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <div className="min-w-[280px] flex-1">
-              <DateRangeField
-                label="조회기간"
-                startDate={fromDate}
-                endDate={toDate}
-                numberOfMonths={2}
-                onChange={(start, end) => {
-                  setFromDate(start)
-                  setToDate(end)
-                }}
-              />
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => { setFromDate(daysAgoDate(30)); setToDate(todayDate()) }}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {FILTERS.map(item => (
+            <button
+              key={item.id}
+              onClick={() => setFilter(item.id)}
+              className={cn(
+                "h-8 rounded-md border px-3 text-xs font-semibold transition-colors",
+                filter === item.id
+                  ? "border-slate-900 bg-slate-900 text-white"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
+              )}
             >
-              <CalendarDays />
-              최근 30일
-            </Button>
-          </div>
+              {item.label}
+            </button>
+          ))}
+          <DateRangeField
+            compact
+            label="조회기간"
+            startDate={fromDate}
+            endDate={toDate}
+            numberOfMonths={2}
+            onChange={(start, end) => {
+              setFromDate(start)
+              setToDate(end)
+            }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => { setFromDate(daysAgoDate(30)); setToDate(todayDate()) }}
+          >
+            <CalendarDays />
+            최근 30일
+          </Button>
         </div>
         <div className="relative w-full lg:w-80">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
@@ -310,7 +305,7 @@ export default function ReassignmentsPage() {
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder="품목명, 제조번호, 변경내용 검색"
-            className="h-9 w-full rounded-md border border-slate-300 bg-white pl-8 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus-visible:border-blue-600 focus-visible:ring-2 focus-visible:ring-blue-200 focus-visible:outline-none"
+            className="h-8 w-full rounded-md border border-slate-300 bg-white pl-8 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus-visible:border-blue-600 focus-visible:ring-2 focus-visible:ring-blue-200 focus-visible:outline-none"
           />
         </div>
       </div>

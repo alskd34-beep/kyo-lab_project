@@ -3,11 +3,16 @@ import { listTesters, createTester, updateTester, deleteTester } from '@backend/
 
 export const runtime = 'nodejs'
 
-/** GET /api/testers[?activeOnly=1] — activeOnly=1 이면 비활성 시험자를 제외한다(배정 후보용) */
+/**
+ * GET /api/testers[?activeOnly=1][&onlyTesterRole=1]
+ * - activeOnly=1 이면 비활성 시험자를 제외한다(배정 후보용)
+ * - onlyTesterRole=1 이면 설정 > 사용자에서 역할이 "시험자"인 계정과 연결된 시험자만 반환한다(시험자 관리 화면용)
+ */
 export async function GET(req: NextRequest) {
   try {
     const activeOnly = req.nextUrl.searchParams.get('activeOnly') === '1'
-    const rows = await listTesters({ activeOnly })
+    const onlyTesterRole = req.nextUrl.searchParams.get('onlyTesterRole') === '1'
+    const rows = await listTesters({ activeOnly, onlyTesterRole })
     return Response.json({ rows })
   } catch (err) {
     return Response.json({ error: err instanceof Error ? err.message : '서버 오류' }, { status: 500 })

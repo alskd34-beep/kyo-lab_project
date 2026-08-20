@@ -45,7 +45,7 @@ export function ManagementDrawer({
   className,
 }: ManagementDrawerProps) {
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={onOpenChange} modal={false}>
       <SheetContent
         side="right"
         className={cn('flex w-full flex-col gap-0 p-0', sizeClass[size], className)}

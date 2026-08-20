@@ -209,11 +209,23 @@ function SortIcon({ field }: { field: typeof sortField }) {
 ## 2. 수정 패널 — Sheet (슬라이드)
 
 > **수정은 항상 Sheet(우측 슬라이드)**. Dialog는 추가/삭제 확인에만 사용.
+> 실제 화면에서는 이 구조를 직접 짜지 말고 **`<ManagementDrawer>`**(`@frontend/components/common/management-drawer.tsx`)를 우선 사용한다 — 아래 전체 구조를 이미 구현하고 있다.
+
+### 떠 있는 패널(floating) — bizday 가이드라인 기준
+
+> 출처: [bizday UI Guideline — Side](http://localhost:3000/bizday-ui-guideline/side) (사내 디자인 시스템 레퍼런스, 로컬 실행 시에만 접근 가능).
+
+`SheetContent`의 기본 `variant`는 `"floating"`이다: 가장자리에서 12px 띄운 채 `rounded-md` + 그림자로 "떠 있는" 패널로 나타나며, **dim 배경 없이 페이지 내용과 함께 상호작용 가능**하고, **Esc 또는 우상단 X로만 닫힌다(바깥 영역 클릭으로는 닫히지 않는다)**. `ManagementDrawer`는 이미 이 모드로 동작한다.
+
+- 직접 `<Sheet>`를 쓸 때는 반드시 `modal={false}`를 함께 지정해야 배경이 dim 없이 인터랙티브하게 유지된다: `<Sheet open={open} onOpenChange={setOpen} modal={false}>`.
+- `dim` prop(`<SheetContent dim>`)을 주면 옅은 배경(`bg-black/10`)을 켤 수 있다. 기본은 꺼짐.
+- 내용이 아주 많은 뷰/입력에는 부적합 — 그런 경우 `size="full"` `Dialog`를 고려한다.
+- **모바일 내비게이션 Sheet(사이드바)처럼 dim + 바깥 클릭 닫기 + 가장자리 밀착이 필요한 예외**는 `<SheetContent variant="docked">`로 기존 동작을 유지한다(`frontend/components/ui/sidebar.tsx` 참고). 새 화면에서는 쓰지 않는다.
 
 ### 전체 구조
 
 ```tsx
-<Sheet open={editOpen} onOpenChange={setEditOpen}>
+<Sheet open={editOpen} onOpenChange={setEditOpen} modal={false}>
   <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
 
     {/* ① 헤더 */}
@@ -746,8 +758,11 @@ import {
 | `top` / `bottom` | 상하 슬라이드 |
 
 **이 프로젝트 규칙:**
+- 새 화면은 `Sheet`/`SheetContent`를 직접 조립하지 말고 `ManagementDrawer`를 우선 사용한다.
 - `SheetContent`: `className="flex w-full flex-col gap-0 p-0 sm:max-w-md" side="right"`
 - 구조: `SheetHeader(border-b)` → `flex-1 overflow-y-auto bg-muted/30` → `SheetFooter(border-t bg-card)`
+- `variant="floating"`(기본): bizday 가이드라인 기준 — 가장자리에서 12px 띄운 `rounded-md` + 그림자, dim 없음, Esc/우상단 X로만 닫힘. `<Sheet modal={false}>`와 함께 써야 한다.
+- `variant="docked"`: 가장자리 밀착 + dim + 바깥 클릭 닫기(기존 방식). 모바일 내비게이션 Sheet 같은 예외적 용도에만 사용.
 
 → [Section 2 전체 패턴 참조](#2-수정-패널--sheet-슬라이드)
 
