@@ -42,7 +42,7 @@ const ALL_TABS = ['시험현황', '제품시험', '안정성시험', '일탈관�
 
 const STATUS_CONFIG: Record<StatusKey, { label: string; cls: string }> = {
   waiting:    { label: '시작대기', cls: 'bg-slate-50 text-slate-600 border border-slate-200' },
-  inprogress: { label: '진행중',   cls: 'bg-violet-50 text-violet-700 border border-violet-200' },
+  inprogress: { label: '진행중',   cls: 'bg-blue-50 text-blue-700 border border-blue-200' },
   prereview:  { label: '검토대기', cls: 'bg-amber-50 text-amber-700 border border-amber-200' },
   reviewing:  { label: '검토중',   cls: 'bg-blue-50 text-blue-700 border border-blue-200' },
   pending:    { label: '승인대기', cls: 'bg-teal-50 text-teal-700 border border-teal-200' },
@@ -56,7 +56,7 @@ function buildKpis(rows: TestRow[]): KpiItem[] {
   return [
     { label: '전체시험', value: String(rows.length),     unit: '건', sub: '조회 기간 전체', accent: 'text-slate-800',   bg: 'bg-white',         border: 'border-slate-200'   },
     { label: '시작대기', value: String(by('waiting')),    unit: '건', sub: '배정 후 미착수', accent: 'text-slate-600',   bg: 'bg-slate-50',      border: 'border-slate-200'   },
-    { label: '진행중',   value: String(by('inprogress')), unit: '건', sub: '처리 진행 중',   accent: 'text-violet-600',  bg: 'bg-violet-50/60',  border: 'border-violet-100'  },
+    { label: '진행중',   value: String(by('inprogress')), unit: '건', sub: '처리 진행 중',   accent: 'text-blue-600',  bg: 'bg-blue-50/60',  border: 'border-blue-100'  },
     { label: '검토',     value: String(by('prereview') + by('reviewing')), unit: '건', sub: '검토대기·검토중', accent: 'text-blue-600', bg: 'bg-blue-50/60', border: 'border-blue-100' },
     { label: '승인대기', value: String(by('pending')),    unit: '건', sub: '검토 후 승인 대기', accent: 'text-teal-600', bg: 'bg-teal-50/60',    border: 'border-teal-100'    },
     { label: '완료',     value: String(by('completed')),  unit: '건', sub: '승인 완료',      accent: 'text-emerald-600', bg: 'bg-emerald-50/60', border: 'border-emerald-100' },
@@ -441,7 +441,7 @@ export default function TestStatusPage() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-medium ${
-                                row.category === '완제품' ? 'bg-slate-100 text-slate-600' : 'bg-sky-50 text-sky-700'
+                                row.category === '완제품' ? 'bg-slate-100 text-slate-600' : 'bg-blue-50 text-blue-700'
                               }`}>{row.category}</span>
                               <span className="text-[10px] text-slate-500">{row.type}</span>
                               <span className={`ml-auto inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-semibold ${status.cls}`}>

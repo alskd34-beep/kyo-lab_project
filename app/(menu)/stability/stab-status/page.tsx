@@ -270,7 +270,7 @@ export default function StabStatusPage() {
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-xl font-bold text-slate-900">안정성 현황</h1>
-            <Badge className="border-violet-200 bg-violet-50 text-violet-700" variant="outline">
+            <Badge className="border-blue-200 bg-blue-50 text-blue-700" variant="outline">
               Google Sheet 기준
             </Badge>
             {changeState === 'changed' && (
@@ -331,12 +331,12 @@ export default function StabStatusPage() {
             <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-700">{stats.completed}</p>
           </CardContent>
         </Card>
-        <Card className="rounded-md border-violet-100 bg-violet-50/50 py-0 shadow-none">
+        <Card className="rounded-md border-blue-100 bg-blue-50/50 py-0 shadow-none">
           <CardContent className="px-4 py-3">
-            <p className="flex items-center gap-1 text-[11px] font-medium text-violet-700">
+            <p className="flex items-center gap-1 text-[11px] font-medium text-blue-700">
               <FlaskConical size={13} /> 품목코드
             </p>
-            <p className="mt-1 text-2xl font-bold tabular-nums text-violet-700">{stats.uniqueProducts}</p>
+            <p className="mt-1 text-2xl font-bold tabular-nums text-blue-700">{stats.uniqueProducts}</p>
           </CardContent>
         </Card>
         <Card className="col-span-2 rounded-md border-slate-200 py-0 shadow-none lg:col-span-1">

@@ -97,7 +97,7 @@ const FIELD_LABEL: Record<string, string> = {
 }
 
 const GROUP_COLORS = [
-  "bg-blue-500", "bg-emerald-500", "bg-violet-500",
+  "bg-blue-500", "bg-emerald-500", "bg-blue-500",
   "bg-amber-500", "bg-rose-500", "bg-teal-500", "bg-fuchsia-500",
 ]
 
@@ -1729,7 +1729,7 @@ interface IngestLog {
 const CHANGE_META: Record<string, { label: string; desc: string; cls: string }> = {
   new:     { label: "신규 추가", desc: "생산계획에서 새로 들어온 오더",  cls: "border-blue-200 text-blue-700" },
   updated: { label: "내용 변경", desc: "기존 오더 정보가 갱신됨",        cls: "border-amber-200 text-amber-700" },
-  blocked: { label: "변경 차단", desc: "작업 진행·확정 상태라 미반영됨", cls: "border-purple-200 text-purple-700" },
+  blocked: { label: "변경 차단", desc: "작업 진행·확정 상태라 미반영됨", cls: "border-blue-200 text-blue-700" },
   deleted: { label: "삭제됨",   desc: "생산계획에서 사라져 제외됨",      cls: "border-red-200 text-red-700" },
 }
 const CHANGE_ORDER = ["new", "updated", "blocked", "deleted"] as const

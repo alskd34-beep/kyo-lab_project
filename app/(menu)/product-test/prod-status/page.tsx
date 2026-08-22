@@ -79,7 +79,7 @@ function ProgressBar({ cleared, total }: { cleared: number; total: number }) {
     <div className="flex items-center gap-2">
       <div className="h-1.5 flex-1 overflow-hidden rounded-md bg-muted">
         <div
-          className={cn("h-full rounded-md transition-all", done ? "bg-emerald-500" : "bg-violet-500")}
+          className={cn("h-full rounded-md transition-all", done ? "bg-emerald-500" : "bg-blue-500")}
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -140,7 +140,7 @@ export default function ProdStatusPage() {
   const totals = data?.totals
   const kpiCards = [
     { label: "작업 중 인원", value: totals?.workingTesters ?? 0, valueCls: "text-foreground", icon: Users },
-    { label: "진행 중 작업", value: totals?.activeJobs ?? 0, valueCls: "text-violet-600", icon: ClipboardList },
+    { label: "진행 중 작업", value: totals?.activeJobs ?? 0, valueCls: "text-blue-600", icon: ClipboardList },
     { label: "시작 대기", value: totals?.pending ?? 0, valueCls: "text-foreground", icon: Clock },
     { label: "지연", value: totals?.delayed ?? 0, valueCls: "text-red-600", icon: TriangleAlert },
     { label: "오늘 완료", value: totals?.completedToday ?? 0, valueCls: "text-emerald-600", icon: CheckCircle2 },
@@ -250,7 +250,7 @@ export default function ProdStatusPage() {
                   </div>
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
-                  {w.inProgress > 0 && <Badge variant="outline" className="gap-1 border-violet-200 text-violet-700"><span className="size-1.5 rounded-full bg-violet-500" />진행 {w.inProgress}</Badge>}
+                  {w.inProgress > 0 && <Badge variant="outline" className="gap-1 border-blue-200 text-blue-700"><span className="size-1.5 rounded-full bg-blue-500" />진행 {w.inProgress}</Badge>}
                   {w.reviewing > 0 && <Badge variant="outline" className="gap-1 border-blue-200 text-blue-700"><span className="size-1.5 rounded-full bg-blue-500" />검토 {w.reviewing}</Badge>}
                   {w.delayed > 0 && <Badge variant="outline" className="gap-1 border-red-200 text-red-700"><span className="size-1.5 rounded-full bg-red-500" />지연 {w.delayed}</Badge>}
                   {w.pendingCount > 0 && <Badge variant="secondary" className="tabular-nums">대기 {w.pendingCount}</Badge>}
@@ -271,7 +271,7 @@ export default function ProdStatusPage() {
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openDetail(j.jobId) }
                       }}
-                      className="cursor-pointer rounded-md border bg-card p-2.5 transition-colors hover:border-violet-300 hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                      className="cursor-pointer rounded-md border bg-card p-2.5 transition-colors hover:border-blue-300 hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex min-w-0 items-center gap-1.5">

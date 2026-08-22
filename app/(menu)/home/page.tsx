@@ -238,7 +238,7 @@ export default function HomePage() {
   const KPI_CARDS = [
     { label: '전체',     value: stats.total,        unit: '건', sub: '총 QC 오더',         accent: 'text-foreground',  bar: 'border-l-primary' },
     { label: '대기중',   value: stats.pending,      unit: '건', sub: '시험 대기',          accent: 'text-foreground',  bar: 'border-l-muted-foreground' },
-    { label: '진행중',   value: stats.inProgress,   unit: '건', sub: 'QC 시험 진행',       accent: 'text-violet-600',  bar: 'border-l-violet-500' },
+    { label: '진행중',   value: stats.inProgress,   unit: '건', sub: 'QC 시험 진행',       accent: 'text-blue-600',  bar: 'border-l-blue-500' },
     { label: 'QC완료',   value: stats.completed,    unit: '건', sub: '승인 완료',          accent: 'text-emerald-600', bar: 'border-l-emerald-500' },
     { label: 'D-7 임박', value: stats.dueSoon7,     unit: '건', sub: '기한 임박 오더',     accent: 'text-amber-600',   bar: 'border-l-amber-500' },
     { label: '기한초과', value: stats.overdueCount, unit: '건', sub: 'QC완료예정일 초과', accent: 'text-destructive', bar: 'border-l-destructive' },
@@ -246,7 +246,7 @@ export default function HomePage() {
 
   const statRows = [
     { label: '대기중', key: 'pending' as const,    color: 'bg-muted-foreground' },
-    { label: '진행중', key: 'inProgress' as const, color: 'bg-violet-500' },
+    { label: '진행중', key: 'inProgress' as const, color: 'bg-blue-500' },
     { label: '완료',   key: 'completed' as const,  color: 'bg-emerald-500' },
   ]
 

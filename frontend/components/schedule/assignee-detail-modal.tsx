@@ -60,7 +60,7 @@ interface Props {
 const statusDot = (s: string) => stageStyle(s).dot
 const STATUS_OPTIONS = ["대기", ...JOB_STAGES, "지연"]
 const GROUP_ACCENTS = [
-  "bg-blue-500", "bg-emerald-500", "bg-violet-500",
+  "bg-blue-500", "bg-emerald-500", "bg-blue-500",
   "bg-amber-500", "bg-rose-500", "bg-teal-500", "bg-fuchsia-500",
 ]
 const DAILY_CAPACITY = 8 // 하루 가용 공수(일) 기준 — 부하율 표시용

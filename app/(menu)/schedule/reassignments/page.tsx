@@ -68,7 +68,7 @@ const TYPE_META: Record<HistoryType, { label: string; icon: typeof History; clas
   reassign: {
     label: "담당자 변경",
     icon: UserRoundCheck,
-    className: "border-violet-200 bg-violet-50 text-violet-700",
+    className: "border-blue-200 bg-blue-50 text-blue-700",
   },
   ingest: {
     label: "자동 적재",
@@ -262,7 +262,7 @@ export default function ReassignmentsPage() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard title="전체 이력" value={stats.total} tone="text-slate-900" />
         <StatCard title="오더 수정" value={stats.edits} tone="text-blue-700" />
-        <StatCard title="담당자 변경" value={stats.reassignments} tone="text-violet-700" />
+        <StatCard title="담당자 변경" value={stats.reassignments} tone="text-blue-700" />
         <StatCard title="자동 적재" value={stats.ingests} tone="text-emerald-700" />
       </div>
 

@@ -44,7 +44,7 @@ const ALL_TABS = ['시험현황', '제품시험', '안정성시험', '일탈관�
 
 const STATUS_CONFIG: Record<StatusKey, { label: string; dot: string }> = {
   waiting:    { label: '시작대기', dot: 'bg-slate-400' },
-  inprogress: { label: '진행중',   dot: 'bg-violet-500' },
+  inprogress: { label: '진행중',   dot: 'bg-blue-500' },
   prereview:  { label: '검토대기', dot: 'bg-amber-500' },
   reviewing:  { label: '검토중',   dot: 'bg-blue-500' },
   pending:    { label: '승인대기', dot: 'bg-teal-500' },
@@ -62,7 +62,7 @@ function buildKpis(rows: TestRow[]): KpiItem[] {
   return [
     { label: '전체시험', value: String(rows.length),     unit: '건', sub: '조회 기간 전체', accent: 'text-foreground',  bg: 'bg-white',         border: 'border-slate-200'   },
     { label: '시작대기', value: String(by('waiting')),    unit: '건', sub: '배정 후 미착수', accent: 'text-slate-600',   bg: 'bg-slate-50',      border: 'border-slate-200'   },
-    { label: '진행중',   value: String(by('inprogress')), unit: '건', sub: '처리 진행 중',   accent: 'text-violet-600',  bg: 'bg-violet-50/60',  border: 'border-violet-100'  },
+    { label: '진행중',   value: String(by('inprogress')), unit: '건', sub: '처리 진행 중',   accent: 'text-blue-600',  bg: 'bg-blue-50/60',  border: 'border-blue-100'  },
     { label: '검토',     value: String(by('prereview') + by('reviewing')), unit: '건', sub: '검토대기·검토중', accent: 'text-blue-600', bg: 'bg-blue-50/60', border: 'border-blue-100' },
     { label: '승인대기', value: String(by('pending')),    unit: '건', sub: '검토 후 승인 대기', accent: 'text-teal-600', bg: 'bg-teal-50/60',    border: 'border-teal-100'    },
     { label: '완료',     value: String(by('completed')),  unit: '건', sub: '승인 완료',      accent: 'text-emerald-600', bg: 'bg-emerald-50/60', border: 'border-emerald-100' },

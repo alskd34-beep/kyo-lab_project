@@ -103,8 +103,8 @@ function cellStyle(row: ScheduleRow): { bg: string; border: string; label: strin
       label: 'PCT·긴급',
     }
     return {
-      bg: 'bg-violet-200 dark:bg-violet-900/60 hover:bg-violet-300',
-      border: 'border-violet-400 dark:border-violet-700 border-dashed',
+      bg: 'bg-amber-200 dark:bg-amber-900/60 hover:bg-amber-300',
+      border: 'border-amber-400 dark:border-amber-700 border-dashed',
       label: 'PCT',
     }
   }
@@ -391,10 +391,10 @@ export default function MonthlySchedulePage() {
 
         {/* PCT 데이터 알림 */}
         {pctSnapshot.length > 0 && (
-          <Card className="border-violet-200 dark:border-violet-800 bg-violet-50/70 dark:bg-violet-950/30">
+          <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/70 dark:bg-blue-950/30">
             <CardContent className="flex flex-wrap items-center justify-between gap-3 py-3 text-xs">
               <div className="flex flex-wrap items-center gap-3">
-                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-violet-600 text-white">
+                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-600 text-white">
                   <Calendar size={14} />
                 </div>
                 <span className={`font-semibold ${TXT_PRIMARY}`}>PCT 생산관리 배정 표시 중</span>
@@ -411,7 +411,7 @@ export default function MonthlySchedulePage() {
                 onClick={handleClearPct}
                 variant="outline"
                 size="sm"
-                className="gap-1.5 border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-900/40"
+                className="gap-1.5 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40"
               >
                 PCT 데이터 지우기
               </Button>
@@ -456,7 +456,7 @@ export default function MonthlySchedulePage() {
               type="month"
               value={month}
               onChange={e => setMonth(e.target.value)}
-              className={`h-9 w-full rounded-md border sm:w-auto ${BORDER} bg-white dark:bg-slate-800 px-3 text-sm tabular-nums outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 dark:focus:ring-violet-900/40 ${TXT_PRIMARY} [color-scheme:light] dark:[color-scheme:dark]`}
+              className={`h-9 w-full rounded-md border sm:w-auto ${BORDER} bg-white dark:bg-slate-800 px-3 text-sm tabular-nums outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 ${TXT_PRIMARY} [color-scheme:light] dark:[color-scheme:dark]`}
             />
           </CardContent>
         </Card>
@@ -519,12 +519,12 @@ export default function MonthlySchedulePage() {
                   </div>
                 </CardContent>
               </Card>
-              <Card className="border-sky-200 bg-sky-50 dark:border-sky-900 dark:bg-sky-950/40">
+              <Card className="border-teal-200 bg-teal-50 dark:border-teal-900 dark:bg-teal-950/40">
                 <CardContent className="flex items-center gap-3 py-4">
-                  <Users size={20} className="text-sky-600 dark:text-sky-400" />
+                  <Users size={20} className="text-teal-600 dark:text-teal-400" />
                   <div>
                     <p className={`text-[11px] font-medium ${TXT_MUTED}`}>듀오</p>
-                    <p className="text-xl font-bold tabular-nums text-sky-700 dark:text-sky-300">{stats.duo}건</p>
+                    <p className="text-xl font-bold tabular-nums text-teal-700 dark:text-teal-300">{stats.duo}건</p>
                   </div>
                 </CardContent>
               </Card>
@@ -551,7 +551,7 @@ export default function MonthlySchedulePage() {
                   >
                     <Icon size={15} />
                     {t.label}
-                    <span className={`hidden text-[10px] font-normal sm:inline ${active ? 'text-violet-100' : TXT_MUTED}`}>
+                    <span className={`hidden text-[10px] font-normal sm:inline ${active ? 'text-blue-100' : TXT_MUTED}`}>
                       {t.hint}
                     </span>
                   </button>
@@ -565,7 +565,7 @@ export default function MonthlySchedulePage() {
             <Card className={`${BORDER} ${CARD_BG} overflow-hidden`}>
               <CardHeader>
                 <CardTitle className={`flex items-center gap-2 text-base ${TXT_PRIMARY}`}>
-                  <Calendar size={16} className="text-violet-600 dark:text-violet-400" />
+                  <Calendar size={16} className="text-blue-600 dark:text-blue-400" />
                   월간 그리드
                   <span className={`text-xs font-normal ${TXT_MUTED}`}>(시험자 × 날짜)</span>
                 </CardTitle>
@@ -673,7 +673,7 @@ export default function MonthlySchedulePage() {
                   <span className={TXT_TERTIARY}>듀오</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <span className="inline-block h-3 w-3 rounded-md border border-dashed border-violet-400 bg-violet-200 dark:border-violet-700 dark:bg-violet-900/60" />
+                  <span className="inline-block h-3 w-3 rounded-md border border-dashed border-amber-400 bg-amber-200 dark:border-amber-700 dark:bg-amber-900/60" />
                   <span className={TXT_TERTIARY}>PCT 생산관리 출처</span>
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -692,7 +692,7 @@ export default function MonthlySchedulePage() {
               <Card className={`${BORDER} ${CARD_BG}`}>
                 <CardHeader>
                   <CardTitle className={`flex items-center gap-2 text-base ${TXT_PRIMARY}`}>
-                    <CalendarRange size={16} className="text-violet-600 dark:text-violet-400" />
+                    <CalendarRange size={16} className="text-blue-600 dark:text-blue-400" />
                     주간 보드
                     <span className={`text-xs font-normal ${TXT_MUTED}`}>(포장/예정일 기준 주차)</span>
                   </CardTitle>
@@ -713,7 +713,7 @@ export default function MonthlySchedulePage() {
               <Card className={`${BORDER} ${CARD_BG}`}>
                 <CardHeader>
                   <CardTitle className={`flex items-center gap-2 text-base ${TXT_PRIMARY}`}>
-                    <UserSquare size={16} className="text-violet-600 dark:text-violet-400" />
+                    <UserSquare size={16} className="text-blue-600 dark:text-blue-400" />
                     개인별 할당
                     <span className={`text-xs font-normal ${TXT_MUTED}`}>(시험자별 배정 목록)</span>
                   </CardTitle>
