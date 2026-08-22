@@ -129,6 +129,7 @@ const NAV_SECTIONS: NavSection[] = [
         subItems: [
           { id: "dash", label: "대시보드", adminOnly: true },
           { id: "stats", label: "운영평가", live: true, adminOnly: true },
+          { id: "workload", label: "품목별 시험공수 관리", live: true, adminOnly: true },
           { id: "ins-report", label: "리포트", adminOnly: true },
         ],
       },
@@ -226,6 +227,7 @@ const PATH_MAP: Record<string, string> = {
   // 인사이트
   dash: "/insights/dash",
   stats: "/insights/stats",
+  workload: "/insights/workload",
   "ins-report": "/insights/ins-report",
   // 장비관리
   "equip-master": "/equipment/master",
