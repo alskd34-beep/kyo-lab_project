@@ -18,7 +18,12 @@
 cp .env.local.example .env.local
 ```
 
-Dify 값(`DIFY_API_URL`, `DIFY_API_KEY`)도 함께 채워야 챗봇이 동작합니다.
+> ⚠️ **`.env.local` 은 절대 커밋하지 않습니다.** `.gitignore` 의 `.env*.local` 규칙으로 제외됩니다.
+> (2026-08-22 이전에는 이 규칙이 주석 처리되어 실제 키가 저장소에 커밋돼 있었습니다 — 키 로테이션 필요.)
+
+챗봇 공급자 키는 역할별로 다릅니다. `AGENTS.md` 의 **AI providers** 표를 참고하세요
+(`MISO_*` = 시험자 챗봇, `LETSUR_*` = 관리자 챗봇(운영), `ANTHROPIC_API_KEY` = AI 주간 스케줄).
+Dify 관련 변수는 더 이상 사용하지 않습니다.
 
 ## 3. 마이그레이션 적용
 
@@ -28,6 +33,24 @@ Dify 값(`DIFY_API_URL`, `DIFY_API_KEY`)도 함께 채워야 챗봇이 동작합
 2. `migrations/0001_init_qc_schema.sql` 내용 붙여넣기 → Run
 3. `migrations/0002_seed_qc_demo.sql` 내용 붙여넣기 → Run (데모 데이터 8건)
 4. `migrations/0003_auth.sql` 내용 붙여넣기 → Run (사용자/리프레시 토큰 테이블)
+
+### 마이그레이션 번호 규칙
+
+- 파일명은 `NNNN_<snake_case>.sql`, **번호는 절대 재사용하지 않는다.**
+- 새 번호를 붙이기 전에 **머지되지 않은 브랜치까지 확인**한다:
+  ```bash
+  git log --all --name-only --pretty=format: -- 'supabase/migrations/*' | sort -u | tail -20
+  ```
+  (예: `main` 은 0025 → 0027 로 건너뛰는데, `0026_workload_standard.sql` 은
+  미머지 브랜치 `feat/workload-standard-and-leave-guard` 가 점유 중이다.)
+- 모든 DDL 은 `if not exists` / `on conflict do nothing` 으로 **재실행 가능하게** 작성한다.
+- 코드가 참조하는 테이블은 반드시 마이그레이션에 정의가 있어야 한다. 확인 방법:
+  ```bash
+  # 코드가 쓰는 테이블 - 마이그레이션이 만드는 테이블 = 비어 있어야 정상
+  grep -rhoE "\.from\('[a-z_]+'\)" backend app --include=*.ts | sed "s/\.from('//;s/')//" | sort -u > /tmp/used
+  grep -rhoiE "create table (if not exists )?[a-z_]+" supabase/migrations/*.sql     | sed -E 's/create table //I; s/if not exists //I' | tr 'A-Z' 'a-z' | sort -u > /tmp/made
+  comm -23 /tmp/used /tmp/made
+  ```
 
 ### 옵션 B: Supabase CLI
 
@@ -48,7 +71,7 @@ npm run dev
 ```
 
 - 대시보드 하단 "데모 모드" 배지가 사라지면 Supabase 연결 성공
-- 챗봇은 `.env.local`의 Dify 값이 채워져야 응답 가능
+- 챗봇은 역할별 공급자 키(`MISO_*` / `LETSUR_*`)가 채워져야 응답 가능
 
 ## 5. 스키마 개요
 

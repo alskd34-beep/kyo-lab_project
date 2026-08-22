@@ -40,7 +40,7 @@ Server-side business logic and infrastructure. Split into `lib/` (auth, Supabase
 - **Service pattern**: a service module imports `supabase` from `@backend/lib/supabase`, exports a typed `XRow` interface, and uses a `mapRow(r)` helper to convert `snake_case` Supabase rows to `camelCase` domain objects (see `products.ts`). Functions are plain async exports (`listX`, `createX`, `updateX`, `deleteX`) returning typed rows/objects, not `Response`s. HTTP concerns stay in the route handler.
 - Throw `Error` with a Korean message on failure; the route handler catches and serializes it.
 - Reuse shared types from `@shared/*` (`types/qc.ts`, `types/pqm.ts`) where a shape is shared with the frontend; service-internal row types live next to the service.
-- **chat.ts**: runs `codex exec` on the server, builds a Korean QC prompt with DB context/history, and converts the final CLI answer into Dify-style SSE. Set `CODEX_MODEL` to pin a model version. If Codex CLI is unavailable or times out, the service responds 503. The `@anthropic-ai/sdk` package in `package.json` is legacy and not used here.
+- **chat.ts**: routes by role — testers go to the MISO app (`runMisoText`, message passed through untouched); admins get the QC-context prompt answered by Codex CLI (dev) or Letsur (prod), selected by `CHAT_ADMIN_USE_CLI`. Both are converted into Dify-style SSE. Set `CODEX_ASSISTANT_MODEL` / `CODEX_MODEL` to pin a Codex model. If the provider is unavailable or times out, the service responds 503. `@anthropic-ai/sdk` is not used here, and since 2026-08-22 it is not used anywhere (leftover dependency).
 - Auth/secrets: only `auth.ts` and `supabase.ts` should read JWT/Supabase env vars. Don't duplicate secret reads in services.
 
 ### Testing Requirements
@@ -55,6 +55,6 @@ Server-side business logic and infrastructure. Split into `lib/` (auth, Supabase
 - `@shared/*` types. `services/*` depend on `lib/supabase`; `users.ts` depends on `lib/auth`.
 
 ### External
-- `@supabase/supabase-js`, `jose`, `bcryptjs`, Node `crypto`, Codex CLI (chat).
+- `@supabase/supabase-js`, `jose`, `bcryptjs`, Node `crypto`, Codex CLI + Letsur + MISO (chat).
 
 <!-- MANUAL: -->
