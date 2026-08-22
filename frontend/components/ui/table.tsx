@@ -39,6 +39,14 @@ const LastColContext = React.createContext(false)
 /** 마지막 칸을 오른쪽 고정 액션 칸(PIN_END)으로 처리할지. 기본값은 일반 데이터 열이다. */
 const PinLastColContext = React.createContext(false)
 const InHeaderContext = React.createContext(false)
+/**
+ * `TableHeader` 안에서 이 행이 몇 번째 머리행인지. 머리행이 한 줄이면 항상 0.
+ *
+ * 머리행을 2단으로 쓰는 표(위=그룹 이름 colSpan, 아래=실제 열 이름)에서
+ * 두 줄이 서로 다른 칸 수·다른 라벨을 번갈아 등록하면 setState 가 맞물려
+ * 무한 렌더(Maximum update depth exceeded)가 된다. 논리 열은 **첫 줄만** 정한다.
+ */
+const HeaderRowIndexContext = React.createContext(0)
 
 /** 현재 펼쳐진 실제 칸 수. colSpan 은 이 값만 쓴다 — 더 큰 값을 쓰면 표 오른쪽에 빈 칸이 생긴다. */
 export function useTableColSpan(): number {
@@ -169,6 +177,9 @@ function Table({
   const registerHeader = React.useCallback((
     logicalIndex: number, mergedLabel: string, fieldLabels: string[], noSplit = false,
   ) => {
+    // 자동 합침이 꺼진 표(layout="wide" 등)는 측정 자체가 쓸모없다.
+    // 등록만 해도 bump() 로 리렌더가 돌아 행렬형 표에서 헛돌게 된다.
+    if (!enabled) return
     const cur = samplesRef.current.get(logicalIndex) ?? emptySample()
     const mergedHeaderUnits = hangulUnits(mergedLabel)
     const fieldUnits = fieldLabels.map(hangulUnits)
@@ -186,7 +197,7 @@ function Table({
       hasSecondary: cur.hasSecondary || fieldLabels.length >= 2,
     })
     bump()
-  }, [bump])
+  }, [bump, enabled])
 
   const registerContent = React.useCallback((
     logicalIndex: number,
@@ -194,6 +205,7 @@ function Table({
     secondary: string,
     secondaryLabel?: string,
   ) => {
+    if (!enabled) return
     const cur = samplesRef.current.get(logicalIndex) ?? emptySample()
     const primaryContentUnits = Math.max(cur.primaryContentUnits, hangulUnits(primary))
     const secondaryContentUnits = Math.max(cur.secondaryContentUnits, hangulUnits(secondary))
@@ -217,7 +229,7 @@ function Table({
       hasSecondary,
     })
     bump()
-  }, [bump])
+  }, [bump, enabled])
 
   React.useEffect(() => {
     if (!enabled || !el) return
@@ -374,14 +386,25 @@ function Table({
   )
 }
 
-function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
+function TableHeader({ className, children, ...props }: React.ComponentProps<"thead">) {
+  // 머리행 순번을 각 행에 알려준다 — 2단 머리행에서 첫 줄만 논리 열을 정하게 하기 위함.
+  const rows = React.Children.toArray(children)
   return (
     <InHeaderContext.Provider value={true}>
       <thead
         data-slot="table-header"
         className={cn("sticky top-0 z-10 bg-card [&_tr]:border-b", className)}
         {...props}
-      />
+      >
+        {rows.map((row, index) => (
+          <HeaderRowIndexContext.Provider
+            key={React.isValidElement(row) && row.key != null ? String(row.key) : index}
+            value={index}
+          >
+            {row}
+          </HeaderRowIndexContext.Provider>
+        ))}
+      </thead>
     </InHeaderContext.Provider>
   )
 }
@@ -412,12 +435,14 @@ function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
 function TableRow({ className, children, ...props }: React.ComponentProps<"tr">) {
   const adaptive = React.useContext(AdaptiveTableContext)
   const inHeader = React.useContext(InHeaderContext)
+  const headerRowIndex = React.useContext(HeaderRowIndexContext)
   const pinLast = React.useContext(PinLastColContext)
   const items = React.Children.toArray(children)
 
   React.useLayoutEffect(() => {
-    if (inHeader) adaptive?.reportLogicalCount(items.length)
-  }, [adaptive, inHeader, items.length])
+    // 2단 머리행이면 둘째 줄은 칸 수를 보고하지 않는다(첫 줄과 번갈아 보고하면 무한 렌더).
+    if (inHeader && headerRowIndex === 0) adaptive?.reportLogicalCount(items.length)
+  }, [adaptive, inHeader, headerRowIndex, items.length])
 
   return (
     <tr
@@ -445,6 +470,7 @@ function TableRow({ className, children, ...props }: React.ComponentProps<"tr">)
 function TableHead({ className, children, ...props }: React.ComponentProps<"th">) {
   const adaptive = React.useContext(AdaptiveTableContext)
   const col = React.useContext(LogicalColContext)
+  const headerRowIndex = React.useContext(HeaderRowIndexContext)
   const pinEnd = React.useContext(LastColContext)
   const sortEl = findElementByName(children, "SortColumnHeader") as React.ReactElement<{
     col: SortColumnDef
@@ -456,7 +482,8 @@ function TableHead({ className, children, ...props }: React.ComponentProps<"th">
   const split = adaptive?.isSplit(col) === true
 
   React.useLayoutEffect(() => {
-    if (!adaptive) return
+    // 둘째 머리행(항목 이름 줄)은 첫 줄과 논리 열 번호가 겹쳐 서로 덮어쓴다 — 등록하지 않는다.
+    if (!adaptive || headerRowIndex !== 0) return
     if (sortEl) {
       adaptive.registerHeader(
         col,
@@ -468,7 +495,7 @@ function TableHead({ className, children, ...props }: React.ComponentProps<"th">
     }
     const text = nodeToText(children)
     if (text) adaptive.registerHeader(col, text, [text])
-  }, [adaptive, col, sortEl, children])
+  }, [adaptive, col, sortEl, children, headerRowIndex])
 
   const thClass = cn(
     "h-10 min-w-0 overflow-hidden px-3 text-left align-middle font-medium whitespace-nowrap text-muted-foreground [&:has([role=checkbox])]:pr-0",
