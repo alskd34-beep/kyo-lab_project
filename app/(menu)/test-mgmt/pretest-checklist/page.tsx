@@ -524,11 +524,16 @@ export default function PretestChecklistPage() {
                 {/* 목록 테이블 */}
                 <Card className="gap-0 overflow-hidden py-0">
                   <Table>
+                    {/* 논리 열 4개(일시·확인사항·이슈로트·작성) + 2필드 묶음 2개 → 최대 6칸.
+                        칸 순서(펼침 / 합침):
+                        일시 · 내용/확인사항 · 특이사항/이슈로트 · 이슈로트/작성 · 작성자 · 작성시간 */}
                     <colgroup>
+                      <col className="w-[12%]" />
+                      <col className="w-[30%]" />
                       <col className="w-[16%]" />
-                      <col />
                       <col className="w-[14%]" />
-                      <col className="w-[18%]" />
+                      <col className="w-[14%]" />
+                      <col className="w-[14%]" />
                     </colgroup>
                     <TableHeader>
                       <TableRow className="hover:bg-transparent">

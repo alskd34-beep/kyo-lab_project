@@ -169,6 +169,9 @@ const SORT_COLUMNS: SortColumnDef<SortField>[] = [
   {
     key: 'dates',
     label: '일자',
+    // 본문이 제조/기한/의뢰 3줄을 한 칸에 그리므로 칸을 나누지 않는다.
+    // (정렬 선택지는 3개 그대로 유지)
+    noSplit: true,
     fields: [
       { id: 'manufacturedAt', label: '제조일자' },
       { id: 'expiryDate', label: '사용기한' },
@@ -372,11 +375,19 @@ export default function StabStatusPage() {
           </div>
         ) : (
           <Table>
+            {/* 논리 열 4개(품목·시험·일자·상태) + 다필드 묶음 3개 → 최대 7칸.
+                칸 순서(펼침 / 합침):
+                품목명/품목 · 품목코드/시험 · 시험종류/일자 · 기간/상태 · 제조일자 · 유효일 · 상태 */}
+            {/* 논리 열 4개(품목·시험·일자·상태) + 2필드 묶음 2개 → 최대 6칸.
+                일자는 noSplit 이라 나뉘지 않는다.
+                칸 순서(펼침 / 합침): 품목/품목 · 품목코드/시험 · 시험종류/일자 · 기간/상태 · 일자 · 상태 */}
             <colgroup>
-              <col className="w-[32%]" />
-              <col className="w-[24%]" />
-              <col className="w-[24%]" />
               <col className="w-[20%]" />
+              <col className="w-[15%]" />
+              <col className="w-[16%]" />
+              <col className="w-[14%]" />
+              <col className="w-[20%]" />
+              <col className="w-[15%]" />
             </colgroup>
             <TableHeader>
               <TableRow className="hover:bg-transparent">

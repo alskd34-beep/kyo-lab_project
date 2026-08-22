@@ -228,11 +228,15 @@ export default function EquipmentReservationPage() {
           예약 목록
         </div>
         <Table>
+          {/* 논리 열 4개(상태·장비·기간·예약자) + 2필드 묶음 1개(기간) → 최대 5칸.
+              table-fixed 에서 <col> 이 모자라면 늘어난 칸이 폭 0으로 접혀 사라진다.
+              칸 순서(펼침 / 합침): 상태 · 장비 · 시작일/기간 · 종료일/예약자 · 예약자 */}
           <colgroup>
-            <col className="w-[14%]" />
-            <col className="w-[22%]" />
-            <col className="w-[22%]" />
-            <col className="w-[16%]" />
+            <col className="w-[12%]" />
+            <col className="w-[24%]" />
+            <col className="w-[20%]" />
+            <col className="w-[20%]" />
+            <col className="w-[18%]" />
           </colgroup>
           <TableHeader>
             <TableRow className="hover:bg-transparent">

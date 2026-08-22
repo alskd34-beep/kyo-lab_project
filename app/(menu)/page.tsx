@@ -374,13 +374,22 @@ export default function QCDashboard() {
               </div>
 
               <Table>
+                {/* 논리 열 6개(체크·품목·시험·담당·일정·진행상태) + 2필드 묶음 4개 -> 최대 10칸.
+                    table-fixed 에서 <col> 이 모자라면 늘어난 칸이 폭 0으로 접혀 사라진다.
+                    칸 순서(펼침 / 합침):
+                    체크 · 제품명/품목 · 유형/시험 · 시험번호/담당 · 시험항목/일정 ·
+                    담당자/진행상태 · 수탁사 · 접수일 · 완료예정일 · 진행상태 */}
                 <colgroup>
                   <col className="w-[4%]" />
-                  <col className="w-[26%]" />
-                  <col className="w-[22%]" />
-                  <col className="w-[18%]" />
                   <col className="w-[16%]" />
-                  <col className="w-[14%]" />
+                  <col className="w-[9%]" />
+                  <col className="w-[11%]" />
+                  <col className="w-[11%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[9%]" />
                 </colgroup>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
