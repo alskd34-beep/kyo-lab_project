@@ -11,6 +11,7 @@ import { CLOSED_STAGE, JOB_STAGES, stageStyle } from "@shared/qc-status"
 import { cn } from "@frontend/lib/utils"
 import { ManagementDrawer } from "@frontend/components/common/management-drawer"
 import { AssigneeDetailModal } from "@frontend/components/schedule/assignee-detail-modal"
+import { OrderTestItemsSection } from "@frontend/components/schedule/order-test-items-section"
 import { TesterAvatar, TesterOptionLabel, primeTesterProfileCache } from "@frontend/lib/tester-profiles"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
@@ -644,7 +645,8 @@ export default function OrdersPage() {
             <dd className="mt-0.5 truncate text-sm font-semibold text-foreground">{r.dosageForm ?? "-"}</dd>
           </div>
           <div className="min-w-0">
-            <dt className="text-muted-foreground">진행방법</dt>
+            {/* 진행방법은 시트 원본값 — 실제 배정 항목은 수정 패널의 「시험항목」이 정한다 */}
+            <dt className="text-muted-foreground">진행방법 (시트)</dt>
             <dd className="mt-0.5 truncate text-sm font-semibold text-foreground">{r.method}</dd>
           </div>
           <div>
@@ -1455,6 +1457,8 @@ function CreateModal({ testers, onClose, onCreated }: {
 function EditModal({ order, testers, onClose, onSaved }: {
   order: OrderRow; testers: Tester[]; onClose: () => void; onSaved: () => void
 }) {
+  const { user } = useAuth()
+  const isAdmin = user?.role === "admin"
   const isAutoOrder = order.source === "auto"
   const [form, setForm] = useState({
     productCode: order.productCode ?? "",
@@ -1547,13 +1551,14 @@ function EditModal({ order, testers, onClose, onSaved }: {
             </SelectContent>
           </Select>
         </Field>
-        <Field label="진행방법">
-          <Select value={form.method} onValueChange={v => setForm({ ...form, method: v })}>
-            <SelectTrigger className="!h-9 w-full px-3"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {METHOD_OPTIONS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-            </SelectContent>
-          </Select>
+        {/*
+          진행방법은 제조 시트에서 들어온 원본값이라 여기서 고르지 않는다(읽기 전용).
+          무엇을 배정할지는 아래 「시험항목」 목록이 결정한다.
+        */}
+        <Field label="진행방법 (시트 원본)">
+          <div className="flex h-9 items-center gap-2 rounded-md border border-input bg-muted px-3">
+            <span className="truncate text-sm text-muted-foreground">{order.method || "-"}</span>
+          </div>
         </Field>
         <Field label="상태">
           <Select value={form.status} onValueChange={v => setForm({ ...form, status: v })}>
@@ -1588,6 +1593,17 @@ function EditModal({ order, testers, onClose, onSaved }: {
         </Field>
         <Field label="비고" full><input value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} className={inputCls} /></Field>
       </div>
+
+      {/*
+        시험항목 가감 — 위 폼(저장 버튼)과 달리 체크할 때마다 즉시 서버에 반영된다.
+        품목 기준은 그대로 두고 이 오더에서만 빼거나 더한다.
+      */}
+      <OrderTestItemsSection
+        orderId={order.id}
+        productName={order.productName}
+        canEdit={isAdmin && !order.locked}
+        locked={order.locked}
+      />
 
       <div className="mt-3">
         <label className="mb-1 block text-xs font-semibold text-foreground">수정 사유 <span className="text-red-500">*</span></label>
