@@ -13,10 +13,15 @@ import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
 import { ManagementDrawer } from "@frontend/components/common/management-drawer"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@frontend/components/ui/select"
+import { formatItemElapsed } from "@frontend/lib/elapsed-format"
 
 interface JobItem {
   id: string; testItemName: string; sequenceOrder: number
-  status: string; clearedAt: string | null; elapsedMinutes: number | null
+  status: string; clearedAt: string | null
+  /** 직전 항목 완료 이후 구간 소요 분 */
+  elapsedMinutes: number | null
+  /** 작업 시작부터 이 항목 완료까지 누적 소요 분 */
+  elapsedTotalMinutes: number | null
 }
 interface Job {
   id: string; orderId: string; qcNo: string; productName: string; batchNo: string
@@ -778,7 +783,11 @@ export default function MyTasksPage() {
                     {done ? (
                       <span className="text-[11px] text-emerald-600">
                         {it.clearedAt && new Date(it.clearedAt).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
-                        {it.elapsedMinutes != null && ` · ${it.elapsedMinutes}분`}
+                        {/* 작업 시작 기준 누적 소요시간 (구간이 다르면 함께 표기) */}
+                        {(() => {
+                          const label = formatItemElapsed(it.elapsedTotalMinutes, it.elapsedMinutes)
+                          return label && ` · ${label}`
+                        })()}
                       </span>
                     ) : (
                       !isDone && (

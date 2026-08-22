@@ -21,15 +21,21 @@ import { Badge } from "@frontend/components/ui/badge"
 import { Button } from "@frontend/components/ui/button"
 import { ManagementDrawer } from "@frontend/components/common/management-drawer"
 import { Skeleton } from "@frontend/components/ui/skeleton"
+import { formatElapsedMinutes, formatItemElapsed } from "@frontend/lib/elapsed-format"
 
 // ─── Types (백엔드 JobDetail 과 동일) ────────────────────────────────────────
 interface JobItem {
   id: string; testItemName: string; sequenceOrder: number
-  status: string; clearedAt: string | null; elapsedMinutes: number | null
+  status: string; clearedAt: string | null
+  /** 직전 항목 완료 이후 구간 소요 분 */
+  elapsedMinutes: number | null
+  /** 작업 시작부터 이 항목 완료까지 누적 소요 분 */
+  elapsedTotalMinutes: number | null
 }
 export interface JobDetail {
   jobId: string; qcNo: string; status: string
-  workStartDate: string | null; workEndDate: string | null; createdAt: string | null
+  workStartDate: string | null; workEndDate: string | null
+  workStartedAt: string | null; createdAt: string | null
   orderId: string; productCode: string | null; productName: string; batchNo: string
   dueDate: string | null; isUrgent: boolean; method: string | null
   testerName: string | null; testerEmployeeNo: string | null
@@ -41,14 +47,6 @@ export interface JobDetail {
 }
 
 // ─── 헬퍼 ────────────────────────────────────────────────────────────────────
-
-/** 분 단위를 "1시간 20분" 형태로 */
-function formatMinutes(min: number): string {
-  if (min < 60) return `${min}분`
-  const h = Math.floor(min / 60)
-  const m = min % 60
-  return m === 0 ? `${h}시간` : `${h}시간 ${m}분`
-}
 
 function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString("ko-KR", {
@@ -167,10 +165,11 @@ export function JobDetailModal({
   const currentIdx = detail ? detail.items.findIndex(i => i.id === detail.currentItemId) : -1
   const currentItem = currentIdx >= 0 ? detail!.items[currentIdx] : null
 
+  const minutesSince = (iso: string) => Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000))
   // 현재 항목 경과시간 (직전 클리어 시각 기준)
-  const currentElapsed = detail?.currentItemStartedAt
-    ? Math.max(0, Math.round((Date.now() - new Date(detail.currentItemStartedAt).getTime()) / 60000))
-    : null
+  const currentElapsed = detail?.currentItemStartedAt ? minutesSince(detail.currentItemStartedAt) : null
+  // 작업 시작 이후 누적 경과시간 — 항목 완료로 초기화되지 않는 기준값
+  const jobElapsed = detail?.workStartedAt ? minutesSince(detail.workStartedAt) : null
 
   return (
     <ManagementDrawer
@@ -264,10 +263,12 @@ export function JobDetailModal({
                     <span className="text-sm font-semibold text-violet-900">
                       {currentItem.testItemName}
                     </span>
-                    {currentElapsed !== null && (
+                    {(jobElapsed !== null || currentElapsed !== null) && (
                       <span className="flex items-center gap-1 text-xs text-violet-700">
                         <Clock className="size-3" />
-                        경과 {formatMinutes(currentElapsed)}
+                        {jobElapsed !== null && `작업 시작 후 ${formatElapsedMinutes(jobElapsed)}`}
+                        {jobElapsed !== null && currentElapsed !== null && " · "}
+                        {currentElapsed !== null && `현재 항목 ${formatElapsedMinutes(currentElapsed)}`}
                       </span>
                     )}
                   </div>
@@ -345,7 +346,11 @@ export function JobDetailModal({
                           {done ? (
                             <span className="text-[11px] text-emerald-700">
                               {it.clearedAt && formatDateTime(it.clearedAt)}
-                              {it.elapsedMinutes != null && ` · ${formatMinutes(it.elapsedMinutes)}`}
+                              {/* 작업 시작 기준 누적 소요시간 (구간이 다르면 함께 표기) */}
+                              {(() => {
+                                const label = formatItemElapsed(it.elapsedTotalMinutes, it.elapsedMinutes)
+                                return label && ` · ${label}`
+                              })()}
                             </span>
                           ) : isCurrent ? (
                             <Badge variant="outline" className="gap-1 border-violet-200 text-violet-700">

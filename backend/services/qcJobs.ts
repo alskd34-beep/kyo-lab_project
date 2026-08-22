@@ -36,7 +36,10 @@ export interface JobItemRow {
   sequenceOrder: number
   status: string
   clearedAt: string | null
+  /** 직전 항목 완료(첫 항목은 작업 시작) 이후 구간 소요 분 — 통계·평가 기준 */
   elapsedMinutes: number | null
+  /** 작업 시작부터 이 항목 완료까지 누적 소요 분 — 작업 화면 표시 기준 */
+  elapsedTotalMinutes: number | null
 }
 export interface QcJobRow {
   id: string
@@ -189,7 +192,7 @@ export async function listWorkspace(userSub: string): Promise<{ testerLinked: bo
   if (jobIds.length > 0) {
     const { data: items } = await supabaseAdmin
       .from('qc_job_items')
-      .select('id, qc_job_id, test_item_name, sequence_order, status, cleared_at, elapsed_minutes')
+      .select('id, qc_job_id, test_item_name, sequence_order, status, cleared_at, elapsed_minutes, elapsed_total_minutes')
       .in('qc_job_id', jobIds)
       .order('sequence_order', { ascending: true })
     for (const it of items ?? []) {
@@ -201,6 +204,7 @@ export async function listWorkspace(userSub: string): Promise<{ testerLinked: bo
         status: it.status as string,
         clearedAt: (it.cleared_at as string) ?? null,
         elapsedMinutes: (it.elapsed_minutes as number) ?? null,
+        elapsedTotalMinutes: (it.elapsed_total_minutes as number) ?? null,
       })
       itemsByJob.set(it.qc_job_id as string, arr)
     }
@@ -291,6 +295,8 @@ export interface JobDetail {
   status: string
   workStartDate: string | null
   workEndDate: string | null
+  /** 작업 시작 버튼을 누른 시각 — 항목 누적 소요시간의 기준점 */
+  workStartedAt: string | null
   createdAt: string | null
   orderId: string
   productCode: string | null
@@ -304,7 +310,7 @@ export interface JobDetail {
   items: JobItemRow[]
   /** 현재 수행 중으로 간주되는 항목 id (미완료 중 sequence_order 최소). 작업이 활성 상태가 아니면 null */
   currentItemId: string | null
-  /** 현재 항목을 시작한 시각 = 직전 클리어 시각 ?? 작업 생성 시각 (clearItem 의 경과시간 기준과 동일) */
+  /** 현재 항목을 시작한 시각 = 직전 클리어 시각 ?? 작업 시작 시각 (clearItem 의 구간 소요시간 기준과 동일) */
   currentItemStartedAt: string | null
   /** 관리자가 버튼으로 넘길 수 있는 다음 단계. 없으면 null */
   nextStage: string | null
@@ -322,7 +328,7 @@ export interface JobDetail {
 export async function getJobDetail(jobId: string): Promise<JobDetail | null> {
   const { data: job } = await supabaseAdmin
     .from('qc_jobs')
-    .select('id, order_id, qc_no, status, work_start_date, work_end_date, created_at, assignee_tester_id')
+    .select('id, order_id, qc_no, status, work_start_date, work_end_date, work_started_at, created_at, assignee_tester_id')
     .eq('id', jobId)
     .maybeSingle()
   if (!job) return null
@@ -338,7 +344,7 @@ export async function getJobDetail(jobId: string): Promise<JobDetail | null> {
       : Promise.resolve({ data: null }),
     supabaseAdmin
       .from('qc_job_items')
-      .select('id, test_item_name, sequence_order, status, cleared_at, elapsed_minutes')
+      .select('id, test_item_name, sequence_order, status, cleared_at, elapsed_minutes, elapsed_total_minutes')
       .eq('qc_job_id', jobId)
       .order('sequence_order', { ascending: true }),
   ])
@@ -353,6 +359,7 @@ export async function getJobDetail(jobId: string): Promise<JobDetail | null> {
     status: it.status as string,
     clearedAt: (it.cleared_at as string) ?? null,
     elapsedMinutes: (it.elapsed_minutes as number) ?? null,
+    elapsedTotalMinutes: (it.elapsed_total_minutes as number) ?? null,
   }))
 
   const status = job.status as string
@@ -363,12 +370,15 @@ export async function getJobDetail(jobId: string): Promise<JobDetail | null> {
     ? items.find(i => i.status !== 'cleared') ?? null
     : null
 
-  // 직전 클리어 시각(가장 늦은 cleared_at) — 없으면 작업 생성 시각
+  // 직전 클리어 시각(가장 늦은 cleared_at) — 없으면 작업 시작 시각
   const lastClearedAt = items
     .filter(i => i.clearedAt)
     .map(i => i.clearedAt as string)
     .sort()
     .at(-1) ?? null
+
+  // 0030 이전 작업은 work_started_at 이 비어 있어 created_at 으로 대체
+  const workStartedAt = (job.work_started_at as string) ?? (job.created_at as string) ?? null
 
   return {
     jobId: job.id as string,
@@ -376,6 +386,7 @@ export async function getJobDetail(jobId: string): Promise<JobDetail | null> {
     status,
     workStartDate: (job.work_start_date as string) ?? null,
     workEndDate: (job.work_end_date as string) ?? null,
+    workStartedAt: workStartedAt,
     createdAt: (job.created_at as string) ?? null,
     orderId: job.order_id as string,
     productCode: (order?.product_code as string) ?? null,
@@ -388,7 +399,7 @@ export async function getJobDetail(jobId: string): Promise<JobDetail | null> {
     testerEmployeeNo: (tester?.employee_no as string) ?? null,
     items,
     currentItemId: current?.id ?? null,
-    currentItemStartedAt: current ? (lastClearedAt ?? (job.created_at as string) ?? null) : null,
+    currentItemStartedAt: current ? (lastClearedAt ?? workStartedAt) : null,
     nextStage: canAdvanceByAdmin(status) ? NEXT_STAGE[status] : null,
     nextStageLabel: canAdvanceByAdmin(status) ? STAGE_ACTION_LABEL[status] : null,
   }
@@ -610,11 +621,13 @@ export async function startJob(orderId: string, userSub: string): Promise<{ jobI
   // 채번 (충돌 시 1회 재시도)
   let qcNo = await generateQcNo()
   let jobId = ''
-  const today = new Date().toISOString().slice(0, 10)
+  const startedAt = new Date()
+  const today = startedAt.toISOString().slice(0, 10)
   for (let attempt = 0; attempt < 2; attempt++) {
     const { data, error } = await supabaseAdmin
       .from('qc_jobs')
-      .insert({ order_id: orderId, qc_no: qcNo, assignee_tester_id: testerId, assignee_user_id: userSub, status: IN_PROGRESS_STATUS, work_start_date: today })
+      // work_start_date(날짜)는 화면·집계용, work_started_at(시각)은 항목 소요시간 기준점
+      .insert({ order_id: orderId, qc_no: qcNo, assignee_tester_id: testerId, assignee_user_id: userSub, status: IN_PROGRESS_STATUS, work_start_date: today, work_started_at: startedAt.toISOString() })
       .select('id')
       .single()
     if (!error) { jobId = data.id as string; break }
@@ -762,25 +775,43 @@ export async function advanceJobStage(
   return { from: current, to: target }
 }
 
-/** 항목 클리어 — 시간 적재 + 감독관 알림 + 전체 완료 시 '검토전' 자동 전환 */
+/** 항목 클리어 — 시간 적재 + 감독관 알림 + 전체 완료 시 '검토전' 자동 전환
+ *
+ *  소요시간은 두 기준을 함께 적재한다.
+ *   - elapsed_total_minutes : 작업 시작 → 이 항목 완료 (작업 화면에 보여주는 값)
+ *   - elapsed_minutes       : 직전 항목 완료 → 이 항목 완료 (구간, 통계·평가 기준)
+ *  완료 버튼을 눌러도 작업 시작 시각은 움직이지 않으므로 누적값은 항목이 진행될수록 커진다.
+ */
 export async function clearItem(
   jobId: string, itemId: string, userSub: string,
 ): Promise<{ allCleared: boolean; statusChangedTo: string | null }> {
   await assertOwner(jobId, userSub)
   const now = new Date()
 
-  // 직전 클리어(또는 작업 시작) 이후 경과시간 산정
-  const { data: job } = await supabaseAdmin.from('qc_jobs').select('created_at, order_id').eq('id', jobId).single()
+  const { data: job } = await supabaseAdmin
+    .from('qc_jobs').select('work_started_at, created_at, order_id').eq('id', jobId).single()
   const { data: lastCleared } = await supabaseAdmin
     .from('qc_job_items').select('cleared_at')
     .eq('qc_job_id', jobId).eq('status', 'cleared')
     .order('cleared_at', { ascending: false }).limit(1).maybeSingle()
-  const baseTime = new Date((lastCleared?.cleared_at as string) ?? (job?.created_at as string) ?? now.toISOString())
-  const elapsed = Math.max(0, Math.round((now.getTime() - baseTime.getTime()) / 60000))
+
+  // 작업 시작 시각 — 0030 이전에 만들어진 작업은 work_started_at 이 비어 있어 created_at 으로 대체
+  const startedAt = new Date(
+    (job?.work_started_at as string) ?? (job?.created_at as string) ?? now.toISOString(),
+  )
+  const prevClearedAt = lastCleared?.cleared_at ? new Date(lastCleared.cleared_at as string) : startedAt
+  const minutesSince = (base: Date) => Math.max(0, Math.round((now.getTime() - base.getTime()) / 60000))
+  const elapsedTotal = minutesSince(startedAt)
+  const elapsed = minutesSince(prevClearedAt)
 
   const { data: item, error } = await supabaseAdmin
     .from('qc_job_items')
-    .update({ status: 'cleared', cleared_at: now.toISOString(), elapsed_minutes: elapsed })
+    .update({
+      status: 'cleared',
+      cleared_at: now.toISOString(),
+      elapsed_minutes: elapsed,
+      elapsed_total_minutes: elapsedTotal,
+    })
     .eq('id', itemId).eq('qc_job_id', jobId)
     .select('test_item_name')
     .single()
@@ -789,7 +820,7 @@ export async function clearItem(
   await createNotification({
     type: 'item_cleared',
     title: '시험항목 완료',
-    body: `시험항목 "${item.test_item_name}" 완료 (소요 ${elapsed}분)`,
+    body: `시험항목 "${item.test_item_name}" 완료 (작업 시작 후 ${elapsedTotal}분, 구간 ${elapsed}분)`,
     relatedOrderId: (job?.order_id as string) ?? null,
     relatedQcJobId: jobId, severity: 'info',
   })
