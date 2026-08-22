@@ -1,6 +1,6 @@
 'use client'
 
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import {
   Sheet,
   SheetContent,
@@ -11,12 +11,17 @@ import {
 } from '@frontend/components/ui/sheet'
 import { cn } from '@frontend/lib/utils'
 
-type ManagementDrawerSize = 'sm' | 'md' | 'lg'
+type ManagementDrawerSize = 'sm' | 'md' | 'lg' | 'xl'
 
-const sizeClass: Record<ManagementDrawerSize, string> = {
-  sm: 'sm:max-w-[420px]',
-  md: 'sm:max-w-[480px]',
-  lg: 'sm:max-w-[560px]',
+/**
+ * 패널 폭. `SheetContent`가 `--sheet-width`를 읽어 `sm:max-w-*`로 적용하므로
+ * 클래스가 아닌 인라인 CSS 변수로 넘긴다(기본값 클래스보다 항상 우선한다).
+ */
+const sizeWidth: Record<ManagementDrawerSize, string> = {
+  sm: '480px',
+  md: '600px',
+  lg: '760px',
+  xl: '920px',
 }
 
 interface ManagementDrawerProps {
@@ -48,7 +53,8 @@ export function ManagementDrawer({
     <Sheet open={open} onOpenChange={onOpenChange} modal={false}>
       <SheetContent
         side="right"
-        className={cn('flex w-full flex-col gap-0 p-0', sizeClass[size], className)}
+        style={{ '--sheet-width': sizeWidth[size] } as CSSProperties}
+        className={cn('flex w-full flex-col gap-0 p-0', className)}
       >
         <SheetHeader className="border-b px-5 py-4 pr-14">
           <SheetTitle className="text-base font-semibold">{title}</SheetTitle>
