@@ -109,7 +109,7 @@ qc_jobs + qc_job_items 생성 (QC번호 채번 qcNumber.ts)
 | 재배정 이력 | `/schedule/reassignments` | admin | ✅ | **AI 스케줄 이력 통합 타임라인**(수정·재배정·자동적재 3소스) + 날짜범위 필터, 시험자별/품목별 통계 |
 | 관리자 대시보드 | `/schedule/dashboard` | admin | ✅ | 전체/진행중/완료/지연/미배정/향정신성/신규품목/재배정 + 보유 DAY·난이도 분포 |
 | (비노출) 동시분석 그룹 | `/schedule/groups` | admin | 🟡 | OR 5조건 union-find 그룹·그룹 잠금/보존/재생성 API는 운영. 현재 사이드바 메뉴 비노출(오더/품목군 마스터 경유) |
-| (비노출) 주간/주간계획 | `/schedule/weekly`,`/weekly-plan` | — | 🟡 | 페이지 존재(메뉴 비노출), 레거시/보조 |
+| ~~(비노출) 주간/주간계획~~ | ~~`/schedule/weekly`,`/weekly-plan`~~ | — | ✅ | **2026-08-22 폐기** — 주간 배정은 `/schedule/orders` 로 통합 |
 
 ### 6.4 내 작업(시험자) ✅
 - 본인 배정 qc_jobs 조회 — 대기/진행중/종료 3단. 시작 전 장비 준비상태 표시(`getStartReadiness`).

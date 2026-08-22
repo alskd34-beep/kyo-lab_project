@@ -184,9 +184,7 @@ const ALL_NAV = NAV_SECTIONS.flatMap((s) => s.items)
 // Maps nav IDs (top-level + sub) to actual app router paths.
 const PATH_MAP: Record<string, string> = {
   home: "/home",
-  // 스케줄
-  "schedule-weekly-plan": "/schedule/weekly-plan",
-  "schedule-weekly": "/schedule/weekly",
+  // 스케줄 — 주간 배정은 'AI 스케줄'(schedule-orders) 하나로 통합됐다(2026-08-22).
   "schedule-monthly": "/schedule/monthly",
   "schedule-orders": "/schedule/orders",
   "schedule-groups": "/schedule/groups",

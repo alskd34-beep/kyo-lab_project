@@ -21,7 +21,6 @@ All browser/client code: React components (shadcn/ui primitives, dashboard chrom
 |------|-------------|
 | `auth-context.tsx` | `AuthProvider` + `useAuth()` — holds current user/session, exposes `logout`, and auto-refreshes the access token via `/api/auth/refresh` when it nears expiry. Mounted in `app/layout.tsx`. |
 | `utils.ts` | `cn(...inputs)` — Tailwind class merge (`clsx` + `tailwind-merge`). Use everywhere for conditional classes. |
-| `weekly-planner.ts` | Weekly scheduling computation used by schedule pages/boards. |
 | `pct-schedule-bridge.ts` | Bridges PCT (product test) data into the schedule board model. |
 
 ## For AI Agents
@@ -38,7 +37,7 @@ All browser/client code: React components (shadcn/ui primitives, dashboard chrom
 
 ### Common Patterns
 - Provider stack lives in `app/layout.tsx` (`ThemeProvider` → `AuthProvider`); add new global providers there.
-- Board/scheduling features combine `components/board/*` with `lib/weekly-planner.ts` + `lib/pct-schedule-bridge.ts`.
+- Board/scheduling features combine `components/board/*` with `lib/pct-schedule-bridge.ts`. (`weekly-planner.ts` was removed on 2026-08-22 — 주간 배정은 서버의 `scheduleEngine`/`assignRules` 하나로 통합됐다.)
 
 ## Dependencies
 
