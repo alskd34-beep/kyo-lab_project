@@ -8,6 +8,7 @@
  */
 
 import { randomUUID } from 'crypto'
+import { DELETED_STATUS } from '@shared/qc-status'
 import { supabase, supabaseAdmin } from '@backend/lib/supabase'
 import { runLetsurText } from '@backend/lib/letsurClient'
 import { runMisoText } from '@backend/lib/misoClient'
@@ -377,7 +378,7 @@ async function fetchScopedOrders(
   let q = supabaseAdmin
     .from('pct_orders')
     .select('id, product_code, product_name, batch_no, due_date, method, status, is_urgent, assignee_tester_id')
-    .neq('status', '삭제')
+    .neq('status', DELETED_STATUS)
   if (opts.productCode) q = q.eq('product_code', opts.productCode)
   if (opts.dueFrom) q = q.gte('due_date', opts.dueFrom)
   if (opts.dueTo) q = q.lte('due_date', opts.dueTo)

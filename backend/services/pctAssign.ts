@@ -9,7 +9,11 @@
  */
 
 import { supabaseAdmin } from '@backend/lib/supabase'
-import { CLOSED_STAGE } from '@shared/qc-status'
+import {
+  CLOSED_STAGE,
+  DELETED_STATUS,
+  PENDING_STATUS,
+} from '@shared/qc-status'
 import { selectAll } from '@backend/lib/supabasePage'
 import { listTesters, listCapabilities, listCapabilityMatrix, assertTesterAssignable } from '@backend/services/testers'
 import { testerAbsences } from '@backend/services/operatorSchedule'
@@ -84,9 +88,9 @@ async function loadTargetOrders(orderIds?: string[]): Promise<OrderForAssign[]> 
   let q = supabaseAdmin
     .from('pct_orders')
     .select('*')
-    .neq('status', '삭제')
+    .neq('status', DELETED_STATUS)
   if (orderIds && orderIds.length > 0) q = q.in('id', orderIds)
-  else q = q.eq('status', '대기').is('assignee_tester_id', null)
+  else q = q.eq('status', PENDING_STATUS).is('assignee_tester_id', null)
   const { data, error } = await q
   if (error) throw error
   // [원칙3] LOCK(확정) 오더는 자동배정/재배정 대상에서 제외
@@ -230,7 +234,7 @@ async function highDifficultyPenalty(): Promise<Record<string, number>> {
       .from('pct_orders')
       .select('assignee_tester_id, product_code')
       .not('assignee_tester_id', 'is', null)
-      .neq('status', '삭제')
+      .neq('status', DELETED_STATUS)
       .gte('created_at', twoWeeksAgoIso),   // [규칙4] 최근 2주(14일)
     supabaseAdmin.from('products').select('product_code, difficulty'),
   ])
@@ -442,7 +446,7 @@ async function autoAssignRule(
       제조번호: o.batch_no ?? '',
       포장일:   o.packaging_date ?? '',
       // 완료예정일 전달 → 엔진이 역순 ALAP·마감위험(deadlineRisk)·EDD 정렬에 활용.
-      // 캘린더 생성 경로(pct-generate)와 일정 기준을 통일한다. NULL이면 포장일 정방향 폴백.
+      // 일정 기준: 완료예정일 역순(ALAP). NULL이면 포장일 정방향 폴백.
       완료예정일: o.due_date ?? undefined,
       긴급:     urgent,
       진행방법: o.method === '개별항목' ? '개별항목' : '전항목',

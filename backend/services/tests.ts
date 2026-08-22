@@ -10,6 +10,7 @@
  */
 
 import { supabaseAdmin } from '@backend/lib/supabase'
+import { DELETED_STATUS } from '@shared/qc-status'
 import { METHOD_PARTIAL, mapByOrders } from '@backend/services/pctOrderTestItems'
 import type { TestRow, StatusKey } from '@shared/qc'
 
@@ -100,7 +101,7 @@ export async function listTests(q: TestsQuery = {}): Promise<TestRow[]> {
   const { data: orderData, error } = await supabaseAdmin
     .from('pct_orders')
     .select('id, product_code, product_name, batch_no, dosage_form, method, due_date, status, assignee_tester_id, created_at')
-    .neq('status', '삭제')
+    .neq('status', DELETED_STATUS)
     .order('created_at', { ascending: false })
   if (error) throw error
   const orders = (orderData ?? []) as OrderLite[]

@@ -6,6 +6,7 @@
  */
 
 import { supabaseAdmin } from '@backend/lib/supabase'
+import { DELETED_STATUS } from '@shared/qc-status'
 import {
   QCINK_NAME,
   buildQthinkIntentPrompt,
@@ -213,7 +214,7 @@ async function overviewContext(scope: QthinkScope): Promise<string> {
   const orderCountQuery = supabaseAdmin
     .from('pct_orders')
     .select('*', { count: 'exact', head: true })
-    .neq('status', '삭제')
+    .neq('status', DELETED_STATUS)
   if (!scope.isAdmin && scope.testerId) orderCountQuery.eq('assignee_tester_id', scope.testerId)
 
   const jobCountQuery = supabaseAdmin.from('qc_jobs').select('*', { count: 'exact', head: true })
@@ -317,7 +318,7 @@ async function ordersContext(intent: QthinkIntent, scope: QthinkScope): Promise<
   let query = supabaseAdmin
     .from('pct_orders')
     .select('product_code, product_name, batch_no, packaging_date, due_date, is_urgent, method, status, assignee_tester_id', { count: 'exact' })
-    .neq('status', '삭제')
+    .neq('status', DELETED_STATUS)
   if (!scope.isAdmin && scope.testerId) query = query.eq('assignee_tester_id', scope.testerId)
   if (keyword) query = query.ilike('product_name', `%${keyword}%`)
   if (intent.status) query = query.eq('status', intent.status)

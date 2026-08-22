@@ -1,4 +1,5 @@
 import { supabase } from '@backend/lib/supabase'
+import { selectAll } from '@backend/lib/supabasePage'
 import { hashPassword } from '@backend/lib/auth'
 
 /** 시험자 계정 최초 자동 생성 시 기본 비밀번호 */
@@ -257,10 +258,9 @@ export async function listCapabilities(): Promise<CapabilityRow[]> {
 }
 
 export async function listCapabilityMatrix(): Promise<CapabilityMatrixRow[]> {
-  const { data, error } = await supabase
-    .from('tester_capability_matrix')
-    .select('tester_id, capability_id, proficiency_level')
-  if (error) throw error
+  // 시험자 x 역량 조합이라 행 수가 빠르게 늘어난다 → 1000행 절단 방지
+  const { data, error } = await selectAll(supabase, 'tester_capability_matrix', 'tester_id, capability_id, proficiency_level')
+  if (error) throw new Error(error.message)
   return (data ?? []).map(r => ({
     testerId:         (r as Record<string, unknown>).tester_id as string,
     capabilityId:     (r as Record<string, unknown>).capability_id as string,

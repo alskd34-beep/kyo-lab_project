@@ -14,7 +14,15 @@
  */
 
 import { supabaseAdmin } from '@backend/lib/supabase'
-import { CLOSED_STAGE, OPEN_STATUSES as SHARED_OPEN_STATUSES } from '@shared/qc-status'
+import { selectAll } from '@backend/lib/supabasePage'
+import {
+  CLOSED_STAGE,
+  DELAYED_STATUS,
+  DELETED_STATUS,
+  IN_PROGRESS_STATUS,
+  OPEN_STATUSES as SHARED_OPEN_STATUSES,
+  PENDING_STATUS,
+} from '@shared/qc-status'
 
 export interface QcDashboard {
   counts: {
@@ -43,7 +51,7 @@ export async function getQcDashboard(): Promise<QcDashboard> {
   const { data: orderData, error: orderErr } = await supabaseAdmin
     .from('pct_orders')
     .select('id, status, assignee_tester_id, product_code, product_name, is_urgent, product_synced, ingest_state')
-    .neq('status', '삭제')
+    .neq('status', DELETED_STATUS)
   if (orderErr) throw orderErr
   const orders = (orderData ?? []) as Record<string, unknown>[]
 
@@ -77,10 +85,10 @@ export async function getQcDashboard(): Promise<QcDashboard> {
   for (const t of testerData ?? []) nameByTester.set(t.id as string, t.name as string)
 
   // 4) 재배정 이력 (after_user 별)
-  const { data: reassignData, error: reassignErr } = await supabaseAdmin
-    .from('reassignment_history')
-    .select('after_user')
-  if (reassignErr) throw reassignErr
+  // 누적 테이블 — 1000행 절단 시 재배정 건수가 조용히 틀려진다 → selectAll
+  const { data: reassignData, error: reassignErr } =
+    await selectAll(supabaseAdmin, 'reassignment_history', 'after_user')
+  if (reassignErr) throw new Error(reassignErr.message)
   const reassigns = (reassignData ?? []) as Record<string, unknown>[]
 
   // ─── 집계 ──────────────────────────────────────────────────────────────────
@@ -99,10 +107,10 @@ export async function getQcDashboard(): Promise<QcDashboard> {
     const name = o.product_name as string
 
     counts.total += 1
-    if (status === '진행중') counts.inProgress += 1
+    if (status === IN_PROGRESS_STATUS) counts.inProgress += 1
     if (status === CLOSED_STAGE) counts.completed += 1
-    if (status === '지연') counts.delayed += 1
-    if (!assignee && status === '대기') counts.unassigned += 1
+    if (status === DELAYED_STATUS) counts.delayed += 1
+    if (!assignee && status === PENDING_STATUS) counts.unassigned += 1
 
     if (PSYCHOTROPIC_NAMES.has(name)) psychotropic += 1
     if (o.product_synced === false || o.ingest_state === 'new') newProducts += 1

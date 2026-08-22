@@ -21,6 +21,8 @@
  */
 
 import { supabaseAdmin } from '@backend/lib/supabase'
+import { selectAll } from '@backend/lib/supabasePage'
+import { DELETED_STATUS } from '@shared/qc-status'
 
 export interface GroupItem {
   orderId: string
@@ -215,9 +217,7 @@ export function buildGroupsFromOrders(
 async function loadFamilyByCodeRaw(): Promise<Map<string, string>> {
   const m = new Map<string, string>()
   try {
-    const { data, error } = await supabaseAdmin
-      .from('concurrent_product_family_members')
-      .select('family_id, product_code')
+    const { data, error } = await selectAll(supabaseAdmin, 'concurrent_product_family_members', 'family_id, product_code')
     if (error) return m
     for (const r of (data ?? []) as Record<string, unknown>[]) {
       m.set(r.product_code as string, r.family_id as string)
@@ -306,8 +306,7 @@ export async function rebuildGroups(): Promise<{ created: number; kept: number }
   const { data: orders, error: ordErr } = await supabaseAdmin
     .from('pct_orders')
     .select('id, product_code, product_name, batch_no, packaging_date, due_date, status')
-    .neq('status', '삭제')
-    .neq('status', '취소')
+    .neq('status', DELETED_STATUS)
   if (ordErr) throw ordErr
 
   const candidates: OrderForGrouping[] = ((orders ?? []) as Record<string, unknown>[])

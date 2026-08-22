@@ -14,6 +14,7 @@
  */
 
 import { supabaseAdmin } from '@backend/lib/supabase'
+import { PENDING_STATUS } from '@shared/qc-status'
 import { selectAll } from '@backend/lib/supabasePage'
 import { listTesters, listCapabilities, listCapabilityMatrix } from '@backend/services/testers'
 import { testersOnLeave } from '@backend/services/operatorSchedule'
@@ -103,7 +104,7 @@ export async function suggestForLeaveWindow(from: string, to: string): Promise<L
       listCapabilityMatrix(),
       testersOnLeave(from, to).catch(() => new Set<string>()),
       // 대기·미배정·미잠금 오더만 (실제 배정 백로그). select('*') 후 locked 필터(0015 미적용 안전).
-      supabaseAdmin.from('pct_orders').select('*').eq('status', '대기').is('assignee_tester_id', null),
+      supabaseAdmin.from('pct_orders').select('*').eq('status', PENDING_STATUS).is('assignee_tester_id', null),
       selectAll(supabaseAdmin, 'products', 'id, product_code'),
       selectAll(supabaseAdmin, 'product_test_items', 'product_id, test_item_id'),
       selectAll(supabaseAdmin, 'test_items', 'id, name, requires_duo'),
