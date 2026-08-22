@@ -103,6 +103,52 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => { cancelled = true }
   }, [fetchMe, refresh])
 
+  /**
+   * 전역 401 처리.
+   *
+   * 화면마다 401 을 따로 처리하다 보니 대부분의 페이지가 세션 만료 시 원인 불명의
+   * 실패로만 보였다(2026-08-22 점검 4-12번). fetch 를 한 번만 감싸 `/api/*` 응답이
+   * 401 이면 자동으로 refresh 를 1회 시도하고, 그래도 실패하면 로그인 화면으로 보낸다.
+   *
+   * - `/api/auth/*` 는 401 이 정상 흐름이라 제외한다.
+   * - 요청 본문이 스트림이면 재전송할 수 없으므로 재시도하지 않는다.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const original = window.fetch
+    const g = window as unknown as { __kdFetchPatched?: boolean }
+    if (g.__kdFetchPatched) return
+    g.__kdFetchPatched = true
+
+    const isGuardedApi = (input: RequestInfo | URL): boolean => {
+      const raw = typeof input === 'string' ? input
+        : input instanceof URL ? input.pathname
+        : (input as Request).url
+      try {
+        const path = raw.startsWith('http') ? new URL(raw).pathname : raw
+        return path.startsWith('/api/') && !path.startsWith('/api/auth/')
+      } catch {
+        return false
+      }
+    }
+
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const res = await original(input, init)
+      if (res.status !== 401 || !isGuardedApi(input)) return res
+
+      const retriable = !(init?.body instanceof ReadableStream)
+      const recovered = await refresh()
+      if (recovered && retriable) return original(input, init)
+      if (!recovered) expireSession()
+      return res
+    }
+
+    return () => {
+      window.fetch = original
+      g.__kdFetchPatched = false
+    }
+  }, [refresh, expireSession])
+
   // 13분마다 자동 갱신 (access TTL 15분 대비 여유)
   useEffect(() => {
     if (!user) return
