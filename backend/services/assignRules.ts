@@ -103,7 +103,7 @@ export function heavyMetalAssigneeForWeek(
 
 /**
  * [규칙3] 긴급(EMERGENCY) 배정 허용 여부.
- * 공수(dayCount, avg_hours 를 DAY 로 환산했거나 별도 산정한 일수)가
+ * 공수(dayCount) — 정본은 product_workload.avg_workdays(DAY, 절대값)다.
  * EMERGENCY_MAX_DAYS(3DAY) 이하인 품목만 긴급 배정을 허용한다.
  */
 export function emergencyAllowed(dayCount: number): boolean {

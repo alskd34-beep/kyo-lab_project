@@ -37,7 +37,8 @@ interface ScheduleRow {
   test_items: string[]
   scheduled_date: string
   workdays: number
-  avg_hours?: number   // PCT 출처: 평균공수(시간) (레거시)
+  /** @deprecated 공수 정본은 DAY(`workdays`). 시간 값은 과거 데이터에만 남아 있다. */
+  avg_hours?: number
   dates?: string[]     // PCT 출처: 명시적 배정 근무일(주말 제외). 있으면 이 날짜들에 배치
   is_urgent: boolean
   is_duo: boolean
@@ -301,7 +302,8 @@ export default function MonthlySchedulePage() {
     코드:     r.product_code ?? '',
     제조번호: r.batch_no ?? (typeof r.batch_id === 'string' ? r.batch_id.replace(/^pct-/, '') : r.batch_id),
     담당자:   testerNameById.get(r.tester_id) ?? String(r.tester_id),
-    공수:     r.avg_hours != null && r.avg_hours > 0 ? r.avg_hours.toFixed(1) : (r.workdays ? `${r.workdays}일` : '—'),
+    // 공수 정본은 DAY 다(PRD 원칙4). avg_hours(시간)는 레거시라 값이 있을 때만 괄호로 덧붙인다.
+    공수:     r.workdays ? `${r.workdays}일` : (r.avg_hours != null && r.avg_hours > 0 ? `${r.avg_hours.toFixed(1)}h` : '—'),
     긴급:     r.is_urgent ? '긴급' : '일반',
     출처:     r.source === 'pct' ? 'PCT' : 'QC',
     시험항목: (r.test_items ?? []).join(', '),
@@ -357,7 +359,7 @@ export default function MonthlySchedulePage() {
     { key: '코드',     label: '코드',     kind: 'mono',   width: 80  },
     { key: '제조번호', label: '제조번호', kind: 'mono',   width: 90  },
     { key: '담당자',   label: '담당자',   kind: 'person', width: 110 },
-    { key: '공수',     label: '공수(h)',  kind: 'number', width: 75  },
+    { key: '공수',     label: '공수(일)', kind: 'text',   width: 75  },
     { key: '긴급',     label: '긴급',     kind: 'chip',   width: 70, chipColor: { '일반': 'slate', '긴급': 'red' } },
     { key: '출처',     label: '출처',     kind: 'chip',   width: 70, chipColor: { 'QC': 'blue', 'PCT': 'violet' } },
     { key: '시험항목', label: '시험항목', kind: 'text',   width: 160 },
@@ -492,18 +494,18 @@ export default function MonthlySchedulePage() {
           <>
             {/* 요약 */}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Card className="border-violet-200 bg-violet-50 dark:border-violet-900 dark:bg-violet-950/40">
+              <Card className="border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/40">
                 <CardContent className="flex items-center gap-3 py-4">
-                  <Calendar size={20} className="text-violet-600 dark:text-violet-400" />
+                  <Calendar size={20} className="text-blue-600 dark:text-blue-400" />
                   <div>
                     <p className={`text-[11px] font-medium ${TXT_MUTED}`}>총 배정</p>
                     <p className={`text-xl font-bold tabular-nums ${TXT_PRIMARY}`}>{stats.total}건</p>
                   </div>
                 </CardContent>
               </Card>
-              <Card className="border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/40">
+              <Card className="border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/40">
                 <CardContent className="flex items-center gap-3 py-4">
-                  <Users size={20} className="text-blue-600 dark:text-blue-400" />
+                  <Users size={20} className="text-slate-600 dark:text-slate-300" />
                   <div>
                     <p className={`text-[11px] font-medium ${TXT_MUTED}`}>활동 시험자</p>
                     <p className={`text-xl font-bold tabular-nums ${TXT_PRIMARY}`}>{stats.testers}명</p>

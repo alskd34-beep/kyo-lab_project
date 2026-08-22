@@ -35,6 +35,8 @@
 - 상태값 영문 전환(현재 한글 → AUTO_ASSIGNED/MANAGER_REVIEW/CONFIRMED/LOCKED/READY/ASSIGNED/IN_PROGRESS/REVIEW/COMPLETED/DELAY/CANCEL) — 기존 데이터 마이그레이션 + 프론트 전반 수정 필요. **DB 데이터 마이그레이션(대시보드/DB 접근) 선행 필수 → 단독 세션 권장.** (차단 로직 `LOCKED_STATUSES`는 한/영 상태값 모두 미리 포함해둠)
 
 ## ⚠️ 주의
-- 공수 단위: 요구사항은 DAY, 현재 `products.avg_hours`는 Hour 단위 → DAY 전환 결정 필요(대시보드는 8h=1d 근사 환산).
+- 공수 단위: **DAY 확정(2026-08-22).** 정본은 `product_workload.avg_workdays`(DAY, 절대값).
+  `products.avg_hours`(Hour)는 레거시이며 운영 DB 전 행이 null 이다. 대시보드·자동배정·월간 화면 모두 DAY 기준으로 통일했다.
+  ⚠️ 단, 운영 DB `product_workload` 가 **0행**이라 실제 공수 값이 비어 있다 → 등록 필요.
 - 상태 영문 전환은 광범위 영향(기존 데이터 + 프론트 전체 상태 참조) → 신중한 단독 작업 권장.
 - 마이그레이션 `0012`, `0013` 미적용 시 신규 화면 동작 안 함 → `supabase db push` 필요.

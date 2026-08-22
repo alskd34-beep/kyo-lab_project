@@ -14,6 +14,8 @@ export interface ProductRow {
   productType: string | null
   unit: string | null
   packageSpec: string | null
+  /** @deprecated 공수 정본은 DAY(`avgWorkdays` = product_workload.avg_workdays).
+   *  운영 DB 의 products.avg_hours 는 전 행이 null 이다(2026-08-22 확인). */
   avgHours: number | null
   avgHoursPackageUnit: string | null
   /** 공수(일, DAY) — product_workload.avg_workdays. 스케줄·대시보드와 동일 단일 소스. */
