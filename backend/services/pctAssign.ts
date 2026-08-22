@@ -26,19 +26,40 @@ import {
 import { codexAssignEnabled, runCodexJson } from '@backend/lib/codexCli'
 import {
   generatePctSchedule,
+  type EngineHalfDayNotice,
   type EnginePctRow,
   type EngineProductItems,
   type EngineEquip,
   type EngineWorkload,
 } from '@backend/services/scheduleEngine'
+import { notifyLeaveConflict, warnIfAssigneeOnLeave } from '@backend/services/leaveConflicts'
+import {
+  findAbsenceConflicts, orderTestWindow, todayIso, type TesterAbsence,
+} from '@shared/leave'
 import { buildGroupsFromOrders, type OrderForGrouping } from '@backend/services/concurrentGroups'
 import { loadFamilyByCode } from '@backend/services/concurrentProductFamilies'
+
+/**
+ * 반차와 겹친 배정 — 관리자가 "이대로 둘지" 확인하는 용도.
+ * 반차는 근무를 하므로 제외 대상이 아니라 확인 대상이다(연차·출장은 애초에 배정되지 않는다).
+ */
+export interface HalfDayAssignNotice {
+  orderId: string
+  productName: string
+  batchNo: string
+  testerId: string
+  testerName: string
+  /** 반차와 겹친 날짜 */
+  dates: string[]
+}
 
 export interface AssignResult {
   mode: 'codex' | 'rule'
   assigned: number
   unassigned: number
   details: Array<{ orderId: string; testerId: string | null; testerName: string | null; note: string }>
+  /** 반차 겹침 배정(비어 있으면 겹침 없음) — 화면 확인 + 관리자 알림 대상 */
+  halfDayNotices: HalfDayAssignNotice[]
 }
 
 interface OrderForAssign {
@@ -253,7 +274,7 @@ async function applyAssignments(
   orders: OrderForAssign[],
   pick: (order: OrderForAssign) => { id: string; name: string } | null,
   reasonFor: (order: OrderForAssign) => string,
-): Promise<Omit<AssignResult, 'mode'>> {
+): Promise<Omit<AssignResult, 'mode' | 'halfDayNotices'>> {
   const details: AssignResult['details'] = []
   let assigned = 0
   for (const o of orders) {
@@ -310,7 +331,10 @@ interface CodexAssignResponse {
   assignments: Array<{ orderId: string; testerId: string | null }>
 }
 
-async function autoAssignCodex(orders: OrderForAssign[], excludedTesterIds: Set<string>): Promise<{ mode: 'codex'; pick: PickFn; reasonByKey: Map<string, string> }> {
+async function autoAssignCodex(
+  orders: OrderForAssign[],
+  excludedTesterIds: Set<string>,
+): Promise<{ mode: 'codex'; pick: PickFn; reasonByKey: Map<string, string>; halfDayNotices: EngineHalfDayNotice[] }> {
   const [allTesters, capabilities, matrix, itemsByCode, workload] = await Promise.all([
     listTesters({ activeOnly: true }), listCapabilities(), listCapabilityMatrix(), productItemsByCode(), currentWorkload(),
   ])
@@ -374,14 +398,15 @@ async function autoAssignCodex(orders: OrderForAssign[], excludedTesterIds: Set<
     testers: testers.map(t => ({ id: t.id, name: t.name })),
     weekIndex: isoWeekIndex(new Date()),
   })
-  return { mode: 'codex', pick, reasonByKey: new Map() }
+  // Codex 경로는 엔진을 거치지 않아 반차 판정이 없다 — autoAssign 이 오더 구간 기준으로 채운다.
+  return { mode: 'codex', pick, reasonByKey: new Map(), halfDayNotices: [] as EngineHalfDayNotice[] }
 }
 
 // ─── 규칙엔진 배분 (폴백) ──────────────────────────────────────────────────────
 async function autoAssignRule(
   orders: OrderForAssign[],
   absences: Array<{ testerId: string; from: string; to: string; type: string }>,
-): Promise<{ mode: 'rule'; pick: PickFn; reasonByKey: Map<string, string> }> {
+): Promise<{ mode: 'rule'; pick: PickFn; reasonByKey: Map<string, string>; halfDayNotices: EngineHalfDayNotice[] }> {
   const [allTesters, capabilities, matrix, productsRes, ptiRes, testItemsRes, equipRes, workloadRes] =
     await Promise.all([
       listTesters({ activeOnly: true }),
@@ -469,7 +494,8 @@ async function autoAssignRule(
     (o) => testerByKey.get(`${o.product_code}|${o.batch_no}`) ?? null,
     { itemsByCode, testers: testers.map(t => ({ id: t.id, name: t.name })), weekIndex: isoWeekIndex(new Date()) },
   )
-  return { mode: 'rule', pick, reasonByKey }
+  // 엔진이 근무일 단위로 판정한 반차 겹침을 그대로 올려보낸다(예전엔 여기서 버려졌다).
+  return { mode: 'rule', pick, reasonByKey, halfDayNotices: engine.halfDayNotices }
 }
 
 /**
@@ -477,7 +503,9 @@ async function autoAssignRule(
  */
 export async function autoAssign(orderIds?: string[]): Promise<AssignResult> {
   const orders = await loadTargetOrders(orderIds)
-  if (orders.length === 0) return { mode: 'rule', assigned: 0, unassigned: 0, details: [] }
+  if (orders.length === 0) {
+    return { mode: 'rule', assigned: 0, unassigned: 0, details: [], halfDayNotices: [] }
+  }
 
   // [동시분석] 동일 품목군(기준설정 마스터)/유사 품목명을 한 그룹으로 묶고 대표만 배정 대상으로 삼는다.
   // 엔진/LLM 에는 reps 만 태워 공수를 그룹당 1회 계산하고, 배정 결과를 멤버 전체에 전파한다.
@@ -496,7 +524,12 @@ export async function autoAssign(orderIds?: string[]): Promise<AssignResult> {
     absences.filter(a => a.type !== 'HALF_DAY').map(a => a.testerId),
   )
 
-  let resolved: { mode: 'codex' | 'rule'; pick: PickFn; reasonByKey: Map<string, string> } | null = null
+  let resolved: {
+    mode: 'codex' | 'rule'
+    pick: PickFn
+    reasonByKey: Map<string, string>
+    halfDayNotices: EngineHalfDayNotice[]
+  } | null = null
   if (codexAssignEnabled()) {
     try {
       resolved = await autoAssignCodex(reps, excludedTesterIds)
@@ -514,7 +547,123 @@ export async function autoAssign(orderIds?: string[]): Promise<AssignResult> {
       ?? '자동배정 조건을 만족하는 담당자를 찾지 못했습니다. 담당자 역량·휴가·업무량을 확인해 주세요.'
   }
   const applied = await applyAssignments(orders, groupPick, reasonFor)
-  return { mode: resolved.mode, ...applied }
+
+  // [반차 확인] 엔진이 계산해 두고 버려졌던 반차 겹침을 오더 단위로 펼쳐
+  // 결과에 실어 화면에 보여주고, 같은 내용을 관리자 알림으로도 남긴다.
+  const halfDayNotices = collectHalfDayNotices({
+    orders, reps, memberToRep, absences,
+    engineNotices: resolved!.halfDayNotices,
+    details: applied.details,
+  })
+  await notifyHalfDayNotices(halfDayNotices, orders, absences)
+
+  return { mode: resolved!.mode, ...applied, halfDayNotices }
+}
+
+/**
+ * 반차 겹침 배정을 실제 오더 단위로 펼친다.
+ *
+ * - 규칙엔진 경로: 엔진이 근무일 단위로 판정한 engineNotices 를 쓴다(날짜가 정확).
+ *   엔진은 그룹 대표(rep)만 계산하므로 같은 그룹 멤버 오더에도 함께 붙인다.
+ * - Codex 경로   : 엔진을 거치지 않아 판정이 없다. 오더 시험구간과 반차 구간의
+ *   겹침으로 대신 판정한다(근무일 단위가 아니라 다소 보수적으로 잡힌다).
+ */
+function collectHalfDayNotices(input: {
+  orders: OrderForAssign[]
+  reps: OrderForAssign[]
+  memberToRep: Map<string, OrderForAssign>
+  absences: TesterAbsence[]
+  engineNotices: EngineHalfDayNotice[]
+  details: AssignResult['details']
+}): HalfDayAssignNotice[] {
+  const { orders, reps, memberToRep, absences, engineNotices, details } = input
+
+  // 실제 배정된 담당자 (미배정 오더는 확인 대상이 아니다)
+  const assignedBy = new Map<string, { testerId: string; testerName: string }>()
+  for (const d of details) {
+    if (d.testerId && d.testerName) assignedBy.set(d.orderId, { testerId: d.testerId, testerName: d.testerName })
+  }
+  const orderById = new Map(orders.map(o => [o.id, o]))
+  const notices: HalfDayAssignNotice[] = []
+  const push = (order: OrderForAssign, dates: string[]) => {
+    const who = assignedBy.get(order.id)
+    if (!who || dates.length === 0) return
+    notices.push({
+      orderId: order.id,
+      productName: order.product_name,
+      batchNo: order.batch_no,
+      testerId: who.testerId,
+      testerName: who.testerName,
+      dates,
+    })
+  }
+
+  if (engineNotices.length > 0) {
+    // 대표 오더 키 → 같은 그룹에 속한 모든 오더
+    const membersByRepId = new Map<string, OrderForAssign[]>()
+    for (const o of orders) {
+      const rep = memberToRep.get(o.id) ?? o
+      const list = membersByRepId.get(rep.id) ?? []
+      list.push(o)
+      membersByRepId.set(rep.id, list)
+    }
+    const repByKey = new Map<string, OrderForAssign>()
+    for (const r of reps) repByKey.set(orderKey(r), r)
+
+    for (const n of engineNotices) {
+      const rep = repByKey.get(`${n.productCode}|${n.batchNo}`)
+      if (!rep) continue
+      for (const member of membersByRepId.get(rep.id) ?? [rep]) {
+        // 엔진 판정 시점과 최종 배정이 어긋날 수 있어(강제배정 규칙 등) 담당자가 같을 때만 알린다
+        if (assignedBy.get(member.id)?.testerId !== n.testerId) continue
+        push(member, n.dates)
+      }
+    }
+    return notices
+  }
+
+  // Codex 경로 폴백 — 오더 시험구간 기준 반차 겹침
+  const today = todayIso()
+  const halfDayAbsences = absences.filter(a => a.type === 'HALF_DAY')
+  if (halfDayAbsences.length === 0) return notices
+  for (const [orderId, who] of assignedBy) {
+    const order = orderById.get(orderId)
+    if (!order) continue
+    const window = orderTestWindow(
+      { packagingDate: order.packaging_date, dueDate: order.due_date }, today,
+    )
+    const hit = findAbsenceConflicts(who.testerId, window, halfDayAbsences)
+    if (hit.length === 0) continue
+    push(order, hit.map(a => (a.from === a.to ? a.from : `${a.from}~${a.to}`)))
+  }
+  return notices
+}
+
+/** 반차 겹침 배정을 관리자 알림으로 남긴다. 알림 실패가 배정을 되돌리지 않는다. */
+async function notifyHalfDayNotices(
+  notices: HalfDayAssignNotice[],
+  orders: OrderForAssign[],
+  absences: TesterAbsence[],
+): Promise<void> {
+  if (notices.length === 0) return
+  const today = todayIso()
+  const orderById = new Map(orders.map(o => [o.id, o]))
+
+  for (const n of notices) {
+    const order = orderById.get(n.orderId)
+    if (!order) continue
+    const window = orderTestWindow({ packagingDate: order.packaging_date, dueDate: order.due_date }, today)
+    const conflicts = findAbsenceConflicts(n.testerId, window, absences.filter(a => a.type === 'HALF_DAY'))
+    if (conflicts.length === 0) continue
+    await notifyLeaveConflict({
+      orderId: n.orderId,
+      productName: n.productName,
+      batchNo: n.batchNo,
+      testerId: n.testerId,
+      conflicts,
+      via: 'AI 자동배정',
+    }).catch(() => {})
+  }
 }
 
 /** 수동 단일 배정·배정 해제(testerId=null). 담당자가 실제로 바뀌면 재배정 이력 기록 */
@@ -551,5 +700,19 @@ export async function assignManually(
       reason: opts.reason ?? null,
       changedBy: opts.changedBy ?? null,
     }).catch(() => {})
+
+    // 수동 배정은 현장 예외를 막지 않으므로 차단하지 않는다.
+    // 다만 휴가·출장 구간과 겹치면 관리자 알림을 남겨 사후 추적이 가능하게 한다.
+    await warnIfAssigneeOnLeave({
+      orderId,
+      testerId,
+      order: {
+        packagingDate: (before?.packaging_date as string) ?? null,
+        dueDate: (before?.due_date as string) ?? null,
+      },
+      productName: (before?.product_name as string) ?? '',
+      batchNo: (before?.batch_no as string) ?? '',
+      via: '수동 배정',
+    })
   }
 }

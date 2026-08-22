@@ -5,6 +5,7 @@
 import { supabaseAdmin } from '@backend/lib/supabase'
 import { assertTesterAssignable } from '@backend/services/testers'
 import { logReassignment } from '@backend/services/reassignmentHistory'
+import { warnIfAssigneeOnLeave } from '@backend/services/leaveConflicts'
 import {
   METHOD_PARTIAL, normalizeForMethod, replaceForOrder,
   type OrderTestItemInput,
@@ -196,6 +197,19 @@ export async function createOrder(input: {
     }
   }
 
+  // 신규 오더에 담당자를 바로 지정한 경우도 휴가 충돌을 알린다(차단하지 않음).
+  await warnIfAssigneeOnLeave({
+    orderId:     o.id as string,
+    testerId:    (o.assignee_tester_id as string) ?? null,
+    order: {
+      packagingDate: (o.packaging_date as string) ?? null,
+      dueDate:       (o.due_date as string) ?? null,
+    },
+    productName: name,
+    batchNo:     batch,
+    via:         '오더 추가',
+  })
+
   let assigneeName: string | null = null
   if (o.assignee_tester_id) {
     const { data: t } = await supabaseAdmin.from('testers').select('name').eq('id', o.assignee_tester_id as string).maybeSingle()
@@ -312,7 +326,32 @@ export async function updateOrderWithReason(
       reason:     trimmedReason,
       changedBy:  editedBy,
     }).catch(() => {})
+
+    // 수동 배정은 차단하지 않는다. 휴가·출장과 겹치면 관리자 알림만 남긴다.
+    // 날짜도 같은 수정에서 바뀔 수 있으므로 패치 적용 후 값을 기준으로 판정한다.
+    await warnIfAssigneeOnLeave({
+      orderId:     id,
+      testerId:    assigneeEdit.new_value,
+      order: {
+        // 'packaging_date' in dbPatch 로 판단한다 — 날짜를 비우는 수정(null)도 패치값이 이겨야 한다.
+        packagingDate: pickPatched(dbPatch, currentRow, 'packaging_date'),
+        dueDate:       pickPatched(dbPatch, currentRow, 'due_date'),
+      },
+      productName: (currentRow.product_name as string) ?? '',
+      batchNo:     (currentRow.batch_no as string) ?? '',
+      via:         '오더 수정',
+    })
   }
+}
+
+/** 수정 후 실제 값 — 패치에 그 컬럼이 있으면(null 로 비우는 경우 포함) 패치값이 이긴다. */
+function pickPatched(
+  patch: Record<string, unknown>,
+  current: Record<string, unknown>,
+  column: string,
+): string | null {
+  const source = column in patch ? patch : current
+  return (source[column] as string) ?? null
 }
 
 export interface OrderEditRow {

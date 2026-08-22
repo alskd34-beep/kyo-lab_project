@@ -8,9 +8,14 @@ import {
   Check, UserMinus,
 } from "lucide-react"
 import { CLOSED_STAGE, JOB_STAGES, stageStyle } from "@shared/qc-status"
+import { describeConflicts, type TesterAbsence } from "@shared/leave"
 import { cn } from "@frontend/lib/utils"
 import { ManagementDrawer } from "@frontend/components/common/management-drawer"
 import { AssigneeDetailModal } from "@frontend/components/schedule/assignee-detail-modal"
+import { useConfirmMessage } from "@frontend/components/common/confirm-message"
+import {
+  LeaveChip, LeaveConflictNotice, bulkConflictSummary, conflictsFor, useTesterAbsences,
+} from "@frontend/components/schedule/leave-warning"
 import { TesterAvatar, TesterOptionLabel, primeTesterProfileCache } from "@frontend/lib/tester-profiles"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
@@ -34,6 +39,16 @@ import {
 } from "@frontend/components/ui/dialog"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
+/** 반차와 겹친 자동배정 (서버 AssignResult.halfDayNotices) */
+interface HalfDayNotice {
+  orderId: string
+  productName: string
+  batchNo: string
+  testerId: string
+  testerName: string
+  dates: string[]
+}
+
 interface OrderRow {
   id: string
   productCode: string
@@ -215,6 +230,9 @@ function YearPicker({ year, years, onChange }: { year: string; years: string[]; 
 export default function OrdersPage() {
   const { user } = useAuth()
   const isAdmin = user?.role === "admin"
+  const { requestConfirm } = useConfirmMessage()
+  // 담당자 선택 시 휴가 겹침을 경고하기 위한 부재 목록 (배정을 막지는 않는다)
+  const { absences } = useTesterAbsences()
 
   const [rows, setRows] = useState<OrderRow[]>([])
   const [testers, setTesters] = useState<Tester[]>([])
@@ -238,6 +256,8 @@ export default function OrdersPage() {
   const [bulkTester, setBulkTester] = useState("")
   const [families, setFamilies] = useState<{ id: string; name: string; codes: string[] }[]>([])
   const [famCollapsed, setFamCollapsed] = useState<Set<string>>(new Set())
+  // 자동배정 직후 반차와 겹친 배정 목록 (닫으면 사라지는 확인용 배너)
+  const [halfDayNotices, setHalfDayNotices] = useState<HalfDayNotice[]>([])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -323,6 +343,35 @@ export default function OrdersPage() {
         : "확정 해제된 오더만 담당자 변경이 가능합니다.")
       return
     }
+
+    // 휴가·출장과 겹치는 배정은 막지 않고 확인만 받는다(현장 예외 허용).
+    if (testerId) {
+      const conflicted = targets
+        .map(r => ({
+          label: `${r.productName} (${r.batchNo})`,
+          conflicts: conflictsFor(testerId, r, absences),
+        }))
+        .filter(i => i.conflicts.length > 0)
+      if (conflicted.length > 0) {
+        const testerName = testers.find(t => t.id === testerId)?.name ?? "담당자"
+        const ok = await requestConfirm({
+          title: "휴가 기간과 겹칩니다. 그대로 배정할까요?",
+          description: (
+            <span className="block">
+              {testerName} 담당자의 휴가·출장 일정과 겹치는 오더가 {conflicted.length}건 있습니다.
+              그대로 배정하면 관리자 알림이 남습니다.
+              <span className="mt-2 block whitespace-pre-line rounded-md border bg-muted/50 p-2 font-mono text-[11px]">
+                {bulkConflictSummary(conflicted)}
+              </span>
+            </span>
+          ),
+          confirmLabel: "그대로 배정",
+          variant: "warning",
+        })
+        if (!ok) return
+      }
+    }
+
     setBusy(opts.busyKey)
     try {
       const results = await Promise.all(targets.map(async ({ id }) => {
@@ -373,6 +422,9 @@ export default function OrdersPage() {
       if (!res.ok) throw new Error(data.error)
       const via = data.mode === "codex" ? "Codex" : "규칙엔진"
       flash(`AI 자동배정(${via}) — 배정 ${data.assigned} · 미배정 ${data.unassigned}`)
+      // [반차 확인] 연차·출장은 후보에서 제외되지만 반차는 근무일이라 배정된다.
+      // 엔진이 잡아둔 겹침을 관리자가 그대로 둘지 확인할 수 있게 보여준다.
+      setHalfDayNotices(data.halfDayNotices ?? [])
       await load()
     } catch (e) {
       flash(`자동배정 실패: ${e instanceof Error ? e.message : ""}`)
@@ -743,6 +795,39 @@ export default function OrdersPage() {
         <div className="shrink-0 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">{msg}</div>
       )}
 
+      {/* 반차 겹침 배정 확인 — 연차·출장은 자동배정에서 제외되지만 반차는 근무일이라 배정된다 */}
+      {halfDayNotices.length > 0 && (
+        <div className="shrink-0 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-amber-800">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="flex items-center gap-1.5 text-sm font-semibold">
+                <AlertCircle className="size-3.5" />
+                반차 기간과 겹치는 배정 {halfDayNotices.length}건
+              </p>
+              <p className="mt-0.5 text-[11px]">
+                반차는 근무일이라 배정에서 제외하지 않고 가용 공수만 차감했습니다. 그대로 둘지 확인해 주세요.
+              </p>
+              <ul className="mt-1.5 flex flex-col gap-0.5 text-xs">
+                {halfDayNotices.map(n => (
+                  <li key={`${n.orderId}-${n.testerId}`} className="truncate">
+                    · {n.productName} ({n.batchNo}) → <strong>{n.testerName}</strong>
+                    <span className="ml-1 font-mono text-[11px]">{n.dates.join(", ")}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <button
+              type="button"
+              onClick={() => setHalfDayNotices([])}
+              className="shrink-0 rounded-md p-1 text-amber-700 hover:bg-amber-100"
+              title="닫기"
+            >
+              <X className="size-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 탭 (주차별 / 담당자별 / 상태별) */}
       <div className="inline-flex h-9 w-fit shrink-0 items-center gap-0.5 rounded-md bg-muted p-0.5 text-muted-foreground">
         {TABS.map(t => (
@@ -970,13 +1055,14 @@ export default function OrdersPage() {
       {createOpen && (
         <CreateModal
           testers={testers}
+          absences={absences}
           onClose={() => setCreateOpen(false)}
           onCreated={() => { setCreateOpen(false); flash("오더가 추가되었습니다."); void load() }}
         />
       )}
       {editTarget && (
         <EditModal
-          order={editTarget} testers={testers}
+          order={editTarget} testers={testers} absences={absences}
           onClose={() => setEditTarget(null)}
           onSaved={() => { setEditTarget(null); flash("수정되었습니다."); void load() }}
         />
@@ -1215,9 +1301,10 @@ function TestItemPickerDialog({
 // ─── 오더 추가 모달 (수동 생성) ───────────────────────────────────────────────
 interface ProductHit { id: string; productCode: string; name: string }
 interface OrderTestItem { testItemId: string; testItemName: string; sequenceOrder: number }
-function CreateModal({ testers, onClose, onCreated }: {
-  testers: Tester[]; onClose: () => void; onCreated: () => void
+function CreateModal({ testers, absences, onClose, onCreated }: {
+  testers: Tester[]; absences: TesterAbsence[]; onClose: () => void; onCreated: () => void
 }) {
+  const { requestConfirm } = useConfirmMessage()
   const [form, setForm] = useState({
     productCode: "", productName: "", batchNo: "", dosageForm: "",
     packagingDate: "", dueDate: "", isUrgent: false,
@@ -1265,12 +1352,33 @@ function CreateModal({ testers, onClose, onCreated }: {
     setTestItems([])
   }
 
+  // 담당자·날짜가 바뀔 때마다 휴가 겹침을 다시 판정한다
+  const leaveConflicts = useMemo(
+    () => conflictsFor(
+      form.assigneeTesterId || null,
+      { packagingDate: form.packagingDate || null, dueDate: form.dueDate || null },
+      absences,
+    ),
+    [form.assigneeTesterId, form.packagingDate, form.dueDate, absences],
+  )
+  const assigneeName = testers.find(t => t.id === form.assigneeTesterId)?.name ?? "선택한"
+
   const save = async () => {
     if (!form.productCode.trim() || !form.productName.trim() || !form.batchNo.trim()) {
       setErr("품목코드·품목명·제조번호는 필수입니다."); return
     }
     if (form.method === "개별항목" && testItems.length === 0) {
       setErr("진행방법이 「개별항목」이면 시험항목을 1개 이상 선택하세요."); return
+    }
+    // 휴가 겹침은 차단하지 않고 확인만 받는다
+    if (leaveConflicts.length > 0) {
+      const ok = await requestConfirm({
+        title: "휴가 기간과 겹칩니다. 그대로 배정할까요?",
+        description: `${assigneeName} 담당자는 이 오더의 시험 기간에 ${describeConflicts(leaveConflicts)} 일정이 있습니다. 그대로 저장하면 관리자 알림이 남습니다.`,
+        confirmLabel: "그대로 저장",
+        variant: "warning",
+      })
+      if (!ok) return
     }
     setSaving(true); setErr(null)
     try {
@@ -1428,6 +1536,13 @@ function CreateModal({ testers, onClose, onCreated }: {
               {assignableTesters(testers, form.assigneeTesterId).map(t => (
                 <SelectItem key={t.id} value={t.id}>
                   <TesterOptionLabel testerId={t.id} name={t.name} />
+                  <LeaveChip
+                    conflicts={conflictsFor(
+                      t.id,
+                      { packagingDate: form.packagingDate || null, dueDate: form.dueDate || null },
+                      absences,
+                    )}
+                  />
                 </SelectItem>
               ))}
             </SelectContent>
@@ -1435,6 +1550,8 @@ function CreateModal({ testers, onClose, onCreated }: {
         </Field>
         <Field label="비고" full><input value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} className={inputCls} /></Field>
       </div>
+
+      <LeaveConflictNotice conflicts={leaveConflicts} testerName={assigneeName} className="mt-2" />
 
       {err && <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">{err}</p>}
 
@@ -1452,9 +1569,11 @@ function CreateModal({ testers, onClose, onCreated }: {
 }
 
 // ─── 수정 모달 (사유 필수) ────────────────────────────────────────────────────
-function EditModal({ order, testers, onClose, onSaved }: {
-  order: OrderRow; testers: Tester[]; onClose: () => void; onSaved: () => void
+function EditModal({ order, testers, absences, onClose, onSaved }: {
+  order: OrderRow; testers: Tester[]; absences: TesterAbsence[]
+  onClose: () => void; onSaved: () => void
 }) {
+  const { requestConfirm } = useConfirmMessage()
   const isAutoOrder = order.source === "auto"
   const [form, setForm] = useState({
     productCode: order.productCode ?? "",
@@ -1473,11 +1592,34 @@ function EditModal({ order, testers, onClose, onSaved }: {
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
+  // 담당자·날짜가 바뀔 때마다 휴가 겹침을 다시 판정한다
+  const leaveConflicts = useMemo(
+    () => conflictsFor(
+      form.assigneeTesterId || null,
+      { packagingDate: form.packagingDate || null, dueDate: form.dueDate || null },
+      absences,
+    ),
+    [form.assigneeTesterId, form.packagingDate, form.dueDate, absences],
+  )
+  const assigneeName = testers.find(t => t.id === form.assigneeTesterId)?.name ?? "선택한"
+  // 담당자가 그대로면(원래부터 그 사람이면) 다시 확인받지 않는다 — 날짜·비고만 고치는 경우
+  const assigneeChanged = (form.assigneeTesterId || null) !== (order.assigneeTesterId ?? null)
+
   const save = async () => {
     if (!isAutoOrder && (!form.productCode.trim() || !form.productName.trim() || !form.batchNo.trim())) {
       setErr("품목코드·품목명·제조번호는 비울 수 없습니다."); return
     }
     if (!reason.trim()) { setErr("수정 사유는 필수입니다."); return }
+    // 휴가 겹침은 차단하지 않고 확인만 받는다
+    if (leaveConflicts.length > 0 && assigneeChanged) {
+      const ok = await requestConfirm({
+        title: "휴가 기간과 겹칩니다. 그대로 배정할까요?",
+        description: `${assigneeName} 담당자는 이 오더의 시험 기간에 ${describeConflicts(leaveConflicts)} 일정이 있습니다. 그대로 저장하면 관리자 알림이 남습니다.`,
+        confirmLabel: "그대로 저장",
+        variant: "warning",
+      })
+      if (!ok) return
+    }
     setSaving(true); setErr(null)
     try {
       const patch: Record<string, string | boolean | null> = {
@@ -1576,6 +1718,13 @@ function EditModal({ order, testers, onClose, onSaved }: {
               {assignableTesters(testers, form.assigneeTesterId).map(t => (
                 <SelectItem key={t.id} value={t.id}>
                   <TesterOptionLabel testerId={t.id} name={t.name} />
+                  <LeaveChip
+                    conflicts={conflictsFor(
+                      t.id,
+                      { packagingDate: form.packagingDate || null, dueDate: form.dueDate || null },
+                      absences,
+                    )}
+                  />
                 </SelectItem>
               ))}
             </SelectContent>
@@ -1588,6 +1737,8 @@ function EditModal({ order, testers, onClose, onSaved }: {
         </Field>
         <Field label="비고" full><input value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} className={inputCls} /></Field>
       </div>
+
+      <LeaveConflictNotice conflicts={leaveConflicts} testerName={assigneeName} className="mt-3" />
 
       <div className="mt-3">
         <label className="mb-1 block text-xs font-semibold text-foreground">수정 사유 <span className="text-red-500">*</span></label>
