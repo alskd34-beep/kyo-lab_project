@@ -545,11 +545,21 @@ export default function TestersPage() {
           {/* Desktop table */}
           <Card className="hidden min-h-0 flex-1 flex-col overflow-hidden py-0 md:flex">
             <Table className="w-full">
+              {/* 논리 열은 4개지만 자동 펼침(이름+사번 / 단독+2인)으로 최대 6칸까지 늘어난다.
+                  table-fixed 에서 <col> 이 4개(합 100%)뿐이면 5·6번째 칸이 폭 0으로 접혀
+                  '2인'과 '상태'가 화면에서 사라진다. 그래서 최대 칸 수(6)만큼 선언하고,
+                  폭은 앞 두 칸만 고정한 뒤 나머지는 자동 분배에 맡긴다.
+                  합쳐졌을 때(4칸)는 뒤의 <col> 이 무시되고 남은 폭이 다시 나뉜다. */}
+              {/* 칸 순서(펼침 / 합침):
+                  순번 / 순번 · 이름 / 시험자 · 사번 / 시험가능 · 단독 / 상태 · 2인 · 상태
+                  주석을 <colgroup> 안에 두면 공백 텍스트 노드가 생겨 hydration 오류가 난다. */}
               <colgroup>
-                <col className="w-[8%]" />
-                <col className="w-[42%]" />
-                <col className="w-[32%]" />
-                <col className="w-[18%]" />
+                <col className="w-[9%]" />
+                <col className="w-[25%]" />
+                <col className="w-[16%]" />
+                <col className="w-[17%]" />
+                <col className="w-[17%]" />
+                <col className="w-[16%]" />
               </colgroup>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
@@ -606,6 +616,14 @@ export default function TestersPage() {
                           primary={tester.canSolo ? <StatusLine color="bg-blue-500" label="단독 가능" /> : "—"}
                           secondary={tester.canDuo ? <StatusLine color="bg-amber-500" label="2인 가능" /> : undefined}
                         />
+                      </TableCell>
+                      {/* 헤더는 상태(활성) 열을 선언하는데 본문에 대응 칸이 없어
+                          헤더 6칸 / 본문 5칸으로 어긋났고, 남는 칸이 폭 0으로 접혀
+                          '2인'과 '상태'가 화면에서 사라졌다. (2026-08-22) */}
+                      <TableCell className="px-3 py-2">
+                        <Tag color={tester.isActive ? "green" : "mono"} className="text-[10px]">
+                          {tester.isActive ? "활성" : "비활성"}
+                        </Tag>
                       </TableCell>
                     </TableRow>
                   ))}

@@ -3,6 +3,7 @@
  */
 
 import { supabaseAdmin } from '@backend/lib/supabase'
+import { DELETED_STATUS, PENDING_STATUS } from '@shared/qc-status'
 import { assertTesterAssignable } from '@backend/services/testers'
 import { logReassignment } from '@backend/services/reassignmentHistory'
 import { warnIfAssigneeOnLeave } from '@backend/services/leaveConflicts'
@@ -67,7 +68,7 @@ export async function listOrders(filters: {
     .select('*')
     .order('packaging_date', { ascending: true, nullsFirst: false })
 
-  if (!filters.includeDeleted) query = query.neq('status', '삭제')
+  if (!filters.includeDeleted) query = query.neq('status', DELETED_STATUS)
   if (filters.status) query = query.eq('status', filters.status)
   if (filters.assigneeTesterId) query = query.eq('assignee_tester_id', filters.assigneeTesterId)
 
@@ -170,7 +171,7 @@ export async function createOrder(input: {
       due_date:           input.dueDate || null,
       is_urgent:          input.isUrgent ?? false,
       method:             method,
-      status:             input.status || '대기',
+      status:             input.status || PENDING_STATUS,
       assignee_tester_id: input.assigneeTesterId || null,
       note:               input.note?.trim() || null,
       product_synced:     false,       // 수동 등록 — 품목마스터 자동동기화 대상 아님

@@ -9,10 +9,16 @@
  */
 
 import { supabaseAdmin } from '@backend/lib/supabase'
+import { selectAll } from '@backend/lib/supabasePage'
 import { fetchPctSheet, type SheetPctRow } from '@backend/lib/googleSheet'
 import { createNotification } from '@backend/services/notifications'
 import { rebuildGroups } from '@backend/services/concurrentGroups'
-import { CLOSED_STAGE, LOCKED_STATUSES } from '@shared/qc-status'
+import {
+  CLOSED_STAGE,
+  DELETED_STATUS,
+  LOCKED_STATUSES,
+  PENDING_STATUS,
+} from '@shared/qc-status'
 
 // 기존 PCT 화면이 쓰던 기본 시트 ID (폴백)
 const DEFAULT_FILE_ID = '1H9_lR-_tpEHKSpVD2qLbxX5cqXRG_s5rpbGs-gqSPxU'
@@ -101,7 +107,7 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
   const { data: existingRows, error: exErr } = await supabaseAdmin
     .from('pct_orders')
     .select('*')   // locked 컬럼(0015)까지 받되 미적용 시 자동 누락 — 방어적
-    .neq('status', '삭제')
+    .neq('status', DELETED_STATUS)
   if (exErr) throw exErr
   const existingByKey = new Map<string, ExistingOrder & { batch_no: string; product_code: string }>()
   for (const r of existingRows ?? []) {
@@ -109,7 +115,9 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
   }
 
   // ── 품목마스터 코드 집합 ───────────────────────────────────────────────────
-  const { data: prodRows } = await supabaseAdmin.from('products').select('product_code')
+  // 품목이 1000개를 넘으면 기본 limit 에 잘려 "미동기화" 오탐이 난다 → selectAll
+  const { data: prodRows, error: prodErr } = await selectAll(supabaseAdmin, 'products', 'product_code')
+  if (prodErr) throw new Error(`품목마스터 조회 실패: ${prodErr.message}`)
   const productCodes = new Set((prodRows ?? []).map(p => String(p.product_code)))
 
   const result: IngestResult = {
@@ -161,7 +169,7 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
       })
       if (!error) {
         result.created++
-        await logIngest(key, 'new', '대기', fileId)
+        await logIngest(key, 'new', PENDING_STATUS, fileId)
       }
     } else if (diffChanged(existing, row) && (isLockedStatus(existing.status) || (existing as { locked?: boolean }).locked)) {
       // ── 변경 차단 ──────────────────────────────────────────────────────────
@@ -218,13 +226,13 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
   // (진행중/완료 등 작업이 걸린 건은 보존)
   for (const [key, existing] of existingByKey) {
     if (seen.has(key)) continue
-    if (existing.status !== '대기') continue
+    if (existing.status !== PENDING_STATUS) continue
     const { error } = await supabaseAdmin.from('pct_orders').update({
-      status: '삭제', ingest_state: 'deleted', deleted_at: nowIso,
+      status: DELETED_STATUS, ingest_state: 'deleted', deleted_at: nowIso,
     }).eq('id', existing.id)
     if (!error) {
       result.deleted++
-      await logIngest(key, 'deleted', '삭제', fileId)
+      await logIngest(key, 'deleted', DELETED_STATUS, fileId)
     }
   }
 

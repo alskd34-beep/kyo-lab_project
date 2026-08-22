@@ -219,6 +219,8 @@ function SortIcon({ field }: { field: typeof sortField }) {
 
 - 직접 `<Sheet>`를 쓸 때는 반드시 `modal={false}`를 함께 지정해야 배경이 dim 없이 인터랙티브하게 유지된다: `<Sheet open={open} onOpenChange={setOpen} modal={false}>`.
 - `dim` prop(`<SheetContent dim>`)을 주면 옅은 배경(`bg-black/10`)을 켤 수 있다. 기본은 꺼짐.
+- 패널 폭은 `ManagementDrawer`의 `size`로 정한다: `sm` 480px / `md`(기본) 600px / `lg` 760px / `xl` 920px.
+- `SheetContent`는 폭을 `--sheet-width` CSS 변수로 읽는다(기본 24rem). 직접 조립할 때는 `sm:max-w-*` 클래스 대신 `style={{ '--sheet-width': '760px' }}`로 지정한다 — 클래스로 주면 `data-[side=right]:` 기본값에 특이도로 밀려 적용되지 않는다.
 - 내용이 아주 많은 뷰/입력에는 부적합 — 그런 경우 `size="full"` `Dialog`를 고려한다.
 - **모바일 내비게이션 Sheet(사이드바)처럼 dim + 바깥 클릭 닫기 + 가장자리 밀착이 필요한 예외**는 `<SheetContent variant="docked">`로 기존 동작을 유지한다(`frontend/components/ui/sidebar.tsx` 참고). 새 화면에서는 쓰지 않는다.
 
@@ -226,7 +228,7 @@ function SortIcon({ field }: { field: typeof sortField }) {
 
 ```tsx
 <Sheet open={editOpen} onOpenChange={setEditOpen} modal={false}>
-  <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
+  <SheetContent side="right" style={{ '--sheet-width': '600px' }} className="flex w-full flex-col gap-0 p-0">
 
     {/* ① 헤더 */}
     <SheetHeader className="border-b px-5 py-4">
@@ -759,7 +761,7 @@ import {
 
 **이 프로젝트 규칙:**
 - 새 화면은 `Sheet`/`SheetContent`를 직접 조립하지 말고 `ManagementDrawer`를 우선 사용한다.
-- `SheetContent`: `className="flex w-full flex-col gap-0 p-0 sm:max-w-md" side="right"`
+- `SheetContent`: `side="right" className="flex w-full flex-col gap-0 p-0"` + 폭은 `style={{ '--sheet-width': '600px' }}`
 - 구조: `SheetHeader(border-b)` → `flex-1 overflow-y-auto bg-muted/30` → `SheetFooter(border-t bg-card)`
 - `variant="floating"`(기본): bizday 가이드라인 기준 — 가장자리에서 12px 띄운 `rounded-md` + 그림자, dim 없음, Esc/우상단 X로만 닫힘. `<Sheet modal={false}>`와 함께 써야 한다.
 - `variant="docked"`: 가장자리 밀착 + dim + 바깥 클릭 닫기(기존 방식). 모바일 내비게이션 Sheet 같은 예외적 용도에만 사용.

@@ -1,4 +1,21 @@
 /**
+ * 개발 단계 기본 AI 경로 — Codex CLI (의도된 선택).
+ *
+ * 개발 중에는 API 키 과금 없이 구독 세션을 그대로 쓰려고 CLI 기반을 우선한다.
+ * 운영 전환 시 API 기반으로 바꾸며, 그때 아래 제약을 함께 해소해야 한다.
+ *
+ * 운영 전환 시 확인할 것 (2026-08-22 점검):
+ *  - `spawn('sh', ['-c', ...])` — Windows 서버에서는 동작하지 않는다.
+ *  - 서버에 설치·로그인된 CLI 세션에 의존해 배포 환경에서 재현이 어렵다.
+ *  - `runCodexText` 는 `--dangerously-bypass-approvals-and-sandbox` 로 실행한다.
+ *  - 호출 이력이 남지 않아 AI 배정 근거를 감사추적할 수 없다(GMP 관점).
+ *
+ * 현재 사용처는 모두 전환 스위치를 갖고 있다:
+ *   - `pctAssign` : `ENABLE_CODEX_ASSIGN=1` 옵트인, 실패 시 규칙엔진 폴백
+ *   - `chat`      : `CHAT_ADMIN_USE_CLI` (기본값: 비프로덕션에서만 CLI, 운영은 Letsur)
+ * 배경: docs/system-audit-2026-08-22.md 7번 항목.
+ */
+/**
  * [BACKEND] Codex CLI 연동 (구독 서비스)
  *
  * 서버에 설치·로그인된 codex CLI(구독 세션)를 child process 로 실행해

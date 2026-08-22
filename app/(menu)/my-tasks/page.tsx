@@ -152,11 +152,11 @@ function ReadinessModal({
               </p>
               <ul className="flex flex-col gap-2">
                 {notes.map(n => (
-                  <li key={n.id} className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs">
-                    <p className="font-semibold text-sky-900">{n.content}</p>
-                    {n.remark && <p className="mt-0.5 text-sky-700">특이사항: {n.remark}</p>}
+                  <li key={n.id} className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs">
+                    <p className="font-semibold text-blue-900">{n.content}</p>
+                    {n.remark && <p className="mt-0.5 text-blue-700">특이사항: {n.remark}</p>}
                     {(n.issueLot || n.createdByName) && (
-                      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-sky-600">
+                      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-blue-600">
                         {n.issueLot && <span>이슈 로트 {n.issueLot}</span>}
                         {n.createdByName && <span>작성 {n.createdByName}</span>}
                       </div>

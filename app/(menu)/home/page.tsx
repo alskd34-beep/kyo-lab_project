@@ -238,7 +238,7 @@ export default function HomePage() {
   const KPI_CARDS = [
     { label: '전체',     value: stats.total,        unit: '건', sub: '총 QC 오더',         accent: 'text-foreground',  bar: 'border-l-primary' },
     { label: '대기중',   value: stats.pending,      unit: '건', sub: '시험 대기',          accent: 'text-foreground',  bar: 'border-l-muted-foreground' },
-    { label: '진행중',   value: stats.inProgress,   unit: '건', sub: 'QC 시험 진행',       accent: 'text-violet-600',  bar: 'border-l-violet-500' },
+    { label: '진행중',   value: stats.inProgress,   unit: '건', sub: 'QC 시험 진행',       accent: 'text-blue-600',  bar: 'border-l-blue-500' },
     { label: 'QC완료',   value: stats.completed,    unit: '건', sub: '승인 완료',          accent: 'text-emerald-600', bar: 'border-l-emerald-500' },
     { label: 'D-7 임박', value: stats.dueSoon7,     unit: '건', sub: '기한 임박 오더',     accent: 'text-amber-600',   bar: 'border-l-amber-500' },
     { label: '기한초과', value: stats.overdueCount, unit: '건', sub: 'QC완료예정일 초과', accent: 'text-destructive', bar: 'border-l-destructive' },
@@ -246,7 +246,7 @@ export default function HomePage() {
 
   const statRows = [
     { label: '대기중', key: 'pending' as const,    color: 'bg-muted-foreground' },
-    { label: '진행중', key: 'inProgress' as const, color: 'bg-violet-500' },
+    { label: '진행중', key: 'inProgress' as const, color: 'bg-blue-500' },
     { label: '완료',   key: 'completed' as const,  color: 'bg-emerald-500' },
   ]
 
@@ -293,10 +293,17 @@ export default function HomePage() {
             </div>
           </div>
           <Table>
+            {/* 논리 열은 3개(품목·기한·상태)지만 자동 펼침으로 최대 5칸이 된다.
+                table-fixed 에서 <col> 이 3개(합 100%)뿐이면 4·5번째 칸이 폭 0으로 접혀
+                'D-Day'와 '상태'가 화면에서 사라진다. 최대 칸 수만큼 선언한다.
+                칸 순서(펼침 / 합침):
+                품목명 / 품목 · 제조번호 / 기한 · QC완료예정일 / 상태 · D-Day · 상태 */}
             <colgroup>
-              <col className="w-[48%]" />
               <col className="w-[28%]" />
-              <col className="w-[24%]" />
+              <col className="w-[20%]" />
+              <col className="w-[20%]" />
+              <col className="w-[16%]" />
+              <col className="w-[16%]" />
             </colgroup>
             <TableHeader>
               <TableRow className="hover:bg-transparent">

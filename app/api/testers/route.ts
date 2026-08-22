@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server'
+import { requireAdmin, requireAuth } from '@backend/lib/guard'
 import { listTesters, createTester, updateTester, deleteTester } from '@backend/services/testers'
 
 export const runtime = 'nodejs'
@@ -9,6 +10,8 @@ export const runtime = 'nodejs'
  * - onlyTesterRole=1 이면 설정 > 사용자에서 역할이 "시험자"인 계정과 연결된 시험자만 반환한다(시험자 관리 화면용)
  */
 export async function GET(req: NextRequest) {
+  const g = await requireAuth(req)
+  if (!g.ok) return g.response
   try {
     const activeOnly = req.nextUrl.searchParams.get('activeOnly') === '1'
     const onlyTesterRole = req.nextUrl.searchParams.get('onlyTesterRole') === '1'
@@ -20,6 +23,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const g = await requireAdmin(req)
+  if (!g.ok) return g.response
   try {
     const body = await req.json()
     const row = await createTester({
@@ -35,6 +40,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  const g = await requireAdmin(req)
+  if (!g.ok) return g.response
   try {
     const body = await req.json()
     const { id, ...fields } = body
@@ -47,6 +54,8 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const g = await requireAdmin(req)
+  if (!g.ok) return g.response
   try {
     const body = await req.json()
     const { id } = body

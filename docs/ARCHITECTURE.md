@@ -92,7 +92,6 @@ flowchart TD
 | UI primitives | `frontend/components/ui/*` | shadcn/ui 기반 Button, Dialog, Table 등 |
 | 보드 UI | `frontend/components/board/*` | Monday 스타일 스케줄 보드 |
 | 인증 컨텍스트 | `frontend/lib/auth-context.tsx` | 사용자 상태, 자동 refresh, logout |
-| 스케줄 유틸 | `frontend/lib/weekly-planner.ts` | 주간 계획 계산 |
 | PCT 브리지 | `frontend/lib/pct-schedule-bridge.ts` | PCT 데이터를 보드 모델로 변환 |
 
 ### 4.2 API Routes
@@ -111,8 +110,7 @@ flowchart TD
 | `/api/tester-capabilities` | 시험자 역량 매트릭스 | `testers.ts` |
 | `/api/manhours` | 제품 공수 | `manhours.ts` |
 | `/api/schedules/monthly` | 월간 스케줄 | 서비스/route 내부 로직 |
-| `/api/schedules/pct-generate` | PCT 스케줄 생성 | `scheduleEngine.ts` |
-| `/api/qc-scheduler` | QC 스케줄 계산 | `scheduleEngine.ts` |
+| `/api/pct-orders/assign` | 주간 배정(정본) | `pctAssign.ts` → `scheduleEngine.ts` |
 | `/api/dashboard` | 대시보드 집계 | route 내부 집계 |
 | `/api/chat`, `/api/chat/history` | AI 챗봇 스트리밍/이력 | `chat.ts`, `chatHistory.ts` |
 | `/api/google-sheet/*` | Google Sheet 연동 | route 내부 연동 |

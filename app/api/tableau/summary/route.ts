@@ -1,3 +1,8 @@
+/**
+ * @deprecated 호출하는 화면이 없다 (2026-08-22 점검 기준).
+ * 외부 Tableau 연동이 호출할 가능성이 있어 삭제하지 않고 남겨둔다.
+ * 제거 여부는 운영 확인 후 결정한다 — docs/system-audit-2026-08-22.md 9번 항목.
+ */
 import { NextRequest } from 'next/server'
 import { requireAuth } from '@backend/lib/guard'
 import { getTableauSummary } from '@backend/services/tableau'

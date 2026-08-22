@@ -14,8 +14,20 @@ import { checkEquipmentReadiness, type ReadinessResult } from '@backend/services
 import { listByProduct, type PretestNoteRow } from '@backend/services/productPretestNotes'
 import { METHOD_PARTIAL, listByOrder as listOrderTestItems } from '@backend/services/pctOrderTestItems'
 import {
-  ACTIVE_JOB_STATUSES, CLOSED_STAGE, NEXT_STAGE, STAGE_ACTION_LABEL,
-  canAdvanceByAdmin, isJobStage, type JobStage,
+  ACTIVE_JOB_STATUSES,
+  APPROVAL_READY_STATUS,
+  CLOSED_STAGE,
+  DELAYED_STATUS,
+  DELETED_STATUS,
+  IN_PROGRESS_STATUS,
+  NEXT_STAGE,
+  PENDING_STATUS,
+  REVIEWING_STATUS,
+  REVIEW_READY_STATUS,
+  STAGE_ACTION_LABEL,
+  canAdvanceByAdmin,
+  isJobStage,
+  type JobStage,
 } from '@shared/qc-status'
 
 export interface JobItemRow {
@@ -167,7 +179,7 @@ export async function listWorkspace(userSub: string): Promise<{ testerLinked: bo
     .from('pct_orders')
     .select('id, product_code, product_name, batch_no, due_date, is_urgent, method, status, assignee_tester_id')
     .eq('assignee_tester_id', testerId)
-    .neq('status', '삭제')
+    .neq('status', DELETED_STATUS)
   const orderById = new Map<string, Record<string, unknown>>()
   for (const o of orderRows ?? []) orderById.set(o.id as string, o)
 
@@ -212,7 +224,7 @@ export async function listWorkspace(userSub: string): Promise<{ testerLinked: bo
   })
 
   const pendingOrders: PendingOrderRow[] = (orderRows ?? [])
-    .filter(o => !jobOrderIds.includes(o.id as string) && o.status === '대기')
+    .filter(o => !jobOrderIds.includes(o.id as string) && o.status === PENDING_STATUS)
     .map(o => ({
       id: o.id as string,
       productCode: o.product_code as string,
@@ -346,7 +358,7 @@ export async function getJobDetail(jobId: string): Promise<JobDetail | null> {
   const status = job.status as string
   // "현재 수행 중인 항목"은 아직 시험을 하고 있는 단계에서만 의미가 있다.
   // 검토전 이후 단계는 시험이 끝난 상태라 현재 항목을 표시하지 않는다.
-  const testing = status === '진행중' || status === '지연'
+  const testing = status === IN_PROGRESS_STATUS || status === DELAYED_STATUS
   const current = testing
     ? items.find(i => i.status !== 'cleared') ?? null
     : null
@@ -409,7 +421,7 @@ export async function listWorkerOverview(): Promise<WorkerOverview> {
     supabaseAdmin
       .from('pct_orders')
       .select('id, product_name, batch_no, due_date, is_urgent, status, assignee_tester_id')
-      .neq('status', '삭제'),
+      .neq('status', DELETED_STATUS),
   ])
   const jobRows = (jobsRes.data ?? []) as Record<string, unknown>[]
   const orderRows = (ordersRes.data ?? []) as Record<string, unknown>[]
@@ -471,10 +483,10 @@ export async function listWorkerOverview(): Promise<WorkerOverview> {
     }
     if (!ACTIVE_JOB_STATUSES.has(status)) continue
 
-    if (status === '진행중') row.inProgress += 1
+    if (status === IN_PROGRESS_STATUS) row.inProgress += 1
     // 검토전·검토중·승인전은 모두 "시험은 끝나고 후속 절차 대기" — 검토 카운터로 함께 센다
-    else if (status === '검토전' || status === '검토중' || status === '승인전') row.reviewing += 1
-    else if (status === '지연') row.delayed += 1
+    else if (status === REVIEW_READY_STATUS || status === REVIEWING_STATUS || status === APPROVAL_READY_STATUS) row.reviewing += 1
+    else if (status === DELAYED_STATUS) row.delayed += 1
 
     const agg = itemAgg.get(j.id as string) ?? { total: 0, cleared: 0 }
     row.activeJobs.push({
@@ -493,7 +505,7 @@ export async function listWorkerOverview(): Promise<WorkerOverview> {
 
   // 시작 대기 오더 집계 (배정됐고 status '대기' & 아직 미시작)
   for (const o of orderRows) {
-    if (o.status !== '대기') continue
+    if (o.status !== PENDING_STATUS) continue
     const testerId = o.assignee_tester_id as string | null
     if (!testerId) continue
     if (startedOrderIds.has(o.id as string)) continue
@@ -602,7 +614,7 @@ export async function startJob(orderId: string, userSub: string): Promise<{ jobI
   for (let attempt = 0; attempt < 2; attempt++) {
     const { data, error } = await supabaseAdmin
       .from('qc_jobs')
-      .insert({ order_id: orderId, qc_no: qcNo, assignee_tester_id: testerId, assignee_user_id: userSub, status: '진행중', work_start_date: today })
+      .insert({ order_id: orderId, qc_no: qcNo, assignee_tester_id: testerId, assignee_user_id: userSub, status: IN_PROGRESS_STATUS, work_start_date: today })
       .select('id')
       .single()
     if (!error) { jobId = data.id as string; break }
@@ -618,7 +630,7 @@ export async function startJob(orderId: string, userSub: string): Promise<{ jobI
   }
 
   // 오더 상태 진행중
-  await supabaseAdmin.from('pct_orders').update({ status: '진행중' }).eq('id', orderId)
+  await supabaseAdmin.from('pct_orders').update({ status: IN_PROGRESS_STATUS }).eq('id', orderId)
 
   // 감독관 알림 (경고 있으면 본문에 덧붙임)
   const warnSuffix = warnings ? ` ⚠ 경고: ${warnings.join(', ')}` : ''
@@ -663,14 +675,14 @@ async function autoAdvanceToReview(jobId: string): Promise<{ allCleared: boolean
     .neq('status', 'cleared')
   if (cntErr || remaining === null || remaining > 0) return { allCleared: false, statusChangedTo: null }
 
-  const target = NEXT_STAGE['진행중']   // '검토전'
+  const target = NEXT_STAGE[IN_PROGRESS_STATUS]   // '검토전'
 
   // '진행중' 인 경우에만 전환 (동시 호출 시 한 번만 성공)
   const { data: updated } = await supabaseAdmin
     .from('qc_jobs')
     .update({ status: target })
     .eq('id', jobId)
-    .eq('status', '진행중')
+    .eq('status', IN_PROGRESS_STATUS)
     .select('order_id')
     .maybeSingle()
   if (!updated) return { allCleared: true, statusChangedTo: null }
@@ -790,7 +802,7 @@ export async function clearItem(
  * 담당 시험자가 직접 바꿀 수 있는 상태.
  * 검토·승인 단계는 관리자만 advanceJobStage 로 넘길 수 있어야 워크플로가 의미를 갖는다.
  */
-const SELF_SERVICE_STATUSES = new Set(['진행중', '지연'])
+const SELF_SERVICE_STATUSES = new Set<string>([IN_PROGRESS_STATUS, DELAYED_STATUS])
 
 /** 작업 상태 변경(담당자) — 오더 상태 동기화 + 감독관 알림.
  *  최종 단계(승인완료)면 work_end_date를 오늘로 설정(이미 설정된 경우 유지).

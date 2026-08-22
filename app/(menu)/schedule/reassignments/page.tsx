@@ -68,7 +68,7 @@ const TYPE_META: Record<HistoryType, { label: string; icon: typeof History; clas
   reassign: {
     label: "담당자 변경",
     icon: UserRoundCheck,
-    className: "border-violet-200 bg-violet-50 text-violet-700",
+    className: "border-blue-200 bg-blue-50 text-blue-700",
   },
   ingest: {
     label: "자동 적재",
@@ -85,13 +85,16 @@ const SORT_COLUMNS: SortColumnDef<SortField>[] = [
   {
     key: "order",
     label: "오더",
+    // 본문이 품목명/품목코드/제조번호를 한 칸에 그리므로 칸을 나누지 않는다.
+    noSplit: true,
     fields: [
       { id: "productName", label: "품목명" },
       { id: "productCode", label: "품목코드" },
       { id: "batchNo", label: "제조번호" },
     ],
   },
-  sortCol("title", "내용"),
+  // 본문이 "요약 · 사유"를 한 칸에 이어 붙이므로 칸을 나누지 않는다(나누면 보조 헤더가 빈칸).
+  { ...sortCol("title", "내용"), noSplit: true },
   sortCol("actorName", "작업자"),
 ]
 
@@ -259,7 +262,7 @@ export default function ReassignmentsPage() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard title="전체 이력" value={stats.total} tone="text-slate-900" />
         <StatCard title="오더 수정" value={stats.edits} tone="text-blue-700" />
-        <StatCard title="담당자 변경" value={stats.reassignments} tone="text-violet-700" />
+        <StatCard title="담당자 변경" value={stats.reassignments} tone="text-blue-700" />
         <StatCard title="자동 적재" value={stats.ingests} tone="text-emerald-700" />
       </div>
 
@@ -319,6 +322,10 @@ export default function ReassignmentsPage() {
           <span className="text-xs font-medium text-slate-500">표시 {filteredRows.length.toLocaleString("ko-KR")}건</span>
         </div>
         <Table className="text-sm">
+          {/* 논리 열 5개 + 다필드 묶음 1개(오더) → 최대 6칸.
+              칸 순서(펼침 / 합침):
+              일시 · 구분 · 품목명/오더 · 품목코드/내용 · 내용/작업자 · 작업자 */}
+          {/* 오더 열이 noSplit 이라 펼침으로 칸이 늘지 않는다 (논리 열 5개 = 최대 5칸). */}
           <colgroup>
             <col className="w-[16%]" />
             <col className="w-[14%]" />

@@ -14,11 +14,7 @@ export default function MenuLoading() {
     pathname === '/schedule/dashboard'
   ) {
     variant = 'dashboard'
-  } else if (
-    pathname === '/schedule/monthly' ||
-    pathname === '/schedule/weekly' ||
-    pathname === '/schedule/weekly-plan'
-  ) {
+  } else if (pathname === '/schedule/monthly') {
     variant = 'board'
   } else if (
     pathname === '/settings/sys-settings' ||

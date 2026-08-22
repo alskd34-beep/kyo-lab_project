@@ -17,7 +17,7 @@ Route group containing every authenticated screen of the QC system, wrapped in a
 | `home/` | Landing dashboard after login |
 | `product-test/` | Product testing: `products` (품목 마스터 + 평균공수 통합), `prod-reg`, `prod-status`, `prod-std` |
 | `test-mgmt/` | Test management: `test-master`, `test-items`, `test-result`, `test-status`, `test-cert`, `testers` (수동 오더 생성은 `schedule/orders`로 통합) |
-| `schedule/` | Scheduling: `monthly`, `weekly`, `weekly-plan`, `pct` (Monday-style boards + planners) |
+| `schedule/` | Scheduling: `monthly`(보드), `orders`(AI 스케줄 — 주간 배정 정본), `vacation`, `holidays`, `reassignments`, `dashboard`, `groups` |
 | `stability/` | Stability studies: `stab-plan`, `stab-report`, `stab-status` |
 | `deviation/` | Deviations: `oos` (out-of-spec), `capa`, `inv-report` (조사 보고) |
 | `documents/` | Controlled docs: `doc-sop`, `doc-std`, `doc-cert`, `doc-checklist` |
@@ -33,7 +33,7 @@ Route group containing every authenticated screen of the QC system, wrapped in a
 - Icons come from `lucide-react` (e.g. `Pencil`, `Trash2`, `Plus`, `Search`).
 - CRUD screens follow a common shape: list/search + a `Dialog` for create/edit + delete confirmation, all hitting one `/api/<resource>` route with GET/POST/PATCH/DELETE.
 - Do **not** import `@backend/*` here — go through `/api/*`. Use `useAuth()` from `@frontend/lib/auth-context` for user/session.
-- Scheduling pages use helpers in `@frontend/lib/weekly-planner.ts` and `@frontend/lib/pct-schedule-bridge.ts`, plus board components in `@frontend/components/board`.
+- Scheduling pages use `@frontend/lib/pct-schedule-bridge.ts` plus board components in `@frontend/components/board`. 배정 규칙은 서버(`@backend/services/assignRules`·`scheduleEngine`)에만 둔다.
 
 ### Testing Requirements
 - `npm run dev` (port 3300), log in, navigate to the screen. `npm run typecheck` for type safety.
@@ -45,7 +45,7 @@ Route group containing every authenticated screen of the QC system, wrapped in a
 
 ### Internal
 - `@frontend/components/ui/*`, `@frontend/components/dashboard/{sidebar,chatbot}`, `@frontend/components/board/*`
-- `@frontend/lib/{auth-context,utils,weekly-planner,pct-schedule-bridge}`
+- `@frontend/lib/{auth-context,utils,api-client,pct-schedule-bridge}`
 - `@shared/{qc,pqm}` types; `/api/*` endpoints
 
 ### External

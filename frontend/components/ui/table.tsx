@@ -13,6 +13,8 @@ import {
 import { SortColumnHeader, type SortColumnDef } from "@frontend/components/ui/table-sort"
 
 type ColSample = {
+  /** 헤더가 이 칸을 나누지 말라고 선언했는가 (SortColumnDef.noSplit) */
+  noSplit: boolean
   mergedHeaderUnits: number
   fieldUnits: number[]
   secondaryLabel?: string
@@ -25,7 +27,7 @@ type ColSample = {
 type AdaptiveTableContextValue = {
   isSplit: (logicalIndex: number) => boolean
   secondHeader: (logicalIndex: number) => string
-  registerHeader: (logicalIndex: number, mergedLabel: string, fieldLabels: string[]) => void
+  registerHeader: (logicalIndex: number, mergedLabel: string, fieldLabels: string[], noSplit?: boolean) => void
   registerContent: (logicalIndex: number, primary: string, secondary: string, secondaryLabel?: string) => void
   reportLogicalCount: (count: number) => void
   visualColCount: number
@@ -106,6 +108,7 @@ function replaceCellStackSecondary(node: React.ReactNode): React.ReactNode {
 
 function emptySample(): ColSample {
   return {
+    noSplit: false,
     mergedHeaderUnits: 0,
     fieldUnits: [],
     secondaryLabelUnits: 0,
@@ -163,7 +166,9 @@ function Table({
     setSampleRev((n) => n + 1)
   }, [])
 
-  const registerHeader = React.useCallback((logicalIndex: number, mergedLabel: string, fieldLabels: string[]) => {
+  const registerHeader = React.useCallback((
+    logicalIndex: number, mergedLabel: string, fieldLabels: string[], noSplit = false,
+  ) => {
     const cur = samplesRef.current.get(logicalIndex) ?? emptySample()
     const mergedHeaderUnits = hangulUnits(mergedLabel)
     const fieldUnits = fieldLabels.map(hangulUnits)
@@ -171,9 +176,11 @@ function Table({
       cur.mergedHeaderUnits === mergedHeaderUnits
       && cur.fieldUnits.length === fieldUnits.length
       && cur.fieldUnits.every((u, i) => u === fieldUnits[i])
+      && cur.noSplit === noSplit
     if (same && !(fieldLabels.length >= 2 && !cur.hasSecondary)) return
     samplesRef.current.set(logicalIndex, {
       ...cur,
+      noSplit,
       mergedHeaderUnits,
       fieldUnits,
       hasSecondary: cur.hasSecondary || fieldLabels.length >= 2,
@@ -240,6 +247,22 @@ function Table({
     }
   }, [el, enabled])
 
+  /**
+   * ⚠️ react-hooks/refs 억제 — 렌더 중 ref 읽기/쓰기.
+   *
+   * 측정치(samplesRef)는 자식 `TableHead`/`TableCell` 의 **useLayoutEffect**(커밋 단계)에서만
+   * 채워지고, 채워질 때마다 `bump()` 로 `sampleRev` 를 올려 이 memo 를 다시 돌린다.
+   * 즉 "렌더 중 변하는 값"이 아니라 커밋 단계에서 확정된 측정 캐시다.
+   * `prevFlagsRef` 는 분할 히스테리시스 기억이며, `pickSplitStacks` 는 자기 출력을
+   * prev 로 다시 넣어도 같은 결과를 내므로(멱등) 재계산에도 결과가 흔들리지 않는다.
+   *
+   * 2026-08-22 점검에서 이를 state 로 옮기는 순수화 리팩터를 시도했으나,
+   * `ctx` 가 매 측정마다 새로 만들어지면서 자식 layout effect → setState → ctx 갱신이
+   * 맞물려 무한 렌더(Maximum update depth exceeded)가 발생했다(장비 마스터 화면에서 재현).
+   * 되돌렸고, 순수화는 ctx 분리(측정 등록용 컨텍스트와 결과 컨텍스트를 나누는 것)까지
+   * 함께 설계해야 한다 — docs/system-audit-2026-08-22.md 「후속」 참고.
+   */
+  /* eslint-disable react-hooks/refs -- 위 주석 참고: 커밋 단계에서만 갱신되는 측정 캐시 */
   const splitByIndex = React.useMemo(() => {
     const flags = new Map<number, boolean>()
     if (!enabled || width <= 0) return flags
@@ -251,7 +274,8 @@ function Table({
     for (let i = 0; i < Math.max(logicalCount, samplesRef.current.size); i++) {
       const sample = samplesRef.current.get(i)
       if (!sample) continue
-      if (sample.hasSecondary) {
+      // noSplit 칸은 본문이 CellStack 이어도 나누지 않는다(헤더 선언이 우선).
+      if (sample.hasSecondary && !sample.noSplit) {
         stackIndexes.push(i)
         stacks.push({
           mergedHeaderUnits: sample.mergedHeaderUnits,
@@ -277,6 +301,7 @@ function Table({
     return flags
     // sampleRev: 헤더·내용 샘플이 늘어나면 최소 폭을 다시 계산한다
   }, [enabled, width, hangulPx, logicalCount, sampleRev])
+  /* eslint-enable react-hooks/refs */
 
   const splitExtra = React.useMemo(() => {
     let n = 0
@@ -293,6 +318,27 @@ function Table({
     reportLogicalCount: setLogicalCount,
     visualColCount,
   }), [splitByIndex, registerHeader, registerContent, visualColCount])
+
+  /**
+   * 개발용 자가진단 — colgroup 이 실제 칸 수를 못 따라가는 화면을 즉시 알린다.
+   *
+   * layout="fluid|content" 는 table-fixed 라, 화면이 <col> 을 논리 열 수만큼만 선언하면
+   * 자동 펼침으로 늘어난 칸이 폭 0으로 접혀 열이 통째로 사라진다(2026-08-22 점검 18번).
+   * 상태를 바꾸지 않고 경고만 낸다.
+   */
+  React.useEffect(() => {
+    if (process.env.NODE_ENV === 'production' || !el) return
+    const table = el.querySelector('table')
+    const declared = table?.querySelectorAll('colgroup > col').length ?? 0
+    const actual = table?.querySelector('thead tr')?.children.length ?? 0
+    if (declared > 0 && actual > declared) {
+      console.warn(
+        `[Table] <col> ${declared}개 < 실제 칸 ${actual}개 — 남는 칸이 폭 0으로 접혀 사라집니다. ` +
+        'colgroup 을 최대 펼침 칸 수만큼 선언하세요 (docs/table-adaptive-columns.md §4).',
+        el,
+      )
+    }
+  }, [el, visualColCount])
 
   const containerOverflow =
     layout === "content" ? "overflow-x-hidden overflow-y-visible"
@@ -416,6 +462,7 @@ function TableHead({ className, children, ...props }: React.ComponentProps<"th">
         col,
         sortEl.props.col.label,
         sortEl.props.col.fields.map((f) => f.label),
+        sortEl.props.col.noSplit === true,
       )
       return
     }
@@ -428,6 +475,10 @@ function TableHead({ className, children, ...props }: React.ComponentProps<"th">
     pinEnd && PIN_END,
     className
   )
+
+  if (split && sortEl?.props.col.noSplit) {
+    return <th data-slot="table-head" className={thClass} {...props}>{children}</th>
+  }
 
   if (split && sortEl && fields && fields.length === 2) {
     const { sortField, sortDir, onPick } = sortEl.props

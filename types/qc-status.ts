@@ -16,12 +16,25 @@
 export const JOB_STAGES = ['진행중', '검토전', '검토중', '승인전', '승인완료'] as const
 export type JobStage = (typeof JOB_STAGES)[number]
 
+/** 각 단계의 이름 있는 상수 — 서비스·화면에서 문자열을 직접 적지 말고 이 상수를 쓴다. */
+export const IN_PROGRESS_STATUS:     JobStage = '진행중'
+export const REVIEW_READY_STATUS:    JobStage = '검토전'
+export const REVIEWING_STATUS:       JobStage = '검토중'
+export const APPROVAL_READY_STATUS:  JobStage = '승인전'
+export const APPROVED_STATUS:        JobStage = '승인완료'
+
 /** 단계가 아닌 부가 상태 — 납기 경과 표시 */
 export const DELAYED_STATUS = '지연'
 /** 작업 시작 전(오더 전용) */
 export const PENDING_STATUS = '대기'
 /** 오더 삭제(소프트) */
 export const DELETED_STATUS = '삭제'
+
+/**
+ * 담당자가 없을 때 화면에 쓰는 라벨. **상태값이 아니다** — 미배정 여부는
+ * `assignee_tester_id IS NULL` 로 판단하고, status 에는 저장하지 않는다.
+ */
+export const UNASSIGNED_LABEL = '미배정'
 
 /** 작업(qc_jobs)에 올 수 있는 모든 상태 */
 export const JOB_STATUSES: readonly string[] = [...JOB_STAGES, DELAYED_STATUS]

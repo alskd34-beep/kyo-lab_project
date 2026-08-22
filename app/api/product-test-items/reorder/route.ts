@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server'
+import { requireAdmin } from '@backend/lib/guard'
 import { reorderByProduct } from '@backend/services/productTestItems'
 
 export const runtime = 'nodejs'
@@ -10,6 +11,8 @@ export const runtime = 'nodejs'
  * 품목의 시험항목 순서를 입력 배열 순서대로 0,1,2,...로 재할당.
  */
 export async function POST(req: NextRequest) {
+  const g = await requireAdmin(req)
+  if (!g.ok) return g.response
   try {
     const body = await req.json()
     const { productId, orderedTestItemIds } = body as {

@@ -21,6 +21,17 @@ export interface SortColumnDef<F extends string = string> {
   key: string
   label: string
   fields: SortOption<F>[]
+  /**
+   * 자동 펼침(칸 나누기)을 끈다.
+   *
+   * 표는 헤더 `fields` 가 2개 이상이면 그 칸을 둘로 나눈다. 그런데 본문 칸이
+   * `CellStack` 이 아니면 나눠지지 않아 **헤더 칸 수 > 본문 칸 수** 로 어긋나고,
+   * 남는 칸이 폭 0으로 접혀 열이 화면에서 사라진다.
+   * 정렬 선택지는 여러 개로 두되 칸은 나누고 싶지 않을 때 이 옵션을 켠다
+   * (설계상 한 칸에 넣을 수 있는 필드는 정확히 2개다 —
+   *  docs/table-adaptive-columns.md §2).
+   */
+  noSplit?: boolean
 }
 
 export function sortCol<F extends string>(id: F, label: string): SortColumnDef<F> {

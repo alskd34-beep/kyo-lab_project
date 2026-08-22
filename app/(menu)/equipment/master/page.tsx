@@ -253,11 +253,18 @@ export default function EquipmentMasterPage() {
           <div className="py-10 text-center text-sm text-muted-foreground">조건에 맞는 장비가 없습니다.</div>
         ) : (
             <Table>
+              {/* 논리 열 4개(장비·분류·교정·상태) + 2필드 묶음 3개 → 최대 7칸.
+                  table-fixed 에서 <col> 이 모자라면 늘어난 칸이 폭 0으로 접혀 사라진다.
+                  칸 순서(펼침 / 합침):
+                  장비명/장비 · 코드/분류 · 카테고리/교정 · 위치/상태 · 최근검교정 · 차기검교정 · 상태 */}
               <colgroup>
-                <col className="w-[30%]" />
-                <col className="w-[22%]" />
-                <col className="w-[24%]" />
-                <col className="w-[24%]" />
+                <col className="w-[18%]" />
+                <col className="w-[12%]" />
+                <col className="w-[14%]" />
+                <col className="w-[14%]" />
+                <col className="w-[15%]" />
+                <col className="w-[15%]" />
+                <col className="w-[12%]" />
               </colgroup>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">

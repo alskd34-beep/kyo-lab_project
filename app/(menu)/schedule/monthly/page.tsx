@@ -37,7 +37,8 @@ interface ScheduleRow {
   test_items: string[]
   scheduled_date: string
   workdays: number
-  avg_hours?: number   // PCT 출처: 평균공수(시간) (레거시)
+  /** @deprecated 공수 정본은 DAY(`workdays`). 시간 값은 과거 데이터에만 남아 있다. */
+  avg_hours?: number
   dates?: string[]     // PCT 출처: 명시적 배정 근무일(주말 제외). 있으면 이 날짜들에 배치
   is_urgent: boolean
   is_duo: boolean
@@ -103,8 +104,8 @@ function cellStyle(row: ScheduleRow): { bg: string; border: string; label: strin
       label: 'PCT·긴급',
     }
     return {
-      bg: 'bg-violet-200 dark:bg-violet-900/60 hover:bg-violet-300',
-      border: 'border-violet-400 dark:border-violet-700 border-dashed',
+      bg: 'bg-amber-200 dark:bg-amber-900/60 hover:bg-amber-300',
+      border: 'border-amber-400 dark:border-amber-700 border-dashed',
       label: 'PCT',
     }
   }
@@ -301,7 +302,8 @@ export default function MonthlySchedulePage() {
     코드:     r.product_code ?? '',
     제조번호: r.batch_no ?? (typeof r.batch_id === 'string' ? r.batch_id.replace(/^pct-/, '') : r.batch_id),
     담당자:   testerNameById.get(r.tester_id) ?? String(r.tester_id),
-    공수:     r.avg_hours != null && r.avg_hours > 0 ? r.avg_hours.toFixed(1) : (r.workdays ? `${r.workdays}일` : '—'),
+    // 공수 정본은 DAY 다(PRD 원칙4). avg_hours(시간)는 레거시라 값이 있을 때만 괄호로 덧붙인다.
+    공수:     r.workdays ? `${r.workdays}일` : (r.avg_hours != null && r.avg_hours > 0 ? `${r.avg_hours.toFixed(1)}h` : '—'),
     긴급:     r.is_urgent ? '긴급' : '일반',
     출처:     r.source === 'pct' ? 'PCT' : 'QC',
     시험항목: (r.test_items ?? []).join(', '),
@@ -357,7 +359,7 @@ export default function MonthlySchedulePage() {
     { key: '코드',     label: '코드',     kind: 'mono',   width: 80  },
     { key: '제조번호', label: '제조번호', kind: 'mono',   width: 90  },
     { key: '담당자',   label: '담당자',   kind: 'person', width: 110 },
-    { key: '공수',     label: '공수(h)',  kind: 'number', width: 75  },
+    { key: '공수',     label: '공수(일)', kind: 'text',   width: 75  },
     { key: '긴급',     label: '긴급',     kind: 'chip',   width: 70, chipColor: { '일반': 'slate', '긴급': 'red' } },
     { key: '출처',     label: '출처',     kind: 'chip',   width: 70, chipColor: { 'QC': 'blue', 'PCT': 'violet' } },
     { key: '시험항목', label: '시험항목', kind: 'text',   width: 160 },
@@ -391,10 +393,10 @@ export default function MonthlySchedulePage() {
 
         {/* PCT 데이터 알림 */}
         {pctSnapshot.length > 0 && (
-          <Card className="border-violet-200 dark:border-violet-800 bg-violet-50/70 dark:bg-violet-950/30">
+          <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/70 dark:bg-blue-950/30">
             <CardContent className="flex flex-wrap items-center justify-between gap-3 py-3 text-xs">
               <div className="flex flex-wrap items-center gap-3">
-                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-violet-600 text-white">
+                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-600 text-white">
                   <Calendar size={14} />
                 </div>
                 <span className={`font-semibold ${TXT_PRIMARY}`}>PCT 생산관리 배정 표시 중</span>
@@ -411,7 +413,7 @@ export default function MonthlySchedulePage() {
                 onClick={handleClearPct}
                 variant="outline"
                 size="sm"
-                className="gap-1.5 border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-900/40"
+                className="gap-1.5 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40"
               >
                 PCT 데이터 지우기
               </Button>
@@ -456,7 +458,7 @@ export default function MonthlySchedulePage() {
               type="month"
               value={month}
               onChange={e => setMonth(e.target.value)}
-              className={`h-9 w-full rounded-md border sm:w-auto ${BORDER} bg-white dark:bg-slate-800 px-3 text-sm tabular-nums outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 dark:focus:ring-violet-900/40 ${TXT_PRIMARY} [color-scheme:light] dark:[color-scheme:dark]`}
+              className={`h-9 w-full rounded-md border sm:w-auto ${BORDER} bg-white dark:bg-slate-800 px-3 text-sm tabular-nums outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 ${TXT_PRIMARY} [color-scheme:light] dark:[color-scheme:dark]`}
             />
           </CardContent>
         </Card>
@@ -492,18 +494,18 @@ export default function MonthlySchedulePage() {
           <>
             {/* 요약 */}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Card className="border-violet-200 bg-violet-50 dark:border-violet-900 dark:bg-violet-950/40">
+              <Card className="border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/40">
                 <CardContent className="flex items-center gap-3 py-4">
-                  <Calendar size={20} className="text-violet-600 dark:text-violet-400" />
+                  <Calendar size={20} className="text-blue-600 dark:text-blue-400" />
                   <div>
                     <p className={`text-[11px] font-medium ${TXT_MUTED}`}>총 배정</p>
                     <p className={`text-xl font-bold tabular-nums ${TXT_PRIMARY}`}>{stats.total}건</p>
                   </div>
                 </CardContent>
               </Card>
-              <Card className="border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/40">
+              <Card className="border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/40">
                 <CardContent className="flex items-center gap-3 py-4">
-                  <Users size={20} className="text-blue-600 dark:text-blue-400" />
+                  <Users size={20} className="text-slate-600 dark:text-slate-300" />
                   <div>
                     <p className={`text-[11px] font-medium ${TXT_MUTED}`}>활동 시험자</p>
                     <p className={`text-xl font-bold tabular-nums ${TXT_PRIMARY}`}>{stats.testers}명</p>
@@ -519,12 +521,12 @@ export default function MonthlySchedulePage() {
                   </div>
                 </CardContent>
               </Card>
-              <Card className="border-sky-200 bg-sky-50 dark:border-sky-900 dark:bg-sky-950/40">
+              <Card className="border-teal-200 bg-teal-50 dark:border-teal-900 dark:bg-teal-950/40">
                 <CardContent className="flex items-center gap-3 py-4">
-                  <Users size={20} className="text-sky-600 dark:text-sky-400" />
+                  <Users size={20} className="text-teal-600 dark:text-teal-400" />
                   <div>
                     <p className={`text-[11px] font-medium ${TXT_MUTED}`}>듀오</p>
-                    <p className="text-xl font-bold tabular-nums text-sky-700 dark:text-sky-300">{stats.duo}건</p>
+                    <p className="text-xl font-bold tabular-nums text-teal-700 dark:text-teal-300">{stats.duo}건</p>
                   </div>
                 </CardContent>
               </Card>
@@ -551,7 +553,7 @@ export default function MonthlySchedulePage() {
                   >
                     <Icon size={15} />
                     {t.label}
-                    <span className={`hidden text-[10px] font-normal sm:inline ${active ? 'text-violet-100' : TXT_MUTED}`}>
+                    <span className={`hidden text-[10px] font-normal sm:inline ${active ? 'text-blue-100' : TXT_MUTED}`}>
                       {t.hint}
                     </span>
                   </button>
@@ -565,7 +567,7 @@ export default function MonthlySchedulePage() {
             <Card className={`${BORDER} ${CARD_BG} overflow-hidden`}>
               <CardHeader>
                 <CardTitle className={`flex items-center gap-2 text-base ${TXT_PRIMARY}`}>
-                  <Calendar size={16} className="text-violet-600 dark:text-violet-400" />
+                  <Calendar size={16} className="text-blue-600 dark:text-blue-400" />
                   월간 그리드
                   <span className={`text-xs font-normal ${TXT_MUTED}`}>(시험자 × 날짜)</span>
                 </CardTitle>
@@ -673,7 +675,7 @@ export default function MonthlySchedulePage() {
                   <span className={TXT_TERTIARY}>듀오</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <span className="inline-block h-3 w-3 rounded-md border border-dashed border-violet-400 bg-violet-200 dark:border-violet-700 dark:bg-violet-900/60" />
+                  <span className="inline-block h-3 w-3 rounded-md border border-dashed border-amber-400 bg-amber-200 dark:border-amber-700 dark:bg-amber-900/60" />
                   <span className={TXT_TERTIARY}>PCT 생산관리 출처</span>
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -692,7 +694,7 @@ export default function MonthlySchedulePage() {
               <Card className={`${BORDER} ${CARD_BG}`}>
                 <CardHeader>
                   <CardTitle className={`flex items-center gap-2 text-base ${TXT_PRIMARY}`}>
-                    <CalendarRange size={16} className="text-violet-600 dark:text-violet-400" />
+                    <CalendarRange size={16} className="text-blue-600 dark:text-blue-400" />
                     주간 보드
                     <span className={`text-xs font-normal ${TXT_MUTED}`}>(포장/예정일 기준 주차)</span>
                   </CardTitle>
@@ -713,7 +715,7 @@ export default function MonthlySchedulePage() {
               <Card className={`${BORDER} ${CARD_BG}`}>
                 <CardHeader>
                   <CardTitle className={`flex items-center gap-2 text-base ${TXT_PRIMARY}`}>
-                    <UserSquare size={16} className="text-violet-600 dark:text-violet-400" />
+                    <UserSquare size={16} className="text-blue-600 dark:text-blue-400" />
                     개인별 할당
                     <span className={`text-xs font-normal ${TXT_MUTED}`}>(시험자별 배정 목록)</span>
                   </CardTitle>

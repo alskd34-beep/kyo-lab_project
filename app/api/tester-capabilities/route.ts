@@ -1,9 +1,12 @@
 import { NextRequest } from 'next/server'
+import { requireAdmin, requireAuth } from '@backend/lib/guard'
 import { listCapabilities, listCapabilityMatrix, upsertCapabilityLevel } from '@backend/services/testers'
 
 export const runtime = 'nodejs'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const g = await requireAuth(req)
+  if (!g.ok) return g.response
   try {
     const [capabilities, matrix] = await Promise.all([
       listCapabilities(),
@@ -16,6 +19,8 @@ export async function GET() {
 }
 
 export async function PATCH(req: NextRequest) {
+  const g = await requireAdmin(req)
+  if (!g.ok) return g.response
   try {
     const body = await req.json()
     const { testerId, capabilityId, proficiencyLevel } = body

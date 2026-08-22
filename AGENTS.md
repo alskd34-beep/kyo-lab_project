@@ -3,7 +3,7 @@
 # kd_project — 광동제약 QC 시험 관리 시스템
 
 ## Purpose
-A Next.js 16 (App Router) web application for **Kwangdong Pharmaceutical's Quality Control (QC) testing management** — a pharma LIMS/QMS covering product test management, scheduling, stability studies, deviations (OOS/CAPA), equipment, documents (SOP/STD), and analytics. UI text and domain terms are in Korean. Data lives in Supabase (Postgres); auth is custom JWT (jose + bcrypt) with httpOnly cookies; an AI chatbot streams answers via OpenAI `gpt-4o-mini`.
+A Next.js 16 (App Router) web application for **Kwangdong Pharmaceutical's Quality Control (QC) testing management** — a pharma LIMS/QMS covering product test management, scheduling, stability studies, deviations (OOS/CAPA), equipment, documents (SOP/STD), and analytics. UI text and domain terms are in Korean. Data lives in Supabase (Postgres); auth is custom JWT (jose + bcrypt) with httpOnly cookies; an AI chatbot streams answers (provider depends on role — see AI providers below).
 
 ## Key Files
 | File | Description |
@@ -81,7 +81,20 @@ Supabase (Postgres)   ← schema in supabase/migrations
 - `jose` (JWT) + `bcryptjs` — custom auth.
 - `tailwindcss` v4 + `radix-ui` + shadcn/ui — styling/components; `clsx` + `tailwind-merge` via `cn()`.
 - `lucide-react` — icons; `date-fns`, `react-day-picker` — dates; `xlsx` — spreadsheet import/export.
-- OpenAI HTTP API (`gpt-4o-mini`) for the chatbot. **Note:** `@anthropic-ai/sdk` is listed in deps but is legacy/unused — the chat service was migrated to OpenAI.
+### AI providers (verified 2026-08-22)
+Four different providers are in use. Keep this table accurate — it was wrong before (it claimed OpenAI `gpt-4o-mini`, which **nothing** calls).
+
+| Path | Provider | Entry point | Env |
+|------|----------|-------------|-----|
+| Chatbot — tester role | **MISO app** | `backend/lib/misoClient.ts` | `MISO_API_URL`, `MISO_API_KEY` |
+| Chatbot — admin, dev | **Codex CLI** (subprocess) | `backend/lib/codexCli.ts` | `CODEX_EXEC_CMD`, `CODEX_ASSISTANT_MODEL` |
+| Chatbot — admin, prod | **Letsur** | `backend/lib/letsurClient.ts` | `LETSUR_BASE_URL`, `LETSUR_API_KEY`, `LETSUR_MODEL` |
+| AI order assignment (opt-in) | **Codex CLI** → rule engine fallback | `backend/services/pctAssign.ts` | `ENABLE_CODEX_ASSIGN=1` |
+
+- `@anthropic-ai/sdk` is a leftover dependency — **nothing imports it** since the Anthropic weekly-schedule path was removed (2026-08-22). OpenAI is not a dependency of any code path either.
+- Admin chatbot provider is chosen by `CHAT_ADMIN_USE_CLI` (defaults to CLI outside production).
+- ⚠️ `LETSUR_*` / `MISO_*` keys are absent from `.env.local`; those two chat paths cannot work until they are set.
+- **CLI-first during development, API-based for production — this is deliberate.** The Codex CLI paths reuse a logged-in subscription session instead of burning API credits, and each has a switch (`CHAT_ADMIN_USE_CLI`, `ENABLE_CODEX_ASSIGN`) that flips to the API/rule-engine path. Constraints to resolve before production: `spawn('sh', …)` does not run on Windows servers, and CLI calls leave no audit trail. See `docs/system-audit-2026-08-22.md` item 7.
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->
 

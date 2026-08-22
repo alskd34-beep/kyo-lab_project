@@ -44,7 +44,7 @@ const ALL_TABS = ['시험현황', '제품시험', '안정성시험', '일탈관�
 
 const STATUS_CONFIG: Record<StatusKey, { label: string; dot: string }> = {
   waiting:    { label: '시작대기', dot: 'bg-slate-400' },
-  inprogress: { label: '진행중',   dot: 'bg-violet-500' },
+  inprogress: { label: '진행중',   dot: 'bg-blue-500' },
   prereview:  { label: '검토대기', dot: 'bg-amber-500' },
   reviewing:  { label: '검토중',   dot: 'bg-blue-500' },
   pending:    { label: '승인대기', dot: 'bg-teal-500' },
@@ -62,7 +62,7 @@ function buildKpis(rows: TestRow[]): KpiItem[] {
   return [
     { label: '전체시험', value: String(rows.length),     unit: '건', sub: '조회 기간 전체', accent: 'text-foreground',  bg: 'bg-white',         border: 'border-slate-200'   },
     { label: '시작대기', value: String(by('waiting')),    unit: '건', sub: '배정 후 미착수', accent: 'text-slate-600',   bg: 'bg-slate-50',      border: 'border-slate-200'   },
-    { label: '진행중',   value: String(by('inprogress')), unit: '건', sub: '처리 진행 중',   accent: 'text-violet-600',  bg: 'bg-violet-50/60',  border: 'border-violet-100'  },
+    { label: '진행중',   value: String(by('inprogress')), unit: '건', sub: '처리 진행 중',   accent: 'text-blue-600',  bg: 'bg-blue-50/60',  border: 'border-blue-100'  },
     { label: '검토',     value: String(by('prereview') + by('reviewing')), unit: '건', sub: '검토대기·검토중', accent: 'text-blue-600', bg: 'bg-blue-50/60', border: 'border-blue-100' },
     { label: '승인대기', value: String(by('pending')),    unit: '건', sub: '검토 후 승인 대기', accent: 'text-teal-600', bg: 'bg-teal-50/60',    border: 'border-teal-100'    },
     { label: '완료',     value: String(by('completed')),  unit: '건', sub: '승인 완료',      accent: 'text-emerald-600', bg: 'bg-emerald-50/60', border: 'border-emerald-100' },
@@ -374,13 +374,22 @@ export default function QCDashboard() {
               </div>
 
               <Table>
+                {/* 논리 열 6개(체크·품목·시험·담당·일정·진행상태) + 2필드 묶음 4개 -> 최대 10칸.
+                    table-fixed 에서 <col> 이 모자라면 늘어난 칸이 폭 0으로 접혀 사라진다.
+                    칸 순서(펼침 / 합침):
+                    체크 · 제품명/품목 · 유형/시험 · 시험번호/담당 · 시험항목/일정 ·
+                    담당자/진행상태 · 수탁사 · 접수일 · 완료예정일 · 진행상태 */}
                 <colgroup>
                   <col className="w-[4%]" />
-                  <col className="w-[26%]" />
-                  <col className="w-[22%]" />
-                  <col className="w-[18%]" />
                   <col className="w-[16%]" />
-                  <col className="w-[14%]" />
+                  <col className="w-[9%]" />
+                  <col className="w-[11%]" />
+                  <col className="w-[11%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[9%]" />
                 </colgroup>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">

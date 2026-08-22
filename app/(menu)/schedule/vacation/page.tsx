@@ -59,13 +59,13 @@ const TYPE_LABEL: Record<ScheduleType, string> = {
 const TYPE_CLS: Record<ScheduleType, string> = {
   ANNUAL:        "bg-blue-50 text-blue-700 border-blue-200",
   HALF_DAY:      "bg-amber-50 text-amber-700 border-amber-200",
-  BUSINESS_TRIP: "bg-violet-50 text-violet-700 border-violet-200",
+  BUSINESS_TRIP: "bg-blue-50 text-blue-700 border-blue-200",
 }
 // Monday 스타일 연속 막대 색(채움)
 const TYPE_BAR: Record<ScheduleType, string> = {
   ANNUAL:        "bg-blue-500 hover:bg-blue-600",
   HALF_DAY:      "bg-amber-500 hover:bg-amber-600",
-  BUSINESS_TRIP: "bg-violet-500 hover:bg-violet-600",
+  BUSINESS_TRIP: "bg-blue-500 hover:bg-blue-600",
 }
 
 // ─── Date utils (UTC 기준 yyyy-MM-dd) ─────────────────────────────────────────

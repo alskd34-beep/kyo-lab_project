@@ -35,13 +35,17 @@ pnpm-debug.log*
 # temporary & garbage files
 /temp/*
 !/temp/README.md
+/.playwright-cli/
+/supabase/.temp/
+/.omc/notepads/
+/.claude/handoff.md
 /*.png
 /*.jpg
 /*.jpeg
 /*.webp
 
 # env files
-#.env*.local
+.env*.local
 
 # typescript
 *.tsbuildinfo
