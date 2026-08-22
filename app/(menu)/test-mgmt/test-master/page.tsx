@@ -10,6 +10,13 @@ import {
   Trash2,
 } from "lucide-react"
 
+import {
+  CATEGORIES,
+  CategoryBadge,
+  type Category,
+} from "@frontend/components/test-mgmt/test-category"
+import { TestItemGroupPanel } from "@frontend/components/test-mgmt/test-item-group-panel"
+
 import { cn } from "@frontend/lib/utils"
 import { Badge } from "@frontend/components/ui/badge"
 import { Tag } from "@frontend/components/ui/tag"
@@ -44,27 +51,13 @@ import {
   TableRow,
 } from "@frontend/components/ui/table"
 
-const CATEGORIES = [
-  "성상·포장",
-  "이화학",
-  "함량시험",
-  "확인시험",
-  "기기분석",
-  "안전성",
-  "기타",
-] as const
+/** 상단 화면 전환 탭. 시험항목 마스터와 그룹(템플릿)은 다른 개념이라 화면을 나눈다. */
+type MasterView = "items" | "groups"
 
-type Category = (typeof CATEGORIES)[number]
-
-const CATEGORY_DOT: Record<string, string> = {
-  "성상·포장": "bg-fuchsia-500",
-  이화학: "bg-blue-500",
-  함량시험: "bg-blue-500",
-  확인시험: "bg-cyan-500",
-  기기분석: "bg-amber-500",
-  안전성: "bg-red-500",
-  기타: "bg-muted-foreground",
-}
+const MASTER_VIEWS: { id: MasterView; label: string }[] = [
+  { id: "items", label: "시험항목" },
+  { id: "groups", label: "그룹" },
+]
 
 interface TestItemRow {
   id: string
@@ -109,18 +102,8 @@ const SORT_COLUMNS: SortColumnDef<SortField>[] = [
 ]
 
 
-
-function CategoryBadge({ category }: { category: string }) {
-  const dot = CATEGORY_DOT[category] ?? CATEGORY_DOT["기타"]
-  return (
-    <Badge variant="outline" className="gap-1.5">
-      <span className={cn("size-1.5 rounded-full", dot)} />
-      {category || "기타"}
-    </Badge>
-  )
-}
-
 export default function TestMasterPage() {
+  const [view, setView] = useState<MasterView>("items")
   const [rows, setRows] = useState<TestItemRow[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
@@ -340,6 +323,27 @@ export default function TestMasterPage() {
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden p-4 md:p-6">
+      {/* 화면 전환 탭 — 시험항목 마스터 / 시험항목 그룹 */}
+      <div className="inline-flex h-9 w-fit shrink-0 items-center gap-0.5 rounded-md bg-muted p-0.5 text-muted-foreground">
+        {MASTER_VIEWS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setView(tab.id)}
+            className={cn(
+              "h-8 rounded-md px-3 text-sm font-medium transition-colors",
+              view === tab.id ? "bg-card text-foreground shadow-sm" : "hover:text-foreground",
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {view === "groups" ? (
+        <TestItemGroupPanel candidates={rows} candidatesLoading={loading} />
+      ) : (
+      <>
       {/* KPI 카드 */}
       <div className="grid shrink-0 grid-cols-3 gap-2">
         <Card className="gap-0.5 px-3 py-2">
@@ -720,6 +724,8 @@ export default function TestMasterPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </>
+      )}
     </div>
   )
 }

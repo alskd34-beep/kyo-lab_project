@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import {
   Copy,
+  Layers,
   Link2,
   PackagePlus,
   Plus,
@@ -10,6 +11,8 @@ import {
   Trash2,
 } from "lucide-react"
 import { cn } from "@frontend/lib/utils"
+import { api, errorMessage } from "@frontend/lib/api-client"
+import { useToastMessage } from "@frontend/components/common/toast-message"
 
 import { Badge } from "@frontend/components/ui/badge"
 import { Tag } from "@frontend/components/ui/tag"
@@ -89,6 +92,22 @@ interface ProductTestItemRow {
   sequenceOrder: number
 }
 
+/** 시험항목 그룹('전공정' 등) — 품목에 통째로 넣는 템플릿 */
+interface TestItemGroupRow {
+  id: string
+  name: string
+  description: string | null
+  itemCount: number
+}
+
+/** 그룹에 속한 시험항목 (그룹 내 순번 오름차순) */
+interface TestItemGroupItemRow {
+  testItemId: string
+  testItemName: string
+  category: string
+  sequenceOrder: number
+}
+
 export default function TestItemsPage() {
   const [products, setProducts] = useState<ProductRow[]>([])
   const [allTestItems, setAllTestItems] = useState<TestItemRow[]>([])
@@ -134,6 +153,16 @@ export default function TestItemsPage() {
   const [copySourceItems, setCopySourceItems] = useState<ProductTestItemRow[]>([])
   const [copySelected, setCopySelected] = useState<Set<string>>(new Set())
   const [copyLoading, setCopyLoading] = useState(false)
+  // 그룹 넣기 (시험항목 그룹을 품목에 통째로 추가)
+  const { showToast } = useToastMessage()
+  const [groupDialogOpen, setGroupDialogOpen] = useState(false)
+  const [groups, setGroups] = useState<TestItemGroupRow[]>([])
+  const [groupsLoading, setGroupsLoading] = useState(false)
+  const [groupSearch, setGroupSearch] = useState("")
+  const [selectedGroup, setSelectedGroup] = useState<TestItemGroupRow | null>(null)
+  const [groupItems, setGroupItems] = useState<TestItemGroupItemRow[]>([])
+  const [groupItemsLoading, setGroupItemsLoading] = useState(false)
+  const [groupApplyLoading, setGroupApplyLoading] = useState(false)
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -283,6 +312,23 @@ export default function TestItemsPage() {
           p.productCode.toLowerCase().includes(q)
       )
   }, [products, copySourceSearch, selectedProduct])
+
+  // 그룹 후보(검색). 이름·설명 모두에서 찾는다.
+  const filteredGroups = useMemo(() => {
+    const q = groupSearch.trim().toLowerCase()
+    if (!q) return groups
+    return groups.filter(
+      (g) =>
+        g.name.toLowerCase().includes(q) ||
+        (g.description ?? "").toLowerCase().includes(q)
+    )
+  }, [groups, groupSearch])
+
+  // 그룹 미리보기 요약 — 이미 있는 항목은 건너뛰므로 실제 추가될 개수만 따로 센다.
+  const groupPreview = useMemo(() => {
+    const already = groupItems.filter((i) => linkedIds.has(i.testItemId)).length
+    return { total: groupItems.length, already, toAdd: groupItems.length - already }
+  }, [groupItems, linkedIds])
 
   const sortedLinkedItems = useMemo(() => {
     const items = linkedItems.slice()
@@ -506,6 +552,79 @@ export default function TestItemsPage() {
     }
   }
 
+  // ── 그룹 넣기 ──
+  function openGroupDialog() {
+    setSelectedGroup(null)
+    setGroupItems([])
+    setGroupSearch("")
+    setError(null)
+    setGroupDialogOpen(true)
+    void loadGroups()
+  }
+
+  async function loadGroups() {
+    setGroupsLoading(true)
+    try {
+      const data = await api.get<{ rows: TestItemGroupRow[] }>("/api/test-item-groups")
+      setGroups(data.rows)
+    } catch (e) {
+      setError(errorMessage(e, "그룹 목록을 불러오지 못했습니다."))
+    } finally {
+      setGroupsLoading(false)
+    }
+  }
+
+  async function selectGroup(group: TestItemGroupRow) {
+    setSelectedGroup(group)
+    setGroupItems([])
+    setGroupItemsLoading(true)
+    try {
+      const data = await api.get<{ rows: TestItemGroupItemRow[] }>(
+        `/api/test-item-groups/${group.id}/items`
+      )
+      setGroupItems(
+        data.rows.slice().sort((a, b) => a.sequenceOrder - b.sequenceOrder)
+      )
+    } catch (e) {
+      setError(errorMessage(e, "그룹 항목을 불러오지 못했습니다."))
+    } finally {
+      setGroupItemsLoading(false)
+    }
+  }
+
+  async function handleApplyGroup() {
+    if (!selectedProduct || !selectedGroup) return
+    setGroupApplyLoading(true)
+    try {
+      // 서버가 이미 있는 항목은 건너뛰고 없는 것만 품목 끝에 그룹 순서대로 덧붙인다.
+      const { added } = await api.post<{ ok: boolean; added: number }>(
+        `/api/test-item-groups/${selectedGroup.id}/apply`,
+        { productId: selectedProduct.id }
+      )
+      await loadLinkedItems(selectedProduct.id)
+      setGroupDialogOpen(false)
+      if (added > 0) {
+        showToast({
+          title: `${added}개 추가됨`,
+          description: `'${selectedGroup.name}' 그룹을 ${selectedProduct.name}에 넣었습니다.`,
+          variant: "success",
+        })
+      } else {
+        showToast({
+          title: "추가할 항목이 없습니다.",
+          description: `'${selectedGroup.name}' 그룹의 항목이 이미 모두 연결되어 있습니다.`,
+          variant: "info",
+        })
+      }
+    } catch (e) {
+      const message = errorMessage(e, "그룹을 넣지 못했습니다.")
+      setError(message)
+      showToast({ title: "그룹 넣기 실패", description: message, variant: "error" })
+    } finally {
+      setGroupApplyLoading(false)
+    }
+  }
+
   const dialogTabs = ["전체", ...CATEGORIES] as const
   const hasSelection = !!selectedProduct
 
@@ -681,6 +800,14 @@ export default function TestItemsPage() {
                         선택 삭제 ({selectedLinked.size})
                       </Button>
                     )}
+                    <Button
+                      onClick={openGroupDialog}
+                      size="sm"
+                      variant="outline"
+                    >
+                      <Layers />
+                      그룹 넣기
+                    </Button>
                     <Button
                       onClick={openCopyDialog}
                       size="sm"
@@ -1254,6 +1381,192 @@ export default function TestItemsPage() {
             >
               <Copy />
               {copyLoading ? "복사 중..." : `복사 (${copySelected.size})`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 그룹 넣기 — 시험항목 그룹을 품목에 통째로 추가 */}
+      <Dialog
+        open={groupDialogOpen}
+        onOpenChange={(open) => {
+          if (!open && !groupApplyLoading) setGroupDialogOpen(false)
+        }}
+      >
+        <DialogContent size="xl">
+          <DialogHeader>
+            <DialogTitle>그룹 넣기</DialogTitle>
+            <DialogDescription>
+              시험항목 그룹을{" "}
+              <span className="font-medium text-foreground">
+                {selectedProduct?.name}
+              </span>
+              에 통째로 넣습니다. 이미 연결된 항목은 건너뛰고, 없는 항목만 그룹
+              순서대로 맨 뒤에 추가합니다.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogBody className="grid gap-4">
+            <div>
+              <p className="mb-2 text-sm font-medium text-foreground">
+                1. 그룹 선택
+              </p>
+              <div className="relative">
+                <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="그룹명 / 설명 검색..."
+                  value={groupSearch}
+                  onChange={(e) => setGroupSearch(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <Card className="mt-3 gap-0 overflow-hidden py-0">
+                <div className="max-h-48 overflow-y-auto">
+                  {groupsLoading ? (
+                    <div className="flex flex-col gap-2 p-4">
+                      <Skeleton className="h-6 w-full" />
+                      <Skeleton className="h-6 w-full" />
+                      <Skeleton className="h-6 w-2/3" />
+                    </div>
+                  ) : filteredGroups.length === 0 ? (
+                    <p className="py-8 text-center text-sm text-muted-foreground">
+                      {groups.length === 0
+                        ? "등록된 그룹이 없습니다."
+                        : "검색 결과가 없습니다."}
+                    </p>
+                  ) : (
+                    <ul className="divide-y">
+                      {filteredGroups.map((g) => (
+                        <li key={g.id}>
+                          <button
+                            type="button"
+                            onClick={() => void selectGroup(g)}
+                            className={cn(
+                              "flex w-full items-center gap-2 px-4 py-2.5 text-left hover:bg-muted/50",
+                              selectedGroup?.id === g.id && "bg-primary/5"
+                            )}
+                          >
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-medium text-foreground">
+                                {g.name}
+                              </span>
+                              {g.description && (
+                                <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                                  {g.description}
+                                </span>
+                              )}
+                            </span>
+                            <Badge variant="secondary">{g.itemCount}개 항목</Badge>
+                            {selectedGroup?.id === g.id && (
+                              <span className="text-xs font-medium text-primary">
+                                선택됨
+                              </span>
+                            )}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </Card>
+            </div>
+
+            {selectedGroup && (
+              <div>
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-foreground">
+                    2. 넣을 항목 미리보기
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="secondary">전체 {groupPreview.total}</Badge>
+                    <Badge variant="outline" className="gap-1">
+                      <span className="size-1.5 rounded-full bg-blue-500" />
+                      추가 {groupPreview.toAdd}
+                    </Badge>
+                    <Badge variant="outline" className="gap-1">
+                      <span className="size-1.5 rounded-full bg-muted-foreground" />
+                      이미 있음 {groupPreview.already}
+                    </Badge>
+                  </div>
+                </div>
+                <Card className="gap-0 overflow-hidden py-0">
+                  <div className="max-h-56 overflow-y-auto">
+                    {groupItemsLoading ? (
+                      <div className="flex flex-col gap-2 p-4">
+                        <Skeleton className="h-6 w-full" />
+                        <Skeleton className="h-6 w-full" />
+                        <Skeleton className="h-6 w-2/3" />
+                      </div>
+                    ) : groupItems.length === 0 ? (
+                      <p className="py-8 text-center text-sm text-muted-foreground">
+                        이 그룹에는 시험항목이 없습니다.
+                      </p>
+                    ) : (
+                      <ul className="divide-y">
+                        {groupItems.map((item, idx) => {
+                          const already = linkedIds.has(item.testItemId)
+                          return (
+                            <li
+                              key={item.testItemId}
+                              className={cn(
+                                "flex items-center gap-3 px-4 py-2.5",
+                                already && "opacity-50"
+                              )}
+                            >
+                              <span className="w-5 shrink-0 text-right text-[11px] text-muted-foreground tabular-nums">
+                                {idx + 1}
+                              </span>
+                              <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                                {item.testItemName}
+                              </span>
+                              <span
+                                className={cn(
+                                  "rounded-md border px-2 py-0.5 text-[10px] font-medium",
+                                  CATEGORY_COLORS[item.category] ??
+                                    CATEGORY_COLORS["기타"]
+                                )}
+                              >
+                                {item.category || "기타"}
+                              </span>
+                              {already ? (
+                                <span className="w-14 shrink-0 text-right text-[10px] text-muted-foreground">
+                                  이미 있음
+                                </span>
+                              ) : (
+                                <span className="w-14 shrink-0 text-right text-[10px] font-medium text-primary">
+                                  추가 예정
+                                </span>
+                              )}
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                </Card>
+              </div>
+            )}
+          </DialogBody>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setGroupDialogOpen(false)}
+              disabled={groupApplyLoading}
+            >
+              취소
+            </Button>
+            <Button
+              onClick={() => void handleApplyGroup()}
+              // 미리보기가 0건이어도 누를 수 있게 둔다 — 서버가 최종 판단하고
+              // "추가할 항목이 없습니다" 를 토스트로 알린다.
+              disabled={groupApplyLoading || !selectedGroup || groupItemsLoading}
+            >
+              <Layers />
+              {groupApplyLoading
+                ? "넣는 중..."
+                : `그룹 넣기 (${groupPreview.toAdd})`}
             </Button>
           </DialogFooter>
         </DialogContent>
