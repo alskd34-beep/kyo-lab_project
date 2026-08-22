@@ -136,7 +136,7 @@ export default function UsersAdminPage() {
     const usersRes = await fetch('/api/users', { cache: 'no-store', credentials: 'include' })
 
     if (usersRes.ok) {
-      const next = (await usersRes.json()).users as UserRow[]
+      const next = (await usersRes.json()).rows as UserRow[]
       setUsers(next)
       primePeopleCacheFromUsers(next)
     } else {
@@ -529,8 +529,8 @@ function EditUserDialog({
       return
     }
 
-    const data = await r.json() as { user: UserRow }
-    await onSaved(data.user)
+    const data = await r.json() as { row: UserRow }
+    await onSaved(data.row)
   }
 
   const removeUser = async () => {

@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server'
+import { requireAdmin, requireAuth } from '@backend/lib/guard'
 import { listTestItems, createTestItem, updateTestItem, deleteTestItem } from '@backend/services/testItems'
 
 export const runtime = 'nodejs'
@@ -14,7 +15,9 @@ function serializeError(err: unknown): string {
   return String(err)
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const g = await requireAuth(req)
+  if (!g.ok) return g.response
   try {
     const rows = await listTestItems()
     return Response.json({ rows })
@@ -25,6 +28,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const g = await requireAdmin(req)
+  if (!g.ok) return g.response
   try {
     const body = await req.json()
     const row = await createTestItem({
@@ -41,6 +46,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  const g = await requireAdmin(req)
+  if (!g.ok) return g.response
   try {
     const body = await req.json()
     const { id, ...fields } = body
@@ -54,6 +61,8 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const g = await requireAdmin(req)
+  if (!g.ok) return g.response
   try {
     const body = await req.json()
     const { id } = body

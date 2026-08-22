@@ -19,7 +19,6 @@ Next.js App Router route handlers (`route.ts`), one folder per resource. These a
 | `batches/`, `batches/[id]/` | Test/production batches |
 | `manhours/` | Man-hour (공수) tracking |
 | `schedules/`, `schedules/monthly/` | Scheduling data |
-| `qc-scheduler/` | QC scheduling computation |
 | `dashboard/` | Aggregated dashboard/KPI data |
 | `chat/`, `chat/history/` | AI chatbot — SSE streaming proxy to Codex CLI-backed assistant; history persistence |
 | `google-sheet/master/`, `.../stability/` | Google Sheet import/sync endpoints |
@@ -49,7 +48,10 @@ Next.js App Router route handlers (`route.ts`), one folder per resource. These a
   // auth.payload → { sub, username, role }
   ```
   Middleware lets API requests through (no redirect); the route guard is the real protection. `auth/*` routes are public by design.
-- **Response contract**: success → `{ rows }` | `{ row }` | `{ ok: true }`; failure → `{ error: <Korean message> }` with appropriate status (400 validation, 401/403 auth, 500 server, 503 missing-env). Keep error messages in Korean.
+- **Response contract**: success → `{ rows }` | `{ row }` | `{ ok: true }`; failure → `{ error: <Korean message> }` with appropriate status (400 validation, 401/403 auth, 500 server, 503 missing-env). Keep error messages in Korean — including guard errors (no bare `'unauthenticated'` / `'forbidden'`).
+  - Standard CRUD resources **must** use `rows` / `row`. Naming the key after the resource (`{ users }`, `{ batch }`) is not allowed — it was normalized on 2026-08-22.
+  - Documented exceptions: `auth/*` returns `{ user }` (the session subject, consumed by `frontend/lib/auth-context.tsx`); endpoints returning **several distinct collections** name each one (`{ rows, categories, classifications }`, `{ capabilities, matrix }`, `{ conversations }`, `{ messages }`, `{ snapshot }`, `{ fileId }`).
+- **Client side**: call APIs through `@frontend/lib/api-client` (`api.get/post/patch/del`). It always sends credentials, unwraps `{ error }` into an `ApiError`, and returns Korean messages. Do not hand-roll `fetch` + `res.json()` error handling in new code. 401 recovery is global (`AuthProvider` retries once via refresh, then redirects to `/login`).
 - The chat route returns a raw `text/event-stream` (SSE) `Response`, not JSON — it pipes `sendChatMessage()`'s stream body straight through. The chat service now shells out to `codex exec` and streams the final answer in the legacy Dify-compatible event format.
 
 ### Testing Requirements

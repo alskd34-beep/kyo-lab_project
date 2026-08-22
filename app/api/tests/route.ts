@@ -4,12 +4,15 @@
  */
 
 import { NextRequest } from 'next/server'
+import { requireAuth } from '@backend/lib/guard'
 import { listTests } from '@backend/services/tests'
 import type { StatusKey } from '@shared/qc'
 
 export const runtime = 'nodejs'
 
 export async function GET(req: NextRequest) {
+  const g = await requireAuth(req)
+  if (!g.ok) return g.response
   try {
     const sp = req.nextUrl.searchParams
     const rows = await listTests({

@@ -14,11 +14,11 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx) {
   try {
     const { id } = await ctx.params
     const { displayName, avatarUrl, role, isActive, password } = await req.json()
-    const user = await updateUser(id, { displayName, avatarUrl, role, isActive, password })
+    const row = await updateUser(id, { displayName, avatarUrl, role, isActive, password })
     if (password || isActive === false) {
       await revokeAllUserTokens(id)
     }
-    return Response.json({ user })
+    return Response.json({ row })
   } catch (err) {
     console.error('[PATCH /api/users] error:', err)
     const msg = err instanceof Error ? err.message : (err as { message?: string })?.message ?? '서버 오류'

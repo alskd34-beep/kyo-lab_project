@@ -8,10 +8,10 @@ export const runtime = 'nodejs'
 export async function POST(req: NextRequest) {
   try {
     const access = req.cookies.get(ACCESS_COOKIE)?.value
-    if (!access) return Response.json({ error: 'unauthenticated' }, { status: 401 })
+    if (!access) return Response.json({ error: '로그인이 필요합니다.' }, { status: 401 })
 
     const payload = await verifyAccessToken(access).catch(() => null)
-    if (!payload) return Response.json({ error: 'invalid token' }, { status: 401 })
+    if (!payload) return Response.json({ error: '로그인 세션이 만료되었습니다. 다시 로그인해 주세요.' }, { status: 401 })
 
     const { currentPassword, newPassword } = await req.json()
     if (!currentPassword || !newPassword) {
@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     }
 
     const user = await findUserByUsername(payload.username)
-    if (!user) return Response.json({ error: 'user not found' }, { status: 404 })
+    if (!user) return Response.json({ error: '사용자를 찾을 수 없습니다.' }, { status: 404 })
 
     const ok = await verifyPassword(currentPassword, user.passwordHash)
     if (!ok) return Response.json({ error: '현재 비밀번호가 올바르지 않습니다.' }, { status: 400 })

@@ -6,8 +6,9 @@
 
 import { NextRequest } from 'next/server'
 import { requireAuth, requireAdmin } from '@backend/lib/guard'
-import { supabaseAdmin } from '@backend/lib/supabase'
-import { cancelReservation, completeReservation } from '@backend/services/equipmentReservation'
+import {
+  cancelReservation, completeReservation, deleteReservation, reservationOwnerId,
+} from '@backend/services/equipmentReservation'
 
 export const runtime = 'nodejs'
 
@@ -23,13 +24,8 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
 
     // 담당자는 본인 예약만 변경 가능, 관리자는 전체
     if (auth.payload.role !== 'admin') {
-      const { data: owner, error: ownErr } = await supabaseAdmin
-        .from('equipment_reservation')
-        .select('user_id')
-        .eq('id', id)
-        .single()
-      if (ownErr) throw ownErr
-      if ((owner?.user_id as string) !== auth.payload.sub) {
+      const ownerId = await reservationOwnerId(id)
+      if (ownerId !== auth.payload.sub) {
         return Response.json({ error: '본인 예약만 변경할 수 있습니다.' }, { status: 403 })
       }
     }
@@ -49,8 +45,7 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
   if (!auth.ok) return auth.response
   try {
     const { id } = await ctx.params
-    const { error } = await supabaseAdmin.from('equipment_reservation').delete().eq('id', id)
-    if (error) throw error
+    await deleteReservation(id)
     return Response.json({ ok: true })
   } catch (err) {
     const msg = err instanceof Error ? err.message : '서버 오류'

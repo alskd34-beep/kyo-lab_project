@@ -8,8 +8,8 @@ export async function GET(req: NextRequest) {
   const g = await requireAdmin(req)
   if (!g.ok) return g.response
   try {
-    const users = await listUsers()
-    return Response.json({ users })
+    const rows = await listUsers()
+    return Response.json({ rows })
   } catch (err) {
     console.error('[api/users GET]', err)
     return Response.json({ error: '서버 오류' }, { status: 500 })
@@ -22,10 +22,10 @@ export async function POST(req: NextRequest) {
   try {
     const { username, password, displayName, avatarUrl, role } = await req.json()
     if (!username || !password) {
-      return Response.json({ error: 'username, password 필수' }, { status: 400 })
+      return Response.json({ error: '아이디와 비밀번호는 필수입니다.' }, { status: 400 })
     }
-    const user = await createUser({ username, password, displayName, avatarUrl, role })
-    return Response.json({ user }, { status: 201 })
+    const row = await createUser({ username, password, displayName, avatarUrl, role })
+    return Response.json({ row }, { status: 201 })
   } catch (err) {
     const msg = err instanceof Error ? err.message : '서버 오류'
     const status = msg.includes('duplicate') ? 409 : 500

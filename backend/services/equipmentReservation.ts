@@ -9,6 +9,7 @@
  */
 
 import { supabaseAdmin } from '@backend/lib/supabase'
+import { selectAll } from '@backend/lib/supabasePage'
 import { createNotification } from '@backend/services/notifications'
 
 export type ReservationStatus = 'RESERVED' | 'WAITING' | 'CANCELLED' | 'COMPLETED'
@@ -231,15 +232,30 @@ export async function autoCancelStaleWaiting(): Promise<number> {
 
 /** 기존 예약의 distinct equipment_id 목록(화면 datalist 용). */
 export async function listEquipmentIds(): Promise<string[]> {
-  const { data, error } = await supabaseAdmin
-    .from('equipment_reservation')
-    .select('equipment_id')
-    .order('equipment_id', { ascending: true })
-  if (error) throw error
+  // 예약은 계속 쌓이는 테이블 — 1000행 절단 시 장비 목록이 누락된다 → selectAll
+  const { data, error } = await selectAll(supabaseAdmin, 'equipment_reservation', 'equipment_id')
+  if (error) throw new Error(error.message)
   const ids = new Set<string>()
   for (const r of data ?? []) {
     const eid = (r as Record<string, unknown>).equipment_id as string | undefined
     if (eid) ids.add(eid)
   }
   return [...ids]
+}
+
+/** 예약 소유자 user_id 조회 (권한 확인용). 없으면 null. */
+export async function reservationOwnerId(id: string): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from('equipment_reservation')
+    .select('user_id')
+    .eq('id', id)
+    .maybeSingle()
+  if (error) throw error
+  return (data?.user_id as string) ?? null
+}
+
+/** 예약 완전 삭제 (관리자 전용). 취소는 cancelReservation 을 쓴다. */
+export async function deleteReservation(id: string): Promise<void> {
+  const { error } = await supabaseAdmin.from('equipment_reservation').delete().eq('id', id)
+  if (error) throw error
 }
