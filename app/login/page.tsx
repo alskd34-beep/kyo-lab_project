@@ -8,6 +8,7 @@ import { Button } from '@frontend/components/ui/button'
 import { Card } from '@frontend/components/ui/card'
 import { Input } from '@frontend/components/ui/input'
 
+const HOME_PATH      = '/home'
 const LS_SAVED_ID    = 'kd-saved-id'
 const LS_AUTO_LOGIN  = 'kd-auto-login'
 const AUTO_LOGIN_COOKIE = 'kd_auto_login'
@@ -46,6 +47,27 @@ function readLoginPrefs(): LoginPrefs {
   }
 }
 
+/**
+ * 로그인 후 이동할 경로를 정리한다.
+ *
+ * `next` 는 미들웨어·세션만료 처리가 붙여 주는 값이라 화면이 아닌 경로가 섞여 들어온다.
+ * 그대로 이동하면 홈 대신 엉뚱한 곳으로 가거나(루트), 로그인 화면으로 되돌아온다.
+ * - `//evil.com`·`https://…` 같은 외부 주소는 오픈 리다이렉트가 되므로 버린다.
+ * - 루트·로그인·API 경로는 홈으로 돌린다.
+ */
+function safeNext(raw: string | null): string {
+  if (!raw) return HOME_PATH
+  // 앞뒤 공백·제어문자가 섞이면 `/` 판정을 우회할 수 있어 먼저 다듬는다.
+  const value = raw.trim()
+  if (!value.startsWith('/') || value.startsWith('//') || value.startsWith('/\\')) return HOME_PATH
+
+  const path = value.split(/[?#]/)[0]
+  if (path === '/') return HOME_PATH
+  if (path === '/login' || path.startsWith('/login/')) return HOME_PATH
+  if (path.startsWith('/api/')) return HOME_PATH
+  return value
+}
+
 function LoginForm() {
   const router       = useRouter()
   const params       = useSearchParams()
@@ -60,7 +82,7 @@ function LoginForm() {
   const [error,      setError]      = useState<string | null>(null)
   const [busy,       setBusy]       = useState(false)
 
-  const next = params.get('next') || '/home'
+  const next = safeNext(params.get('next'))
 
   useEffect(() => {
     const prefs = readLoginPrefs()
@@ -80,11 +102,24 @@ function LoginForm() {
     }
   }, [user, loading, autoLogin, router, next])
 
-  const submit = async (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError(null)
+
+    // 브라우저 자동완성은 DOM 입력값만 채우고 React 상태를 갱신하지 못하는 경우가 있다.
+    // 상태만 믿으면 값이 보이는데도 "빈 값" 으로 판단해 로그인이 조용히 막힌다.
+    // await 전에 동기적으로 폼 값을 읽어 함께 본다.
+    const fd = new FormData(e.currentTarget)
+    const id = (username || String(fd.get('username') ?? '')).trim()
+    const pw = password || String(fd.get('password') ?? '')
+
+    if (!id || !pw) {
+      setError('아이디와 비밀번호를 입력하세요.')
+      return
+    }
+
     setBusy(true)
-    const r = await login(username.trim(), password)
+    const r = await login(id, pw)
     setBusy(false)
     if (!r.ok) {
       setError(r.error)
@@ -93,7 +128,7 @@ function LoginForm() {
 
     // Persist preferences
     try {
-      if (rememberId) localStorage.setItem(LS_SAVED_ID, username.trim())
+      if (rememberId) localStorage.setItem(LS_SAVED_ID, id)
       else            localStorage.removeItem(LS_SAVED_ID)
       if (autoLogin)  localStorage.setItem(LS_AUTO_LOGIN, '1')
       else            localStorage.removeItem(LS_AUTO_LOGIN)
@@ -120,6 +155,8 @@ function LoginForm() {
             <div className="relative">
               <UserIcon className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
+                id="login-username"
+                name="username"
                 type="text"
                 value={username}
                 onChange={e => setUsername(e.target.value)}
@@ -136,6 +173,8 @@ function LoginForm() {
             <div className="relative">
               <Lock className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
+                id="login-password"
+                name="password"
                 type={showPw ? 'text' : 'password'}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
@@ -181,7 +220,7 @@ function LoginForm() {
             <p className="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">{error}</p>
           )}
 
-          <Button type="submit" disabled={busy || !username || !password} className="w-full">
+          <Button type="submit" disabled={busy} className="w-full">
             {busy && <Loader2 className="animate-spin" />}
             {busy ? '로그인 중…' : '로그인'}
           </Button>
