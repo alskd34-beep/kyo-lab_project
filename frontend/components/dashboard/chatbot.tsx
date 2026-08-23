@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { X, Send, Sparkles, Trash2, Bot, ImagePlus, Loader2 } from 'lucide-react'
 import { useAuth } from '@frontend/lib/auth-context'
 import { ConfirmMessageDialog } from '@frontend/components/common/confirm-message'
+import BotMessage from '@frontend/components/dashboard/bot-message'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Message {
@@ -23,6 +24,33 @@ function nowTime() {
 
 function todayLabel() {
   return new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })
+}
+
+// ─── 패널 너비 ────────────────────────────────────────────────────────────────
+/** 마지막으로 조절한 패널 너비를 기억해 두는 localStorage 키 */
+const WIDTH_STORAGE_KEY = 'qcink:panel-width'
+const DEFAULT_PANEL_WIDTH = 520
+const MIN_PANEL_WIDTH = 360
+const MAX_PANEL_WIDTH = 900
+/** 패널이 떠 있는 레이아웃으로 바뀌는 지점(Tailwind md) */
+const FLOATING_BREAKPOINT = 768
+/** 오른쪽 여백(right-6 = 24px) + 왼쪽 최소 여백 */
+const PANEL_VIEWPORT_MARGIN = 48
+
+/** 저장값이 이상하거나 화면이 좁아도 항상 화면 안에 들어오는 너비를 돌려준다. */
+function clampPanelWidth(width: number, viewportWidth: number) {
+  const room = viewportWidth - PANEL_VIEWPORT_MARGIN
+  const max = Math.min(MAX_PANEL_WIDTH, Math.max(MIN_PANEL_WIDTH, room))
+  return Math.round(Math.min(Math.max(width, MIN_PANEL_WIDTH), max))
+}
+
+/** localStorage 는 시크릿 모드·사이트 데이터 차단 시 접근 자체가 예외를 던진다. */
+function savePanelWidth(width: number) {
+  try {
+    window.localStorage.setItem(WIDTH_STORAGE_KEY, String(width))
+  } catch {
+    // 저장이 막혀 있으면 이번 세션에만 적용된다.
+  }
 }
 
 function createWelcomeMessage(): Message {
@@ -48,6 +76,12 @@ export default function Chatbot() {
   const inputRef = useRef<HTMLInputElement>(null)
   const abortRef = useRef<AbortController | null>(null)
 
+  // 패널 너비 — 왼쪽 모서리를 끌어 조절하고 마지막 값을 브라우저에 기억한다.
+  // 복원 전(서버 렌더 시점)에는 null 이라 CSS 기본 너비가 그대로 쓰인다.
+  const [panelWidth, setPanelWidth] = useState<number | null>(null)
+  const [viewportWidth, setViewportWidth] = useState(0)
+  const [isResizing, setIsResizing] = useState(false)
+
   // 이미지 첨부 — 서버 임시 저장소에 올리고 id 를 받는다(Codex CLI 경로에서만 모델에 전달됨).
   const { user } = useAuth()
   const canAttach = !!user && user.role !== 'admin'
@@ -58,6 +92,39 @@ export default function Chatbot() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages.length])
+
+  // 저장해 둔 너비를 복원하고, 창 크기를 따라간다.
+  useEffect(() => {
+    const syncViewport = () => setViewportWidth(window.innerWidth)
+    syncViewport()
+    window.addEventListener('resize', syncViewport)
+
+    let saved: number | null = null
+    try {
+      const raw = window.localStorage.getItem(WIDTH_STORAGE_KEY)
+      const parsed = raw === null ? Number.NaN : Number(raw)
+      if (Number.isFinite(parsed)) saved = parsed
+    } catch {
+      // 접근이 막혀 있으면 기본 너비로 시작한다.
+    }
+    setPanelWidth(saved ?? DEFAULT_PANEL_WIDTH)
+
+    return () => window.removeEventListener('resize', syncViewport)
+  }, [])
+
+  // 드래그 중에는 커서와 텍스트 선택을 문서 전체에 맞춰 준다.
+  useEffect(() => {
+    if (!isResizing) return
+    const { style } = document.body
+    const prevCursor = style.cursor
+    const prevSelect = style.userSelect
+    style.cursor = 'ew-resize'
+    style.userSelect = 'none'
+    return () => {
+      style.cursor = prevCursor
+      style.userSelect = prevSelect
+    }
+  }, [isResizing])
 
   useEffect(() => {
     if (!open) return
@@ -282,6 +349,50 @@ export default function Chatbot() {
     }
   }
 
+  // 화면이 좁으면(모바일) 전체화면 모달이라 너비를 지정하지 않는다.
+  const isFloating = viewportWidth >= FLOATING_BREAKPOINT
+  // 저장된 값은 그대로 두고, 화면이 좁을 때만 실제로 그리는 너비를 줄인다.
+  const appliedWidth =
+    isFloating && panelWidth !== null ? clampPanelWidth(panelWidth, viewportWidth) : null
+
+  const commitWidth = (next: number) => {
+    setPanelWidth(next)
+    savePanelWidth(next)
+  }
+
+  const handleResizeStart = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    const startX = e.clientX
+    const startWidth = appliedWidth ?? DEFAULT_PANEL_WIDTH
+    setIsResizing(true)
+
+    let latest = startWidth
+    const onMove = (ev: PointerEvent) => {
+      // 패널이 오른쪽에 붙어 있으므로 왼쪽으로 끌수록 넓어진다.
+      latest = clampPanelWidth(startWidth + (startX - ev.clientX), window.innerWidth)
+      setPanelWidth(latest)
+    }
+    const onEnd = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onEnd)
+      window.removeEventListener('pointercancel', onEnd)
+      setIsResizing(false)
+      savePanelWidth(latest)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onEnd)
+    window.addEventListener('pointercancel', onEnd)
+  }
+
+  // 마우스 없이도 조절할 수 있게 방향키를 받는다(Shift 를 누르면 크게).
+  const handleResizeKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+    e.preventDefault()
+    const step = e.shiftKey ? 40 : 10
+    const base = appliedWidth ?? DEFAULT_PANEL_WIDTH
+    commitWidth(clampPanelWidth(base + (e.key === 'ArrowLeft' ? step : -step), window.innerWidth))
+  }
+
   return (
     <>
       {/* ── Floating Button ───────────────────────────────────────────────── */}
@@ -314,16 +425,44 @@ export default function Chatbot() {
           fixed z-30 flex flex-col overflow-hidden bg-white shadow-2xl transition-all duration-300
           inset-0 rounded-none border-0
           md:inset-auto md:bottom-24 md:right-6 md:rounded-md md:border md:border-slate-200
-          md:w-[440px] md:h-[70vh] md:max-h-[600px]
-          lg:w-[360px] lg:h-auto lg:max-h-[560px]
+          md:w-[520px] md:h-[70vh] md:max-h-[600px]
+          lg:w-[520px] lg:h-auto lg:max-h-[560px]
+          ${isResizing ? 'select-none' : ''}
         `}
         style={{
           opacity: open ? 1 : 0,
           pointerEvents: open ? 'all' : 'none',
           transform: open ? 'translateY(0) scale(1)' : 'translateY(16px) scale(0.97)',
           transformOrigin: 'bottom right',
+          // 복원 전에는 CSS 기본값을 쓰고, 모바일 전체화면에서는 너비를 건드리지 않는다.
+          ...(appliedWidth !== null ? { width: appliedWidth } : {}),
+          // 드래그 중에 width 가 애니메이션되면 따라오는 느낌이 뭉개진다.
+          ...(isResizing ? { transition: 'none' } : {}),
         }}
       >
+        {/* 좌측 너비 조절 핸들 — 끌어서 조절, 더블클릭하면 기본 너비로 되돌린다. */}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="AI 에이전트 패널 너비 조절"
+          aria-valuenow={appliedWidth ?? DEFAULT_PANEL_WIDTH}
+          aria-valuemin={MIN_PANEL_WIDTH}
+          aria-valuemax={MAX_PANEL_WIDTH}
+          tabIndex={0}
+          onPointerDown={handleResizeStart}
+          onDoubleClick={() => commitWidth(DEFAULT_PANEL_WIDTH)}
+          onKeyDown={handleResizeKey}
+          title="드래그해서 너비 조절 · 더블클릭하면 기본 너비"
+          className="group absolute top-0 left-0 z-20 hidden h-full w-2 cursor-ew-resize outline-none md:block"
+        >
+          <span
+            className={`absolute inset-y-0 left-0 w-full transition-colors group-hover:bg-blue-500/25 group-focus-visible:bg-blue-500/40 ${
+              isResizing ? 'bg-blue-500/40' : 'bg-transparent'
+            }`}
+          />
+          <span className="pointer-events-none absolute top-1/2 left-[3px] h-10 w-0.5 -translate-y-1/2 rounded-md bg-slate-400/70 opacity-0 transition-opacity group-hover:opacity-100" />
+        </div>
+
         {/* Header */}
         <div
           className="flex items-center justify-between px-4 py-3.5 shrink-0"
@@ -335,7 +474,7 @@ export default function Chatbot() {
             </div>
             <div>
               <p className="text-sm font-semibold text-white leading-tight">QCink</p>
-              <p className="text-[11px] text-blue-200 leading-none mt-0.5">
+              <p className="text-xs text-blue-200 leading-none mt-0.5">
                 {isStreaming ? (
                   <span className="flex items-center gap-1">
                     <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
@@ -374,7 +513,7 @@ export default function Chatbot() {
 
         {/* Date label */}
         <div className="flex items-center justify-center py-2 shrink-0">
-          <span className="rounded-md bg-slate-100 px-3 py-1 text-[11px] text-slate-500">
+          <span className="rounded-md bg-slate-100 px-3 py-1 text-xs leading-normal text-slate-500">
             {todayLabel()}
           </span>
         </div>
@@ -391,7 +530,11 @@ export default function Chatbot() {
                   <Bot size={13} className="text-white" />
                 </div>
               )}
-              <div className={`flex flex-col gap-1 max-w-[76%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+              <div
+                className={`flex flex-col gap-1 ${
+                  msg.role === 'user' ? 'max-w-[76%] items-end' : 'max-w-[90%] items-start'
+                }`}
+              >
                 {msg.images && msg.images.length > 0 && (
                   <div className="flex flex-wrap justify-end gap-1.5">
                     {msg.images.map((src, i) => (
@@ -408,13 +551,15 @@ export default function Chatbot() {
                   </div>
                 )}
                 <div
-                  className={`rounded-md px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
+                  className={`rounded-md px-3.5 py-2.5 text-sm leading-relaxed ${
                     msg.role === 'user'
-                      ? 'bg-blue-600 text-white rounded-tr-md'
+                      ? 'bg-blue-600 text-white rounded-tr-md whitespace-pre-wrap'
                       : 'bg-slate-100 text-slate-800 rounded-tl-md'
-                  }`}
+                  } ${msg.role === 'bot' && msg.streaming ? 'whitespace-pre-wrap' : ''}`}
                 >
-                  {msg.content}
+                  {msg.role === 'bot' && !msg.streaming
+                    ? <BotMessage content={msg.content} />
+                    : msg.content}
                   {msg.streaming && !msg.content && (
                     <span className="inline-flex gap-1">
                       <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:0ms]" />
@@ -426,7 +571,7 @@ export default function Chatbot() {
                     <span className="ml-1 inline-block h-3 w-0.5 bg-slate-500 animate-pulse align-text-bottom" />
                   )}
                 </div>
-                <span className="text-[10px] text-slate-400 px-1">{msg.time}</span>
+                <span className="text-xs leading-normal text-slate-400 px-1">{msg.time}</span>
               </div>
             </div>
           ))}
@@ -502,7 +647,7 @@ export default function Chatbot() {
               <Send size={13} />
             </button>
           </div>
-          <p className="mt-1.5 text-center text-[10px] text-slate-400">
+          <p className="mt-1.5 text-center text-xs leading-normal text-slate-400">
             QCink의 답변은 중요한 업무 판단 전에 확인해 주세요
           </p>
         </div>
