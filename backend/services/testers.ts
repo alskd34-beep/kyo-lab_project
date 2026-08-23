@@ -278,3 +278,109 @@ export async function upsertCapabilityLevel(
     .upsert({ tester_id: testerId, capability_id: capabilityId, proficiency_level: proficiencyLevel })
   if (error) throw error
 }
+
+// ─── 역량 마스터(test_capabilities) 관리 ─────────────────────────────────────
+// 이 표의 한 행이 시험자 역량 매트릭스의 컬럼 하나가 된다.
+
+/** 마스터 목록 + 각 역량이 매트릭스에서 실제로 몇 건 평가됐는지 */
+export interface CapabilityMasterRow extends CapabilityRow {
+  /** 이 역량에 숙련도가 기록된 시험자 수 ('X' 미평가 포함) */
+  ratedCount: number
+}
+
+const CODE_PATTERN = /^[A-Z0-9_]+$/
+
+/**
+ * 코드는 마이그레이션 시드·외부 연동이 참조하는 키라 형식을 강제한다.
+ * (기존 값이 전부 APPEARANCE / LCMS_TQ 같은 대문자 스네이크라 같은 규칙을 유지)
+ */
+function normalizeCapabilityInput(input: { code?: unknown; name?: unknown; sortOrder?: unknown }) {
+  const out: { code?: string; name?: string; sort_order?: number } = {}
+  if (input.code !== undefined) {
+    const code = String(input.code).trim().toUpperCase()
+    if (!code) throw new Error('코드를 입력하세요.')
+    if (!CODE_PATTERN.test(code)) throw new Error('코드는 영문 대문자·숫자·밑줄(_)만 쓸 수 있습니다.')
+    out.code = code
+  }
+  if (input.name !== undefined) {
+    const name = String(input.name).trim()
+    if (!name) throw new Error('역량명을 입력하세요.')
+    out.name = name
+  }
+  if (input.sortOrder !== undefined) {
+    const n = Number(input.sortOrder)
+    if (!Number.isFinite(n)) throw new Error('표시 순서는 숫자여야 합니다.')
+    out.sort_order = Math.trunc(n)
+  }
+  return out
+}
+
+/** 코드 unique 제약 위반을 사용자가 읽을 수 있는 문장으로 바꾼다 */
+function rethrowCapabilityError(err: { code?: string; message?: string } | null, code?: string): never {
+  if (err?.code === '23505') throw new Error(`이미 쓰고 있는 코드입니다${code ? ` (${code})` : ''}.`)
+  throw new Error(err?.message ?? '서버 오류')
+}
+
+export async function listCapabilityMaster(): Promise<CapabilityMasterRow[]> {
+  const caps = await listCapabilities()
+  // 역량 수 x 시험자 수라 1000행을 넘길 수 있다 → selectAll 로 전량 조회
+  const { data, error } = await selectAll(supabase, 'tester_capability_matrix', 'capability_id')
+  if (error) throw new Error(error.message)
+  const countById = new Map<string, number>()
+  for (const r of (data ?? []) as Record<string, unknown>[]) {
+    const id = r.capability_id as string
+    countById.set(id, (countById.get(id) ?? 0) + 1)
+  }
+  return caps.map(c => ({ ...c, ratedCount: countById.get(c.id) ?? 0 }))
+}
+
+export async function createCapability(input: {
+  code: unknown; name: unknown; sortOrder?: unknown
+}): Promise<CapabilityRow> {
+  const values = normalizeCapabilityInput(input)
+  // 순서를 안 주면 맨 뒤에 붙인다 — 10 단위로 띄워 두면 나중에 사이에 끼워 넣기 쉽다
+  if (values.sort_order === undefined) {
+    const caps = await listCapabilities()
+    values.sort_order = caps.length === 0 ? 10 : Math.max(...caps.map(c => c.sortOrder)) + 10
+  }
+  const { data, error } = await supabase
+    .from('test_capabilities')
+    .insert(values)
+    .select('id, code, name, sort_order')
+    .single()
+  if (error) rethrowCapabilityError(error, values.code)
+  const r = data as Record<string, unknown>
+  return { id: r.id as string, code: r.code as string, name: r.name as string, sortOrder: r.sort_order as number }
+}
+
+export async function updateCapability(id: string, input: {
+  code?: unknown; name?: unknown; sortOrder?: unknown
+}): Promise<void> {
+  const values = normalizeCapabilityInput(input)
+  if (Object.keys(values).length === 0) return
+  const { error } = await supabase.from('test_capabilities').update(values).eq('id', id)
+  if (error) rethrowCapabilityError(error, values.code)
+}
+
+/**
+ * 역량 삭제.
+ *
+ * `tester_capability_matrix.capability_id` 가 `on delete cascade` 라, 지우면 그 역량에
+ * 매겨 둔 시험자 숙련도가 **경고 없이 함께 사라진다.** 실수로 컬럼 하나를 지워 평가
+ * 이력을 통째로 날리는 일이 없도록, 평가 기록이 있으면 기본적으로 막는다.
+ * 정말 지우려면 화면에서 건수를 확인시킨 뒤 force 로 다시 부른다.
+ */
+export async function deleteCapability(id: string, opts: { force?: boolean } = {}): Promise<void> {
+  if (!opts.force) {
+    const { count, error: cErr } = await supabase
+      .from('tester_capability_matrix')
+      .select('capability_id', { count: 'exact', head: true })
+      .eq('capability_id', id)
+    if (cErr) throw cErr
+    if ((count ?? 0) > 0) {
+      throw new Error(`이 역량에 매겨 둔 시험자 숙련도 ${count}건이 함께 삭제됩니다. 확인 후 다시 시도하세요.`)
+    }
+  }
+  const { error } = await supabase.from('test_capabilities').delete().eq('id', id)
+  if (error) throw error
+}

@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useId, useMemo, useState } from "react"
+import Link from "next/link"
 import {
   Grid2x2,
   Lock,
@@ -692,6 +693,11 @@ export default function TestersPage() {
                 역량 매트릭스의 열은 시험 역량 마스터(성상 · HPLC · GC 등)를 그대로 그립니다.
                 마스터가 비어 있어 표시할 열이 없습니다.
               </p>
+              <Button asChild variant="outline" size="sm" className="mt-2">
+                <Link href="/test-mgmt/test-capabilities">
+                  <Grid2x2 />시험 역량 마스터로 이동
+                </Link>
+              </Button>
             </Card>
           ) : (
             <>
