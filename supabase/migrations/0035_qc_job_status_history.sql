@@ -41,7 +41,7 @@ comment on column qc_job_status_history.source is
 -- 시각은 알 수 없으므로 작업 생성 시각을 쓰고, 화면에서 backfill 배지로 구분한다.
 insert into qc_job_status_history (qc_job_id, order_id, from_status, to_status, source, note, created_at)
 select j.id, j.order_id, null, j.status, 'backfill',
-       '상태 이력 도입(0032) 이전 작업 — 당시 상태만 기록되어 변경 시각·변경자는 알 수 없습니다.',
+       '상태 이력 도입(0035) 이전 작업 — 당시 상태만 기록되어 변경 시각·변경자는 알 수 없습니다.',
        coalesce(j.created_at, now())
   from qc_jobs j
  where not exists (
