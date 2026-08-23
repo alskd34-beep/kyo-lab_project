@@ -5,6 +5,8 @@
  *
  * 두 가지 경로를 한 곳에 모은다.
  *  1) 다음 단계로  — 정해진 순서대로 한 칸 전진 (POST /api/qc-jobs/[id]/stage)
+ *                   단계 전이는 되돌리려면 사유가 필요한 되돌리기라, 누르는 순간
+ *                   바로 넘기지 않고 "무엇이 어떻게 바뀌는지" 를 보여준 뒤 확인받는다.
  *  2) 직접 변경   — 되돌리기·지연 지정처럼 순서를 벗어나는 정정. **사유 필수**
  *                   (PATCH /api/qc-jobs/[id]/status)
  *
@@ -12,7 +14,7 @@
  */
 
 import { useState } from "react"
-import { ArrowRight, LoaderCircle, PenLine, ShieldAlert } from "lucide-react"
+import { ArrowRight, Check, LoaderCircle, PenLine, ShieldAlert } from "lucide-react"
 import {
   CLOSED_STAGE, DELAYED_STATUS, IN_PROGRESS_STATUS, JOB_STAGES,
   NEXT_STAGE, STAGE_ACTION_LABEL, isJobStage,
@@ -40,6 +42,8 @@ export function JobStatusControl({
 }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // 단계 전이 확인 대기 — 두 패널(확인/직접 변경)은 동시에 열리지 않는다
+  const [confirming, setConfirming] = useState(false)
   const [manualOpen, setManualOpen] = useState(false)
   const [target, setTarget] = useState<string>("")
   const [reason, setReason] = useState("")
@@ -60,6 +64,7 @@ export function JobStatusControl({
       })
       const data = await res.json().catch(() => ({})) as { error?: string }
       if (!res.ok) throw new Error(data.error ?? "단계 변경 실패")
+      setConfirming(false)
       onChanged()
     } catch (e) {
       setError(e instanceof Error ? e.message : "단계 변경 실패")
@@ -81,6 +86,7 @@ export function JobStatusControl({
       const data = await res.json().catch(() => ({})) as { error?: string }
       if (!res.ok) throw new Error(data.error ?? "상태 변경 실패")
       setManualOpen(false); setTarget(""); setReason("")
+      setConfirming(false)
       onChanged()
     } catch (e) {
       setError(e instanceof Error ? e.message : "상태 변경 실패")
@@ -106,9 +112,14 @@ export function JobStatusControl({
         <span className="text-xs font-semibold text-foreground">상태 변경</span>
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
           {nextStage && nextLabel ? (
-            <Button size="sm" onClick={() => void advance()} disabled={busy}>
-              {busy ? <LoaderCircle className="animate-spin" /> : <ArrowRight />}
-              {nextLabel} → {nextStage}
+            <Button
+              size="sm"
+              variant={confirming ? "secondary" : "default"}
+              aria-expanded={confirming}
+              onClick={() => { setConfirming(c => !c); setManualOpen(false); setError(null) }}
+              disabled={busy}
+            >
+              <ArrowRight />{nextLabel} → {nextStage}
             </Button>
           ) : (
             <span className="max-w-[22rem] text-right text-[11px] text-muted-foreground">
@@ -124,13 +135,36 @@ export function JobStatusControl({
           <Button
             size="sm"
             variant="outline"
-            onClick={() => { setManualOpen(o => !o); setError(null) }}
+            aria-expanded={manualOpen}
+            onClick={() => { setManualOpen(o => !o); setConfirming(false); setError(null) }}
             disabled={busy}
           >
             <PenLine />직접 변경
           </Button>
         </div>
       </div>
+
+      {/* 전이 확인 — 무엇이 어떻게 바뀌는지 보여주고 한 번 더 받는다 */}
+      {confirming && nextStage && nextLabel && (
+        <div className="mt-3 flex flex-col gap-2 rounded-md border bg-muted/40 p-2.5 sm:flex-row sm:items-center">
+          <p className="min-w-0 flex-1 text-[11px] text-foreground">
+            <span className="font-semibold">{nextLabel}</span> 처리하면 상태가{" "}
+            <span className="font-semibold">{status}</span> → <span className="font-semibold">{nextStage}</span>
+            {" "}로 바뀝니다.
+            {nextStage === CLOSED_STAGE && " 완료일이 오늘로 기록됩니다."}
+            {" "}되돌리려면 사유를 적어 직접 변경해야 합니다.
+          </p>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <Button size="sm" variant="outline" onClick={() => setConfirming(false)} disabled={busy}>
+              취소
+            </Button>
+            <Button size="sm" onClick={() => void advance()} disabled={busy}>
+              {busy ? <LoaderCircle className="animate-spin" /> : <Check />}
+              {busy ? "처리 중..." : "확인"}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {manualOpen && (
         <div className="mt-3 flex flex-col gap-2 rounded-md border border-amber-200 bg-amber-50/60 p-2.5">
