@@ -12,8 +12,30 @@ import { createHash, randomUUID } from 'crypto'
 
 const enc = new TextEncoder()
 
-const ACCESS_SECRET  = process.env.JWT_ACCESS_SECRET  ?? 'dev-access-secret-change-me'
-const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET ?? 'dev-refresh-secret-change-me'
+/**
+ * JWT 시크릿.
+ *
+ * 2026-08-23 보안 수정: 예전에는 미설정 시 `'dev-access-secret-change-me'` 같은
+ * **소스에 적힌 고정값**으로 조용히 폴백했다. 운영에서 환경변수가 빠지면 누구나
+ * 그 값으로 `role:'admin'` 토큰을 위조할 수 있는 상태가 무증상으로 발생한다.
+ * 이제 운영(NODE_ENV=production)에서는 미설정 시 부팅을 실패시킨다.
+ */
+function requireSecret(name: 'JWT_ACCESS_SECRET' | 'JWT_REFRESH_SECRET', devFallback: string): string {
+  const v = process.env[name]
+  if (v && v.length >= 32) return v
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      `${name} 환경변수가 없거나 너무 짧습니다(32자 이상 필요). ` +
+      `생성: openssl rand -hex 32`,
+    )
+  }
+  if (v) return v   // 개발 환경에서는 짧은 값도 허용
+  console.warn(`[auth] ${name} 미설정 — 개발용 기본값을 사용합니다. 운영에서는 반드시 설정하세요.`)
+  return devFallback
+}
+
+const ACCESS_SECRET  = requireSecret('JWT_ACCESS_SECRET',  'dev-access-secret-change-me')
+const REFRESH_SECRET = requireSecret('JWT_REFRESH_SECRET', 'dev-refresh-secret-change-me')
 
 export const ACCESS_TTL_SEC  = 60 * 15            // 15분
 export const REFRESH_TTL_SEC = 60 * 60 * 24 * 7   // 7일

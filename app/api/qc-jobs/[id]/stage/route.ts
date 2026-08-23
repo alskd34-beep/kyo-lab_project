@@ -19,7 +19,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   try {
     const { id } = await ctx.params
     const body = await req.json().catch(() => ({})) as { expected?: string }
-    const result = await advanceJobStage(id, body.expected)
+    const result = await advanceJobStage(id, body.expected, auth.payload.sub)
     return Response.json({ ok: true, ...result })
   } catch (err) {
     const msg = err instanceof Error ? err.message : '서버 오류'

@@ -7,7 +7,6 @@ import {
 } from '@backend/lib/auth'
 import { buildAuthCookies } from '@backend/lib/auth-cookies'
 import {
-  ensureAdminSeed,
   findUserByUsername,
   storeRefreshToken,
   touchLastLogin,
@@ -17,10 +16,11 @@ export const runtime = 'nodejs'
 
 export async function POST(req: NextRequest) {
   try {
-    await ensureAdminSeed()
-
+    // 2026-08-23 보안 수정: 여기서 ensureAdminSeed() 를 호출하던 코드를 제거했다.
+    // 공개 엔드포인트에서 하드코딩 관리자 계정을 자동 생성하던 경로였다.
+    // 부트스트랩은 `npx tsx scripts/seed_admin.ts` 로만 수행한다.
     const { username, password } = await req.json()
-    if (!username || !password) {
+    if (typeof username !== 'string' || typeof password !== 'string' || !username || !password) {
       return Response.json({ error: '아이디와 비밀번호를 입력하세요.' }, { status: 400 })
     }
 
@@ -63,8 +63,9 @@ export async function POST(req: NextRequest) {
       { status: 200, headers },
     )
   } catch (err) {
+    // 원인은 서버 로그에만 남긴다. DB 오류 메시지를 로그인 응답으로 흘리면
+    // 스키마·테이블명 등이 미인증 사용자에게 노출된다.
     console.error('[api/auth/login]', err)
-    const msg = err instanceof Error ? err.message : '서버 오류'
-    return Response.json({ error: msg }, { status: 500 })
+    return Response.json({ error: '로그인 처리 중 오류가 발생했습니다.' }, { status: 500 })
   }
 }

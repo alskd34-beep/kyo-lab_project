@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useId, useMemo, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
 import { ClipboardList, Plus, Trash2, Loader2 } from "lucide-react"
 import { DateField } from "@frontend/components/ui/date-field"
@@ -380,6 +380,7 @@ interface ModalProps {
 const inputCls = "h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
 
 function EquipmentModal({ open, mode, initial, onClose, onSaved, onDelete, onError }: ModalProps) {
+  const uid = useId()
   const [code,               setCode]               = useState(initial?.code ?? "")
   const [name,               setName]               = useState(initial?.name ?? "")
   const [category,           setCategory]           = useState(initial?.category ?? "")
@@ -460,10 +461,11 @@ function EquipmentModal({ open, mode, initial, onClose, onSaved, onDelete, onErr
           {/* 코드 / 장비명 */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-xs font-semibold text-foreground">
+              <label htmlFor={`${uid}-code`} className="mb-1 block text-xs font-semibold text-foreground">
                 장비코드 <span className="text-red-500">*</span>
               </label>
               <Input
+                id={`${uid}-code`}
                 value={code}
                 onChange={e => setCode(e.target.value)}
                 placeholder="예) HPLC-01"
@@ -471,10 +473,11 @@ function EquipmentModal({ open, mode, initial, onClose, onSaved, onDelete, onErr
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-semibold text-foreground">
+              <label htmlFor={`${uid}-name`} className="mb-1 block text-xs font-semibold text-foreground">
                 장비명 <span className="text-red-500">*</span>
               </label>
               <Input
+                id={`${uid}-name`}
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="예) HPLC 분석장비 1호"
@@ -486,8 +489,9 @@ function EquipmentModal({ open, mode, initial, onClose, onSaved, onDelete, onErr
           {/* 카테고리 / 상태 */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-xs font-semibold text-foreground">카테고리</label>
+              <label htmlFor={`${uid}-category`} className="mb-1 block text-xs font-semibold text-foreground">카테고리</label>
               <Input
+                id={`${uid}-category`}
                 value={category}
                 onChange={e => setCategory(e.target.value)}
                 placeholder="예) 분석기기"
@@ -495,9 +499,9 @@ function EquipmentModal({ open, mode, initial, onClose, onSaved, onDelete, onErr
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-semibold text-foreground">상태</label>
+              <label htmlFor={`${uid}-status`} className="mb-1 block text-xs font-semibold text-foreground">상태</label>
               <Select value={status} onValueChange={v => setStatus(v as EquipmentStatus)}>
-                <SelectTrigger className="!h-9 w-full px-3">
+                <SelectTrigger id={`${uid}-status`} className="!h-9 w-full px-3">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -525,8 +529,9 @@ function EquipmentModal({ open, mode, initial, onClose, onSaved, onDelete, onErr
 
           {/* 위치 */}
           <div>
-            <label className="mb-1 block text-xs font-semibold text-foreground">위치</label>
+            <label htmlFor={`${uid}-location`} className="mb-1 block text-xs font-semibold text-foreground">위치</label>
             <Input
+              id={`${uid}-location`}
               value={location}
               onChange={e => setLocation(e.target.value)}
               placeholder="예) QC실 3번 랙"
@@ -536,8 +541,9 @@ function EquipmentModal({ open, mode, initial, onClose, onSaved, onDelete, onErr
 
           {/* 비고 */}
           <div>
-            <label className="mb-1 block text-xs font-semibold text-foreground">비고</label>
+            <label htmlFor={`${uid}-note`} className="mb-1 block text-xs font-semibold text-foreground">비고</label>
             <textarea
+              id={`${uid}-note`}
               value={note}
               onChange={e => setNote(e.target.value)}
               rows={2}

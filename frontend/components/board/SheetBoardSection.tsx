@@ -7,7 +7,7 @@
  * Phase 1: 표시만 (상태/배정 변경은 다음 단계)
  */
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@frontend/components/ui/card'
 import { Button } from '@frontend/components/ui/button'
 import { FileSpreadsheet, Loader2, AlertCircle, RefreshCw } from 'lucide-react'
@@ -47,6 +47,7 @@ const GROUP_COLORS = ['bg-blue-500', 'bg-emerald-500', 'bg-violet-500', 'bg-ambe
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function SheetBoardSection() {
+  const sheetIdInputId = useId()
   const [fileId, setFileId]   = useState(DEFAULT_FILE_ID)
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState<string | null>(null)
@@ -114,7 +115,8 @@ export default function SheetBoardSection() {
     { key: '제형',     label: '제형',     kind: 'text',   width: 110 },
     { key: '포장일',   label: '포장일',   kind: 'date',   width: 110 },
     { key: '상태',     label: '상태',     kind: 'chip',   width: 90,
-      chipColor: { '대기': 'slate', '진행중': 'violet', '검토전': 'amber', '검토중': 'blue', '승인전': 'teal', '승인완료': 'emerald', '지연': 'red' } },
+      // 단계는 파랑 램프(진행할수록 진하게), 단계 밖 상태만 회색·빨강으로 뺀다.
+      chipColor: { '대기': 'slate', '진행중': 'blue300', '검토전': 'blue400', '검토중': 'blue500', '승인전': 'blue600', '승인완료': 'blue700', '지연': 'red' } },
     { key: '담당자',   label: '담당자',   kind: 'person', width: 140 },
   ]
 
@@ -137,10 +139,11 @@ export default function SheetBoardSection() {
         {/* 시트 ID 입력 + 불러오기 */}
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex flex-1 min-w-[280px] flex-col gap-1.5">
-            <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
+            <label htmlFor={sheetIdInputId} className="text-xs font-medium text-slate-600 dark:text-slate-300">
               구글 시트 ID
             </label>
             <input
+              id={sheetIdInputId}
               type="text"
               value={fileId}
               onChange={e => setFileId(e.target.value)}

@@ -30,8 +30,18 @@ export interface InternalUser extends UserDTO {
   passwordHash: string
 }
 
-const ADMIN_USERNAME = 'kyo-admin'
-const ADMIN_PASSWORD = 'kyo-admin'
+/**
+ * 부트스트랩 관리자 계정.
+ *
+ * 2026-08-23 보안 수정: 예전에는 `kyo-admin`/`kyo-admin` 이 소스에 하드코딩된 채
+ * **공개 로그인 엔드포인트에서 요청마다** 자동 시드됐다. 자격증명이 저장소에 평문으로 있어
+ * 누구나 관리자로 로그인할 수 있었고, 운영 DB 에서 계정을 지워도 다음 로그인에 다시 생겼다.
+ *
+ * 이제 자격증명은 환경변수로만 받고, 시드는 명시적으로 호출할 때만 수행한다
+ * (`scripts/seed_admin.ts`). 로그인 경로에서는 절대 호출하지 않는다.
+ */
+const ADMIN_USERNAME = process.env.BOOTSTRAP_ADMIN_USERNAME?.trim() || ''
+const ADMIN_PASSWORD = process.env.BOOTSTRAP_ADMIN_PASSWORD ?? ''
 
 /**
  * 앱 역할(UserRole: 'admin'|'tester') ↔ DB enum(user_role: 'admin'|'user') 매핑.
@@ -44,9 +54,25 @@ function roleFromDb(dbRole: string): UserRole { return dbRole === 'admin' ? 'adm
 
 let adminEnsured = false
 
-/** 최초 가동 시 기본 admin 계정을 생성합니다. */
+/**
+ * 부트스트랩 admin 계정을 1회 생성한다.
+ *
+ * ⚠️ 로그인·회원가입 등 **요청 처리 경로에서 호출하지 말 것**. 명시적인 시드 스크립트
+ * (`npx tsx scripts/seed_admin.ts`)에서만 호출한다.
+ * `BOOTSTRAP_ADMIN_USERNAME`/`BOOTSTRAP_ADMIN_PASSWORD` 가 없으면 아무것도 하지 않는다.
+ */
 export async function ensureAdminSeed(): Promise<void> {
   if (adminEnsured) return
+
+  if (!ADMIN_USERNAME || !ADMIN_PASSWORD) {
+    throw new Error(
+      'BOOTSTRAP_ADMIN_USERNAME / BOOTSTRAP_ADMIN_PASSWORD 환경변수가 필요합니다. ' +
+      '기본 관리자 자격증명은 더 이상 소스에 두지 않습니다.',
+    )
+  }
+  if (ADMIN_PASSWORD.length < 12) {
+    throw new Error('BOOTSTRAP_ADMIN_PASSWORD 는 12자 이상이어야 합니다.')
+  }
 
   const sel = await supabase
     .from('users')
@@ -161,8 +187,20 @@ async function ensureLinkedTester(userId: string, username: string, displayName:
 
   if (existing) {
     const testerId = (existing as Record<string, unknown>).id as string
-    // 다른 사용자가 이 시험자를 점유하고 있으면 먼저 해제
-    await supabase.from('users').update({ tester_id: null }).eq('tester_id', testerId).neq('id', userId)
+    // 다른 사용자가 이 시험자를 점유하고 있으면 먼저 해제한다(0021 의 ux_users_tester_id 1:1 유지).
+    //
+    // 2026-08-23 수정 2건:
+    //  1) createUser 는 아직 id 가 없어 userId='' 로 호출했는데, `.neq('id', '')` 는
+    //     uuid 컬럼에 빈 문자열을 캐스팅하려다 Postgres 오류가 난다. 그 오류를 검사하지
+    //     않아 조용히 실패했고, 점유가 안 풀린 채 insert 가 유니크 위반으로 터졌다.
+    //     → userId 가 있을 때만 제외 조건을 건다.
+    //  2) 오류를 삼키지 않고 올린다.
+    let q = supabase.from('users').update({ tester_id: null }).eq('tester_id', testerId)
+    if (userId) q = q.neq('id', userId)
+    const { error: releaseErr } = await q
+    if (releaseErr) {
+      throw new Error(`기존 시험자 연결 해제 실패: ${releaseErr.message}`)
+    }
     return testerId
   }
 
@@ -262,6 +300,12 @@ export async function touchLastLogin(id: string): Promise<void> {
 }
 
 // ─── Refresh tokens ─────────────────────────────────────────────────────────
+/**
+ * 회전된 refresh 토큰을 계속 받아 주는 유예 시간(초).
+ * 재사용 공격을 막기에는 충분히 짧고, 브라우저의 중복 요청을 흡수하기에는 충분히 길다.
+ */
+const REFRESH_ROTATION_GRACE_SEC = 30
+
 export async function storeRefreshToken(params: {
   userId:    string
   jti:       string
@@ -287,9 +331,16 @@ export async function isRefreshTokenValid(jti: string, rawToken: string): Promis
     .eq('id', jti)
     .maybeSingle()
   if (!data) return false
-  if (data.revoked_at) return false
   if (new Date(data.expires_at as string) < new Date()) return false
-  return data.token_hash === hashRefreshToken(rawToken)
+  if (data.token_hash !== hashRefreshToken(rawToken)) return false
+
+  // 회전 직후 유예: 방금 회전된 토큰을 뒤늦게 제출한 정상 요청까지 세션 만료로 끊지 않는다.
+  // 탭 2개, 새로고침, 요청 재시도처럼 같은 refresh 쿠키가 중복 제출되는 상황은 흔하다.
+  if (data.revoked_at) {
+    const revokedAtMs = new Date(data.revoked_at as string).getTime()
+    if (Date.now() - revokedAtMs > REFRESH_ROTATION_GRACE_SEC * 1000) return false
+  }
+  return true
 }
 
 export async function revokeRefreshToken(jti: string): Promise<void> {

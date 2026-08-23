@@ -21,6 +21,7 @@ import { createNotification } from '@backend/services/notifications'
 import { logReassignment } from '@backend/services/reassignmentHistory'
 import {
   isPsychotropic,
+  filterPsychotropicCandidates,
   PSYCHOTROPIC_EXCLUDED_NAMES,
   isoWeekIndex,
   heavyMetalAssigneeForWeek,
@@ -28,7 +29,10 @@ import {
   difficultyPenalty,
 } from '@backend/services/assignRules'
 import { codexAssignEnabled, runCodexJson } from '@backend/lib/codexCli'
+import { getHolidaySet } from '@backend/services/holidays'
+import { kstNow, kstToday, kstYear } from '@backend/lib/kstDate'
 import {
+  buildCapResolver,
   generatePctSchedule,
   type EngineHalfDayNotice,
   type EnginePctRow,
@@ -103,19 +107,39 @@ function orderKey(order: OrderForAssign): string {
   return `${order.product_code}|${order.batch_no}`
 }
 
-/** 대상 오더 로드 (orderIds 미지정 시 미배정 '대기' 전체) */
+/**
+ * 대상 오더 로드 (orderIds 미지정 시 미배정 '대기' 전체).
+ *
+ * 2026-08-23 수정: 예전에는 `orderIds` 를 명시하면 status 필터가 통째로 사라져
+ * '진행중'/'검토중'/'승인완료' 오더까지 재배정 대상이 됐다(PRD 원칙2 위반 —
+ * "시험 시작 후 일정 변경 금지"). 이제 두 경로 모두 '대기' 상태만 대상으로 삼고,
+ * 이미 QC 작업이 시작된 오더는 상태와 무관하게 제외한다.
+ */
 async function loadTargetOrders(orderIds?: string[]): Promise<OrderForAssign[]> {
   // select('*') 로 locked 컬럼까지 받되(0015 미적용 시 자동 누락), 잠긴 오더는 배정 제외.
+  // pct_orders 는 소프트 삭제만 하므로 1000행 상한에 걸리지 않도록 페이지네이션한다.
   let q = supabaseAdmin
     .from('pct_orders')
     .select('*')
     .neq('status', DELETED_STATUS)
+    // [원칙2] 작업 미시작('대기') 오더만 자동배정/재배정 대상이다.
+    .eq('status', PENDING_STATUS)
   if (orderIds && orderIds.length > 0) q = q.in('id', orderIds)
-  else q = q.eq('status', PENDING_STATUS).is('assignee_tester_id', null)
-  const { data, error } = await q
+  else q = q.is('assignee_tester_id', null)
+  const { data, error } = await q.range(0, 9999)
   if (error) throw error
+
   // [원칙3] LOCK(확정) 오더는 자동배정/재배정 대상에서 제외
-  return (data ?? []).filter(o => !o.locked) as OrderForAssign[]
+  const candidates = (data ?? []).filter(o => !o.locked) as OrderForAssign[]
+  if (candidates.length === 0) return []
+
+  // [원칙2] QC 작업이 이미 생성된 오더는 상태 표기와 무관하게 제외한다.
+  const { data: jobs } = await supabaseAdmin
+    .from('qc_jobs')
+    .select('order_id')
+    .in('order_id', candidates.map(o => o.id))
+  const started = new Set((jobs ?? []).map(j => j.order_id as string))
+  return candidates.filter(o => !started.has(o.id))
 }
 
 /**
@@ -161,7 +185,7 @@ function groupOrders(orders: OrderForAssign[], familyByCode?: Map<string, string
  * 내일 시작하는 휴가를 놓쳤다. 제조일은 시험 시점과 무관하므로 완료예정일을 쓴다.
  */
 function leaveWindow(orders: OrderForAssign[]): { from: string; to: string } {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = kstToday()
   const ends = orders
     .map(o => o.due_date || o.packaging_date)
     .filter((d): d is string => !!d)
@@ -235,7 +259,11 @@ function withForcedRules(
 ): (order: OrderForAssign) => { id: string; name: string } | null {
   return (order) => {
     if (isHeavyMetalIndividual(order, ctx.itemsByCode)) {
-      const t = heavyMetalAssigneeForWeek(ctx.weekIndex, ctx.testers)
+      // [규칙1] 향정신성 제외 대상은 강제배정으로도 뚫리지 않아야 한다.
+      const eligible = isPsychotropic(order.product_name)
+        ? filterPsychotropicCandidates(order.product_name, ctx.testers).candidates
+        : ctx.testers
+      const t = heavyMetalAssigneeForWeek(ctx.weekIndex, eligible)
       if (t) return { id: t.id, name: t.name }
     }
     return base(order)
@@ -293,11 +321,19 @@ async function applyAssignments(
     }
     if (hit?.id) {
       const beforeUser = (o.assignee_tester_id as string | null) ?? null
-      const { error } = await supabaseAdmin
+      // 조건부 갱신 — 대상 로드 시점 이후 다른 관리자가 LOCK 을 걸었으면 적용하지 않는다.
+      const { data: updated, error } = await supabaseAdmin
         .from('pct_orders')
         .update({ assignee_tester_id: hit.id, note: withoutAutoUnassignedNote(o.note) })
         .eq('id', o.id)
+        .eq('locked', false)
+        .select('id')
+        .maybeSingle()
       if (error) throw error
+      if (!updated) {
+        details.push({ orderId: o.id, testerId: null, testerName: null, note: '확정(LOCK) 상태로 변경되어 건너뜀' })
+        continue
+      }
       assigned++
       details.push({ orderId: o.id, testerId: hit.id, testerName: hit.name, note: '배정됨' })
       if (beforeUser !== hit.id) {
@@ -339,23 +375,48 @@ async function autoAssignCodex(
   orders: OrderForAssign[],
   excludedTesterIds: Set<string>,
 ): Promise<{ mode: 'codex'; pick: PickFn; reasonByKey: Map<string, string>; halfDayNotices: EngineHalfDayNotice[] }> {
-  const [allTesters, capabilities, matrix, itemsByCode, workload] = await Promise.all([
+  const [allTesters, capabilities, matrix, itemsByCode, workload, equipRes] = await Promise.all([
     listTesters({ activeOnly: true }), listCapabilities(), listCapabilityMatrix(), productItemsByCode(), currentWorkload(),
+    selectAll(supabaseAdmin, 'test_item_equipment', 'test_item, required_equipment, is_universal'),
   ])
   // 비활성(퇴사·휴직 등) 시험자와 휴가/출장 중인 시험자는 배정 후보에서 제외
   const testers = allTesters.filter(t => t.isActive && !excludedTesterIds.has(t.id))
 
-  // 시험자별 보유 역량명 (Y/O 만)
+  // 시험자별 보유 역량명 (Y/O 만) — LLM 프롬프트 컨텍스트용
   const capNameById = new Map<string, string>()
   for (const c of capabilities) capNameById.set(c.id, c.name ?? c.code ?? c.id)
   const capsByTester = new Map<string, string[]>()
+  // 시험자별 보유 역량 **id** 집합 — 결과 검증용(엔진의 can() 과 동일 기준)
+  const capIdsByTester = new Map<string, Set<string>>()
   for (const m of matrix) {
     if (m.proficiencyLevel === 'Y' || m.proficiencyLevel === 'O') {
       const arr = capsByTester.get(m.testerId) ?? []
       const nm = capNameById.get(m.capabilityId)
       if (nm) arr.push(nm)
       capsByTester.set(m.testerId, arr)
+
+      const ids = capIdsByTester.get(m.testerId) ?? new Set<string>()
+      ids.add(m.capabilityId)
+      capIdsByTester.set(m.testerId, ids)
     }
+  }
+
+  // 시험항목 → 필요 capability id 목록 (엔진의 reqOf 와 같은 해석기를 재사용한다).
+  // 매핑이 없거나 is_universal 인 항목은 제약 없음으로 본다(엔진과 동일한 보수적 처리).
+  const resolveCaps = buildCapResolver(
+    capabilities.map(c => ({ id: c.id, code: c.code ?? '', name: c.name ?? '' })),
+  )
+  const equipByItem = new Map<string, { required: string; universal: boolean }>()
+  for (const e of equipRes.data ?? []) {
+    equipByItem.set(e.test_item as string, {
+      required: (e.required_equipment as string) ?? '',
+      universal: !!e.is_universal,
+    })
+  }
+  const capIdsForItem = (testItem: string): string[] => {
+    const e = equipByItem.get(testItem)
+    if (!e || e.universal) return []
+    return resolveCaps(e.required)
   }
 
   const testerCtx = testers.map(t => ({
@@ -393,14 +454,31 @@ async function autoAssignCodex(
 
   const basePick = (o: OrderForAssign): { id: string; name: string } | null => {
     const tid = byOrder.get(o.id)
-    if (tid && testerById.has(tid)) return { id: tid, name: testerById.get(tid)! }
-    return null
+    if (!tid || !testerById.has(tid)) return null
+
+    // [검증] 프롬프트의 "역량을 갖춘 시험자만 배정한다"는 강제력이 없다.
+    // 예전에는 LLM 이 역량 미보유 시험자를 지목해도 그대로 DB 에 반영됐다.
+    // 규칙엔진과 **동일한 기준**(capability id 집합 포함관계)으로 사후 검증한다.
+    const requiredCaps = new Set<string>()
+    for (const item of itemsByCode.get(o.product_code) ?? []) {
+      for (const capId of capIdsForItem(item)) requiredCaps.add(capId)
+    }
+    const have = capIdsByTester.get(tid) ?? new Set<string>()
+    const missing = [...requiredCaps].filter(c => !have.has(c))
+    if (missing.length > 0) {
+      console.warn(
+        '[pctAssign] LLM 이 역량 미보유 시험자를 지목해 폐기하고 규칙엔진 결과로 대체합니다 — ' +
+        `오더 ${o.product_code}/${o.batch_no}, 시험자 ${testerById.get(tid)}`,
+      )
+      return null
+    }
+    return { id: tid, name: testerById.get(tid)! }
   }
   // [규칙2] 개별 중금속 금요일 순환 강제배정을 LLM 결과 위에 덧씌운다.
   const pick = withForcedRules(basePick, {
     itemsByCode,
     testers: testers.map(t => ({ id: t.id, name: t.name })),
-    weekIndex: isoWeekIndex(new Date()),
+    weekIndex: isoWeekIndex(kstNow()),
   })
   // Codex 경로는 엔진을 거치지 않아 반차 판정이 없다 — autoAssign 이 오더 구간 기준으로 채운다.
   return { mode: 'codex', pick, reasonByKey: new Map(), halfDayNotices: [] as EngineHalfDayNotice[] }
@@ -410,6 +488,7 @@ async function autoAssignCodex(
 async function autoAssignRule(
   orders: OrderForAssign[],
   absences: Array<{ testerId: string; from: string; to: string; type: string }>,
+  excludedTesterIds: Set<string>,
 ): Promise<{ mode: 'rule'; pick: PickFn; reasonByKey: Map<string, string>; halfDayNotices: EngineHalfDayNotice[] }> {
   const [allTesters, capabilities, matrix, productsRes, ptiRes, testItemsRes, equipRes, workloadRes] =
     await Promise.all([
@@ -481,11 +560,24 @@ async function autoAssignRule(
   // [규칙4] 최근 HIGH 난이도 부담을 초기 부하로 실어 차주 MEDIUM/LOW 배정에서 후순위로 민다.
   const initialLoad = await highDifficultyPenalty().catch(() => ({}))
 
+  // 공휴일 — PRD "주말+공휴일 스킵". 전달하지 않으면 엔진이 빈 Set 으로 폴백해
+  // 설·추석 같은 연휴를 근무일로 계산한다(2026-08-23 점검에서 누락 발견).
+  // public_holidays 조회 실패 시에는 빈 Set 으로 두되 경고를 남긴다 — 조용히 넘기면
+  // "공휴일에 배정된 일정"이 정상 결과처럼 보고된다.
+  const holidays = await getHolidaySet().catch(err => {
+    console.error('[pctAssign] 공휴일 조회 실패 — 주말만 비근무일로 계산합니다:', err)
+    return new Set<string>()
+  })
+  if (holidays.size === 0) {
+    console.warn('[pctAssign] 공휴일 데이터가 비어 있습니다. /api/holidays/import 로 해당 연도를 적재하세요.')
+  }
+
   const engine = generatePctSchedule({
     rows, testers, capabilities,
     matrix: matrix.map(m => ({ testerId: m.testerId, capabilityId: m.capabilityId, level: m.proficiencyLevel })),
-    productItems, equipment, workload, year: new Date().getFullYear(), initialLoad,
+    productItems, equipment, workload, year: kstYear(), initialLoad,
     absences,
+    holidays,
   })
 
   const testerByKey = new Map<string, { id: string; name: string }>()
@@ -493,10 +585,53 @@ async function autoAssignRule(
   const reasonByKey = new Map<string, string>()
   for (const item of engine.unassigned) reasonByKey.set(`${item.productCode}|${item.batchNo}`, item.reason)
 
-  // [규칙2] 개별 중금속 금요일 순환 강제배정을 엔진 결과 위에 덧씌운다.
+  // [규칙1] 향정신성 오더는 **사후 거부가 아니라 사전 필터**로 처리한다.
+  //
+  // 예전에는 엔진이 강지윤/김정호를 뽑으면 applyAssignments 가 그냥 미배정 처리하고
+  // 대체 시험자를 다시 찾지 않아, 배정 가능한 다른 사람이 있어도 오더가 비어 있었다.
+  // (사전 필터용 filterPsychotropicCandidates 는 만들어져 있었지만 호출되지 않고 있었다)
+  // 향정신성 오더만 제외 대상을 뺀 후보로 엔진을 한 번 더 돌려 대체자를 찾는다.
+  const psychoOrders = orders.filter(o => isPsychotropic(o.product_name))
+  const psychoByKey = new Map<string, { id: string; name: string }>()
+  if (psychoOrders.length > 0) {
+    const allowed = filterPsychotropicCandidates(
+      psychoOrders[0].product_name,
+      testers.map(t => ({ id: t.id, name: t.name })),
+    ).candidates
+    const allowedIds = new Set(allowed.map(t => t.id))
+    const psychoEngine = generatePctSchedule({
+      rows: rows.filter(r => isPsychotropic(r.품목명)),
+      testers: testers.filter(t => allowedIds.has(t.id)),
+      capabilities,
+      matrix: matrix.map(m => ({ testerId: m.testerId, capabilityId: m.capabilityId, level: m.proficiencyLevel })),
+      productItems, equipment, workload, year: kstYear(), initialLoad,
+      absences, holidays,
+    })
+    for (const a of psychoEngine.assignments) {
+      psychoByKey.set(`${a.productCode}|${a.batchNo}`, { id: a.testerId, name: a.testerName })
+    }
+    for (const item of psychoEngine.unassigned) {
+      reasonByKey.set(`${item.productCode}|${item.batchNo}`, item.reason)
+    }
+  }
+
+  // [규칙2] 개별 중금속 주차 순환 강제배정을 엔진 결과 위에 덧씌운다.
+  //
+  // 강제배정 후보에서 연차·출장자를 제외한다. `testers` 는 엔진이 날짜 단위로 부재를
+  // 판정하도록 일부러 거르지 않은 목록이라, 그대로 넘기면 강제배정만 부재 판정을
+  // 건너뛰어 "휴가 중인 사람에게 중금속 시험 배정"이 발생한다.
+  // (LLM 경로는 이미 excludedTesterIds 로 걸러 넘기고 있었다 — 두 경로가 어긋나 있었다)
+  const forcedCandidates = testers
+    .filter(t => !excludedTesterIds.has(t.id))
+    .map(t => ({ id: t.id, name: t.name }))
   const pick = withForcedRules(
-    (o) => testerByKey.get(`${o.product_code}|${o.batch_no}`) ?? null,
-    { itemsByCode, testers: testers.map(t => ({ id: t.id, name: t.name })), weekIndex: isoWeekIndex(new Date()) },
+    (o) => {
+      const key = `${o.product_code}|${o.batch_no}`
+      // 향정신성 오더는 제외 대상을 뺀 후보로 재계산한 결과를 우선한다.
+      if (isPsychotropic(o.product_name)) return psychoByKey.get(key) ?? null
+      return testerByKey.get(key) ?? null
+    },
+    { itemsByCode, testers: forcedCandidates, weekIndex: isoWeekIndex(kstNow()) },
   )
   // 엔진이 근무일 단위로 판정한 반차 겹침을 그대로 올려보낸다(예전엔 여기서 버려졌다).
   return { mode: 'rule', pick, reasonByKey, halfDayNotices: engine.halfDayNotices }
@@ -541,7 +676,7 @@ export async function autoAssign(orderIds?: string[]): Promise<AssignResult> {
       console.error('[pctAssign] Codex 배분 실패 — 규칙엔진 폴백:', err)
     }
   }
-  if (!resolved) resolved = await autoAssignRule(reps, absences)
+  if (!resolved) resolved = await autoAssignRule(reps, absences, excludedTesterIds)
 
   // [동시분석] 각 멤버는 자신이 속한 그룹 대표의 배정 결과를 따른다(한 시험자가 동시분석).
   const groupPick: PickFn = (o) => resolved!.pick(memberToRep.get(o.id) ?? o)
@@ -692,8 +827,17 @@ export async function assignManually(
     throw new Error('확정(LOCK)된 오더는 담당자를 변경할 수 없습니다. 확정 해제 후 다시 시도해 주세요.')
   }
 
-  const { error } = await supabaseAdmin.from('pct_orders').update({ assignee_tester_id: testerId }).eq('id', orderId)
+  // 조건부 갱신 — 읽기와 쓰기 사이에 다른 관리자가 LOCK 을 걸었을 수 있다(TOCTOU).
+  // `.eq('locked', false)` 를 붙여 그 경우 0행이 갱신되도록 하고, 0행이면 실패로 알린다.
+  // (locked 컬럼이 없는 환경(0015 미적용)에서는 조건을 걸 수 없으므로 기존 동작을 유지한다)
+  const hasLockedColumn = before != null && 'locked' in before
+  let q = supabaseAdmin.from('pct_orders').update({ assignee_tester_id: testerId }).eq('id', orderId)
+  if (hasLockedColumn) q = q.eq('locked', false)
+  const { data: updated, error } = await q.select('id').maybeSingle()
   if (error) throw error
+  if (!updated) {
+    throw new Error('확정(LOCK) 상태가 변경되어 배정을 적용하지 못했습니다. 새로고침 후 다시 시도해 주세요.')
+  }
 
   // 담당자가 실제로 바뀐 경우에만 이력 기록 (분석용: 누가/왜/어느 품목에서 변경되는가)
   if (beforeUser !== testerId) {

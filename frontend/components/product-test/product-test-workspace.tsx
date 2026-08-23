@@ -1,6 +1,6 @@
 "use client"
 
-import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from "react"
+import { memo, useCallback, useDeferredValue, useEffect, useId, useMemo, useState, type ChangeEvent, type ReactNode } from "react"
 import {
   Box,
   Lock,
@@ -406,6 +406,8 @@ function FormFields({
   categories: LookupOptionRow[]
   classifications: LookupOptionRow[]
 }) {
+  const uid = useId()
+
   function f(key: keyof ProductFormState) {
     return (e: ChangeEvent<HTMLInputElement>) =>
       setForm((prev) => ({ ...prev, [key]: e.target.value }))
@@ -421,16 +423,16 @@ function FormFields({
         <h3 className="mb-3 border-b pb-2 text-sm font-semibold text-foreground">식별 정보</h3>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="flex flex-col gap-1.5 sm:col-span-2">
-            <label className={labelClass}>품목명 <span className="text-destructive">*</span></label>
-            <Input value={form.name} onChange={f("name")} placeholder="품목명을 입력하세요" />
+            <label htmlFor={`${uid}-name`} className={labelClass}>품목명 <span className="text-destructive">*</span></label>
+            <Input id={`${uid}-name`} value={form.name} onChange={f("name")} placeholder="품목명을 입력하세요" />
           </div>
           <div className="flex flex-col gap-1.5 sm:col-span-2">
-            <label className={labelClass}>품목명2</label>
-            <Input value={form.nameAlt} onChange={f("nameAlt")} placeholder="품목명2 (선택)" />
+            <label htmlFor={`${uid}-nameAlt`} className={labelClass}>품목명2</label>
+            <Input id={`${uid}-nameAlt`} value={form.nameAlt} onChange={f("nameAlt")} placeholder="품목명2 (선택)" />
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className={labelClass}>약호</label>
-            <Input value={form.abbreviation} onChange={f("abbreviation")} placeholder="예) ABC" />
+            <label htmlFor={`${uid}-abbreviation`} className={labelClass}>약호</label>
+            <Input id={`${uid}-abbreviation`} value={form.abbreviation} onChange={f("abbreviation")} placeholder="예) ABC" />
           </div>
         </div>
       </section>
@@ -440,12 +442,12 @@ function FormFields({
         <h3 className="mb-3 border-b pb-2 text-sm font-semibold text-foreground">분류 및 시험 속성</h3>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="flex flex-col gap-1.5">
-            <label className={labelClass}>품목구분</label>
+            <label htmlFor={`${uid}-categoryId`} className={labelClass}>품목구분</label>
             <Select
               value={form.categoryId || NONE_SENTINEL}
               onValueChange={(v) => setField("categoryId", v === NONE_SENTINEL ? "" : v)}
             >
-              <SelectTrigger className="!h-9 px-3"><SelectValue placeholder="—" /></SelectTrigger>
+              <SelectTrigger id={`${uid}-categoryId`} className="!h-9 px-3"><SelectValue placeholder="—" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={NONE_SENTINEL}>—</SelectItem>
                 {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
@@ -453,12 +455,12 @@ function FormFields({
             </Select>
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className={labelClass}>전문분류</label>
+            <label htmlFor={`${uid}-classificationId`} className={labelClass}>전문분류</label>
             <Select
               value={form.classificationId || NONE_SENTINEL}
               onValueChange={(v) => setField("classificationId", v === NONE_SENTINEL ? "" : v)}
             >
-              <SelectTrigger className="!h-9 px-3"><SelectValue placeholder="—" /></SelectTrigger>
+              <SelectTrigger id={`${uid}-classificationId`} className="!h-9 px-3"><SelectValue placeholder="—" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={NONE_SENTINEL}>—</SelectItem>
                 {classifications.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
@@ -466,12 +468,12 @@ function FormFields({
             </Select>
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className={labelClass}>난이도</label>
+            <label htmlFor={`${uid}-difficulty`} className={labelClass}>난이도</label>
             <Select
               value={form.difficulty || NONE_SENTINEL}
               onValueChange={(v) => setField("difficulty", v === NONE_SENTINEL ? "" : v)}
             >
-              <SelectTrigger className="!h-9 px-3"><SelectValue placeholder="—" /></SelectTrigger>
+              <SelectTrigger id={`${uid}-difficulty`} className="!h-9 px-3"><SelectValue placeholder="—" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={NONE_SENTINEL}>—</SelectItem>
                 {DIFFICULTY_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
@@ -479,8 +481,8 @@ function FormFields({
             </Select>
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className={labelClass}>단위</label>
-            <Input value={form.unit} onChange={f("unit")} placeholder="예) mg" />
+            <label htmlFor={`${uid}-unit`} className={labelClass}>단위</label>
+            <Input id={`${uid}-unit`} value={form.unit} onChange={f("unit")} placeholder="예) mg" />
           </div>
         </div>
       </section>
@@ -490,12 +492,12 @@ function FormFields({
         <h3 className="mb-3 border-b pb-2 text-sm font-semibold text-foreground">제품 상세</h3>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="flex flex-col gap-1.5">
-            <label className={labelClass}>구분</label>
-            <Input value={form.productType} onChange={f("productType")} placeholder="예) 완제품" />
+            <label htmlFor={`${uid}-productType`} className={labelClass}>구분</label>
+            <Input id={`${uid}-productType`} value={form.productType} onChange={f("productType")} placeholder="예) 완제품" />
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className={labelClass}>포장규격</label>
-            <Input value={form.packageSpec} onChange={f("packageSpec")} placeholder="예) 100정/병" />
+            <label htmlFor={`${uid}-packageSpec`} className={labelClass}>포장규격</label>
+            <Input id={`${uid}-packageSpec`} value={form.packageSpec} onChange={f("packageSpec")} placeholder="예) 100정/병" />
           </div>
         </div>
       </section>
@@ -504,8 +506,9 @@ function FormFields({
       <section className="rounded-md border bg-card p-4 shadow-sm">
         <h3 className="mb-3 border-b pb-2 text-sm font-semibold text-foreground">공수 정보</h3>
         <div className="flex flex-col gap-1.5">
-          <label className={labelClass}>공수(일) <span className="text-destructive">*</span></label>
+          <label htmlFor={`${uid}-avgWorkdays`} className={labelClass}>공수(일) <span className="text-destructive">*</span></label>
           <Input
+            id={`${uid}-avgWorkdays`}
             type="number"
             min={0}
             step={1}
@@ -697,6 +700,7 @@ const ProductMasterList = memo(function ProductMasterList({
 })
 
 export function ProductTestWorkspace() {
+  const addUid = useId()
   const [rows, setRows] = useState<ProductRow[]>([])
   const [categories, setCategories] = useState<LookupOptionRow[]>([])
   const [classifications, setClassifications] = useState<LookupOptionRow[]>([])
@@ -1000,32 +1004,36 @@ export function ProductTestWorkspace() {
                 <h3 className="mb-3 border-b pb-2 text-sm font-semibold text-foreground">식별 정보</h3>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="flex flex-col gap-1.5">
-                    <label className={labelClass}>품목코드 <span className="text-destructive">*</span></label>
+                    <label htmlFor={`${addUid}-productCode`} className={labelClass}>품목코드 <span className="text-destructive">*</span></label>
                     <Input
+                      id={`${addUid}-productCode`}
                       value={addForm.productCode}
                       onChange={(e) => setAddForm((p) => ({ ...p, productCode: e.target.value }))}
                       placeholder="예) PR-001"
                     />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <label className={labelClass}>약호</label>
+                    <label htmlFor={`${addUid}-abbreviation`} className={labelClass}>약호</label>
                     <Input
+                      id={`${addUid}-abbreviation`}
                       value={addForm.abbreviation}
                       onChange={(e) => setAddForm((p) => ({ ...p, abbreviation: e.target.value }))}
                       placeholder="예) ABC"
                     />
                   </div>
                   <div className="flex flex-col gap-1.5 sm:col-span-2">
-                    <label className={labelClass}>품목명 <span className="text-destructive">*</span></label>
+                    <label htmlFor={`${addUid}-name`} className={labelClass}>품목명 <span className="text-destructive">*</span></label>
                     <Input
+                      id={`${addUid}-name`}
                       value={addForm.name}
                       onChange={(e) => setAddForm((p) => ({ ...p, name: e.target.value }))}
                       placeholder="품목명을 입력하세요"
                     />
                   </div>
                   <div className="flex flex-col gap-1.5 sm:col-span-2">
-                    <label className={labelClass}>품목명2</label>
+                    <label htmlFor={`${addUid}-nameAlt`} className={labelClass}>품목명2</label>
                     <Input
+                      id={`${addUid}-nameAlt`}
                       value={addForm.nameAlt}
                       onChange={(e) => setAddForm((p) => ({ ...p, nameAlt: e.target.value }))}
                       placeholder="품목명2 (선택)"

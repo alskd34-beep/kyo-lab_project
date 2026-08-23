@@ -3,9 +3,12 @@
 /**
  * [FRONTEND] QC 작업 상세 모달
  *
- * 작업현황(prod-status)에서 진행 중인 작업 카드를 클릭하면 열린다.
+ * 작업현황(prod-status)에서 작업 카드(진행 중·완료)를 클릭하면 열린다.
  * "진행중" 이라는 상태값만으로는 알 수 없는 **어떤 시험항목을 수행 중인지**를
  * 항목 체크리스트 + 현재 항목 강조 + 항목별 소요시간으로 보여준다.
+ *
+ * 관리자는 여기서 상태도 바꾼다 — 다음 단계 전진과, 잘못 넘긴 단계를 사유와 함께
+ * 되돌리는 직접 변경 두 경로 모두 공통 JobStatusControl 이 담당한다(시험현황과 동일).
  *
  * qc_job_items 에는 항목별 '진행중' 플래그가 없다(pending|cleared).
  * 백엔드 getJobDetail 이 미완료 항목 중 순번이 가장 빠른 항목을 현재 항목으로 계산해 내려준다.
@@ -13,15 +16,21 @@
 
 import { useCallback, useEffect, useState } from "react"
 import {
-  ArrowRight, CheckCircle2, Circle, Clock, LoaderCircle, TriangleAlert, User,
+  CheckCircle2, Circle, Clock, LoaderCircle, TriangleAlert, User,
 } from "lucide-react"
-import { JOB_STAGES, stageStyle } from "@shared/qc-status"
+import { IN_PROGRESS_STATUS, stageStyle } from "@shared/qc-status"
 import { cn } from "@frontend/lib/utils"
 import { Badge } from "@frontend/components/ui/badge"
 import { Button } from "@frontend/components/ui/button"
 import { ManagementDrawer } from "@frontend/components/common/management-drawer"
+import { JobStageTrack } from "@frontend/components/common/job-stage-track"
+import { JobStatusControl } from "@frontend/components/common/job-status-control"
+import { JobStatusHistory } from "@frontend/components/common/job-status-history"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import { formatElapsedMinutes, formatItemElapsed } from "@frontend/lib/elapsed-format"
+
+/** "진행중" 표시색은 상태 팔레트(types/qc-status.ts)에서 가져온다. 화면마다 색이 갈리지 않게. */
+const IN_PROGRESS_STYLE = stageStyle(IN_PROGRESS_STATUS)
 
 // ─── Types (백엔드 JobDetail 과 동일) ────────────────────────────────────────
 interface JobItem {
@@ -65,53 +74,22 @@ function SummaryField({ label, value, mono }: { label: string; value: string; mo
 }
 
 // ─── 모달 ────────────────────────────────────────────────────────────────────
-/** 진행중 → 검토전 → 검토중 → 승인전 → 승인완료 진행 막대 */
-function StageTrack({ status }: { status: string }) {
-  const idx = (JOB_STAGES as readonly string[]).indexOf(status)
-  // '지연' 등 단계에 없는 상태는 막대를 그리지 않는다
-  if (idx < 0) return null
-  return (
-    <div className="flex items-center gap-1">
-      {JOB_STAGES.map((s, i) => {
-        const done = i < idx
-        const here = i === idx
-        return (
-          <div key={s} className="flex min-w-0 flex-1 flex-col items-center gap-1">
-            <div
-              className={cn(
-                "h-1 w-full rounded-md",
-                done ? "bg-emerald-400" : here ? stageStyle(s).dot : "bg-muted",
-              )}
-            />
-            <span className={cn(
-              "truncate text-[10px]",
-              here ? "font-semibold text-foreground" : "text-muted-foreground",
-            )}>
-              {s}
-            </span>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
 export function JobDetailModal({
-  jobId, open, onOpenChange, canAdvance = false, onAdvanced,
+  jobId, open, onOpenChange, isAdmin = false, onAdvanced,
 }: {
   jobId: string | null
   open: boolean
   onOpenChange: (v: boolean) => void
-  /** 관리자만 검토·승인 버튼을 쓸 수 있다 */
-  canAdvance?: boolean
-  /** 단계 전이 후 목록을 새로고침하도록 알린다 */
+  /** 관리자만 상태를 바꿀 수 있다(단계 전이 + 직접 변경) */
+  isAdmin?: boolean
+  /** 상태가 바뀐 뒤 목록을 새로고침하도록 알린다 */
   onAdvanced?: () => void
 }) {
   const [detail, setDetail] = useState<JobDetail | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [advancing, setAdvancing] = useState(false)
-  const [advanceError, setAdvanceError] = useState<string | null>(null)
+  // 상태를 바꾼 뒤 상세·이력을 다시 읽게 하는 키
+  const [historyKey, setHistoryKey] = useState(0)
 
   const load = useCallback(async (id: string) => {
     setLoading(true)
@@ -128,33 +106,16 @@ export function JobDetailModal({
     }
   }, [])
 
-  /** 다음 단계로 넘기기 (관리자) */
-  const advance = useCallback(async () => {
-    if (!detail?.nextStage) return
-    setAdvancing(true)
-    setAdvanceError(null)
-    try {
-      const res = await fetch(`/api/qc-jobs/${detail.jobId}/stage`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        // 화면이 보고 있던 단계를 함께 보내 동시 클릭을 막는다
-        body: JSON.stringify({ expected: detail.status }),
-      })
-      const data = await res.json() as { error?: string }
-      if (!res.ok) throw new Error(data.error ?? "단계 변경 실패")
-      await load(detail.jobId)
-      onAdvanced?.()
-    } catch (e) {
-      setAdvanceError(e instanceof Error ? e.message : "단계 변경 실패")
-    } finally {
-      setAdvancing(false)
-    }
-  }, [detail, load, onAdvanced])
+  /** 상태가 바뀌면 상세·이력·목록을 모두 최신으로 맞춘다 */
+  const handleChanged = useCallback(() => {
+    if (jobId) void load(jobId)
+    setHistoryKey(k => k + 1)
+    onAdvanced?.()
+  }, [jobId, load, onAdvanced])
 
   useEffect(() => {
     if (open && jobId) void load(jobId)
-    if (!open) { setDetail(null); setError(null); setAdvanceError(null) }
+    if (!open) { setDetail(null); setError(null) }
   }, [open, jobId, load])
 
   const cleared = detail?.items.filter(i => i.status === "cleared").length ?? 0
@@ -190,23 +151,10 @@ export function JobDetailModal({
             )}
         </span>
       )}
-      description="수행 중인 시험항목과 항목별 진행 내역을 확인합니다."
+      description="시험항목 진행 내역을 확인하고, 관리자는 작업 상태를 변경합니다."
       footer={(
-        <div className="flex w-full flex-col items-stretch gap-2 sm:flex-row sm:items-center">
-          {advanceError && (
-            <p className="min-w-0 flex-1 text-left text-xs font-medium text-destructive sm:mr-auto">
-              {advanceError}
-            </p>
-          )}
+        <div className="flex w-full justify-end">
           <Button variant="outline" onClick={() => onOpenChange(false)}>닫기</Button>
-          {canAdvance && detail?.nextStage && detail.nextStageLabel && (
-            <Button onClick={() => void advance()} disabled={advancing}>
-              {advancing
-                ? <LoaderCircle className="animate-spin" />
-                : <ArrowRight />}
-              {advancing ? "처리 중..." : `${detail.nextStageLabel} → ${detail.nextStage}`}
-            </Button>
-          )}
         </div>
       )}
     >
@@ -230,7 +178,7 @@ export function JobDetailModal({
             <>
               {/* 단계 진행 막대 */}
               <section className="rounded-md border bg-card p-3 shadow-sm">
-                <StageTrack status={detail.status} />
+                <JobStageTrack status={detail.status} />
               </section>
 
               {/* 작업 요약 */}
@@ -252,19 +200,28 @@ export function JobDetailModal({
                 </div>
               </section>
 
+              {/* 상태 변경 (관리자) — 잘못 넘긴 단계를 사유와 함께 되돌릴 수 있다 */}
+              {isAdmin && (
+                <JobStatusControl
+                  jobId={detail.jobId}
+                  status={detail.status}
+                  onChanged={handleChanged}
+                />
+              )}
+
               {/* 현재 수행 항목 */}
               {currentItem ? (
-                <section className="rounded-md border border-violet-200 bg-violet-50/60 p-3">
-                  <p className="flex items-center gap-1.5 text-[11px] font-semibold text-violet-700">
+                <section className="rounded-md border bg-muted/40 p-3">
+                  <p className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
                     <LoaderCircle className="size-3" />
                     현재 수행 중인 시험항목
                   </p>
                   <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-sm font-semibold text-violet-900">
+                    <span className="text-sm font-semibold text-foreground">
                       {currentItem.testItemName}
                     </span>
                     {(jobElapsed !== null || currentElapsed !== null) && (
-                      <span className="flex items-center gap-1 text-xs text-violet-700">
+                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
                         <Clock className="size-3" />
                         {jobElapsed !== null && `작업 시작 후 ${formatElapsedMinutes(jobElapsed)}`}
                         {jobElapsed !== null && currentElapsed !== null && " · "}
@@ -272,13 +229,13 @@ export function JobDetailModal({
                       </span>
                     )}
                   </div>
-                  <p className="mt-1 text-[11px] text-violet-700/80">
+                  <p className="mt-1 text-[11px] text-muted-foreground">
                     미완료 항목 중 순번이 가장 빠른 항목입니다. ({currentIdx + 1}번째 / 총 {total}개)
                   </p>
                 </section>
               ) : detail.items.length > 0 && cleared === total ? (
-                <section className="rounded-md border border-emerald-200 bg-emerald-50/60 p-3">
-                  <p className="flex items-center gap-1.5 text-sm font-semibold text-emerald-800">
+                <section className="rounded-md border border-blue-200 bg-blue-50/60 p-3">
+                  <p className="flex items-center gap-1.5 text-sm font-semibold text-blue-800">
                     <CheckCircle2 className="size-4" />
                     모든 시험항목이 완료되었습니다.
                   </p>
@@ -294,7 +251,7 @@ export function JobDetailModal({
                   <div
                     className={cn(
                       "h-full rounded-md transition-all",
-                      total > 0 && cleared === total ? "bg-emerald-500" : "bg-violet-500",
+                      total > 0 && cleared === total ? "bg-blue-700" : IN_PROGRESS_STYLE.dot,
                     )}
                     style={{ width: `${pct}%` }}
                   />
@@ -319,8 +276,8 @@ export function JobDetailModal({
                         key={it.id}
                         className={cn(
                           "flex items-center justify-between gap-2 rounded-md border px-3 py-2.5",
-                          done && "border-emerald-200 bg-emerald-50/60",
-                          isCurrent && "border-violet-300 bg-violet-50/60",
+                          done && "border-blue-200 bg-blue-50/60",
+                          isCurrent && "border-primary/40 bg-primary/5",
                         )}
                       >
                         <div className="flex min-w-0 items-center gap-2">
@@ -328,14 +285,14 @@ export function JobDetailModal({
                             {idx + 1}
                           </span>
                           {done
-                            ? <CheckCircle2 className="size-4 shrink-0 text-emerald-500" />
+                            ? <CheckCircle2 className="size-4 shrink-0 text-blue-600" />
                             : isCurrent
-                              ? <LoaderCircle className="size-4 shrink-0 text-violet-500" />
+                              ? <LoaderCircle className="size-4 shrink-0 text-primary" />
                               : <Circle className="size-4 shrink-0 text-muted-foreground" />}
                           <span className={cn(
                             "truncate text-sm",
-                            done ? "font-medium text-emerald-800"
-                              : isCurrent ? "font-semibold text-violet-900"
+                            done ? "font-medium text-blue-800"
+                              : isCurrent ? "font-semibold text-foreground"
                               : "text-foreground",
                           )}>
                             {it.testItemName}
@@ -344,7 +301,7 @@ export function JobDetailModal({
 
                         <div className="flex shrink-0 items-center gap-2">
                           {done ? (
-                            <span className="text-[11px] text-emerald-700">
+                            <span className="text-[11px] text-blue-700">
                               {it.clearedAt && formatDateTime(it.clearedAt)}
                               {/* 작업 시작 기준 누적 소요시간 (구간이 다르면 함께 표기) */}
                               {(() => {
@@ -353,8 +310,8 @@ export function JobDetailModal({
                               })()}
                             </span>
                           ) : isCurrent ? (
-                            <Badge variant="outline" className="gap-1 border-violet-200 text-violet-700">
-                              <span className="size-1.5 rounded-full bg-violet-500" />진행 중
+                            <Badge variant="outline" className={cn("gap-1", IN_PROGRESS_STYLE.cls)}>
+                              <span className={cn("size-1.5 rounded-full", IN_PROGRESS_STYLE.dot)} />진행 중
                             </Badge>
                           ) : (
                             <Badge variant="secondary">대기</Badge>
@@ -365,6 +322,9 @@ export function JobDetailModal({
                   })}
                 </ul>
               )}
+
+              {/* 상태 변경 이력 */}
+              <JobStatusHistory jobId={detail.jobId} reloadKey={historyKey} />
 
               {/* 담당자 안내 */}
               <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">

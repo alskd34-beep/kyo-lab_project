@@ -670,7 +670,7 @@ export default function MyTasksPage() {
     const dd = dDay(job.dueDate)
     const isDone = job.status === CLOSED_STAGE
     return (
-      <Card key={job.id} className={cn("gap-0 overflow-hidden py-0", isDone && "border-emerald-200")}>
+      <Card key={job.id} className={cn("gap-0 overflow-hidden py-0", isDone && "border-blue-300")}>
         <div className="flex flex-col gap-3 border-b px-4 py-3 md:flex-row md:items-center md:justify-between">
           <div className="flex min-w-0 items-start gap-2">
             {selectable && (
@@ -769,19 +769,19 @@ export default function MyTasksPage() {
                     key={it.id}
                     className={cn(
                       "flex items-center justify-between rounded-md border px-3 py-2",
-                      done && "border-emerald-200 bg-emerald-50/60",
+                      done && "border-blue-200 bg-blue-50/60",
                     )}
                   >
                     <div className="flex items-center gap-2">
                       {done
-                        ? <CheckCircle2 size={16} className="text-emerald-500" />
+                        ? <CheckCircle2 size={16} className="text-blue-600" />
                         : <Circle size={16} className="text-muted-foreground" />}
-                      <span className={cn("text-sm", done ? "font-medium text-emerald-800" : "text-foreground")}>
+                      <span className={cn("text-sm", done ? "font-medium text-blue-800" : "text-foreground")}>
                         {it.testItemName}
                       </span>
                     </div>
                     {done ? (
-                      <span className="text-[11px] text-emerald-600">
+                      <span className="text-[11px] text-blue-700">
                         {it.clearedAt && new Date(it.clearedAt).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
                         {/* 작업 시작 기준 누적 소요시간 (구간이 다르면 함께 표기) */}
                         {(() => {

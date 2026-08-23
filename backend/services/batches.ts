@@ -1,4 +1,5 @@
-import { supabase } from '@backend/lib/supabase'
+import { supabaseAdmin as supabase } from '@backend/lib/supabase'
+import { sanitizeFilterTerm } from '@backend/lib/postgrestFilter'
 import type { BatchSummary, DashboardStats } from '@shared/pqm'
 
 function calcDday(dateStr: string | null): number | null {
@@ -14,7 +15,9 @@ export async function listBatches(q: {
   if (q.productId) query = query.eq('product_id', q.productId)
   if (q.from) query = query.gte('packaging_planned_date', q.from)
   if (q.to)   query = query.lte('packaging_planned_date', q.to)
-  if (q.search) query = query.or(`product_name.ilike.%${q.search}%,batch_no.ilike.%${q.search}%,product_code.ilike.%${q.search}%`)
+  // 검색어는 PostgREST 필터 DSL 에 문자열로 삽입되므로 문법 문자를 제거한다(필터 인젝션 방지).
+  const search = sanitizeFilterTerm(q.search)
+  if (search) query = query.or(`product_name.ilike.%${search}%,batch_no.ilike.%${search}%,product_code.ilike.%${search}%`)
   const { data, error } = await query
   if (error) throw error
   return (data ?? []).map(r => ({

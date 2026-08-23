@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useId, useMemo, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
 import { CalendarDays, Plus, Trash2, Loader2, ChevronLeft, ChevronRight, Download } from "lucide-react"
 import { DateField } from "@frontend/components/ui/date-field"
@@ -333,6 +333,7 @@ function AddModal({
   onSaved: () => void
   onError: (m: string) => void
 }) {
+  const uid = useId()
   const [date, setDate] = useState("")
   const [description, setDescription] = useState("")
   const [saving, setSaving] = useState(false)
@@ -378,8 +379,9 @@ function AddModal({
         <div className="grid gap-3">
           <DateField label="날짜" value={date} onChange={setDate} />
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">설명</label>
+            <label htmlFor={`${uid}-description`} className="mb-1 block text-xs font-medium text-muted-foreground">설명</label>
             <Input
+              id={`${uid}-description`}
               value={description}
               onChange={e => setDescription(e.target.value)}
               placeholder="예) 설날, 어린이날"

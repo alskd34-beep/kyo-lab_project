@@ -83,6 +83,29 @@ export function isFriday(date: Date): boolean {
 }
 
 /**
+ * [규칙2] 기준일 이후(당일 포함) 가장 가까운 금요일을 반환한다.
+ *
+ * 프로세스 정의(.claude/commands/qc-schedule-process.md)는
+ * "개별 중금속: **매주 금요일** 강제 배정, 박성호→이영남→정예찬 순환, 공수 1DAY 고정" 이다.
+ * 순환(누구)은 구현돼 있었지만 금요일 배치(언제)는 빠져 있었다(2026-08-23 점검).
+ * 중금속 항목의 시험일을 이 함수로 금요일에 고정한다.
+ *
+ * @param fromISO 'YYYY-MM-DD'
+ * @param holidays 공휴일 집합 — 해당 금요일이 공휴일이면 다음 금요일로 넘긴다
+ */
+export function nextFriday(fromISO: string, holidays?: ReadonlySet<string>): string {
+  let cur = fromISO
+  // 최대 8주 탐색(연속 공휴일 방어). 못 찾으면 입력을 그대로 돌려준다.
+  for (let i = 0; i < 56; i++) {
+    const d = new Date(cur + 'T00:00:00Z')
+    if (d.getUTCDay() === 5 && !(holidays?.has(cur) ?? false)) return cur
+    d.setUTCDate(d.getUTCDate() + 1)
+    cur = d.toISOString().slice(0, 10)
+  }
+  return fromISO
+}
+
+/**
  * [규칙2] 주차 인덱스에 해당하는 개별 중금속 시험 담당자 반환.
  * HEAVY_METAL_ROTATION[weekIndex % 3] 이름과 매칭되는 tester 를 찾아 반환,
  * 매칭되는 시험자가 후보에 없으면 null.

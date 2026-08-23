@@ -19,6 +19,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     const { id } = await ctx.params
     const detail = await getJobDetail(id)
     if (!detail) return Response.json({ error: '작업을 찾을 수 없습니다.' }, { status: 404 })
+    // 담당자는 본인 작업만 열람할 수 있다(관리자는 전체).
+    // 예전에는 requireAuth 만 통과하면 임의 작업 id 의 상세를 볼 수 있었다(IDOR).
+    if (auth.payload.role !== 'admin' && detail.assigneeUserId !== auth.payload.sub) {
+      return Response.json({ error: '본인 작업만 조회할 수 있습니다.' }, { status: 403 })
+    }
     return Response.json(detail)
   } catch (err) {
     const msg = err instanceof Error ? err.message : '서버 오류'

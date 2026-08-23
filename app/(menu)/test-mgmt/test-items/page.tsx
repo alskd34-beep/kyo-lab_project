@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useDeferredValue, useEffect, useMemo, useState } from "react"
 import {
   Copy,
   Layers,
@@ -11,6 +11,7 @@ import {
   Trash2,
 } from "lucide-react"
 import { cn } from "@frontend/lib/utils"
+import { useVirtualWindow } from "@frontend/hooks/use-virtual-window"
 import { api, errorMessage } from "@frontend/lib/api-client"
 import { useToastMessage } from "@frontend/components/common/toast-message"
 
@@ -107,6 +108,9 @@ interface TestItemGroupItemRow {
   category: string
   sequenceOrder: number
 }
+
+/** 품목 사이드바 한 줄의 고정 높이(px). 가상 스크롤 계산의 기준이라 마크업과 반드시 일치해야 한다. */
+const PRODUCT_ITEM_HEIGHT = 64
 
 export default function TestItemsPage() {
   const [products, setProducts] = useState<ProductRow[]>([])
@@ -242,8 +246,10 @@ export default function TestItemsPage() {
     }
   }
 
+  const deferredProductSearch = useDeferredValue(productSearch)
+
   const filteredProducts = useMemo(() => {
-    const q = productSearch.trim().toLowerCase()
+    const q = deferredProductSearch.trim().toLowerCase()
     let list = q
       ? products.filter(
           (product) =>
@@ -256,7 +262,17 @@ export default function TestItemsPage() {
     }
     // 활성 품목을 항상 위로 올린다. 원래 정렬(sort_order)은 그룹 안에서 그대로 유지된다(stable sort).
     return [...list].sort((a, b) => Number(b.isActive) - Number(a.isActive))
-  }, [products, productSearch, productStatusFilter])
+  }, [products, deferredProductSearch, productStatusFilter])
+
+  /** 품목이 2,000건까지 오므로 보이는 구간만 그린다. 항목 높이는 PRODUCT_ITEM_HEIGHT 로 고정돼 있다. */
+  const {
+    containerRef: productListRef,
+    start: productStart,
+    end: productEnd,
+    padTop: productPadTop,
+    padBottom: productPadBottom,
+  } = useVirtualWindow(filteredProducts.length, PRODUCT_ITEM_HEIGHT)
+  const windowedProducts = filteredProducts.slice(productStart, productEnd)
 
   const productStatusCounts = useMemo(() => {
     const active = products.filter((p) => p.isActive).length
@@ -682,7 +698,7 @@ export default function TestItemsPage() {
             />
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div ref={productListRef} className="min-h-0 flex-1 overflow-y-auto">
             {filteredProducts.length === 0 ? (
               <div className="flex items-center justify-center py-10">
                 <p className="text-sm text-muted-foreground">
@@ -690,8 +706,9 @@ export default function TestItemsPage() {
                 </p>
               </div>
             ) : (
-              <ul className="divide-y">
-                {filteredProducts.map((product) => {
+              <ul>
+                {productPadTop > 0 && <li aria-hidden style={{ height: productPadTop }} />}
+                {windowedProducts.map((product) => {
                   const isSelected = selectedProduct?.id === product.id
                   return (
                     <li key={product.id}>
@@ -699,10 +716,10 @@ export default function TestItemsPage() {
                         type="button"
                         onClick={() => setSelectedProduct(product)}
                         className={cn(
-                          "w-full border-l-2 px-4 py-3 text-left transition-colors",
+                          "h-16 w-full overflow-hidden border-b border-l-2 px-4 py-3 text-left transition-colors",
                           isSelected
-                            ? "border-primary bg-primary/5"
-                            : "border-transparent hover:bg-muted/50"
+                            ? "border-l-primary bg-primary/5"
+                            : "border-l-transparent hover:bg-muted/50"
                         )}
                       >
                         <div className="flex items-center gap-2">
@@ -720,18 +737,14 @@ export default function TestItemsPage() {
                             <Tag color="mono" className="text-[10px]">비활성</Tag>
                           )}
                         </div>
-                        <p
-                          className={cn(
-                            "mt-0.5 text-sm leading-snug font-medium",
-                            isSelected ? "text-foreground" : "text-foreground"
-                          )}
-                        >
+                        <p className="mt-0.5 truncate text-sm leading-snug font-medium text-foreground">
                           {product.name}
                         </p>
                       </button>
                     </li>
                   )
                 })}
+                {productPadBottom > 0 && <li aria-hidden style={{ height: productPadBottom }} />}
               </ul>
             )}
           </div>
@@ -1116,7 +1129,7 @@ export default function TestItemsPage() {
                     <ul className="divide-y">
                       {Array.from({ length: 5 }).map((_, i) => (
                         <li key={i} className="flex items-center gap-3 px-4 py-2.5">
-                          <Skeleton className="h-4 w-4 rounded" />
+                          <Skeleton className="h-4 w-4 rounded-md" />
                           <Skeleton className="h-4 flex-1" />
                           <Skeleton className="h-4 w-14 rounded-md" />
                         </li>

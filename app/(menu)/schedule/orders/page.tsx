@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
 import {
   RefreshCw, Sparkles, History, AlertCircle, X, Loader2, Database, Plus,
@@ -923,7 +923,7 @@ export default function OrdersPage() {
             <button
               onClick={() => setSearch("")}
               title="검색어 지우기"
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
             >
               <X className="size-3.5" />
             </button>
@@ -951,7 +951,7 @@ export default function OrdersPage() {
                 {Array.from({ length: 3 }).map((_, j) => (
                   <Card key={j} className="gap-3 p-3">
                     <div className="flex items-start gap-2.5">
-                      <Skeleton className="size-4 rounded-sm" />
+                      <Skeleton className="size-4 rounded-md" />
                       <div className="min-w-0 flex-1 space-y-2">
                         <Skeleton className="h-4 w-2/3" />
                         <Skeleton className="h-3 w-1/2" />
@@ -1307,6 +1307,7 @@ function CreateModal({ testers, absences, onClose, onCreated }: {
   testers: Tester[]; absences: TesterAbsence[]; onClose: () => void; onCreated: () => void
 }) {
   const { requestConfirm } = useConfirmMessage()
+  const uid = useId()
   const [form, setForm] = useState({
     productCode: "", productName: "", batchNo: "", dosageForm: "",
     packagingDate: "", dueDate: "", isUrgent: false,
@@ -1429,10 +1430,11 @@ function CreateModal({ testers, absences, onClose, onCreated }: {
 
       {/* 품목 검색 (자동완성) */}
       <div className="relative mb-3">
-        <label className="mb-1 block text-xs font-semibold text-foreground">품목 검색</label>
+        <label htmlFor={`${uid}-productSearch`} className="mb-1 block text-xs font-semibold text-foreground">품목 검색</label>
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <input
+            id={`${uid}-productSearch`}
             value={pq}
             onChange={e => { setPq(e.target.value); setShowHits(true) }}
             onFocus={() => { if (hits.length) setShowHits(true) }}
@@ -1576,6 +1578,7 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
   onClose: () => void; onSaved: () => void
 }) {
   const { requestConfirm } = useConfirmMessage()
+  const uid = useId()
   const { user } = useAuth()
   const isAdmin = user?.role === "admin"
   const isAutoOrder = order.source === "auto"
@@ -1757,8 +1760,8 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
       />
 
       <div className="mt-3">
-        <label className="mb-1 block text-xs font-semibold text-foreground">수정 사유 <span className="text-red-500">*</span></label>
-        <textarea value={reason} onChange={e => setReason(e.target.value)} rows={2}
+        <label htmlFor={`${uid}-reason`} className="mb-1 block text-xs font-semibold text-foreground">수정 사유 <span className="text-red-500">*</span></label>
+        <textarea id={`${uid}-reason`} value={reason} onChange={e => setReason(e.target.value)} rows={2}
           placeholder="변경 사유를 입력하세요 (필수)"
           className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none" />
       </div>
@@ -1826,7 +1829,7 @@ function HistoryModal({ order, testers, onClose }: { order: OrderRow; testers: T
       ) : sessions.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted-foreground">수정 이력이 없습니다.</p>
       ) : (
-        <ul className="flex max-h-[60vh] flex-col gap-2.5 overflow-y-auto">
+        <ul className="flex flex-col gap-2.5">
           {sessions.map((s, i) => (
             <li key={s.key} className="rounded-md border bg-muted/40 px-3 py-2.5">
               {/* 헤더: 작성자 · 시각 · 변경 필드 수 */}
@@ -1847,7 +1850,7 @@ function HistoryModal({ order, testers, onClose }: { order: OrderRow; testers: T
               <div className="mt-2 flex flex-col gap-1.5">
                 {s.edits.map(e => (
                   <div key={e.id} className="grid grid-cols-[auto_1fr] items-baseline gap-2 text-xs">
-                    <span className="rounded bg-card px-1.5 py-0.5 font-medium text-muted-foreground ring-1 ring-border">
+                    <span className="rounded-md bg-card px-1.5 py-0.5 font-medium text-muted-foreground ring-1 ring-border">
                       {FIELD_LABEL[e.field] ?? e.field}
                     </span>
                     <span className="text-muted-foreground">
@@ -1963,7 +1966,7 @@ function IngestLogModal({ onClose }: { onClose: () => void }) {
       ) : rows.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted-foreground">아직 적재한 이력이 없습니다.</p>
       ) : (
-        <div className="flex max-h-[60vh] flex-col gap-4 overflow-y-auto pr-1">
+        <div className="flex flex-col gap-4">
           {groups.map(g => {
             const d = new Date(g.runAt)
             const dateLabel = d.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "short" })
@@ -2022,8 +2025,11 @@ const inputCls = "h-9 w-full rounded-md border border-input bg-background px-3 t
 function Field({ label, full, children }: { label: string; full?: boolean; children: React.ReactNode }) {
   return (
     <div className={full ? "sm:col-span-2" : ""}>
-      <label className="mb-1 block text-xs font-semibold text-foreground">{label}</label>
-      {children}
+      {/* 라벨이 컨트롤을 감싸 암묵적으로 연결된다(별도 id 불필요). */}
+      <label className="block">
+        <span className="mb-1 block text-xs font-semibold text-foreground">{label}</span>
+        {children}
+      </label>
     </div>
   )
 }

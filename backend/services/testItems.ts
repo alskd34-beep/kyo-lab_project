@@ -1,4 +1,4 @@
-import { supabase } from '@backend/lib/supabase'
+import { supabaseAdmin as supabase } from '@backend/lib/supabase'
 
 export interface TestItemRow {
   id: string

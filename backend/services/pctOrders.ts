@@ -3,12 +3,12 @@
  */
 
 import { supabaseAdmin } from '@backend/lib/supabase'
-import { DELETED_STATUS, PENDING_STATUS } from '@shared/qc-status'
+import { DELETED_STATUS, PENDING_STATUS, ORDER_STATUSES } from '@shared/qc-status'
 import { assertTesterAssignable } from '@backend/services/testers'
 import { logReassignment } from '@backend/services/reassignmentHistory'
 import { warnIfAssigneeOnLeave } from '@backend/services/leaveConflicts'
 import {
-  METHOD_PARTIAL, normalizeForMethod, replaceForOrder,
+  METHOD_ALL, METHOD_PARTIAL, normalizeForMethod, replaceForOrder,
   type OrderTestItemInput,
 } from '@backend/services/pctOrderTestItems'
 
@@ -44,6 +44,47 @@ const EDITABLE_FIELDS = [
 type EditableField = (typeof EDITABLE_FIELDS)[number]
 const AUTO_IMMUTABLE_FIELDS = ['productCode', 'productName', 'batchNo'] as const
 
+/**
+ * [원칙3] 확정(LOCK) 시 변경을 막는 필드.
+ *
+ * 2026-08-23 수정: 예전에는 assigneeTesterId 하나만 막고 있었다. 그런데
+ * packagingDate/dueDate 는 엔진의 스케줄 윈도우 입력(computeWindow)이고
+ * method/isUrgent 는 배정 방식 자체를 바꾸므로, 이것들이 열려 있으면
+ * "확정된 일정"이 확정되지 않은 것과 같다.
+ * note 는 메모라서 LOCK 후에도 남겨둔다.
+ */
+const LOCKED_IMMUTABLE_FIELDS = [
+  'assigneeTesterId', 'packagingDate', 'dueDate', 'isUrgent', 'method',
+] as const
+
+/**
+ * [원칙2] QC 작업이 시작된 뒤에는 변경을 막는 필드.
+ * "시험 시작(IN_PROGRESS)/완료 후 일정 변경 금지". status 는 작업 진행에 따라
+ * 서버가 동기화하므로(qcJobs.advanceJobStage) 여기서 제외한다.
+ */
+const STARTED_IMMUTABLE_FIELDS = [
+  'assigneeTesterId', 'packagingDate', 'dueDate', 'isUrgent', 'method',
+  'productCode', 'productName', 'batchNo',
+] as const
+
+/** 오류 메시지용 한국어 필드명 */
+const FIELD_LABEL: Record<EditableField, string> = {
+  productCode: '품목코드',
+  productName: '품목명',
+  batchNo: '제조번호',
+  dosageForm: '제형',
+  packagingDate: '포장일',
+  dueDate: '완료예정일',
+  isUrgent: '긴급여부',
+  method: '진행방법',
+  status: '상태',
+  note: '비고',
+  assigneeTesterId: '담당자',
+}
+function fieldLabel(f: EditableField): string {
+  return FIELD_LABEL[f] ?? f
+}
+
 const FIELD_TO_COL: Record<EditableField, string> = {
   productCode: 'product_code',
   productName: 'product_name',
@@ -72,7 +113,8 @@ export async function listOrders(filters: {
   if (filters.status) query = query.eq('status', filters.status)
   if (filters.assigneeTesterId) query = query.eq('assignee_tester_id', filters.assigneeTesterId)
 
-  const { data, error } = await query
+  // Supabase 기본 1000행 상한 회피. pct_orders 는 소프트 삭제만 하므로 단조 증가한다.
+  const { data, error } = await query.range(0, 9999)
   if (error) throw error
   const orders = (data ?? []) as Record<string, unknown>[]
   if (orders.length === 0) return []
@@ -270,6 +312,23 @@ export async function updateOrderWithReason(
 ): Promise<void> {
   const trimmedReason = (reason ?? '').trim()
   if (!trimmedReason) throw new Error('수정 사유는 필수입니다.')
+
+  // 열거값 검증 — types/qc-status.ts 가 단일 기준이다.
+  // 예전에는 검증이 없어 임의 문자열이 status 에 저장됐고, 그러면
+  // OPEN_STATUSES / ACTIVE_JOB_STATUSES / LOCKED_STATUSES 기반 필터가 전부
+  // 그 오더를 놓쳐 대시보드·공수집계·적재차단에서 조용히 사라졌다.
+  if (patch.status !== undefined && patch.status !== null) {
+    const s = String(patch.status)
+    if (!ORDER_STATUSES.includes(s)) {
+      throw new Error(`허용되지 않는 상태값입니다: ${s} (가능: ${ORDER_STATUSES.join(', ')})`)
+    }
+  }
+  if (patch.method !== undefined && patch.method !== null) {
+    const m = String(patch.method)
+    if (m !== METHOD_ALL && m !== METHOD_PARTIAL) {
+      throw new Error(`허용되지 않는 진행방법입니다: ${m} (가능: ${METHOD_ALL}, ${METHOD_PARTIAL})`)
+    }
+  }
   // 담당자를 바꾸는 수정이면 비활성 시험자 지정을 차단한다
   if (patch.assigneeTesterId) await assertTesterAssignable(String(patch.assigneeTesterId))
 
@@ -303,19 +362,64 @@ export async function updateOrderWithReason(
 
   if (edits.length === 0) return  // 변경 없음
 
-  // [원칙3] 확정(LOCK)된 오더의 담당자는 서버에서도 변경·해제를 막는다
-  const assigneeEdit = edits.find(e => e.field === 'assigneeTesterId')
-  if (assigneeEdit && currentRow.locked) {
-    throw new Error('확정(LOCK)된 오더는 담당자를 변경할 수 없습니다. 확정 해제 후 다시 시도해 주세요.')
+  const changed = new Set(edits.map(e => e.field))
+
+  // [원칙3] 확정(LOCK)된 오더는 담당자뿐 아니라 일정·진행방법·긴급여부까지 잠근다.
+  if (currentRow.locked) {
+    const blocked = LOCKED_IMMUTABLE_FIELDS.filter(f => changed.has(f))
+    if (blocked.length > 0) {
+      throw new Error(
+        `확정(LOCK)된 오더는 ${blocked.map(fieldLabel).join('·')} 를 변경할 수 없습니다. ` +
+        '확정 해제 후 다시 시도해 주세요.',
+      )
+    }
   }
 
-  const { error: updErr } = await supabaseAdmin.from('pct_orders').update(dbPatch).eq('id', id)
-  if (updErr) throw updErr
+  // [원칙2] QC 작업이 시작된 오더는 일정·배정을 변경하지 않는다.
+  const { data: startedJob } = await supabaseAdmin
+    .from('qc_jobs')
+    .select('id')
+    .eq('order_id', id)
+    .maybeSingle()
+  if (startedJob) {
+    const blocked = STARTED_IMMUTABLE_FIELDS.filter(f => changed.has(f))
+    if (blocked.length > 0) {
+      throw new Error(
+        `이미 시험이 시작된 오더는 ${blocked.map(fieldLabel).join('·')} 를 변경할 수 없습니다.`,
+      )
+    }
+  }
 
-  const { error: logErr } = await supabaseAdmin.from('pct_order_edits').insert(
-    edits.map(e => ({ order_id: id, field: e.field, old_value: e.old_value, new_value: e.new_value, reason: trimmedReason, edited_by: editedBy })),
-  )
-  if (logErr) throw logErr
+  // [GMP/ALCOA+] 감사 이력을 **먼저** 남기고 값을 바꾼다.
+  //
+  // 예전에는 update → insert 순서였고 둘 다 별개 요청(트랜잭션 아님)이라,
+  // 이력 insert 가 실패하면 "사유·작성자 기록 없이 값만 바뀐 오더"가 남았다.
+  // 순서를 뒤집으면 최악의 경우가 "이력은 있는데 값은 안 바뀐" 쪽이 된다 —
+  // 감사 관점에서 설명 가능한 실패다. 값 변경이 실패하면 방금 쓴 이력을 되돌린다.
+  //
+  // 근본 해결은 update+insert 를 한 트랜잭션(RPC)이나 DB 트리거로 옮기는 것이다.
+  const { data: insertedEdits, error: logErr } = await supabaseAdmin
+    .from('pct_order_edits')
+    .insert(
+      edits.map(e => ({ order_id: id, field: e.field, old_value: e.old_value, new_value: e.new_value, reason: trimmedReason, edited_by: editedBy })),
+    )
+    .select('id')
+  if (logErr) throw new Error(`수정 이력 기록 실패로 변경을 취소했습니다: ${logErr.message}`)
+
+  const { error: updErr } = await supabaseAdmin.from('pct_orders').update(dbPatch).eq('id', id)
+  if (updErr) {
+    // 값 변경이 실패했으므로 방금 남긴 이력을 제거해 "일어나지 않은 변경"이 남지 않게 한다.
+    const ids = (insertedEdits ?? []).map(r => r.id as string)
+    if (ids.length > 0) {
+      await supabaseAdmin.from('pct_order_edits').delete().in('id', ids).then(
+        undefined,
+        () => console.error('[pctOrders] 이력 롤백 실패 — 수동 정리 필요:', ids),
+      )
+    }
+    throw updErr
+  }
+
+  const assigneeEdit = edits.find(e => e.field === 'assigneeTesterId')
 
   // 담당자 변경·해제는 재배정 이력에도 남긴다(자동배정/수동배정과 동일 저장소).
   // 이력 적재 실패가 수정 자체를 되돌리지는 않는다.

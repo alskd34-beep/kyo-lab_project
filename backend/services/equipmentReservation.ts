@@ -94,7 +94,7 @@ export async function createReservation(input: CreateReservationInput): Promise<
     .gte('end_date', input.startDate)
   if (confErr) throw confErr
 
-  const hasConflict = (conflicts ?? []).length > 0
+  let hasConflict = (conflicts ?? []).length > 0
 
   let status: ReservationStatus = 'RESERVED'
   let waitOrder: number | null = null
@@ -114,18 +114,38 @@ export async function createReservation(input: CreateReservationInput): Promise<
     waitOrder = currentMax + 1
   }
 
-  const { data, error } = await supabaseAdmin
-    .from('equipment_reservation')
-    .insert({
-      equipment_id: input.equipmentId,
-      user_id:      input.userId,
-      start_date:   input.startDate,
-      end_date:     input.endDate,
-      status,
-      wait_order:   waitOrder,
-    })
-    .select(SELECT)
-    .single()
+  const insertRow = async (s: ReservationStatus, w: number | null) =>
+    supabaseAdmin
+      .from('equipment_reservation')
+      .insert({
+        equipment_id: input.equipmentId,
+        user_id:      input.userId,
+        start_date:   input.startDate,
+        end_date:     input.endDate,
+        status:       s,
+        wait_order:   w,
+      })
+      .select(SELECT)
+      .single()
+
+  let { data, error } = await insertRow(status, waitOrder)
+
+  // 겹침 조회(1)와 insert 사이에 다른 요청이 먼저 RESERVED 를 잡았을 수 있다(TOCTOU).
+  // 마이그레이션 0031 의 배제 제약이 그 경우를 23P01 로 거절하므로, 여기서 WAITING 으로 강등해
+  // 재시도한다. 애플리케이션 재검사로는 이 경쟁을 없앨 수 없어 DB 가 유일한 직렬화 지점이다.
+  if (error && (error as { code?: string }).code === '23P01') {
+    const { data: maxRows } = await supabaseAdmin
+      .from('equipment_reservation')
+      .select('wait_order')
+      .eq('equipment_id', input.equipmentId)
+      .eq('status', 'WAITING')
+      .order('wait_order', { ascending: false })
+      .limit(1)
+    const retryOrder = ((maxRows?.[0]?.wait_order as number) ?? 0) + 1
+    status = 'WAITING'
+    hasConflict = true
+    ;({ data, error } = await insertRow('WAITING', retryOrder))
+  }
   if (error) throw error
 
   // WAITING 이면 현재 RESERVED 사용자에게 대기 등록 알림
@@ -173,35 +193,44 @@ export async function cancelReservation(id: string): Promise<void> {
   if ((target?.status as string) !== 'RESERVED') return
   const equipmentId = target?.equipment_id as string
 
-  // 가장 앞 WAITING 1건(wait_order 오름차순, 동률이면 created_at)
-  const { data: nextRows, error: nErr } = await supabaseAdmin
+  // 대기열 앞에서부터 승격을 시도한다.
+  //
+  // 예전에는 맨 앞 1건을 무조건 RESERVED 로 올렸는데, 그 대기 예약이 **다른** RESERVED 와도
+  // 겹치는 경우(취소된 건 말고 제3의 예약)에는 이중 예약이 만들어졌다.
+  // 이제 0031 의 배제 제약이 그런 승격을 23P01 로 거절하므로, 거절되면 다음 대기자를 시도한다.
+  const { data: waitingRows, error: nErr } = await supabaseAdmin
     .from('equipment_reservation')
     .select('id, user_id, start_date, end_date')
     .eq('equipment_id', equipmentId)
     .eq('status', 'WAITING')
     .order('wait_order', { ascending: true, nullsFirst: true })
     .order('created_at', { ascending: true })
-    .limit(1)
+    .limit(10)
   if (nErr) throw nErr
 
-  const next = nextRows?.[0] as Record<string, unknown> | undefined
-  if (!next) return
+  for (const row of (waitingRows ?? []) as Record<string, unknown>[]) {
+    const { error: promoteErr } = await supabaseAdmin
+      .from('equipment_reservation')
+      .update({ status: 'RESERVED', wait_order: null })
+      .eq('id', row.id as string)
+      .eq('status', 'WAITING')      // 낙관적 잠금 — 그 사이 취소/승격됐으면 건너뜀
+    if (promoteErr) {
+      // 여전히 다른 RESERVED 와 겹치는 대기자 → 다음 순번 시도
+      if ((promoteErr as { code?: string }).code === '23P01') continue
+      throw promoteErr
+    }
 
-  const { error: promoteErr } = await supabaseAdmin
-    .from('equipment_reservation')
-    .update({ status: 'RESERVED', wait_order: null })
-    .eq('id', next.id as string)
-  if (promoteErr) throw promoteErr
-
-  const nextUserId = next.user_id as string | undefined
-  if (nextUserId) {
-    await createNotification({
-      type: 'status_changed',
-      title: '장비 예약 확정',
-      body: `대기 중이던 장비 '${equipmentId}' 예약(${next.start_date} ~ ${next.end_date})이 확정되었습니다.`,
-      targetUserId: nextUserId,
-      severity: 'info',
-    }).catch(() => {})
+    const nextUserId = row.user_id as string | undefined
+    if (nextUserId) {
+      await createNotification({
+        type: 'status_changed',
+        title: '장비 예약 확정',
+        body: `대기 중이던 장비 '${equipmentId}' 예약(${row.start_date} ~ ${row.end_date})이 확정되었습니다.`,
+        targetUserId: nextUserId,
+        severity: 'info',
+      }).catch(() => {})
+    }
+    return
   }
 }
 

@@ -10,7 +10,7 @@
  * value / onChange 는 "yyyy-MM-dd" ISO 문자열 기준.
  */
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 import { format, isValid, parse } from "date-fns"
 import { ko } from "date-fns/locale"
 import { Calendar as CalendarIcon } from "lucide-react"
@@ -72,6 +72,7 @@ export function DateField({
   const [open, setOpen] = useState(false)
   const [inputVal, setInputVal] = useState(() => isoToMasked(value))
   const inputRef = useRef<HTMLInputElement>(null)
+  const inputId = useId()
 
   const handleCalendarSelect = (date: Date | undefined) => {
     const iso = date ? format(date, "yyyy-MM-dd") : ""
@@ -116,6 +117,7 @@ export function DateField({
     <div className="relative">
       <Input
         ref={inputRef}
+        id={inputId}
         type="text"
         inputMode="numeric"
         value={inputVal}
@@ -178,7 +180,7 @@ export function DateField({
   return (
     <div className="grid gap-1.5">
       {label && (
-        <label className="text-xs font-medium text-foreground">
+        <label htmlFor={inputId} className="text-xs font-medium text-foreground">
           {label}
           {helper && (
             <span className="ml-1 font-normal text-muted-foreground">{helper}</span>

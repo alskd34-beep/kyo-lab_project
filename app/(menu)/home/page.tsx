@@ -7,14 +7,37 @@ import { Skeleton } from '@frontend/components/ui/skeleton'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@frontend/components/ui/table'
 import { CellStack } from '@frontend/components/ui/table-cell-stack'
 import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from '@frontend/components/ui/table-sort'
+import { AssigneeDetailModal } from '@frontend/components/schedule/assignee-detail-modal'
 import { TesterAvatar, primeTesterProfileCache } from '@frontend/lib/tester-profiles'
 import { cn } from '@frontend/lib/utils'
-import { CLOSED_STAGE, OPEN_STATUSES, stageStyle } from '@shared/qc-status'
+import {
+  ACTIVE_JOB_STATUSES,
+  CLOSED_STAGE,
+  OPEN_STATUSES,
+  PENDING_STATUS,
+  stageStyle,
+} from '@shared/qc-status'
+
+/** 시험자 카드에 나열할 개별 작업(오더) */
+interface TesterWorkItem {
+  id: string
+  productName: string
+  batchNo: string
+  status: string
+  dueDate: string | null
+  dDay: number | null
+  isUrgent: boolean
+}
 
 interface TesterLoad {
   id: string
   name: string
-  assigned: number
+  /** 착수한 작업(진행중·검토전·검토중·승인전·지연) 건수 */
+  activeCount: number
+  /** 배정만 되고 아직 시작 전인 '대기' 건수 */
+  pendingCount: number
+  /** 화면에 나열할 작업 — 착수분이 먼저, 그 뒤에 대기분 */
+  items: TesterWorkItem[]
 }
 
 interface TesterApiRow {
@@ -31,6 +54,7 @@ interface PctOrderApiRow {
   batchNo: string
   dueDate: string | null
   status: string
+  isUrgent?: boolean
   assigneeTesterId: string | null
 }
 
@@ -115,6 +139,71 @@ function buildUpcoming(orders: PctOrderApiRow[]): UpcomingRow[] {
     .filter(row => row.status !== CLOSED_STAGE && row.dDay !== null && row.dDay >= 0 && row.dDay <= 7)
 }
 
+/** 시험자 카드에 한 번에 펼쳐 보여줄 작업 수. 넘치면 '외 N건'으로 접는다. */
+const MAX_ITEMS_PER_TESTER = 4
+
+/** 긴급 먼저, 그 다음 기한이 임박한 순. */
+function byUrgencyThenDue(a: TesterWorkItem, b: TesterWorkItem): number {
+  if (a.isUrgent !== b.isUrgent) return a.isUrgent ? -1 : 1
+  return (a.dDay ?? Infinity) - (b.dDay ?? Infinity)
+}
+
+/**
+ * 시험자별 "지금 무엇을 들고 있는가"를 만든다.
+ *
+ * 착수분(ACTIVE_JOB_STATUSES)을 먼저, 아직 시작 전인 '대기'를 뒤에 이어 붙인다.
+ * 착수분만 나열하면 배정은 있는데 아무도 시작하지 않은 시기에 카드가 전부 비어
+ * 보여, "배정이 없다"로 오독된다. 상태 배지 색으로 둘을 구분한다.
+ * 종결(승인완료)·삭제 오더는 OPEN_STATUSES 에서 걸러진다.
+ */
+function buildTesterLoads(orders: PctOrderApiRow[], testerRows: TesterApiRow[]): TesterLoad[] {
+  const byTester = new Map<string, { active: TesterWorkItem[]; pending: TesterWorkItem[] }>()
+
+  for (const order of orders) {
+    const testerId = order.assigneeTesterId
+    if (!testerId || !OPEN_STATUSES.has(order.status)) continue
+    if (order.status !== PENDING_STATUS && !ACTIVE_JOB_STATUSES.has(order.status)) continue
+
+    let bucket = byTester.get(testerId)
+    if (!bucket) {
+      bucket = { active: [], pending: [] }
+      byTester.set(testerId, bucket)
+    }
+
+    const item: TesterWorkItem = {
+      id: order.id,
+      productName: order.productName,
+      batchNo: order.batchNo,
+      status: order.status,
+      dueDate: order.dueDate,
+      dDay: calcDday(order.dueDate),
+      isUrgent: Boolean(order.isUrgent),
+    }
+    if (order.status === PENDING_STATUS) bucket.pending.push(item)
+    else bucket.active.push(item)
+  }
+
+  // 일이 많은 시험자를 앞으로 — 한눈에 부하가 읽히게.
+  return testerRows
+    .map(row => {
+      const bucket = byTester.get(row.id)
+      const active = (bucket?.active ?? []).sort(byUrgencyThenDue)
+      const pending = (bucket?.pending ?? []).sort(byUrgencyThenDue)
+      return {
+        id: row.id,
+        name: row.name,
+        activeCount: active.length,
+        pendingCount: pending.length,
+        items: [...active, ...pending],
+      }
+    })
+    .sort((a, b) =>
+      b.activeCount - a.activeCount
+      || b.pendingCount - a.pendingCount
+      || a.name.localeCompare(b.name, 'ko'),
+    )
+}
+
 async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   const res = await fetch(url, { signal, credentials: 'include' })
   if (!res.ok) throw new Error(await res.text())
@@ -151,6 +240,12 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(true)
   const [sortField, setSortField] = useState<SortField>('dDay')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
+  const [detailTester, setDetailTester] = useState<{ id: string; name: string } | null>(null)
+
+  const totalActive = useMemo(
+    () => testers.reduce((sum, tester) => sum + tester.activeCount, 0),
+    [testers],
+  )
 
   function pickSort(field: SortField, dir: SortDir) {
     setSortField(field)
@@ -183,23 +278,10 @@ export default function HomePage() {
       const orders = orderResult.status === 'fulfilled' ? orderResult.value.rows : []
       const testerRows = testerResult.status === 'fulfilled' ? testerResult.value.rows : []
 
-      const assignedByTester = new Map<string, number>()
-      for (const order of orders) {
-        if (!order.assigneeTesterId || !OPEN_STATUSES.has(order.status)) continue
-        assignedByTester.set(
-          order.assigneeTesterId,
-          (assignedByTester.get(order.assigneeTesterId) ?? 0) + 1,
-        )
-      }
-
       if (testerRows.length > 0) primeTesterProfileCache(testerRows)
       setStats(orderResult.status === 'fulfilled' ? buildStats(orders) : EMPTY_STATS)
       setUpcoming(orderResult.status === 'fulfilled' ? buildUpcoming(orders) : [])
-      setTesters(testerRows.map(row => ({
-        id: row.id,
-        name: row.name,
-        assigned: assignedByTester.get(row.id) ?? 0,
-      })))
+      setTesters(buildTesterLoads(orders, testerRows))
       setLoadError(orderResult.status === 'rejected' ? '홈 데이터를 불러오지 못했습니다.' : null)
     } catch {
       if (signal?.aborted) return
@@ -325,7 +407,7 @@ export default function HomePage() {
                     <TableRow key={i}>
                       <TableCell className="px-3 py-2"><Skeleton className="h-8 w-40" /></TableCell>
                       <TableCell className="px-3 py-2"><Skeleton className="h-8 w-24" /></TableCell>
-                      <TableCell className="px-3 py-2"><Skeleton className="h-5 w-14 rounded-full" /></TableCell>
+                      <TableCell className="px-3 py-2"><Skeleton className="h-5 w-14 rounded-md" /></TableCell>
                     </TableRow>
                   ))
                 : sortedData.length === 0
@@ -397,9 +479,9 @@ export default function HomePage() {
                         <span className="w-7 text-right text-[10px] tabular-nums text-muted-foreground">{pct}%</span>
                       </div>
                     </div>
-                    <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                    <div className="h-2 w-full overflow-hidden rounded-md bg-muted">
                       <div
-                        className={cn('h-full rounded-full transition-all', row.color)}
+                        className={cn('h-full rounded-md transition-all', row.color)}
                         style={{ width: `${pct}%` }}
                       />
                     </div>
@@ -412,19 +494,27 @@ export default function HomePage() {
       </div>
 
       <Card className="gap-0 overflow-hidden py-0">
-        <div className="border-b px-4 py-3">
-          <span className="text-sm font-semibold text-foreground">오늘의 시험 배정 현황</span>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-foreground">시험자별 작업 현황</span>
+            <Badge variant="outline" className="text-muted-foreground">진행중 {totalActive}건</Badge>
+          </div>
+          <span className="text-[11px] text-muted-foreground">시험자를 클릭하면 배정 상세를 봅니다.</span>
         </div>
-        <CardContent className="px-4 py-3">
+        <CardContent className="px-4 py-4">
           {isLoading ? (
-            <div className="flex flex-wrap items-center gap-3">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="flex items-center gap-2.5 rounded-md border bg-muted/30 px-3.5 py-2.5">
-                  <Skeleton className="h-8 w-8 rounded-md" />
-                  <div className="flex flex-col gap-1">
-                    <Skeleton className="h-3 w-14" />
-                    <Skeleton className="h-3 w-20" />
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="flex flex-col gap-2 rounded-md border px-3.5 py-3">
+                  <div className="flex items-center gap-2.5">
+                    <Skeleton className="size-8 rounded-md" />
+                    <div className="flex flex-col gap-1">
+                      <Skeleton className="h-3 w-14" />
+                      <Skeleton className="h-3 w-24" />
+                    </div>
                   </div>
+                  <Skeleton className="h-6 w-full" />
+                  <Skeleton className="h-6 w-full" />
                 </div>
               ))}
             </div>
@@ -433,25 +523,75 @@ export default function HomePage() {
               등록된 시험자가 없습니다.
             </p>
           ) : (
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {testers.map(tester => (
-                <div
+                <button
                   key={tester.id}
-                  className="flex items-center gap-2.5 rounded-md border bg-muted/30 px-3.5 py-2.5"
+                  type="button"
+                  onClick={() => setDetailTester({ id: tester.id, name: tester.name })}
+                  className="flex flex-col gap-2 rounded-md border bg-card px-3.5 py-3 text-left transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                 >
-                  <TesterAvatar testerId={tester.id} name={tester.name} size="md" />
-                  <div>
-                    <p className="text-xs font-semibold text-foreground">{tester.name}</p>
-                    <p className="text-[11px] text-muted-foreground">
-                      배정 <span className="font-semibold text-foreground">{tester.assigned}</span>건
-                    </p>
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <TesterAvatar testerId={tester.id} name={tester.name} size="md" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-semibold text-foreground">{tester.name}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        진행중 <span className="font-semibold text-foreground">{tester.activeCount}</span>건
+                        <span className="px-1 text-border">·</span>
+                        대기 <span className="font-semibold text-foreground">{tester.pendingCount}</span>건
+                      </p>
+                    </div>
                   </div>
-                </div>
+
+                  {tester.items.length === 0 ? (
+                    <p className="rounded-md bg-muted/40 px-2.5 py-2 text-[11px] text-muted-foreground">
+                      배정된 작업이 없습니다.
+                    </p>
+                  ) : (
+                    <ul className="flex flex-col gap-1">
+                      {tester.items.slice(0, MAX_ITEMS_PER_TESTER).map(item => (
+                        <li
+                          key={item.id}
+                          className="flex items-center gap-1.5 rounded-md bg-muted/40 px-2.5 py-1.5"
+                          title={`${item.productName} / ${item.batchNo} · ${item.status} · ${item.dueDate ?? '기한 미정'}`}
+                        >
+                          <span className={cn('size-1.5 shrink-0 rounded-full', stageStyle(item.status).dot)} />
+                          <span className="min-w-0 flex-1 truncate text-[11px] text-foreground">
+                            {item.productName}
+                            <span className="text-muted-foreground"> / {item.batchNo}</span>
+                          </span>
+                          {item.isUrgent && (
+                            <span className="shrink-0 rounded-md bg-destructive/10 px-1 text-[10px] font-semibold text-destructive">
+                              긴급
+                            </span>
+                          )}
+                          <span className="shrink-0 text-[10px] text-muted-foreground">{item.status}</span>
+                          <span className={cn('w-9 shrink-0 text-right text-[10px] tabular-nums', dDayColor(item.dDay))}>
+                            {dDayLabel(item.dDay)}
+                          </span>
+                        </li>
+                      ))}
+                      {tester.items.length > MAX_ITEMS_PER_TESTER && (
+                        <li className="px-2.5 pt-0.5 text-[11px] text-muted-foreground">
+                          외 {tester.items.length - MAX_ITEMS_PER_TESTER}건
+                        </li>
+                      )}
+                    </ul>
+                  )}
+                </button>
               ))}
             </div>
           )}
         </CardContent>
       </Card>
+
+      {detailTester && (
+        <AssigneeDetailModal
+          testerId={detailTester.id}
+          testerName={detailTester.name}
+          onClose={() => setDetailTester(null)}
+        />
+      )}
 
     </div>
   )

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useId, useMemo, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
 import { Wrench, Plus, Trash2, Loader2, CheckCircle2, Ban } from "lucide-react"
 import { Skeleton } from "@frontend/components/ui/skeleton"
@@ -61,6 +61,7 @@ const SORT_COLUMNS: SortColumnDef<SortField>[] = [
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function EquipmentReservationPage() {
+  const uid = useId()
   const { user } = useAuth()
   const { requestConfirm } = useConfirmMessage()
   const isAdmin = user?.role === "admin"
@@ -199,8 +200,9 @@ export default function EquipmentReservationPage() {
       {/* Filter */}
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-48">
-          <label className="mb-1 block text-xs font-medium text-muted-foreground">장비 필터</label>
+          <label htmlFor={`${uid}-filter`} className="mb-1 block text-xs font-medium text-muted-foreground">장비 필터</label>
           <input
+            id={`${uid}-filter`}
             list="equipment-ids-filter"
             value={filterEquipment}
             onChange={e => setFilterEquipment(e.target.value)}
@@ -419,6 +421,7 @@ function AddModal({
   onSaved: (status: ReservationStatus) => void
   onError: (m: string) => void
 }) {
+  const uid = useId()
   const [equipmentId, setEquipmentId] = useState("")
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
@@ -459,8 +462,9 @@ function AddModal({
     >
         <div className="grid gap-3">
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">장비</label>
+            <label htmlFor={`${uid}-equipment`} className="mb-1 block text-xs font-medium text-muted-foreground">장비</label>
             <input
+              id={`${uid}-equipment`}
               list="equipment-ids-add"
               value={equipmentId}
               onChange={e => setEquipmentId(e.target.value)}

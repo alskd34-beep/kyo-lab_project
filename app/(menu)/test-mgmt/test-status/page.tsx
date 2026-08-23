@@ -17,6 +17,8 @@ import {
 import { CellStack } from '@frontend/components/ui/table-cell-stack'
 import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from '@frontend/components/ui/table-sort'
 import { TesterAvatar } from '@frontend/lib/tester-profiles'
+import { useAuth } from '@frontend/lib/auth-context'
+import { TestDetailDrawer } from '@frontend/components/test-mgmt/test-detail-drawer'
 import { Calendar } from '@frontend/components/ui/calendar'
 import {
   Popover,
@@ -35,6 +37,7 @@ import {
   Pin,
   PinOff,
   X,
+  Eye,
 } from 'lucide-react'
 
 // ─── Static Data ──────────────────────────────────────────────────────────────
@@ -46,7 +49,7 @@ const STATUS_CONFIG: Record<StatusKey, { label: string; cls: string }> = {
   prereview:  { label: '검토대기', cls: 'bg-amber-50 text-amber-700 border border-amber-200' },
   reviewing:  { label: '검토중',   cls: 'bg-blue-50 text-blue-700 border border-blue-200' },
   pending:    { label: '승인대기', cls: 'bg-teal-50 text-teal-700 border border-teal-200' },
-  completed:  { label: '적합완료', cls: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
+  completed:  { label: '적합완료', cls: 'bg-blue-100 text-blue-900 border border-blue-400' },
   fail:       { label: '부적합',   cls: 'bg-red-50 text-red-700 border border-red-200' },
 }
 
@@ -59,7 +62,7 @@ function buildKpis(rows: TestRow[]): KpiItem[] {
     { label: '진행중',   value: String(by('inprogress')), unit: '건', sub: '처리 진행 중',   accent: 'text-blue-600',  bg: 'bg-blue-50/60',  border: 'border-blue-100'  },
     { label: '검토',     value: String(by('prereview') + by('reviewing')), unit: '건', sub: '검토대기·검토중', accent: 'text-blue-600', bg: 'bg-blue-50/60', border: 'border-blue-100' },
     { label: '승인대기', value: String(by('pending')),    unit: '건', sub: '검토 후 승인 대기', accent: 'text-teal-600', bg: 'bg-teal-50/60',    border: 'border-teal-100'    },
-    { label: '완료',     value: String(by('completed')),  unit: '건', sub: '승인 완료',      accent: 'text-emerald-600', bg: 'bg-emerald-50/60', border: 'border-emerald-100' },
+    { label: '완료',     value: String(by('completed')),  unit: '건', sub: '승인 완료',      accent: 'text-blue-900',    bg: 'bg-blue-100/60',   border: 'border-blue-300'    },
     { label: '부적합',   value: String(by('fail')),       unit: '건', sub: '기준 이탈',      accent: 'text-red-600',     bg: 'bg-red-50/60',     border: 'border-red-100'     },
   ]
 }
@@ -115,6 +118,9 @@ function FullWidthCell({ children }: { children: React.ReactNode }) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function TestStatusPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
+
   const [activeTab, setActiveTab]         = useState<string>('시험현황')
   const [pinnedTabs, setPinnedTabs]       = useState<Set<string>>(new Set(['시험현황', '제품시험']))
   const [closedTabs, setClosedTabs]       = useState<Set<string>>(new Set())
@@ -134,6 +140,11 @@ export default function TestStatusPage() {
   const [loadError, setLoadError]         = useState<string | null>(null)
   const [sortField, setSortField]         = useState<SortField>('dueDate')
   const [sortDir, setSortDir]             = useState<SortDir>('asc')
+  // 미리보기 패널 — 행을 클릭하면 열린다(디자인 표준: 행 클릭 → Sheet)
+  const [previewRow, setPreviewRow]       = useState<TestRow | null>(null)
+  const [previewOpen, setPreviewOpen]     = useState(false)
+  // 상태를 바꾸면 목록을 다시 읽어야 진행상태·KPI 가 맞는다
+  const [reloadKey, setReloadKey]         = useState(0)
 
   // ─── Fetch from API — 실제 DB 데이터만 표시한다(데모/목업 폴백 없음) ────────
   useEffect(() => {
@@ -164,7 +175,7 @@ export default function TestStatusPage() {
       .finally(() => { if (!cancelled) setIsLoading(false) })
 
     return () => { cancelled = true }
-  }, [dateRange, searchValue])
+  }, [dateRange, searchValue, reloadKey])
 
   const toggleTab = (tab: string) => {
     setPinnedTabs(prev => {
@@ -180,6 +191,11 @@ export default function TestStatusPage() {
       next.has(id) ? next.delete(id) : next.add(id)
       return next
     })
+  }
+
+  const openPreview = (row: TestRow) => {
+    setPreviewRow(row)
+    setPreviewOpen(true)
   }
 
   const toggleAll = () => {
@@ -244,7 +260,7 @@ export default function TestStatusPage() {
                       className={`
                         group relative flex shrink-0 items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors
                         ${isActive
-                          ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600 after:rounded-t-full'
+                          ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600 after:rounded-t-md'
                           : 'text-slate-500 hover:text-slate-700'}
                       `}
                     >
@@ -266,7 +282,7 @@ export default function TestStatusPage() {
                         }}
                         title={isPinned ? '즐겨찾기 해제' : '즐겨찾기'}
                         className={`
-                          ml-0.5 inline-flex rounded p-0.5 transition-all cursor-pointer
+                          ml-0.5 inline-flex rounded-md p-0.5 transition-all cursor-pointer
                           ${isPinned
                             ? 'text-amber-400 hover:text-amber-500'
                             : 'text-transparent group-hover:text-slate-300 hover:!text-amber-400'}
@@ -287,7 +303,7 @@ export default function TestStatusPage() {
                           }
                         }}
                         title="탭 닫기"
-                        className="ml-0.5 inline-flex rounded p-0.5 text-transparent transition-all cursor-pointer group-hover:text-slate-400 hover:!bg-slate-100 hover:!text-slate-700"
+                        className="ml-0.5 inline-flex rounded-md p-0.5 text-transparent transition-all cursor-pointer group-hover:text-slate-400 hover:!bg-slate-100 hover:!text-slate-700"
                       >
                         <X size={11} />
                       </span>
@@ -425,7 +441,12 @@ export default function TestStatusPage() {
                     return (
                       <div
                         key={row.id}
-                        onClick={() => toggleRow(row.id)}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => openPreview(row)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPreview(row) }
+                        }}
                         className={`rounded-md border p-3 transition-colors cursor-pointer ${
                           isSelected ? 'bg-blue-50/60 border-blue-200' : 'bg-white border-slate-200 hover:bg-slate-50/70'
                         }`}
@@ -436,6 +457,7 @@ export default function TestStatusPage() {
                             checked={isSelected}
                             onChange={() => toggleRow(row.id)}
                             onClick={e => e.stopPropagation()}
+                            aria-label={`${row.testNo} ${row.product} 선택`}
                             className="cb-custom mt-0.5"
                           />
                           <div className="flex-1 min-w-0">
@@ -480,6 +502,7 @@ export default function TestStatusPage() {
                         type="checkbox"
                         checked={selectedRows.size === tableData.length && tableData.length > 0}
                         onChange={toggleAll}
+                        aria-label="전체 선택"
                         className="cb-custom"
                       />
                     </TableHead>
@@ -532,7 +555,8 @@ export default function TestStatusPage() {
                       <TableRow
                         key={row.id}
                         data-state={isSelected ? 'selected' : undefined}
-                        onClick={() => toggleRow(row.id)}
+                        onClick={() => openPreview(row)}
+                        title="클릭하면 미리보기가 열립니다"
                         className={`cursor-pointer border-slate-100 text-sm transition-colors ${
                           isSelected ? 'bg-blue-50/60' : 'hover:bg-slate-50/70'
                         }`}
@@ -543,6 +567,7 @@ export default function TestStatusPage() {
                             checked={isSelected}
                             onChange={() => toggleRow(row.id)}
                             onClick={e => e.stopPropagation()}
+                            aria-label={`${row.testNo} ${row.product} 선택`}
                             className="cb-custom"
                           />
                         </TableCell>
@@ -610,11 +635,24 @@ export default function TestStatusPage() {
                     </span>
                   )}
                 </p>
-                <span className="text-xs text-slate-400">1 / 1 페이지</span>
+                <span className="flex items-center gap-3">
+                  <span className="hidden items-center gap-1 text-xs text-slate-400 sm:flex">
+                    <Eye size={12} />행을 클릭하면 미리보기·상태 변경·이력을 볼 수 있습니다
+                  </span>
+                  <span className="text-xs text-slate-400">1 / 1 페이지</span>
+                </span>
               </div>
             </Card>
           </div>
       </div>
+
+      <TestDetailDrawer
+        row={previewRow}
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        isAdmin={isAdmin}
+        onChanged={() => setReloadKey(k => k + 1)}
+      />
     </>
   )
 }

@@ -479,10 +479,10 @@ export default function MonthlySchedulePage() {
             <CardContent className="py-4">
               <div className="grid grid-cols-7 gap-1">
                 {Array.from({ length: 7 }).map((_, i) => (
-                  <Skeleton key={i} className="h-8 rounded" />
+                  <Skeleton key={i} className="h-8 rounded-md" />
                 ))}
                 {Array.from({ length: 35 }).map((_, i) => (
-                  <Skeleton key={`cell-${i}`} className="h-20 rounded" />
+                  <Skeleton key={`cell-${i}`} className="h-20 rounded-md" />
                 ))}
               </div>
             </CardContent>

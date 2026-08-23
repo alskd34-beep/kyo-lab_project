@@ -5,7 +5,7 @@ import {
   verifyRefreshToken,
   generateJti,
 } from '@backend/lib/auth'
-import { buildAuthCookies, clearAuthCookies, REFRESH_COOKIE } from '@backend/lib/auth-cookies'
+import { buildAuthCookies, clearSessionCookies, REFRESH_COOKIE } from '@backend/lib/auth-cookies'
 import {
   findUserById,
   isRefreshTokenValid,
@@ -16,12 +16,12 @@ import {
 export const runtime = 'nodejs'
 
 /**
- * 세션 복구 불가 응답. 남아 있는 인증 쿠키(자동 로그인 마커 포함)를 함께 제거해
- * 다음 페이지 요청부터 미들웨어가 곧바로 /login 으로 보내도록 한다.
+ * 세션 복구 불가 응답. access·refresh 쿠키만 제거한다. 자동 로그인 체크는 사용자 설정이므로
+ * 남겨 둔다 — 미들웨어는 마커와 refresh 를 둘 다 요구하므로 다음 요청은 /login 으로 간다.
  */
 function sessionExpired(error: string): Response {
   const headers = new Headers({ 'Content-Type': 'application/json' })
-  for (const c of clearAuthCookies()) headers.append('Set-Cookie', c)
+  for (const c of clearSessionCookies()) headers.append('Set-Cookie', c)
   return new Response(JSON.stringify({ error }), { status: 401, headers })
 }
 

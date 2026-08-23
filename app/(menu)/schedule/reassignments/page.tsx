@@ -8,7 +8,7 @@ import { Button } from "@frontend/components/ui/button"
 import { DateRangeField } from "@frontend/components/ui/date-range-field"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import { CellStack } from "@frontend/components/ui/table-cell-stack"
-import { TesterAvatar } from "@frontend/lib/tester-profiles"
+import { ActorAvatar, primePeopleCacheFromUsers } from "@frontend/lib/tester-profiles"
 import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from "@frontend/components/ui/table-sort"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@frontend/components/ui/table"
 import {
@@ -179,7 +179,17 @@ export default function ReassignmentsPage() {
       const params = new URLSearchParams({ limit: "1000" })
       if (fromDate) params.set("from", fromDate)
       if (toDate) params.set("to", toDate)
-      const res = await fetch(`/api/ai-schedule-history?${params.toString()}`, { credentials: "include" })
+      // 작업자 칸에 계정 사진을 띄우려면 사용자 명부가 프로필 캐시에 있어야 한다.
+      // 이력에 찍히는 사람은 대개 시험자가 아니라 관리자 계정이라
+      // /api/testers 만으로는 매칭되지 않는다. (관리자 전용 화면이라 조회 가능)
+      const [res, usersRes] = await Promise.all([
+        fetch(`/api/ai-schedule-history?${params.toString()}`, { credentials: "include" }),
+        fetch("/api/users", { credentials: "include" }).catch(() => null),
+      ])
+      if (usersRes?.ok) {
+        const users = (await usersRes.json()).rows
+        if (Array.isArray(users)) primePeopleCacheFromUsers(users)
+      }
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? "조회 실패")
       setRows(data.rows ?? [])
@@ -237,7 +247,7 @@ export default function ReassignmentsPage() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3 md:p-5">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-3 md:p-5">
       <div className="flex flex-col gap-3 rounded-md border border-slate-200 bg-white px-4 py-3 shadow-sm md:flex-row md:items-center md:justify-between md:py-4">
         <div>
           <h1 className="text-base font-bold text-slate-900 sm:text-lg">AI 스케줄 전체 이력</h1>
@@ -313,7 +323,7 @@ export default function ReassignmentsPage() {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-md border border-slate-200 bg-white py-0 shadow-sm">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-slate-200 bg-white py-0 shadow-sm">
         <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
           <div className="flex items-center gap-1.5">
             <History className="size-4 text-slate-400" />
@@ -386,7 +396,7 @@ export default function ReassignmentsPage() {
                   <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">
                     {row.actorName ? (
                       <div className="flex min-w-0 items-center gap-2">
-                        <TesterAvatar name={row.actorName} size="xs" />
+                        <ActorAvatar actorId={row.actorId} name={row.actorName} size="xs" />
                         <span className="block truncate">{row.actorName}</span>
                       </div>
                     ) : (

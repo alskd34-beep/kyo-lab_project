@@ -5,7 +5,7 @@
  * 모든 함수는 테이블 부재 시(Postgres 42P01) graceful 폴백한다.
  */
 
-import { supabase } from '@backend/lib/supabase'
+import { supabaseAdmin as supabase } from '@backend/lib/supabase'
 import { getRestHolidaysForYear } from '@backend/lib/holiday'
 
 /** 출처: 'api'(공휴일 API 수집) | 'manual'(사용자 직접 등록) */

@@ -34,14 +34,31 @@ export function buildAuthCookies(access: string, refresh: string): string[] {
 }
 
 /**
- * 인증 쿠키 전체 제거.
- * 자동 로그인 마커까지 함께 지운다. 마커만 남으면 미들웨어가 "복구 가능한 세션"으로
- * 오판해 페이지를 통과시키고, 정작 API는 401을 내는 죽은 세션 상태가 된다.
+ * 세션 쿠키(access·refresh)만 제거하고 자동 로그인 마커는 남긴다.
+ *
+ * 세션 복구 실패에 쓴다. 미들웨어는 마커와 refresh 쿠키를 **둘 다** 요구하므로
+ * (middleware.ts 의 `hasAutoLogin && hasRefresh`), refresh 가 지워진 이상 마커만
+ * 남아도 페이지가 통과되는 "죽은 세션" 은 생기지 않는다.
+ *
+ * 2026-08-23 수정: 예전에는 여기서 마커까지 지웠다. 자동 로그인은 자격증명이 아니라
+ * 사용자 설정인데, 회전된 refresh 토큰이 한 번 중복 제출되는 것만으로(탭 2개, 새로고침,
+ * 요청 재시도 등 흔한 상황) 설정이 영구히 꺼져 다시 로그인해도 자동 로그인이 안 되는
+ * 상태가 됐다. 설정은 사용자가 끄거나 로그아웃할 때만 지운다.
+ */
+export function clearSessionCookies(): string[] {
+  return [
+    cookieString(ACCESS_COOKIE,  '', { maxAge: 0, httpOnly: false }),
+    cookieString(REFRESH_COOKIE, '', { maxAge: 0, httpOnly: true  }),
+  ]
+}
+
+/**
+ * 인증 쿠키 전체 제거 (자동 로그인 마커 포함).
+ * 사용자가 명시적으로 로그아웃할 때만 쓴다.
  */
 export function clearAuthCookies(): string[] {
   return [
-    cookieString(ACCESS_COOKIE,     '', { maxAge: 0, httpOnly: false }),
-    cookieString(REFRESH_COOKIE,    '', { maxAge: 0, httpOnly: true  }),
+    ...clearSessionCookies(),
     cookieString(AUTO_LOGIN_COOKIE, '', { maxAge: 0, httpOnly: false }),
   ]
 }

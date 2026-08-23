@@ -159,6 +159,7 @@ const NAV_SECTIONS: NavSection[] = [
         subItems: [
           { id: "products-master", label: "품목 마스터", live: true },
           { id: "test-master", label: "시험항목 마스터", live: true },
+          { id: "test-item-groups", label: "시험항목 그룹", live: true },
           { id: "test-items", label: "품목별 시험항목 관리", live: true },
           { id: "pretest-checklist", label: "시험 전 확인사항", live: true },
           { id: "concurrent-items", label: "동시분석 품목", live: true, adminOnly: true },
@@ -206,6 +207,7 @@ const PATH_MAP: Record<string, string> = {
   manhours: "/product-test/products",
   "products-master": "/product-test/products",
   "test-master": "/test-mgmt/test-master",
+  "test-item-groups": "/test-mgmt/test-item-groups",
   "test-items": "/test-mgmt/test-items",
   "pretest-checklist": "/test-mgmt/pretest-checklist",
   "concurrent-items": "/settings/concurrent-items",

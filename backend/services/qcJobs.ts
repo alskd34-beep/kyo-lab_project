@@ -9,10 +9,12 @@
 
 import { supabaseAdmin } from '@backend/lib/supabase'
 import { generateQcNo } from '@backend/lib/qcNumber'
+import { kstToday } from '@backend/lib/kstDate'
 import { createNotification } from '@backend/services/notifications'
 import { checkEquipmentReadiness, type ReadinessResult } from '@backend/services/equipmentMaster'
 import { listByProduct, type PretestNoteRow } from '@backend/services/productPretestNotes'
 import { METHOD_PARTIAL, listByOrder as listOrderTestItems } from '@backend/services/pctOrderTestItems'
+import { logJobStatusChange } from '@backend/services/qcJobStatusHistory'
 import {
   ACTIVE_JOB_STATUSES,
   APPROVAL_READY_STATUS,
@@ -20,6 +22,7 @@ import {
   DELAYED_STATUS,
   DELETED_STATUS,
   IN_PROGRESS_STATUS,
+  JOB_STATUSES,
   NEXT_STAGE,
   PENDING_STATUS,
   REVIEWING_STATUS,
@@ -84,9 +87,28 @@ async function getTesterId(userSub: string): Promise<string | null> {
   if (!tester?.id) return null
 
   const testerId = tester.id as string
-  // 다른 사용자가 이 시험자를 점유 중이면 먼저 해제(1:1 unique 유지) 후 연결
-  await supabaseAdmin.from('users').update({ tester_id: null }).eq('tester_id', testerId).neq('id', userSub)
-  await supabaseAdmin.from('users').update({ tester_id: testerId }).eq('id', userSub)
+
+  // 2026-08-23 수정: 예전에는 "사번이 같다"는 이유만으로 이 시험자를 점유 중인
+  // **다른 사용자의 링크를 조용히 끊고** 가져왔다. 링크가 끊긴 쪽은 이후
+  // getTesterId 가 null 을 반환해 본인 작업 화면이 비고, testerAbsences 가 그 사람의
+  // 휴가를 배정 엔진에 전달하지 못한다(operatorSchedule: `if (!testerId) continue`).
+  // 남의 링크는 건드리지 않고, 비어 있을 때만 연결한다.
+  const { data: holder } = await supabaseAdmin
+    .from('users').select('id').eq('tester_id', testerId).maybeSingle()
+  if (holder && holder.id !== userSub) {
+    console.warn(
+      `[qcJobs] 시험자 ${testerId} 는 이미 사용자 ${holder.id} 에 연결돼 있어 자가복구를 건너뜁니다 ` +
+      `(요청자 ${userSub}). 관리자 화면에서 연결을 정리하세요.`,
+    )
+    return null
+  }
+
+  const { error: linkErr } = await supabaseAdmin
+    .from('users').update({ tester_id: testerId }).eq('id', userSub)
+  if (linkErr) {
+    console.error('[qcJobs] 시험자 자가복구 연결 실패:', linkErr)
+    return null
+  }
   return testerId
 }
 
@@ -150,7 +172,7 @@ export async function getStartReadiness(
   }
 
   const equipmentCodes = productCode ? await resolveOrderEquipmentCodes(productCode) : []
-  const date = new Date().toISOString().slice(0, 10)
+  const date = kstToday()
   if (equipmentCodes.length === 0) {
     // 장비 없으면 장비 검증은 OK (확인사항은 별도 반환)
     return { ok: true, checks: [], equipmentCodes, pretestNotes }
@@ -254,6 +276,7 @@ export interface OverviewJobRow {
   itemsTotal: number
   itemsCleared: number
   workStartDate: string | null
+  workEndDate: string | null
 }
 export interface OverviewPendingRow {
   orderId: string
@@ -273,6 +296,8 @@ export interface WorkerOverviewRow {
   delayed: number
   completedTotal: number
   activeJobs: OverviewJobRow[]
+  /** 승인완료된 작업 (최근 완료일 순, 시험자당 COMPLETED_JOBS_LIMIT 건까지) */
+  completedJobs: OverviewJobRow[]
   pendingOrders: OverviewPendingRow[]
 }
 export interface WorkerOverview {
@@ -282,11 +307,37 @@ export interface WorkerOverview {
     pending: number          // 시작 대기 오더 총수
     delayed: number          // 지연 작업 총수
     completedToday: number   // 오늘 완료한 작업 수
+    completedTotal: number   // 승인완료 작업 총수(기간 제한 없음)
   }
   workers: WorkerOverviewRow[]
 }
 
 // 진행 중으로 간주하는 작업 상태는 @shared/qc-status 의 ACTIVE_JOB_STATUSES 를 쓴다.
+
+/** 시험자 1명당 응답에 싣는 완료 작업 상한 — 화면은 기간 필터로 더 좁혀 본다. */
+const COMPLETED_JOBS_LIMIT = 50
+
+/** qc_jobs 행 + 오더 메타 → 화면용 작업 요약 (진행 중/완료 공통) */
+function toOverviewJob(
+  j: Record<string, unknown>,
+  o: Record<string, unknown> | undefined,
+  itemAgg: Map<string, { total: number; cleared: number }>,
+): OverviewJobRow {
+  const agg = itemAgg.get(j.id as string) ?? { total: 0, cleared: 0 }
+  return {
+    jobId: j.id as string,
+    qcNo: j.qc_no as string,
+    productName: (o?.product_name as string) ?? '',
+    batchNo: (o?.batch_no as string) ?? '',
+    status: j.status as string,
+    dueDate: (o?.due_date as string) ?? null,
+    isUrgent: !!o?.is_urgent,
+    itemsTotal: agg.total,
+    itemsCleared: agg.cleared,
+    workStartDate: (j.work_start_date as string) ?? null,
+    workEndDate: (j.work_end_date as string) ?? null,
+  }
+}
 
 // ─── 작업 상세 (시험항목 진행 내역) ──────────────────────────────────────────
 export interface JobDetail {
@@ -316,6 +367,8 @@ export interface JobDetail {
   nextStage: string | null
   /** 그 버튼에 표시할 라벨 (예: '검토 시작'). 없으면 null */
   nextStageLabel: string | null
+  /** 소유자(로그인 사용자) id — 라우트의 소유권 검사에 쓴다 */
+  assigneeUserId: string | null
 }
 
 /**
@@ -328,7 +381,7 @@ export interface JobDetail {
 export async function getJobDetail(jobId: string): Promise<JobDetail | null> {
   const { data: job } = await supabaseAdmin
     .from('qc_jobs')
-    .select('id, order_id, qc_no, status, work_start_date, work_end_date, work_started_at, created_at, assignee_tester_id')
+    .select('id, order_id, qc_no, status, work_start_date, work_end_date, work_started_at, created_at, assignee_tester_id, assignee_user_id')
     .eq('id', jobId)
     .maybeSingle()
   if (!job) return null
@@ -402,6 +455,7 @@ export async function getJobDetail(jobId: string): Promise<JobDetail | null> {
     currentItemStartedAt: current ? (lastClearedAt ?? workStartedAt) : null,
     nextStage: canAdvanceByAdmin(status) ? NEXT_STAGE[status] : null,
     nextStageLabel: canAdvanceByAdmin(status) ? STAGE_ACTION_LABEL[status] : null,
+    assigneeUserId: (job.assignee_user_id as string) ?? null,
   }
 }
 
@@ -414,7 +468,7 @@ export async function getJobDetail(jobId: string): Promise<JobDetail | null> {
  *  - pct_orders    : 작업 메타(품목·제조번호·완료예정·긴급) + 시작 대기 오더
  */
 export async function listWorkerOverview(): Promise<WorkerOverview> {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = kstToday()
 
   // 1) 시험자
   const { data: testerData } = await supabaseAdmin
@@ -470,6 +524,7 @@ export async function listWorkerOverview(): Promise<WorkerOverview> {
       delayed: 0,
       completedTotal: 0,
       activeJobs: [],
+      completedJobs: [],
       pendingOrders: [],
     })
   }
@@ -490,6 +545,9 @@ export async function listWorkerOverview(): Promise<WorkerOverview> {
     if (status === CLOSED_STAGE) {
       row.completedTotal += 1
       if ((j.work_end_date as string) === today) completedToday += 1
+      // 예전에는 여기서 건너뛰어 화면에서 완료 작업을 아예 볼 수 없었다.
+      // 집계만 하지 말고 목록도 함께 내려준다(화면에서 기간으로 좁혀 본다).
+      row.completedJobs.push(toOverviewJob(j, o, itemAgg))
       continue
     }
     if (!ACTIVE_JOB_STATUSES.has(status)) continue
@@ -499,19 +557,7 @@ export async function listWorkerOverview(): Promise<WorkerOverview> {
     else if (status === REVIEW_READY_STATUS || status === REVIEWING_STATUS || status === APPROVAL_READY_STATUS) row.reviewing += 1
     else if (status === DELAYED_STATUS) row.delayed += 1
 
-    const agg = itemAgg.get(j.id as string) ?? { total: 0, cleared: 0 }
-    row.activeJobs.push({
-      jobId: j.id as string,
-      qcNo: j.qc_no as string,
-      productName: (o?.product_name as string) ?? '',
-      batchNo: (o?.batch_no as string) ?? '',
-      status,
-      dueDate: (o?.due_date as string) ?? null,
-      isUrgent: !!o?.is_urgent,
-      itemsTotal: agg.total,
-      itemsCleared: agg.cleared,
-      workStartDate: (j.work_start_date as string) ?? null,
-    })
+    row.activeJobs.push(toOverviewJob(j, o, itemAgg))
   }
 
   // 시작 대기 오더 집계 (배정됐고 status '대기' & 아직 미시작)
@@ -537,6 +583,9 @@ export async function listWorkerOverview(): Promise<WorkerOverview> {
   for (const row of rowByTester.values()) {
     row.activeJobs.sort((a, b) => dueRank(a.dueDate) - dueRank(b.dueDate))
     row.pendingOrders.sort((a, b) => dueRank(a.dueDate) - dueRank(b.dueDate))
+    // 완료 작업은 최근 완료일 순. 오래된 이력까지 전부 실어 보내면 응답이 커지므로 상한을 둔다.
+    row.completedJobs.sort((a, b) => (b.workEndDate ?? '').localeCompare(a.workEndDate ?? ''))
+    row.completedJobs = row.completedJobs.slice(0, COMPLETED_JOBS_LIMIT)
   }
 
   // 작업량 많은 순(진행중→대기) 정렬, 활성 시험자 우선
@@ -554,6 +603,7 @@ export async function listWorkerOverview(): Promise<WorkerOverview> {
     pending: workers.reduce((s, w) => s + w.pendingCount, 0),
     delayed: workers.reduce((s, w) => s + w.delayed, 0),
     completedToday,
+    completedTotal: workers.reduce((s, w) => s + w.completedTotal, 0),
   }
 
   return { totals, workers }
@@ -570,8 +620,19 @@ export async function startJob(orderId: string, userSub: string): Promise<{ jobI
     .single()
   if (oErr) throw oErr
 
-  // 본인 배정 검증
-  if (testerId && order.assignee_tester_id && order.assignee_tester_id !== testerId) {
+  // 본인 배정 검증.
+  //
+  // 2026-08-23 보안 수정: 예전에는 `if (testerId && order.assignee_tester_id && ...)` 라서
+  // ① 시험자 미연결 계정(testerId=null)이거나 ② 미배정 오더면 검증이 통째로 건너뛰어졌다.
+  // 그 경로로 타인 배정 오더를 가로채면 assignee_user_id 가 가로챈 쪽으로 기록돼
+  // (assertOwner 기준) 원래 담당자가 자기 작업을 만질 수 없게 됐다.
+  if (!testerId) {
+    throw new Error('로그인 계정에 연결된 시험자가 없습니다. 관리자에게 시험자 연결을 요청하세요.')
+  }
+  if (!order.assignee_tester_id) {
+    throw new Error('아직 담당자가 배정되지 않은 오더입니다. 관리자 배정 후 시작할 수 있습니다.')
+  }
+  if (order.assignee_tester_id !== testerId) {
     throw new Error('본인에게 배정된 오더만 시작할 수 있습니다.')
   }
 
@@ -618,32 +679,61 @@ export async function startJob(orderId: string, userSub: string): Promise<{ jobI
     }
   }
 
-  // 채번 (충돌 시 1회 재시도)
+  // 이미 작업이 있는 오더인지 먼저 본다.
+  // qc_jobs.order_id 는 unique 라 어차피 insert 가 23505 로 실패하는데, 아래 재시도 루프가
+  // 23505 를 전부 "QC번호 충돌"로 해석해 번호만 새로 뽑고 다시 실패한 뒤
+  // '작업 생성에 실패했습니다' 라는 엉뚱한 메시지를 냈다(그 사이 QC번호도 소모했다).
+  const { data: dup } = await supabaseAdmin
+    .from('qc_jobs').select('qc_no').eq('order_id', orderId).maybeSingle()
+  if (dup) {
+    throw new Error(`이미 시작된 오더입니다 (QC ${dup.qc_no}). 작업 화면에서 이어서 진행하세요.`)
+  }
+
+  // 채번 (QC번호 충돌 시 1회 재시도)
   let qcNo = await generateQcNo()
   let jobId = ''
   const startedAt = new Date()
-  const today = startedAt.toISOString().slice(0, 10)
   for (let attempt = 0; attempt < 2; attempt++) {
     const { data, error } = await supabaseAdmin
       .from('qc_jobs')
-      // work_start_date(날짜)는 화면·집계용, work_started_at(시각)은 항목 소요시간 기준점
-      .insert({ order_id: orderId, qc_no: qcNo, assignee_tester_id: testerId, assignee_user_id: userSub, status: IN_PROGRESS_STATUS, work_start_date: today, work_started_at: startedAt.toISOString() })
+      // work_start_date(날짜)는 화면·집계용이라 KST 기준, work_started_at(시각)은 항목 소요시간 기준점
+      .insert({ order_id: orderId, qc_no: qcNo, assignee_tester_id: testerId, assignee_user_id: userSub, status: IN_PROGRESS_STATUS, work_start_date: kstToday(), work_started_at: startedAt.toISOString() })
       .select('id')
       .single()
     if (!error) { jobId = data.id as string; break }
-    if (error.code === '23505') { qcNo = await generateQcNo(); continue }  // unique 충돌
+    // order_id 유니크 위반은 재시도해도 소용없다(위에서 걸렀지만 경쟁 상황 대비).
+    if (error.code === '23505' && /order_id/.test(error.message ?? '')) {
+      throw new Error('이미 시작된 오더입니다. 새로고침 후 확인하세요.')
+    }
+    if (error.code === '23505') { qcNo = await generateQcNo(); continue }  // QC번호 충돌
     throw error
   }
-  if (!jobId) throw new Error('작업 생성에 실패했습니다.')
+  if (!jobId) throw new Error('QC번호 채번에 실패했습니다. 잠시 후 다시 시도해 주세요.')
 
   if (plannedItems.length > 0) {
-    await supabaseAdmin.from('qc_job_items').insert(
+    // 실패를 삼키면 체크리스트가 빈 작업이 남고, 담당자는 클리어할 항목이 없어
+    // 작업을 끝낼 수 없게 된다. 실패 시 방금 만든 작업을 되돌린다.
+    const { error: itemErr } = await supabaseAdmin.from('qc_job_items').insert(
       plannedItems.map(it => ({ qc_job_id: jobId, ...it })),
     )
+    if (itemErr) {
+      await supabaseAdmin.from('qc_jobs').delete().eq('id', jobId)
+      throw new Error(`시험항목 체크리스트 생성 실패: ${itemErr.message}`)
+    }
   }
 
   // 오더 상태 진행중
-  await supabaseAdmin.from('pct_orders').update({ status: IN_PROGRESS_STATUS }).eq('id', orderId)
+  const { error: ordErr } = await supabaseAdmin
+    .from('pct_orders').update({ status: IN_PROGRESS_STATUS }).eq('id', orderId)
+  if (ordErr) {
+    console.error('[qcJobs.startJob] 오더 상태 동기화 실패 — 작업은 생성됨:', orderId, ordErr)
+  }
+
+  // 상태 이력 — 작업 생성이 첫 전이(null → 진행중)다.
+  await logJobStatusChange({
+    jobId, orderId, fromStatus: null, toStatus: IN_PROGRESS_STATUS,
+    changedBy: userSub, source: 'manual', note: `QC ${qcNo} 작업 시작`,
+  })
 
   // 감독관 알림 (경고 있으면 본문에 덧붙임)
   const warnSuffix = warnings ? ` ⚠ 경고: ${warnings.join(', ')}` : ''
@@ -660,10 +750,27 @@ export async function startJob(orderId: string, userSub: string): Promise<{ jobI
 /** 시작/종료일 수정 */
 export async function updateJobDates(jobId: string, userSub: string, dates: { workStartDate?: string | null; workEndDate?: string | null }): Promise<void> {
   await assertOwner(jobId, userSub)
+
+  // [원칙2] 검토·승인 단계에 들어간 작업의 수행일자는 담당자가 바꿀 수 없다.
+  const { data: job } = await supabaseAdmin
+    .from('qc_jobs').select('status, work_start_date, work_end_date').eq('id', jobId).maybeSingle()
+  if (!job) throw new Error('작업을 찾을 수 없습니다.')
+  if (!SELF_SERVICE_STATUSES.has(job.status as string)) {
+    throw new Error(`"${job.status}" 단계의 작업은 수행일자를 변경할 수 없습니다.`)
+  }
+
   const patch: Record<string, unknown> = {}
   if ('workStartDate' in dates) patch.work_start_date = dates.workStartDate || null
   if ('workEndDate' in dates) patch.work_end_date = dates.workEndDate || null
   if (Object.keys(patch).length === 0) return
+
+  // 기간 정합성 — 종료일이 시작일보다 앞서면 공수 집계(testerEvaluation)가 음수가 된다.
+  const start = (patch.work_start_date as string | null | undefined) ?? (job.work_start_date as string | null)
+  const end   = (patch.work_end_date   as string | null | undefined) ?? (job.work_end_date   as string | null)
+  if (start && end && end < start) {
+    throw new Error('종료일은 시작일 이후여야 합니다.')
+  }
+
   const { error } = await supabaseAdmin.from('qc_jobs').update(patch).eq('id', jobId)
   if (error) throw error
 }
@@ -688,7 +795,7 @@ async function autoAdvanceToReview(jobId: string): Promise<{ allCleared: boolean
     .neq('status', 'cleared')
   if (cntErr || remaining === null || remaining > 0) return { allCleared: false, statusChangedTo: null }
 
-  const target = NEXT_STAGE[IN_PROGRESS_STATUS]   // '검토전'
+  const target = NEXT_STAGE[IN_PROGRESS_STATUS] ?? REVIEW_READY_STATUS   // '검토전'
 
   // '진행중' 인 경우에만 전환 (동시 호출 시 한 번만 성공)
   const { data: updated } = await supabaseAdmin
@@ -700,8 +807,13 @@ async function autoAdvanceToReview(jobId: string): Promise<{ allCleared: boolean
     .maybeSingle()
   if (!updated) return { allCleared: true, statusChangedTo: null }
 
-  // 오더 상태 동기화 + 감독관 알림
+  // 오더 상태 동기화 + 이력 + 감독관 알림
   await supabaseAdmin.from('pct_orders').update({ status: target }).eq('id', updated.order_id as string)
+  await logJobStatusChange({
+    jobId, orderId: updated.order_id as string,
+    fromStatus: IN_PROGRESS_STATUS, toStatus: target,
+    source: 'auto', note: '전 시험항목 완료로 서버가 자동 전환했습니다.',
+  })
   await createNotification({
     type: 'status_changed',
     title: '검토 대기',
@@ -720,11 +832,13 @@ async function autoAdvanceToReview(jobId: string): Promise<{ allCleared: boolean
  * - `expected` 를 주면 화면이 보고 있던 단계와 실제 단계가 같을 때만 전환한다(동시 클릭 방지).
  * - 조건부 update 로 한 번만 성공하게 한다.
  * - 마지막 단계(승인완료) 도달 시 work_end_date 를 오늘로 기록한다(이미 있으면 유지).
- * - 오더 상태를 함께 동기화하고 알림을 남긴다.
+ * - 오더 상태를 함께 동기화하고, 상태 이력·알림을 남긴다.
  */
 export async function advanceJobStage(
   jobId: string,
   expected?: string,
+  /** 전이를 실행한 관리자(로그인 사용자) id — 상태 이력에 남긴다 */
+  changedBy?: string,
 ): Promise<{ from: JobStage; to: JobStage }> {
   const { data: job } = await supabaseAdmin
     .from('qc_jobs')
@@ -748,7 +862,7 @@ export async function advanceJobStage(
 
   const patch: Record<string, unknown> = { status: target }
   if (target === CLOSED_STAGE && !job.work_end_date) {
-    patch.work_end_date = new Date().toISOString().slice(0, 10)
+    patch.work_end_date = kstToday()
   }
 
   const { data: updated } = await supabaseAdmin
@@ -763,6 +877,12 @@ export async function advanceJobStage(
   }
 
   await supabaseAdmin.from('pct_orders').update({ status: target }).eq('id', updated.order_id as string)
+  await logJobStatusChange({
+    jobId, orderId: updated.order_id as string,
+    fromStatus: current, toStatus: target,
+    changedBy: changedBy ?? null, source: 'manual',
+    note: STAGE_ACTION_LABEL[current] ?? '단계 전이',
+  })
   await createNotification({
     type: 'status_changed',
     title: `${STAGE_ACTION_LABEL[current] ?? '단계 변경'} 처리`,
@@ -789,7 +909,13 @@ export async function clearItem(
   const now = new Date()
 
   const { data: job } = await supabaseAdmin
-    .from('qc_jobs').select('work_started_at, created_at, order_id').eq('id', jobId).single()
+    .from('qc_jobs').select('work_started_at, created_at, order_id, status').eq('id', jobId).single()
+
+  // [원칙2] 검토·승인 단계로 넘어간 작업의 항목은 더 이상 클리어할 수 없다.
+  // 예전에는 상태를 보지 않아 '승인완료' 작업에도 cleared_at 을 쓰고 알림까지 보냈다.
+  if (job && !SELF_SERVICE_STATUSES.has(job.status as string)) {
+    throw new Error(`"${job.status}" 단계의 작업은 시험항목을 변경할 수 없습니다.`)
+  }
   const { data: lastCleared } = await supabaseAdmin
     .from('qc_job_items').select('cleared_at')
     .eq('qc_job_id', jobId).eq('status', 'cleared')
@@ -843,26 +969,108 @@ export async function changeJobStatus(jobId: string, userSub: string, status: st
   if (!SELF_SERVICE_STATUSES.has(status)) {
     throw new Error(`"${status}" 는 담당자가 직접 지정할 수 없습니다. 검토·승인은 관리자가 작업 현황에서 진행합니다.`)
   }
-  const patch: Record<string, unknown> = { status }
-  if (status === CLOSED_STAGE) {
-    // 기존 work_end_date가 없을 때만 오늘로 설정
-    const { data: existing } = await supabaseAdmin
-      .from('qc_jobs').select('work_end_date').eq('id', jobId).maybeSingle()
-    if (!existing?.work_end_date) {
-      patch.work_end_date = new Date().toISOString().slice(0, 10)
-    }
+
+  // 2026-08-23 수정: 예전에는 **목표 상태만** 검사하고 현재 상태를 보지 않았다.
+  // 그래서 '승인완료' 작업에 status='진행중' 을 보내면 그대로 통과해
+  // 승인이 끝난 시험 기록이 되돌아가고 pct_orders.status 까지 함께 되돌아갔다.
+  // 담당자가 스스로 바꿀 수 있는 출발 상태를 명시적으로 제한한다.
+  const { data: before } = await supabaseAdmin
+    .from('qc_jobs').select('status, work_end_date').eq('id', jobId).maybeSingle()
+  if (!before) throw new Error('작업을 찾을 수 없습니다.')
+  const current = before.status as string
+  if (!SELF_SERVICE_STATUSES.has(current)) {
+    throw new Error(
+      `"${current}" 단계의 작업은 담당자가 상태를 바꿀 수 없습니다. 관리자에게 문의하세요.`,
+    )
   }
+  if (current === status) return   // 변경 없음
+
+  const patch: Record<string, unknown> = { status }
   const { data: job, error } = await supabaseAdmin
     .from('qc_jobs').update(patch).eq('id', jobId)
-    .select('order_id').single()
+    .eq('status', current)          // 낙관적 잠금 — 그 사이 바뀌었으면 실패
+    .select('order_id').maybeSingle()
   if (error) throw error
+  if (!job) throw new Error('다른 사용자가 먼저 상태를 변경했습니다. 새로고침 후 다시 시도하세요.')
   await supabaseAdmin.from('pct_orders').update({ status }).eq('id', job.order_id)
+  await logJobStatusChange({
+    jobId, orderId: job.order_id as string,
+    fromStatus: current, toStatus: status,
+    changedBy: userSub, source: 'manual', note: '담당자 상태 변경',
+  })
   await createNotification({
     type: 'status_changed',
     title: '상태 변경',
     body: `작업 상태가 "${status}" 로 변경되었습니다.`,
     relatedOrderId: job.order_id as string, relatedQcJobId: jobId, severity: 'info',
   })
+}
+
+/**
+ * 관리자 상태 직접 변경 — 정해진 순서(advanceJobStage) 밖으로 상태를 옮긴다.
+ *
+ * 되돌리기(승인완료 → 검토중), 지연 지정/해제처럼 순차 전이로는 표현할 수 없는 정정이
+ * 실제로 필요하다. 다만 임의 변경은 시험 기록의 신뢰도를 떨어뜨리므로
+ *  ① 관리자만(라우트에서 requireAdmin), ② **사유 필수**, ③ 상태 이력에 사유까지 남긴다.
+ *
+ * work_end_date 는 종결 여부를 따라간다 — 승인완료로 가면 오늘로 기록하고,
+ * 승인완료에서 되돌리면 지운다(완료일이 남아 있으면 완료 집계·공수 통계가 어긋난다).
+ */
+export async function setJobStatusByAdmin(
+  jobId: string, adminUserSub: string, status: string, reason: string,
+): Promise<{ from: string; to: string }> {
+  if (!JOB_STATUSES.includes(status)) {
+    throw new Error(`"${status}" 는 작업에 지정할 수 없는 상태입니다.`)
+  }
+  const note = reason.trim()
+  if (note.length < 2) {
+    throw new Error('상태를 직접 변경하려면 사유를 입력해야 합니다.')
+  }
+
+  const { data: before } = await supabaseAdmin
+    .from('qc_jobs').select('status, order_id, qc_no, work_end_date').eq('id', jobId).maybeSingle()
+  if (!before) throw new Error('작업을 찾을 수 없습니다.')
+  const current = before.status as string
+  if (current === status) return { from: current, to: status }
+
+  const patch: Record<string, unknown> = { status }
+  if (status === CLOSED_STAGE) {
+    if (!before.work_end_date) patch.work_end_date = kstToday()
+  } else if (current === CLOSED_STAGE) {
+    patch.work_end_date = null
+  }
+
+  const { data: updated, error } = await supabaseAdmin
+    .from('qc_jobs').update(patch).eq('id', jobId)
+    .eq('status', current)          // 낙관적 잠금 — 그 사이 바뀌었으면 실패
+    .select('order_id').maybeSingle()
+  if (error) throw error
+  if (!updated) throw new Error('다른 사용자가 먼저 상태를 변경했습니다. 새로고침 후 다시 시도하세요.')
+
+  await supabaseAdmin.from('pct_orders').update({ status }).eq('id', updated.order_id as string)
+  await logJobStatusChange({
+    jobId, orderId: updated.order_id as string,
+    fromStatus: current, toStatus: status,
+    changedBy: adminUserSub, source: 'manual', note: `관리자 직접 변경 — ${note}`,
+  })
+  await createNotification({
+    type: 'status_changed',
+    title: '관리자 상태 변경',
+    body: `QC ${before.qc_no} 작업 상태가 "${current}" → "${status}" 로 변경되었습니다. (사유: ${note})`,
+    relatedOrderId: updated.order_id as string,
+    relatedQcJobId: jobId,
+    severity: 'warning',
+  })
+
+  return { from: current, to: status }
+}
+
+/** 작업 소유자(로그인 사용자) id — 라우트의 소유권 검사용. 없는 작업이면 undefined */
+export async function getJobAssigneeUserId(jobId: string): Promise<string | null | undefined> {
+  const { data } = await supabaseAdmin
+    .from('qc_jobs').select('assignee_user_id').eq('id', jobId).maybeSingle()
+  if (!data) return undefined
+  return (data.assignee_user_id as string) ?? null
 }
 
 async function assertOwner(jobId: string, userSub: string): Promise<void> {

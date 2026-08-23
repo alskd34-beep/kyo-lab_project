@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useSyncExternalStore } from 'react'
 import Image from 'next/image'
+import { MonitorCog } from 'lucide-react'
 import { cn } from '@frontend/lib/utils'
 
 export interface TesterProfile {
@@ -293,6 +294,53 @@ export function TesterAvatar({
       {emoji}
     </span>
   )
+}
+
+/**
+ * 이력의 "작업자" 칸처럼 **사람일 수도, 시스템일 수도** 있는 행위자를 표시한다.
+ *
+ * 예전에는 이름만 TesterAvatar 에 넘겼다. 그러면 시험자 명부에 없는 이름
+ * ('시스템', 관리자 계정 등)은 이름 해시로 뽑은 얼굴 이모지를 받아,
+ * 자동 적재까지 사람이 한 것처럼 보였다.
+ *
+ * - 시스템(행위자 id 없음)  → 사람 얼굴이 아니라 컴퓨터 아이콘
+ * - 사람(행위자 id 있음)    → 그 계정의 프로필 사진(없으면 기존 이모지)
+ *   id 는 users.id 라 byUserId 색인으로 찾는다. 호출하는 화면이
+ *   primePeopleCacheFromUsers 로 사용자 명부를 먼저 채워야 사진이 뜬다.
+ */
+export function ActorAvatar({
+  actorId,
+  name,
+  size = 'xs',
+  className,
+}: {
+  actorId?: string | null
+  name?: string | null
+  size?: 'xs' | 'sm' | 'md' | 'lg'
+  className?: string
+}) {
+  if (!actorId) {
+    const boxClass = {
+      xs: 'size-5 rounded-md',
+      sm: 'size-7 rounded-md',
+      md: 'size-8 rounded-md',
+      lg: 'size-24 rounded-md',
+    }[size]
+    const iconClass = { xs: 'size-3', sm: 'size-4', md: 'size-4', lg: 'size-12' }[size]
+    return (
+      <span
+        className={cn(
+          'inline-flex shrink-0 items-center justify-center bg-muted text-muted-foreground ring-1 ring-border',
+          boxClass,
+          className,
+        )}
+        title={name ?? '시스템'}
+      >
+        <MonitorCog className={iconClass} />
+      </span>
+    )
+  }
+  return <TesterAvatar testerId={actorId} name={name} size={size} className={className} />
 }
 
 export function TesterOptionLabel({ testerId, name }: { testerId: string; name: string }) {

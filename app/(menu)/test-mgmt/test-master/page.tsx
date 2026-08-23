@@ -1,9 +1,10 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useId, useMemo, useState } from "react"
 import { CellStack } from "@frontend/components/ui/table-cell-stack"
 import {
   ClipboardList,
+  FilterX,
   Plus,
   Save,
   Search,
@@ -15,10 +16,8 @@ import {
   CategoryBadge,
   type Category,
 } from "@frontend/components/test-mgmt/test-category"
-import { TestItemGroupPanel } from "@frontend/components/test-mgmt/test-item-group-panel"
 
 import { cn } from "@frontend/lib/utils"
-import { Badge } from "@frontend/components/ui/badge"
 import { Tag } from "@frontend/components/ui/tag"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
@@ -30,6 +29,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@frontend/components/ui/dialog"
+import { FilterBar, PageHeader } from "@frontend/components/common/page-header"
 import { ManagementDrawer } from "@frontend/components/common/management-drawer"
 import { Input } from "@frontend/components/ui/input"
 import {
@@ -41,7 +41,6 @@ import {
 } from "@frontend/components/ui/select"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from "@frontend/components/ui/table-sort"
-import { StatusFilterTabs, type StatusFilterValue } from "@frontend/components/ui/status-filter-tabs"
 import {
   Table,
   TableBody,
@@ -50,14 +49,6 @@ import {
   TableHeader,
   TableRow,
 } from "@frontend/components/ui/table"
-
-/** 상단 화면 전환 탭. 시험항목 마스터와 그룹(템플릿)은 다른 개념이라 화면을 나눈다. */
-type MasterView = "items" | "groups"
-
-const MASTER_VIEWS: { id: MasterView; label: string }[] = [
-  { id: "items", label: "시험항목" },
-  { id: "groups", label: "그룹" },
-]
 
 interface TestItemRow {
   id: string
@@ -85,6 +76,11 @@ const EMPTY_FORM: FormState = {
   isActive: true,
 }
 
+/** 대분류 필터 값. `all` 은 전체. */
+type CategoryFilter = "all" | Category
+/** 활성 상태 필터 값. */
+type StatusFilter = "all" | "active" | "inactive"
+
 type SortField = "name" | "category" | "estimatedHours" | "requiresDuo" | "isActive"
 
 const SORT_COLUMNS: SortColumnDef<SortField>[] = [
@@ -103,11 +99,12 @@ const SORT_COLUMNS: SortColumnDef<SortField>[] = [
 
 
 export default function TestMasterPage() {
-  const [view, setView] = useState<MasterView>("items")
+  const uid = useId()
   const [rows, setRows] = useState<TestItemRow[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
-  const [activeTab, setActiveTab] = useState<"전체" | Category>("전체")
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all")
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
   const [dialogOpen, setDialogOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
@@ -117,7 +114,7 @@ export default function TestMasterPage() {
   const [error, setError] = useState<string | null>(null)
   const [sortField, setSortField] = useState<SortField>("name")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
-  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>("all")
+
   useEffect(() => {
     queueMicrotask(() => {
       void loadItems()
@@ -151,12 +148,12 @@ export default function TestMasterPage() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return rows.filter((row) => {
-      if (activeTab !== "전체" && row.category !== activeTab) return false
+      if (categoryFilter !== "all" && row.category !== categoryFilter) return false
       if (q && !row.name.toLowerCase().includes(q)) return false
       if (statusFilter !== "all" && row.isActive !== (statusFilter === "active")) return false
       return true
     })
-  }, [rows, search, activeTab, statusFilter])
+  }, [rows, search, categoryFilter, statusFilter])
 
   const pickSort = useCallback((field: SortField, dir: SortDir) => {
     setSortField(field)
@@ -191,10 +188,12 @@ export default function TestMasterPage() {
     })
   }, [filtered, sortField, sortDir])
 
-  const tabCounts = useMemo(() => {
-    const counts: Record<string, number> = { 전체: rows.length }
-    for (const category of CATEGORIES) {
-      counts[category] = rows.filter((row) => row.category === category).length
+  /** 대분류 드롭다운에 함께 보여줄 분류별 건수. */
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const category of CATEGORIES) counts[category] = 0
+    for (const row of rows) {
+      counts[row.category] = (counts[row.category] ?? 0) + 1
     }
     return counts
   }, [rows])
@@ -209,6 +208,15 @@ export default function TestMasterPage() {
       : 0
     return { active, duo, avgHours }
   }, [rows])
+
+  const filterActive =
+    categoryFilter !== "all" || statusFilter !== "all" || search.trim() !== ""
+
+  function resetFilters() {
+    setCategoryFilter("all")
+    setStatusFilter("all")
+    setSearch("")
+  }
 
   async function patchItem(id: string, payload: Partial<TestItemRow>) {
     const res = await fetch("/api/test-items", {
@@ -319,114 +327,98 @@ export default function TestMasterPage() {
     }
   }
 
-  const allTabs = ["전체", ...CATEGORIES] as const
-
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden p-4 md:p-6">
-      {/* 화면 전환 탭 — 시험항목 마스터 / 시험항목 그룹 */}
-      <div className="inline-flex h-9 w-fit shrink-0 items-center gap-0.5 rounded-md bg-muted p-0.5 text-muted-foreground">
-        {MASTER_VIEWS.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setView(tab.id)}
-            className={cn(
-              "h-8 rounded-md px-3 text-sm font-medium transition-colors",
-              view === tab.id ? "bg-card text-foreground shadow-sm" : "hover:text-foreground",
-            )}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {view === "groups" ? (
-        <TestItemGroupPanel candidates={rows} candidatesLoading={loading} />
-      ) : (
-      <>
-      {/* KPI 카드 */}
-      <div className="grid shrink-0 grid-cols-3 gap-2">
-        <Card className="gap-0.5 px-3 py-2">
-          <span className="text-[10px] font-medium text-muted-foreground">전체 항목</span>
-          <span className="text-lg font-semibold tabular-nums text-foreground">{rows.length}</span>
-          <span className="text-[11px] text-muted-foreground">
-            현재 표시{" "}
-            <span className="font-semibold text-foreground tabular-nums">{filtered.length}</span>건
-          </span>
-        </Card>
-        <Card className="gap-0.5 px-3 py-2">
-          <span className="text-[10px] font-medium text-muted-foreground">활성 항목</span>
-          <span className="text-lg font-semibold tabular-nums text-blue-600">{summary.active}</span>
-        </Card>
-        <Card className="gap-0.5 px-3 py-2">
-          <span className="text-[10px] font-medium text-muted-foreground">평균 예상시간</span>
-          <span className="text-lg font-semibold tabular-nums text-amber-600">
-            {summary.avgHours.toFixed(1)}
-            <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">
-              2인 {summary.duo}건
-            </span>
-          </span>
-        </Card>
-      </div>
-
-      <StatusFilterTabs
-        value={statusFilter}
-        onChange={setStatusFilter}
-        counts={{ all: rows.length, active: summary.active, inactive: rows.length - summary.active }}
-        activeLabel="활성 항목"
-        inactiveLabel="비활성 항목"
-        className="shrink-0"
+      <PageHeader
+        icon={ClipboardList}
+        title="시험항목 마스터"
+        count={rows.length}
+        description="시험항목 분류와 예상시간, 2인시험 여부를 관리합니다."
+        stats={[
+          { label: "활성", value: summary.active, tone: "blue" },
+          { label: "2인시험", value: `${summary.duo}건` },
+          { label: "평균 예상시간", value: `${summary.avgHours.toFixed(1)}h`, tone: "amber" },
+        ]}
+        actions={(
+          <Button onClick={openAddDialog} size="lg">
+            <Plus />
+            항목 추가
+          </Button>
+        )}
       />
 
-      {/* 헤더 + 검색 + 추가 버튼 */}
-      <div className="flex flex-col gap-3">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <ClipboardList className="size-5 text-muted-foreground" />
-          <h1 className="text-xl font-semibold text-foreground">시험항목 마스터</h1>
-          <Badge variant="secondary" className="tabular-nums">{filtered.length}건</Badge>
+      {/* 필터 한 줄 — 검색 · 대분류 · 상태. (예전의 3중 탭을 대체) */}
+      <FilterBar
+        trailing={(
+          <span className="tabular-nums">
+            <span className="font-semibold text-foreground">{filtered.length}</span>
+            {" / "}
+            {rows.length}건 표시
+          </span>
+        )}
+      >
+        <div className="relative w-full sm:w-64">
+          <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="시험항목명 검색..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="h-8 pl-9"
+          />
         </div>
-        <p className="text-sm text-muted-foreground">
-          시험항목 분류와 예상시간, 2인시험 여부를 관리합니다.
-        </p>
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          {/* 탭 세그먼트 */}
-          <div className="inline-flex h-9 w-fit items-center gap-0.5 rounded-md bg-muted p-0.5 text-muted-foreground flex-wrap">
-            {allTabs.map((tab) => (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => setActiveTab(tab as typeof activeTab)}
-                className={cn(
-                  "h-8 rounded-md px-3 text-sm font-medium transition-colors inline-flex items-center gap-1",
-                  activeTab === tab ? "bg-card text-foreground shadow-sm" : "hover:text-foreground",
-                )}
-              >
-                {tab}
-                <Badge variant="secondary" className="tabular-nums text-[10px] px-1.5 py-0">
-                  {tabCounts[tab] ?? 0}
-                </Badge>
-              </button>
+        <Select
+          value={categoryFilter}
+          onValueChange={(value) => setCategoryFilter(value as CategoryFilter)}
+        >
+          <SelectTrigger
+            aria-label="대분류 필터"
+            className={cn(
+              "min-w-40",
+              categoryFilter !== "all" && "border-blue-500 bg-blue-50 text-blue-700",
+            )}
+          >
+            <span className="text-muted-foreground">대분류</span>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">전체 ({rows.length})</SelectItem>
+            {CATEGORIES.map((category) => (
+              <SelectItem key={category} value={category}>
+                {category} ({categoryCounts[category] ?? 0})
+              </SelectItem>
             ))}
-          </div>
+          </SelectContent>
+        </Select>
 
-          <div className="flex gap-2 sm:ml-auto">
-            <div className="relative w-full sm:w-56">
-              <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="시험항목명 검색..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="h-9 pl-9"
-              />
-            </div>
-            <Button onClick={openAddDialog} size="lg">
-              <Plus />
-              항목 추가
-            </Button>
-          </div>
-        </div>
-      </div>
+        <Select
+          value={statusFilter}
+          onValueChange={(value) => setStatusFilter(value as StatusFilter)}
+        >
+          <SelectTrigger
+            aria-label="상태 필터"
+            className={cn(
+              "min-w-32",
+              statusFilter !== "all" && "border-blue-500 bg-blue-50 text-blue-700",
+            )}
+          >
+            <span className="text-muted-foreground">상태</span>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">전체 ({rows.length})</SelectItem>
+            <SelectItem value="active">활성 ({summary.active})</SelectItem>
+            <SelectItem value="inactive">비활성 ({rows.length - summary.active})</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {filterActive && (
+          <Button variant="ghost" size="sm" onClick={resetFilters} className="h-8">
+            <FilterX />
+            초기화
+          </Button>
+        )}
+      </FilterBar>
 
       {error && !dialogOpen && !deleteOpen && (
         <div className="rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
@@ -447,13 +439,17 @@ export default function TestMasterPage() {
               <Skeleton className="h-4 w-3/4" />
             </Card>
           ))
-        ) : filtered.length === 0 ? (
+        ) : sortedData.length === 0 ? (
           <Card className="items-center py-6 text-center text-sm text-muted-foreground">
-            데이터가 없습니다.
+            {filterActive ? "조건에 맞는 시험항목이 없습니다." : "데이터가 없습니다."}
           </Card>
         ) : (
-          filtered.map((row) => (
-            <Card key={row.id} className="gap-0 px-3 py-3">
+          sortedData.map((row) => (
+            <Card
+              key={row.id}
+              className="cursor-pointer gap-0 px-3 py-3"
+              onClick={() => openEditDialog(row)}
+            >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -477,25 +473,6 @@ export default function TestMasterPage() {
                   <span className="font-medium text-foreground">2인시험:</span>{" "}
                   {row.requiresDuo ? "필요" : "미사용"}
                 </div>
-              </div>
-
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                <span className={cn(
-                    "rounded-md border px-2 py-0.5 text-[10px] font-medium",
-                    row.requiresDuo
-                      ? "border-amber-200 bg-amber-50 text-amber-700"
-                      : "border-input bg-background text-muted-foreground",
-                  )}>
-                  {row.requiresDuo ? "2인시험 사용" : "2인시험 미사용"}
-                </span>
-                <span className={cn(
-                    "rounded-md border px-2 py-0.5 text-[10px] font-medium",
-                    row.isActive
-                      ? "border-blue-200 bg-blue-50 text-blue-700"
-                      : "border-input bg-background text-muted-foreground",
-                  )}>
-                  {row.isActive ? "활성" : "비활성"}
-                </span>
               </div>
             </Card>
           ))
@@ -528,10 +505,10 @@ export default function TestMasterPage() {
                   <TableCell className="px-3 py-2"><Skeleton className="h-8 w-16" /></TableCell>
                 </TableRow>
               ))
-            ) : filtered.length === 0 ? (
+            ) : sortedData.length === 0 ? (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={8} className="py-16 text-center text-sm text-muted-foreground">
-                  데이터가 없습니다.
+                <TableCell colSpan={SORT_COLUMNS.length} className="py-16 text-center text-sm text-muted-foreground">
+                  {filterActive ? "조건에 맞는 시험항목이 없습니다." : "데이터가 없습니다."}
                 </TableCell>
               </TableRow>
             ) : (
@@ -603,10 +580,11 @@ export default function TestMasterPage() {
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="flex flex-col gap-1.5 sm:col-span-2">
-                    <label className="text-xs font-medium text-muted-foreground">
+                    <label htmlFor={`${uid}-name`} className="text-xs font-medium text-muted-foreground">
                       시험항목명 <span className="text-destructive">*</span>
                   </label>
                     <Input
+                      id={`${uid}-name`}
                       value={form.name}
                       onChange={(e) =>
                         setForm((prev) => ({ ...prev, name: e.target.value }))
@@ -615,14 +593,14 @@ export default function TestMasterPage() {
                     />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">대분류</label>
+                    <label htmlFor={`${uid}-category`} className="text-xs font-medium text-muted-foreground">대분류</label>
                     <Select
                       value={form.category}
                       onValueChange={(value) =>
                         setForm((prev) => ({ ...prev, category: value as Category }))
                       }
                     >
-                      <SelectTrigger className="!h-9 px-3">
+                      <SelectTrigger id={`${uid}-category`} className="!h-9 px-3">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -635,7 +613,7 @@ export default function TestMasterPage() {
                     </Select>
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">
+                    <label htmlFor={`${uid}-hours`} className="text-xs font-medium text-muted-foreground">
                       예상시간 (h)
                   </label>
                   <label className="mt-2 flex items-center gap-2 rounded-md border px-3 py-2.5 text-sm font-medium text-foreground">
@@ -648,6 +626,7 @@ export default function TestMasterPage() {
                     활성 상태
                   </label>
                     <Input
+                      id={`${uid}-hours`}
                       type="number"
                       min={0}
                       value={form.estimatedHours}
@@ -724,8 +703,6 @@ export default function TestMasterPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      </>
-      )}
     </div>
   )
 }

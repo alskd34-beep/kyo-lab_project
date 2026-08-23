@@ -10,6 +10,7 @@
 
 import { supabaseAdmin } from '@backend/lib/supabase'
 import { selectAll } from '@backend/lib/supabasePage'
+import { kstToday, kstDateAfter } from '@backend/lib/kstDate'
 import { fetchPctSheet, type SheetPctRow } from '@backend/lib/googleSheet'
 import { createNotification } from '@backend/services/notifications'
 import { rebuildGroups } from '@backend/services/concurrentGroups'
@@ -32,6 +33,28 @@ export interface IngestResult {
   deleted: number
   unsynced: number
   deadlineAlerts: number
+  /**
+   * 처리에 실패한 건. 예전에는 insert/update 실패를 `if (!error)` 로 전부 삼켜
+   * 크론 로그와 요약 알림이 "성공한 것만" 보고했다. 의약품 제조 시스템에서
+   * 적재 누락이 무증상으로 발생하면 사후 추적이 불가능하다.
+   */
+  failures: Array<{ orderKey: string; stage: 'product' | 'new' | 'blocked' | 'updated' | 'deleted'; message: string }>
+}
+
+/** pct_orders 전체를 1000행 단위로 끝까지 모아 온다(기본 limit 우회) */
+async function selectAllRange(
+  client: typeof supabaseAdmin, table: string, excludeStatus: string,
+): Promise<{ data: Record<string, unknown>[] | null; error: { message: string } | null }> {
+  const PAGE = 1000
+  const all: Record<string, unknown>[] = []
+  for (let from = 0; ; from += PAGE) {
+    const res = await client.from(table).select('*').neq('status', excludeStatus).range(from, from + PAGE - 1)
+    if (res.error) return { data: null, error: res.error }
+    const rows = (res.data ?? []) as Record<string, unknown>[]
+    all.push(...rows)
+    if (rows.length < PAGE) break
+  }
+  return { data: all, error: null }
 }
 
 const keyOf = (batchNo: string, code: string) => `${batchNo}|${code}`
@@ -104,11 +127,13 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
   void MUTABLE // 문서용(diff는 diffChanged에서 명시 비교)
 
   // ── 기존 오더 로드 (삭제 제외) ─────────────────────────────────────────────
-  const { data: existingRows, error: exErr } = await supabaseAdmin
-    .from('pct_orders')
-    .select('*')   // locked 컬럼(0015)까지 받되 미적용 시 자동 누락 — 방어적
-    .neq('status', DELETED_STATUS)
-  if (exErr) throw exErr
+  // Supabase 기본 1000행 상한을 넘기지 않도록 페이지네이션한다.
+  // pct_orders 는 소프트 삭제만 하므로 단조 증가한다. 잘리면 기존 오더가 "신규"로 판정돼
+  // unique(batch_no, product_code) 위반 insert 가 나고, 그 오류는 아래에서 조용히
+  // 삼켜져 적재 누락이 무증상으로 발생한다.
+  const { data: existingRows, error: exErr } =
+    await selectAllRange(supabaseAdmin, 'pct_orders', DELETED_STATUS)
+  if (exErr) throw new Error(`기존 오더 조회 실패: ${exErr.message}`)
   const existingByKey = new Map<string, ExistingOrder & { batch_no: string; product_code: string }>()
   for (const r of existingRows ?? []) {
     existingByKey.set(keyOf(r.batch_no as string, r.product_code as string), r as never)
@@ -122,6 +147,11 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
 
   const result: IngestResult = {
     fileId, total: sheetRows.length, created: 0, updated: 0, blocked: 0, deleted: 0, unsynced: 0, deadlineAlerts: 0,
+    failures: [],
+  }
+  const fail = (orderKey: string, stage: IngestResult['failures'][number]['stage'], message: string) => {
+    console.error(`[pct-ingest] ${stage} 실패 (${orderKey}): ${message}`)
+    result.failures.push({ orderKey, stage, message })
   }
   const seen = new Set<string>()
   const nowIso = new Date().toISOString()
@@ -138,7 +168,9 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
         name: row.productName,
         product_type: '완제품',
       })
-      if (!insErr) {
+      if (insErr) {
+        fail(key, 'product', `품목마스터 자동등록 실패: ${insErr.message}`)
+      } else {
         productCodes.add(row.productCode)
         result.unsynced++
         await createNotification({
@@ -167,7 +199,9 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
         ingest_state: 'new',
         source_file_id: fileId,
       })
-      if (!error) {
+      if (error) {
+        fail(key, 'new', `신규 오더 생성 실패: ${error.message}`)
+      } else {
         result.created++
         await logIngest(key, 'new', PENDING_STATUS, fileId)
       }
@@ -212,7 +246,9 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
         last_seen_at: nowIso,
         source_file_id: fileId,
       }).eq('id', existing.id)
-      if (!error) {
+      if (error) {
+        fail(key, 'updated', `오더 변경 반영 실패: ${error.message}`)
+      } else {
         result.updated++
         await logIngest(key, 'updated', existing.status, fileId)
       }
@@ -230,7 +266,9 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
     const { error } = await supabaseAdmin.from('pct_orders').update({
       status: DELETED_STATUS, ingest_state: 'deleted', deleted_at: nowIso,
     }).eq('id', existing.id)
-    if (!error) {
+    if (error) {
+      fail(key, 'deleted', `오더 소프트삭제 실패: ${error.message}`)
+    } else {
       result.deleted++
       await logIngest(key, 'deleted', DELETED_STATUS, fileId)
     }
@@ -251,11 +289,20 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
   result.deadlineAlerts = await notifyDeadlines()
 
   // 적재 요약 알림 (감독관)
+  const failed = result.failures.length
   await createNotification({
     type: 'ingest',
-    title: 'PCT 시트 적재 완료',
-    body: `신규 ${result.created} · 변경 ${result.updated} · 차단 ${result.blocked} · 삭제 ${result.deleted} · 미동기화 ${result.unsynced} · 동시분석그룹 ${groupsCreated}`,
-    severity: 'info',
+    title: failed > 0 ? `PCT 시트 적재 완료 (실패 ${failed}건)` : 'PCT 시트 적재 완료',
+    body:
+      `신규 ${result.created} · 변경 ${result.updated} · 차단 ${result.blocked} · 삭제 ${result.deleted} · ` +
+      `미동기화 ${result.unsynced} · 동시분석그룹 ${groupsCreated}` +
+      (failed > 0
+        ? `
+⚠ 실패 ${failed}건: ` +
+          result.failures.slice(0, 5).map(f => `${f.orderKey}(${f.stage})`).join(', ') +
+          (failed > 5 ? ` 외 ${failed - 5}건` : '')
+        : ''),
+    severity: failed > 0 ? 'critical' : 'info',
   })
 
   return result
@@ -269,11 +316,10 @@ async function logIngest(orderKey: string, changeType: 'new' | 'updated' | 'bloc
 
 /** 완료예정일 D-7 이내 & 미완료 오더에 대해 알림 (오더당 1회) */
 async function notifyDeadlines(): Promise<number> {
-  const today = new Date()
-  const limit = new Date(today)
-  limit.setDate(limit.getDate() + 7)
-  const todayStr = today.toISOString().slice(0, 10)
-  const limitStr = limit.toISOString().slice(0, 10)
+  // KST 기준. 적재 크론이 09:00 KST(= 00:00 UTC)에 돌아 UTC 기준이면 정확히 경계에서
+  // "오늘"이 하루 전으로 계산되고 D-7 알림이 하루 어긋났다.
+  const todayStr = kstToday()
+  const limitStr = kstDateAfter(7)
 
   const { data: due } = await supabaseAdmin
     .from('pct_orders')

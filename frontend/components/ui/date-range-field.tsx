@@ -6,7 +6,7 @@
  * startDate / endDate / onChange 는 "yyyy-MM-dd" ISO 문자열 기준.
  */
 
-import { useState } from "react"
+import { useId, useState } from "react"
 import { format, parse } from "date-fns"
 import { ko } from "date-fns/locale"
 import { Calendar as CalendarIcon } from "lucide-react"
@@ -63,6 +63,8 @@ export function DateRangeField({
     if (from && to) setOpen(false)
   }
 
+  const triggerId = useId()
+
   const cell = (caption: string, value: string) => (
     <span className="flex flex-1 flex-col justify-center gap-0.5 px-3 py-1.5">
       <span className="text-[10px] font-medium text-muted-foreground">{caption}</span>
@@ -81,6 +83,7 @@ export function DateRangeField({
   const trigger = compact ? (
     <button
       type="button"
+      id={triggerId}
       disabled={disabled}
       className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-input bg-background px-3 text-xs outline-none transition-colors hover:bg-muted/30 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
     >
@@ -96,6 +99,7 @@ export function DateRangeField({
   ) : (
     <button
       type="button"
+      id={triggerId}
       disabled={disabled}
       className="flex w-full items-stretch overflow-hidden rounded-md border border-input bg-background text-left outline-none transition-colors hover:bg-muted/30 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
     >
@@ -141,7 +145,7 @@ export function DateRangeField({
   return (
     <div className="grid gap-1.5">
       {label && (
-        <label className="text-xs font-medium text-foreground">{label}</label>
+        <label htmlFor={triggerId} className="text-xs font-medium text-foreground">{label}</label>
       )}
       {picker}
     </div>

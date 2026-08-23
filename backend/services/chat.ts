@@ -9,7 +9,7 @@
 
 import { randomUUID } from 'crypto'
 import { DELETED_STATUS } from '@shared/qc-status'
-import { supabase, supabaseAdmin } from '@backend/lib/supabase'
+import { supabaseAdmin, supabaseAdmin as supabase } from '@backend/lib/supabase'
 import { runLetsurText } from '@backend/lib/letsurClient'
 import { runMisoText } from '@backend/lib/misoClient'
 import { codexAssistantModel, runCodexText, type CodexCliError } from '@backend/lib/codexCli'
