@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import {
-  RefreshCw, Search, Users, TriangleAlert, CheckCircle2, ClipboardList, Clock,
+  RefreshCw, Search, Users, TriangleAlert, CheckCircle2, ClipboardList, Pencil,
 } from "lucide-react"
 import { cn } from "@frontend/lib/utils"
 import { useAuth } from "@frontend/lib/auth-context"
@@ -12,6 +12,7 @@ import { Card } from "@frontend/components/ui/card"
 import { Input } from "@frontend/components/ui/input"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import { JobDetailModal } from "@frontend/components/product-test/job-detail-modal"
+import { TesterAvatar } from "@frontend/lib/tester-profiles"
 import {
   WorkerStageLane, type OverviewJob, type WorkerRow,
 } from "@frontend/components/product-test/worker-stage-lane"
@@ -63,6 +64,7 @@ export default function ProdStatusPage() {
   const [search, setSearch] = useState("")
   const [view, setView] = useState<ViewMode>("working")
   const [completedRange, setCompletedRange] = useState<CompletedRangeKey>("30d")
+  const [selectedTesterId, setSelectedTesterId] = useState<string | null>(null)
   const [detailJobId, setDetailJobId] = useState<string | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
 
@@ -100,7 +102,6 @@ export default function ProdStatusPage() {
         w.testerId,
         (w.completedJobs ?? []).filter(j => {
           if (since === null) return true
-          // 완료일이 비어 있으면 기간을 판정할 수 없다 — '전체'에서만 보여준다.
           return j.workEndDate !== null && j.workEndDate >= since
         }),
       )
@@ -124,6 +125,18 @@ export default function ProdStatusPage() {
     return rows
   }, [data, view, search, completedByTester])
 
+  useEffect(() => {
+    if (workers.length === 0) {
+      setSelectedTesterId(null)
+      return
+    }
+    if (!selectedTesterId || !workers.some(w => w.testerId === selectedTesterId)) {
+      setSelectedTesterId(workers[0].testerId)
+    }
+  }, [workers, selectedTesterId])
+
+  const selectedWorker = workers.find(w => w.testerId === selectedTesterId) ?? workers[0]
+
   /** 진행 중 작업들의 시험항목 소화율 — '진행 중 작업' 카드의 막대 */
   const itemProgress = useMemo(() => {
     let total = 0, cleared = 0
@@ -134,6 +147,7 @@ export default function ProdStatusPage() {
   }, [data])
 
   const totals = data?.totals
+
   /** onClick 이 있는 카드는 눌러서 해당 보기로 바로 넘어간다. */
   const kpiCards: Array<{
     label: string; value: number; valueCls: string; icon: typeof Users
@@ -141,7 +155,7 @@ export default function ProdStatusPage() {
   }> = [
     {
       label: "작업 중 인원", value: totals?.workingTesters ?? 0, valueCls: "text-foreground", icon: Users,
-      foot: <span className="text-[11px] text-muted-foreground">전체 {data?.workers.filter(w => w.isActive).length ?? 0}명 중</span>,
+      foot: <span className="text-xs leading-normal text-slate-600">전체 {data?.workers.filter(w => w.isActive).length ?? 0}명 중</span>,
     },
     {
       label: "진행 중 작업", value: totals?.activeJobs ?? 0, valueCls: "text-blue-700", icon: ClipboardList,
@@ -150,33 +164,29 @@ export default function ProdStatusPage() {
           <span className="h-1.5 w-16 overflow-hidden rounded-md bg-muted">
             <span className="block h-full rounded-md bg-blue-500" style={{ width: `${itemProgress.pct}%` }} />
           </span>
-          <span className="text-[11px] tabular-nums text-muted-foreground">
+          <span className="text-xs leading-normal tabular-nums text-slate-600">
             시험항목 {itemProgress.cleared}/{itemProgress.total}
           </span>
         </span>
       ) : undefined,
     },
     {
-      label: "시작 대기", value: totals?.pending ?? 0, valueCls: "text-foreground", icon: Clock,
-      foot: <span className="text-[11px] text-muted-foreground">아직 시작하지 않은 오더</span>,
-    },
-    {
       label: "지연 작업", value: totals?.delayed ?? 0, valueCls: (totals?.delayed ?? 0) > 0 ? "text-red-600" : "text-foreground",
       icon: TriangleAlert,
-      foot: <span className="text-[11px] text-muted-foreground">완료예정일 경과</span>,
+      foot: <span className="text-xs leading-normal text-slate-600">완료예정일 경과</span>,
     },
     {
       label: "완료 작업", value: totals?.completedToday ?? 0, valueCls: "text-blue-800", icon: CheckCircle2,
-      foot: <span className="text-[11px] text-muted-foreground">오늘 · 누적 {totals?.completedTotal ?? 0}건</span>,
+      foot: <span className="text-xs leading-normal text-slate-600">오늘 · 누적 {totals?.completedTotal ?? 0}건</span>,
       onClick: () => { setView("completed"); setCompletedRange("today") },
       hint: "클릭하면 오늘 완료한 작업 목록으로 이동합니다",
     },
   ]
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden p-4 md:p-6">
+    <div className="flex min-h-full min-w-0 flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto p-4 md:p-6">
       {/* KPI */}
-      <div className="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-4">
         {kpiCards.map((card) => {
           const Icon = card.icon
           return (
@@ -198,7 +208,7 @@ export default function ProdStatusPage() {
                 card.onClick && "cursor-pointer transition-colors hover:border-blue-300 hover:bg-muted/40",
               )}
             >
-              <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
                 <Icon className="size-3.5" />{card.label}
               </span>
               {loading
@@ -213,14 +223,17 @@ export default function ProdStatusPage() {
       {/* 헤더 + 필터 */}
       <div className="flex flex-col gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <h1 className="text-xl font-semibold text-foreground">작업자 작업 현황</h1>
+          <h1 className="flex items-center gap-2 text-xl font-bold text-slate-950">
+            작업자 작업 현황
+            <Pencil className="size-4 text-muted-foreground" />
+          </h1>
           <Badge variant="secondary" className="tabular-nums">{workers.length}명</Badge>
           {view === "completed" && (
             <Badge variant="outline" className="gap-1 border-blue-300 text-blue-800 tabular-nums">
               <CheckCircle2 className="size-3" />완료 {completedShown}건
             </Badge>
           )}
-          <p className="w-full text-xs text-muted-foreground sm:w-auto">
+          <p className="w-full text-xs font-medium text-slate-700 sm:w-auto">
             {view === "completed"
               ? "승인완료된 작업을 작업자·기간별로 확인합니다. (작업자당 최근 50건까지)"
               : "작업자마다 단계 레일을 하나씩 두고, 보유 작업을 지금 서 있는 단계 위에 세웁니다."}
@@ -304,21 +317,50 @@ export default function ProdStatusPage() {
         </div>
       ) : !error && workers.length === 0 ? (
         <Card className="items-center py-16 text-center text-sm text-muted-foreground">
-          {view === "working" ? "진행 중이거나 대기 중인 작업이 있는 작업자가 없습니다."
-            : view === "completed" ? "선택한 기간에 완료된 작업이 없습니다. 기간을 넓혀 보세요."
-            : "작업자가 없습니다."}
+          {view === "working"
+            ? "진행 중이거나 대기 중인 작업이 있는 작업자가 없습니다."
+            : view === "completed"
+              ? "선택한 기간에 완료된 작업이 없습니다. 기간을 넓혀 보세요."
+              : "작업자가 없습니다."}
         </Card>
       ) : !error ? (
-        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
-          {workers.map((w) => (
-            <WorkerStageLane
-              key={w.testerId}
-              worker={w}
-              mode={view === "completed" ? "completed" : "active"}
-              completedJobs={completedByTester.get(w.testerId) ?? []}
-              onOpenJob={openDetail}
-            />
-          ))}
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden md:grid-cols-[190px_minmax(0,1fr)]">
+          <div className="min-h-0 overflow-y-auto rounded-md border border-slate-200 bg-white p-2">
+            <div className="flex flex-col gap-1.5">
+              {workers.map((w) => (
+                <button
+                  key={w.testerId}
+                  type="button"
+                  onClick={() => setSelectedTesterId(w.testerId)}
+                  className={cn(
+                    "flex items-center gap-2.5 rounded-md border px-2.5 py-2.5 text-left transition-all",
+                    selectedWorker?.testerId === w.testerId
+                      ? "border-blue-400 bg-blue-50/70 text-slate-950 shadow-sm"
+                      : "border-transparent text-slate-700 hover:border-slate-200 hover:bg-slate-50",
+                  )}
+                >
+                  <TesterAvatar testerId={w.testerId} name={w.name} size="md" />
+                  <div className="min-w-0">
+                    <span className="block truncate text-xs font-bold text-slate-900">
+                      {w.name}{" "}
+                      <span className="font-mono font-medium text-slate-600">{w.employeeNo}</span>
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="min-h-0 min-w-0 overflow-y-auto">
+            {selectedWorker && (
+              <WorkerStageLane
+                worker={selectedWorker}
+                mode={view === "completed" ? "completed" : "active"}
+                completedJobs={completedByTester.get(selectedWorker.testerId) ?? []}
+                onOpenJob={openDetail}
+                showWorker={false}
+              />
+            )}
+          </div>
         </div>
       ) : null}
 
