@@ -49,7 +49,7 @@ const STATUS_CONFIG: Record<StatusKey, { label: string; cls: string }> = {
   prereview:  { label: '검토대기', cls: 'bg-amber-50 text-amber-700 border border-amber-200' },
   reviewing:  { label: '검토중',   cls: 'bg-blue-50 text-blue-700 border border-blue-200' },
   pending:    { label: '승인대기', cls: 'bg-teal-50 text-teal-700 border border-teal-200' },
-  completed:  { label: '적합완료', cls: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
+  completed:  { label: '적합완료', cls: 'bg-blue-100 text-blue-900 border border-blue-400' },
   fail:       { label: '부적합',   cls: 'bg-red-50 text-red-700 border border-red-200' },
 }
 
@@ -62,7 +62,7 @@ function buildKpis(rows: TestRow[]): KpiItem[] {
     { label: '진행중',   value: String(by('inprogress')), unit: '건', sub: '처리 진행 중',   accent: 'text-blue-600',  bg: 'bg-blue-50/60',  border: 'border-blue-100'  },
     { label: '검토',     value: String(by('prereview') + by('reviewing')), unit: '건', sub: '검토대기·검토중', accent: 'text-blue-600', bg: 'bg-blue-50/60', border: 'border-blue-100' },
     { label: '승인대기', value: String(by('pending')),    unit: '건', sub: '검토 후 승인 대기', accent: 'text-teal-600', bg: 'bg-teal-50/60',    border: 'border-teal-100'    },
-    { label: '완료',     value: String(by('completed')),  unit: '건', sub: '승인 완료',      accent: 'text-emerald-600', bg: 'bg-emerald-50/60', border: 'border-emerald-100' },
+    { label: '완료',     value: String(by('completed')),  unit: '건', sub: '승인 완료',      accent: 'text-blue-900',    bg: 'bg-blue-100/60',   border: 'border-blue-300'    },
     { label: '부적합',   value: String(by('fail')),       unit: '건', sub: '기준 이탈',      accent: 'text-red-600',     bg: 'bg-red-50/60',     border: 'border-red-100'     },
   ]
 }

@@ -233,8 +233,8 @@ export function JobDetailModal({
                   </p>
                 </section>
               ) : detail.items.length > 0 && cleared === total ? (
-                <section className="rounded-md border border-emerald-200 bg-emerald-50/60 p-3">
-                  <p className="flex items-center gap-1.5 text-sm font-semibold text-emerald-800">
+                <section className="rounded-md border border-blue-200 bg-blue-50/60 p-3">
+                  <p className="flex items-center gap-1.5 text-sm font-semibold text-blue-800">
                     <CheckCircle2 className="size-4" />
                     모든 시험항목이 완료되었습니다.
                   </p>
@@ -250,7 +250,7 @@ export function JobDetailModal({
                   <div
                     className={cn(
                       "h-full rounded-md transition-all",
-                      total > 0 && cleared === total ? "bg-emerald-500" : IN_PROGRESS_STYLE.dot,
+                      total > 0 && cleared === total ? "bg-blue-700" : IN_PROGRESS_STYLE.dot,
                     )}
                     style={{ width: `${pct}%` }}
                   />
@@ -275,7 +275,7 @@ export function JobDetailModal({
                         key={it.id}
                         className={cn(
                           "flex items-center justify-between gap-2 rounded-md border px-3 py-2.5",
-                          done && "border-emerald-200 bg-emerald-50/60",
+                          done && "border-blue-200 bg-blue-50/60",
                           isCurrent && "border-primary/40 bg-primary/5",
                         )}
                       >
@@ -284,13 +284,13 @@ export function JobDetailModal({
                             {idx + 1}
                           </span>
                           {done
-                            ? <CheckCircle2 className="size-4 shrink-0 text-emerald-500" />
+                            ? <CheckCircle2 className="size-4 shrink-0 text-blue-600" />
                             : isCurrent
                               ? <LoaderCircle className="size-4 shrink-0 text-primary" />
                               : <Circle className="size-4 shrink-0 text-muted-foreground" />}
                           <span className={cn(
                             "truncate text-sm",
-                            done ? "font-medium text-emerald-800"
+                            done ? "font-medium text-blue-800"
                               : isCurrent ? "font-semibold text-foreground"
                               : "text-foreground",
                           )}>
@@ -300,7 +300,7 @@ export function JobDetailModal({
 
                         <div className="flex shrink-0 items-center gap-2">
                           {done ? (
-                            <span className="text-[11px] text-emerald-700">
+                            <span className="text-[11px] text-blue-700">
                               {it.clearedAt && formatDateTime(it.clearedAt)}
                               {it.elapsedMinutes != null && ` · ${formatMinutes(it.elapsedMinutes)}`}
                             </span>

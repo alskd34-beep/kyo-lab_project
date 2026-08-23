@@ -52,7 +52,7 @@ export default function QcDashboardPage() {
   const kpis: KpiDef[] = data ? [
     { key: "total",        label: "전체 오더",   value: data.counts.total,      icon: ClipboardList, tone: "text-slate-600 bg-slate-100" },
     { key: "inProgress",   label: "진행중",      value: data.counts.inProgress, icon: PlayCircle,    tone: "text-blue-700 bg-blue-50" },
-    { key: "completed",    label: "완료",        value: data.counts.completed,  icon: CheckCircle2,  tone: "text-emerald-700 bg-emerald-50" },
+    { key: "completed",    label: "완료",        value: data.counts.completed,  icon: CheckCircle2,  tone: "text-blue-900 bg-blue-100" },
     { key: "delayed",      label: "지연",        value: data.counts.delayed,    icon: AlertTriangle, tone: "text-red-700 bg-red-50" },
     { key: "unassigned",   label: "미배정",      value: data.counts.unassigned, icon: UserMinus,     tone: "text-amber-700 bg-amber-50" },
     { key: "psychotropic", label: "향정신성",    value: data.psychotropic,      icon: Pill,          tone: "text-rose-700 bg-rose-50" },

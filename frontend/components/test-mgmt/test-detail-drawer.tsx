@@ -206,7 +206,7 @@ export function TestDetailDrawer({
                     <span
                       className={cn(
                         "block h-full rounded-md transition-all",
-                        cleared === total ? "bg-emerald-500" : "bg-blue-500",
+                        cleared === total ? "bg-blue-700" : "bg-blue-400",
                       )}
                       style={{ width: `${pct}%` }}
                     />
@@ -241,18 +241,18 @@ export function TestDetailDrawer({
                         key={it.id}
                         className={cn(
                           "flex items-center justify-between gap-2 rounded-md border px-3 py-2",
-                          done && "border-emerald-200 bg-emerald-50/60",
+                          done && "border-blue-200 bg-blue-50/60",
                           isCurrent && "border-primary/40 bg-primary/5",
                         )}
                       >
                         <span className="flex min-w-0 items-center gap-2">
                           <span className="w-5 shrink-0 text-xs tabular-nums text-muted-foreground">{idx + 1}</span>
                           {done
-                            ? <CheckCircle2 className="size-4 shrink-0 text-emerald-500" />
+                            ? <CheckCircle2 className="size-4 shrink-0 text-blue-600" />
                             : isCurrent
                               ? <LoaderCircle className="size-4 shrink-0 text-primary" />
                               : <Circle className="size-4 shrink-0 text-muted-foreground" />}
-                          <span className={cn("truncate text-sm", done && "text-emerald-800")}>
+                          <span className={cn("truncate text-sm", done && "text-blue-800")}>
                             {it.testItemName}
                           </span>
                         </span>

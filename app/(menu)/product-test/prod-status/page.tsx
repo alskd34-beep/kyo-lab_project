@@ -109,7 +109,7 @@ function ProgressBar({ cleared, total }: { cleared: number; total: number }) {
     <div className="flex items-center gap-2">
       <div className="h-1.5 flex-1 overflow-hidden rounded-md bg-muted">
         <div
-          className={cn("h-full rounded-md transition-all", done ? "bg-emerald-500" : "bg-blue-500")}
+          className={cn("h-full rounded-md transition-all", done ? "bg-blue-700" : "bg-blue-400")}
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -202,11 +202,11 @@ export default function ProdStatusPage() {
     { label: "시작 대기", value: totals?.pending ?? 0, valueCls: "text-foreground", icon: Clock },
     { label: "지연", value: totals?.delayed ?? 0, valueCls: "text-red-600", icon: TriangleAlert },
     {
-      label: "오늘 완료", value: totals?.completedToday ?? 0, valueCls: "text-emerald-600", icon: CheckCircle2,
+      label: "오늘 완료", value: totals?.completedToday ?? 0, valueCls: "text-blue-800", icon: CheckCircle2,
       onClick: () => { setView("completed"); setCompletedRange("today") },
     },
     {
-      label: "누적 완료", value: totals?.completedTotal ?? 0, valueCls: "text-emerald-600", icon: CheckCheck,
+      label: "누적 완료", value: totals?.completedTotal ?? 0, valueCls: "text-blue-800", icon: CheckCheck,
       onClick: () => { setView("completed"); setCompletedRange("all") },
     },
   ]
@@ -233,7 +233,7 @@ export default function ProdStatusPage() {
                 : {})}
               className={cn(
                 "gap-0.5 px-3 py-2",
-                card.onClick && "cursor-pointer transition-colors hover:border-emerald-300 hover:bg-muted/40",
+                card.onClick && "cursor-pointer transition-colors hover:border-blue-300 hover:bg-muted/40",
               )}
             >
               <span className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
@@ -253,7 +253,7 @@ export default function ProdStatusPage() {
           <h1 className="text-xl font-semibold text-foreground">작업자 작업 현황</h1>
           <Badge variant="secondary" className="tabular-nums">{workers.length}명</Badge>
           {view === "completed" && (
-            <Badge variant="outline" className="gap-1 border-emerald-200 text-emerald-700 tabular-nums">
+            <Badge variant="outline" className="gap-1 border-blue-300 text-blue-800 tabular-nums">
               <CheckCircle2 className="size-3" />완료 {completedShown}건
             </Badge>
           )}
@@ -359,7 +359,7 @@ export default function ProdStatusPage() {
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
                   {view === "completed" ? (
                     <>
-                      <Badge variant="outline" className="gap-1 border-emerald-200 text-emerald-700 tabular-nums">
+                      <Badge variant="outline" className="gap-1 border-blue-300 text-blue-800 tabular-nums">
                         <CheckCircle2 className="size-3" />완료 {completedByTester.get(w.testerId)?.length ?? 0}
                       </Badge>
                       <Badge variant="secondary" className="tabular-nums">누적 {w.completedTotal}</Badge>
@@ -387,7 +387,7 @@ export default function ProdStatusPage() {
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openDetail(j.jobId) }
                       }}
-                      className="cursor-pointer rounded-md border border-emerald-200 bg-emerald-50/40 p-2.5 transition-colors hover:bg-emerald-50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                      className="cursor-pointer rounded-md border border-blue-200 bg-blue-50/40 p-2.5 transition-colors hover:bg-blue-50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex min-w-0 items-center gap-1.5">

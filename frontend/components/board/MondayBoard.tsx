@@ -196,6 +196,12 @@ export default function MondayBoard({ groups, columns, emptyMessage, onCellChang
 // ─── Cell renderers ───────────────────────────────────────────────────────────
 // Monday.com 스타일: 셀 전체에 컬러 채움 + 흰 텍스트
 const CHIP_FILL: Record<string, string> = {
+  // 작업 단계용 파랑 램프 — 진행할수록 진해진다(types/qc-status.ts STAGE_STYLE 과 같은 흐름)
+  blue300: 'bg-blue-300   text-blue-900 hover:bg-blue-400',
+  blue400: 'bg-blue-400   text-white hover:bg-blue-500',
+  blue500: 'bg-blue-500   text-white hover:bg-blue-600',
+  blue600: 'bg-blue-600   text-white hover:bg-blue-700',
+  blue700: 'bg-blue-700   text-white hover:bg-blue-800',
   emerald: 'bg-emerald-500 text-white hover:bg-emerald-600',
   amber:   'bg-amber-400   text-white hover:bg-amber-500',
   red:     'bg-red-500     text-white hover:bg-red-600',

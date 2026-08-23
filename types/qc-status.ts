@@ -94,18 +94,23 @@ export const LOCKED_STATUSES: ReadonlySet<string> = new Set<string>([
 
 // ─── 표시 ────────────────────────────────────────────────────────────────────
 /**
- * 단계별 배지 색.
- * 상태 팔레트는 "색 자체가 의미"인 곳이라 브랜드 indigo 통일 규칙의 예외다(AGENTS.md).
- * 대기 성격(검토전·승인전)은 따뜻한 색, 진행은 파랑, 종결은 초록으로 읽히게 둔다.
+ * 단계별 배지 색 — 브랜드 파랑 한 계열의 **램프**.
+ *
+ * 예전에는 단계마다 다른 색조(보라·앰버·파랑·틸·초록)를 썼다. 색이 다 다르니
+ * 어느 쪽이 더 진행된 단계인지 색만 보고는 알 수 없었고, 화면은 알록달록했다.
+ * 이제 진행할수록 진해지는 파랑 하나로 두어 **색의 농도 = 진척도** 가 되게 한다.
+ * (단계 막대 JobStageTrack 이 같은 램프를 CSS 그라데이션으로 잇는다)
+ *
+ * 단계가 아닌 상태는 램프 밖에 둔다 — 지연은 경고라 빨강, 대기·삭제는 회색.
  */
 export interface StageStyle { dot: string; cls: string }
 
 export const STAGE_STYLE: Record<string, StageStyle> = {
-  진행중:   { dot: 'bg-violet-500',  cls: 'border-violet-200 text-violet-700 bg-violet-50' },
-  검토전:   { dot: 'bg-amber-500',   cls: 'border-amber-200 text-amber-700 bg-amber-50' },
-  검토중:   { dot: 'bg-blue-500',    cls: 'border-blue-200 text-blue-700 bg-blue-50' },
-  승인전:   { dot: 'bg-teal-500',    cls: 'border-teal-200 text-teal-700 bg-teal-50' },
-  승인완료: { dot: 'bg-emerald-500', cls: 'border-emerald-200 text-emerald-700 bg-emerald-50' },
+  진행중:   { dot: 'bg-blue-400',  cls: 'border-blue-200 text-blue-600 bg-blue-50' },
+  검토전:   { dot: 'bg-blue-500',  cls: 'border-blue-200 text-blue-700 bg-blue-50' },
+  검토중:   { dot: 'bg-blue-600',  cls: 'border-blue-300 text-blue-700 bg-blue-50' },
+  승인전:   { dot: 'bg-blue-700',  cls: 'border-blue-300 text-blue-800 bg-blue-100/60' },
+  승인완료: { dot: 'bg-blue-800',  cls: 'border-blue-400 text-blue-900 bg-blue-100' },
   지연:     { dot: 'bg-red-500',     cls: 'border-red-200 text-red-700 bg-red-50' },
   대기:     { dot: 'bg-slate-400',   cls: 'border-slate-200 text-slate-600 bg-slate-50' },
   삭제:     { dot: 'bg-slate-300',   cls: 'border-slate-200 text-slate-400 bg-slate-50' },

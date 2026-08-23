@@ -115,7 +115,8 @@ export default function SheetBoardSection() {
     { key: '제형',     label: '제형',     kind: 'text',   width: 110 },
     { key: '포장일',   label: '포장일',   kind: 'date',   width: 110 },
     { key: '상태',     label: '상태',     kind: 'chip',   width: 90,
-      chipColor: { '대기': 'slate', '진행중': 'violet', '검토전': 'amber', '검토중': 'blue', '승인전': 'teal', '승인완료': 'emerald', '지연': 'red' } },
+      // 단계는 파랑 램프(진행할수록 진하게), 단계 밖 상태만 회색·빨강으로 뺀다.
+      chipColor: { '대기': 'slate', '진행중': 'blue300', '검토전': 'blue400', '검토중': 'blue500', '승인전': 'blue600', '승인완료': 'blue700', '지연': 'red' } },
     { key: '담당자',   label: '담당자',   kind: 'person', width: 140 },
   ]
 
