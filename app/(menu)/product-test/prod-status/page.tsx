@@ -2,10 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import {
-  RefreshCw, Search, Users, TriangleAlert, CheckCircle2, CheckCheck, ClipboardList, Clock, ListChecks,
-  CalendarCheck,
+  RefreshCw, Search, Users, TriangleAlert, CheckCircle2, ClipboardList, Clock,
 } from "lucide-react"
-import { stageStyle } from "@shared/qc-status"
 import { cn } from "@frontend/lib/utils"
 import { useAuth } from "@frontend/lib/auth-context"
 import { Badge } from "@frontend/components/ui/badge"
@@ -13,26 +11,11 @@ import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
 import { Input } from "@frontend/components/ui/input"
 import { Skeleton } from "@frontend/components/ui/skeleton"
-import { TesterAvatar } from "@frontend/lib/tester-profiles"
 import { JobDetailModal } from "@frontend/components/product-test/job-detail-modal"
+import {
+  WorkerStageLane, type OverviewJob, type WorkerRow,
+} from "@frontend/components/product-test/worker-stage-lane"
 
-// ─── Types (백엔드 listWorkerOverview 와 동일) ───────────────────────────────
-interface OverviewJob {
-  jobId: string; qcNo: string; productName: string; batchNo: string
-  status: string; dueDate: string | null; isUrgent: boolean
-  itemsTotal: number; itemsCleared: number
-  workStartDate: string | null; workEndDate: string | null
-}
-interface OverviewPending {
-  orderId: string; productName: string; batchNo: string
-  dueDate: string | null; isUrgent: boolean
-}
-interface WorkerRow {
-  testerId: string; name: string; employeeNo: string; isActive: boolean
-  pendingCount: number; inProgress: number; reviewing: number; delayed: number
-  completedTotal: number
-  activeJobs: OverviewJob[]; completedJobs: OverviewJob[]; pendingOrders: OverviewPending[]
-}
 interface Overview {
   totals: {
     workingTesters: number; activeJobs: number; pending: number
@@ -69,57 +52,6 @@ function daysAgo(days: number): string {
   return ymd(d)
 }
 
-function JobStatusBadge({ status }: { status: string }) {
-  const meta = stageStyle(status)
-  return (
-    <Badge variant="outline" className={cn("gap-1.5", meta.cls)}>
-      <span className={cn("size-1.5 rounded-full", meta.dot)} />
-      {status}
-    </Badge>
-  )
-}
-
-function dDay(due: string | null): number | null {
-  if (!due) return null
-  const today = new Date(); today.setHours(0, 0, 0, 0)
-  const d = new Date(due); d.setHours(0, 0, 0, 0)
-  return Math.round((d.getTime() - today.getTime()) / 86400000)
-}
-
-function DDay({ due }: { due: string | null }) {
-  const dd = dDay(due)
-  if (dd === null) return null
-  const label = dd === 0 ? "D-Day" : dd > 0 ? `D-${dd}` : `D+${-dd}`
-  const cls =
-    dd <= 0 ? "border-red-200 text-red-700"
-    : dd <= 3 ? "border-red-200 text-red-700"
-    : dd <= 7 ? "border-amber-200 text-amber-700"
-    : "text-muted-foreground"
-  return (
-    <Badge variant="outline" className={cn("gap-1 font-semibold tabular-nums", cls)}>
-      <Clock className="size-3" />{label}
-    </Badge>
-  )
-}
-
-function ProgressBar({ cleared, total }: { cleared: number; total: number }) {
-  const pct = total > 0 ? Math.round((cleared / total) * 100) : 0
-  const done = total > 0 && cleared === total
-  return (
-    <div className="flex items-center gap-2">
-      <div className="h-1.5 flex-1 overflow-hidden rounded-md bg-muted">
-        <div
-          className={cn("h-full rounded-md transition-all", done ? "bg-blue-700" : "bg-blue-400")}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <span className="shrink-0 text-[11px] font-medium tabular-nums text-muted-foreground">
-        {cleared}/{total}
-      </span>
-    </div>
-  )
-}
-
 // ─── 페이지 ──────────────────────────────────────────────────────────────────
 export default function ProdStatusPage() {
   const { user } = useAuth()
@@ -134,10 +66,10 @@ export default function ProdStatusPage() {
   const [detailJobId, setDetailJobId] = useState<string | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
 
-  function openDetail(jobId: string) {
+  const openDetail = useCallback((jobId: string) => {
     setDetailJobId(jobId)
     setDetailOpen(true)
-  }
+  }, [])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -192,29 +124,59 @@ export default function ProdStatusPage() {
     return rows
   }, [data, view, search, completedByTester])
 
+  /** 진행 중 작업들의 시험항목 소화율 — '진행 중 작업' 카드의 막대 */
+  const itemProgress = useMemo(() => {
+    let total = 0, cleared = 0
+    for (const w of data?.workers ?? []) {
+      for (const j of w.activeJobs) { total += j.itemsTotal; cleared += j.itemsCleared }
+    }
+    return { total, cleared, pct: total > 0 ? Math.round((cleared / total) * 100) : 0 }
+  }, [data])
+
   const totals = data?.totals
-  /** onClick 이 있는 카드는 눌러서 완료 보기로 바로 넘어간다. */
+  /** onClick 이 있는 카드는 눌러서 해당 보기로 바로 넘어간다. */
   const kpiCards: Array<{
-    label: string; value: number; valueCls: string; icon: typeof Users; onClick?: () => void
+    label: string; value: number; valueCls: string; icon: typeof Users
+    foot?: React.ReactNode; onClick?: () => void; hint?: string
   }> = [
-    { label: "작업 중 인원", value: totals?.workingTesters ?? 0, valueCls: "text-foreground", icon: Users },
-    { label: "진행 중 작업", value: totals?.activeJobs ?? 0, valueCls: "text-blue-600", icon: ClipboardList },
-    { label: "시작 대기", value: totals?.pending ?? 0, valueCls: "text-foreground", icon: Clock },
-    { label: "지연", value: totals?.delayed ?? 0, valueCls: "text-red-600", icon: TriangleAlert },
     {
-      label: "오늘 완료", value: totals?.completedToday ?? 0, valueCls: "text-blue-800", icon: CheckCircle2,
-      onClick: () => { setView("completed"); setCompletedRange("today") },
+      label: "작업 중 인원", value: totals?.workingTesters ?? 0, valueCls: "text-foreground", icon: Users,
+      foot: <span className="text-[11px] text-muted-foreground">전체 {data?.workers.filter(w => w.isActive).length ?? 0}명 중</span>,
     },
     {
-      label: "누적 완료", value: totals?.completedTotal ?? 0, valueCls: "text-blue-800", icon: CheckCheck,
-      onClick: () => { setView("completed"); setCompletedRange("all") },
+      label: "진행 중 작업", value: totals?.activeJobs ?? 0, valueCls: "text-blue-700", icon: ClipboardList,
+      foot: itemProgress.total > 0 ? (
+        <span className="flex items-center gap-1.5">
+          <span className="h-1.5 w-16 overflow-hidden rounded-md bg-muted">
+            <span className="block h-full rounded-md bg-blue-500" style={{ width: `${itemProgress.pct}%` }} />
+          </span>
+          <span className="text-[11px] tabular-nums text-muted-foreground">
+            시험항목 {itemProgress.cleared}/{itemProgress.total}
+          </span>
+        </span>
+      ) : undefined,
+    },
+    {
+      label: "시작 대기", value: totals?.pending ?? 0, valueCls: "text-foreground", icon: Clock,
+      foot: <span className="text-[11px] text-muted-foreground">아직 시작하지 않은 오더</span>,
+    },
+    {
+      label: "지연 작업", value: totals?.delayed ?? 0, valueCls: (totals?.delayed ?? 0) > 0 ? "text-red-600" : "text-foreground",
+      icon: TriangleAlert,
+      foot: <span className="text-[11px] text-muted-foreground">완료예정일 경과</span>,
+    },
+    {
+      label: "완료 작업", value: totals?.completedToday ?? 0, valueCls: "text-blue-800", icon: CheckCircle2,
+      foot: <span className="text-[11px] text-muted-foreground">오늘 · 누적 {totals?.completedTotal ?? 0}건</span>,
+      onClick: () => { setView("completed"); setCompletedRange("today") },
+      hint: "클릭하면 오늘 완료한 작업 목록으로 이동합니다",
     },
   ]
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden p-4 md:p-6">
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden p-4 md:p-6">
       {/* KPI */}
-      <div className="grid shrink-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {kpiCards.map((card) => {
           const Icon = card.icon
           return (
@@ -228,20 +190,21 @@ export default function ProdStatusPage() {
                     onKeyDown: (e: React.KeyboardEvent) => {
                       if (e.key === "Enter" || e.key === " ") { e.preventDefault(); card.onClick?.() }
                     },
-                    title: "클릭하면 완료 작업 목록으로 이동합니다",
+                    title: card.hint,
                   }
                 : {})}
               className={cn(
-                "gap-0.5 px-3 py-2",
+                "gap-1 px-4 py-3",
                 card.onClick && "cursor-pointer transition-colors hover:border-blue-300 hover:bg-muted/40",
               )}
             >
-              <span className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
-                <Icon className="size-3" />{card.label}
+              <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <Icon className="size-3.5" />{card.label}
               </span>
               {loading
-                ? <Skeleton className="h-5 w-10" />
-                : <span className={cn("text-lg font-semibold tabular-nums", card.valueCls)}>{card.value}</span>}
+                ? <Skeleton className="h-8 w-12" />
+                : <span className={cn("text-2xl font-semibold tabular-nums", card.valueCls)}>{card.value}</span>}
+              {!loading && card.foot}
             </Card>
           )
         })}
@@ -260,16 +223,16 @@ export default function ProdStatusPage() {
           <p className="w-full text-xs text-muted-foreground sm:w-auto">
             {view === "completed"
               ? "승인완료된 작업을 작업자·기간별로 확인합니다. (작업자당 최근 50건까지)"
-              : "“내 작업”을 수행 중인 작업자별 진행 상황을 한눈에 봅니다."}
+              : "작업자마다 단계 레일을 하나씩 두고, 보유 작업을 지금 서 있는 단계 위에 세웁니다."}
           </p>
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="inline-flex h-9 w-fit items-center gap-0.5 rounded-md bg-muted p-0.5 text-muted-foreground">
             {([
-              { key: "working", label: "작업 있는 인원" },
+              { key: "working", label: "진행 중" },
               { key: "all", label: "전체" },
-              { key: "completed", label: "완료 작업" },
+              { key: "completed", label: "완료" },
             ] as const).map(t => (
               <button
                 key={t.key}
@@ -323,18 +286,20 @@ export default function ProdStatusPage() {
         </Card>
       )}
 
-      {/* 작업자 카드 그리드 */}
+      {/* 작업자 레인 */}
       {loading ? (
-        <div className="grid min-h-0 flex-1 grid-cols-1 content-start gap-3 overflow-y-auto lg:grid-cols-2 xl:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Card key={i} className="gap-3 px-4 py-4">
-              <div className="flex items-center justify-between">
-                <Skeleton className="h-5 w-28" />
-                <Skeleton className="h-5 w-20 rounded-md" />
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="flex gap-4 rounded-md border bg-card p-4 shadow-sm">
+              <div className="flex w-40 shrink-0 items-center gap-2">
+                <Skeleton className="size-8 rounded-md" />
+                <div className="flex flex-col gap-1">
+                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-3 w-12" />
+                </div>
               </div>
-              <Skeleton className="h-12 w-full rounded-md" />
-              <Skeleton className="h-12 w-full rounded-md" />
-            </Card>
+              <Skeleton className="h-16 flex-1 rounded-md" />
+            </div>
           ))}
         </div>
       ) : !error && workers.length === 0 ? (
@@ -344,151 +309,15 @@ export default function ProdStatusPage() {
             : "작업자가 없습니다."}
         </Card>
       ) : !error ? (
-        <div className="grid min-h-0 flex-1 grid-cols-1 content-start gap-3 overflow-y-auto lg:grid-cols-2 xl:grid-cols-3">
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
           {workers.map((w) => (
-            <Card key={w.testerId} className="gap-0 overflow-hidden py-0">
-              {/* 카드 헤더 */}
-              <div className="flex items-center gap-2 border-b px-4 py-3">
-                <TesterAvatar testerId={w.testerId} name={w.name} size="md" />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="truncate text-sm font-semibold text-foreground">{w.name}</span>
-                    <span className="font-mono text-xs text-muted-foreground">{w.employeeNo}</span>
-                  </div>
-                </div>
-                <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
-                  {view === "completed" ? (
-                    <>
-                      <Badge variant="outline" className="gap-1 border-blue-300 text-blue-800 tabular-nums">
-                        <CheckCircle2 className="size-3" />완료 {completedByTester.get(w.testerId)?.length ?? 0}
-                      </Badge>
-                      <Badge variant="secondary" className="tabular-nums">누적 {w.completedTotal}</Badge>
-                    </>
-                  ) : (
-                    <>
-                      {w.inProgress > 0 && <Badge variant="outline" className="gap-1 border-blue-200 text-blue-700"><span className="size-1.5 rounded-full bg-blue-500" />진행 {w.inProgress}</Badge>}
-                      {w.reviewing > 0 && <Badge variant="outline" className="gap-1 border-blue-200 text-blue-700"><span className="size-1.5 rounded-full bg-blue-500" />검토 {w.reviewing}</Badge>}
-                      {w.delayed > 0 && <Badge variant="outline" className="gap-1 border-red-200 text-red-700"><span className="size-1.5 rounded-full bg-red-500" />지연 {w.delayed}</Badge>}
-                      {w.pendingCount > 0 && <Badge variant="secondary" className="tabular-nums">대기 {w.pendingCount}</Badge>}
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* 완료 작업 — 완료 보기에서만 */}
-              {view === "completed" ? (
-                <div className="flex flex-col gap-2 px-4 py-3">
-                  {(completedByTester.get(w.testerId) ?? []).map((j) => (
-                    <div
-                      key={j.jobId}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => openDetail(j.jobId)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openDetail(j.jobId) }
-                      }}
-                      className="cursor-pointer rounded-md border border-blue-200 bg-blue-50/40 p-2.5 transition-colors hover:bg-blue-50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex min-w-0 items-center gap-1.5">
-                          <span className="font-mono text-xs font-bold text-blue-700">QC {j.qcNo}</span>
-                          {j.isUrgent && <Badge variant="outline" className="border-red-200 px-1.5 text-[10px] text-red-700">긴급</Badge>}
-                        </div>
-                        <JobStatusBadge status={j.status} />
-                      </div>
-                      <p className="mt-1 truncate text-sm font-medium text-foreground">
-                        {j.productName}
-                        <span className="ml-1 font-mono text-xs font-normal text-muted-foreground">/ {j.batchNo}</span>
-                      </p>
-                      <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <CalendarCheck className="size-3" />
-                          완료 <span className="font-mono tabular-nums">{j.workEndDate ?? "-"}</span>
-                        </span>
-                        {j.workStartDate && (
-                          <span className="flex items-center gap-1">
-                            <Clock className="size-3" />
-                            시작 <span className="font-mono tabular-nums">{j.workStartDate}</span>
-                          </span>
-                        )}
-                        {j.itemsTotal > 0 && (
-                          <span className="flex items-center gap-1">
-                            <ListChecks className="size-3" />
-                            시험항목 <span className="tabular-nums">{j.itemsCleared}/{j.itemsTotal}</span>
-                          </span>
-                        )}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-              /* 진행 중 작업 */
-              <div className="flex flex-col gap-2 px-4 py-3">
-                {w.activeJobs.length === 0 ? (
-                  <p className="py-1 text-xs text-muted-foreground">진행 중인 작업이 없습니다.</p>
-                ) : (
-                  w.activeJobs.map((j) => (
-                    <div
-                      key={j.jobId}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => openDetail(j.jobId)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openDetail(j.jobId) }
-                      }}
-                      className="cursor-pointer rounded-md border bg-card p-2.5 transition-colors hover:border-blue-300 hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex min-w-0 items-center gap-1.5">
-                          <span className="font-mono text-xs font-bold text-blue-700">QC {j.qcNo}</span>
-                          {j.isUrgent && <Badge variant="outline" className="border-red-200 px-1.5 text-[10px] text-red-700">긴급</Badge>}
-                        </div>
-                        <div className="flex shrink-0 items-center gap-1">
-                          <DDay due={j.dueDate} />
-                          <JobStatusBadge status={j.status} />
-                        </div>
-                      </div>
-                      <p className="mt-1 truncate text-sm font-medium text-foreground">
-                        {j.productName}
-                        <span className="ml-1 font-mono text-xs font-normal text-muted-foreground">/ {j.batchNo}</span>
-                      </p>
-                      {j.itemsTotal > 0 && <div className="mt-2"><ProgressBar cleared={j.itemsCleared} total={j.itemsTotal} /></div>}
-                      <p className="mt-1.5 flex items-center gap-1 text-[11px] text-muted-foreground">
-                        <ListChecks className="size-3" />
-                        클릭하면 수행 중인 시험항목을 확인할 수 있습니다.
-                      </p>
-                    </div>
-                  ))
-                )}
-
-                {/* 시작 대기 오더 */}
-                {w.pendingOrders.length > 0 && (
-                  <div className="mt-1 rounded-md border border-dashed bg-muted/40 p-2.5">
-                    <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
-                      <Clock className="size-3" />시작 대기 {w.pendingCount}건
-                    </p>
-                    <ul className="flex flex-col gap-1">
-                      {w.pendingOrders.slice(0, 4).map((o) => (
-                        <li key={o.orderId} className="flex items-center justify-between gap-2 text-xs">
-                          <span className="truncate text-foreground">
-                            {o.productName}
-                            <span className="ml-1 font-mono text-muted-foreground">{o.batchNo}</span>
-                          </span>
-                          <span className="flex shrink-0 items-center gap-1">
-                            {o.isUrgent && <span className="text-[10px] font-semibold text-red-600">긴급</span>}
-                            <DDay due={o.dueDate} />
-                          </span>
-                        </li>
-                      ))}
-                      {w.pendingOrders.length > 4 && (
-                        <li className="text-[11px] text-muted-foreground">외 {w.pendingOrders.length - 4}건</li>
-                      )}
-                    </ul>
-                  </div>
-                )}
-              </div>
-              )}
-            </Card>
+            <WorkerStageLane
+              key={w.testerId}
+              worker={w}
+              mode={view === "completed" ? "completed" : "active"}
+              completedJobs={completedByTester.get(w.testerId) ?? []}
+              onOpenJob={openDetail}
+            />
           ))}
         </div>
       ) : null}
