@@ -48,7 +48,7 @@ export default function Chatbot() {
   const inputRef = useRef<HTMLInputElement>(null)
   const abortRef = useRef<AbortController | null>(null)
 
-  // 이미지 첨부(시험자 챗봇 = MISO 전용)
+  // 이미지 첨부 — 서버 임시 저장소에 올리고 id 를 받는다(Codex CLI 경로에서만 모델에 전달됨).
   const { user } = useAuth()
   const canAttach = !!user && user.role !== 'admin'
   const [attachments, setAttachments] = useState<{ id: string; name: string; url: string }[]>([])

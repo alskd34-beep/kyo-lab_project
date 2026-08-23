@@ -1,8 +1,10 @@
 /**
  * [BACKEND] Chat 서비스 - 역할별 챗봇 라우팅
  *
- * 관리자(admin)는 Letsur Staix(OpenAI 호환 게이트웨이), 시험자(tester)는 MISO(Dify 호환)를
- * 호출해 답변을 생성하고, 프런트엔드는 동일한 Dify 호환 SSE 포맷을 그대로 재사용합니다.
+ * 관리자·시험자 모두 같은 QCink 파이프라인(의도분석 → 권한범위 조회 → 근거 기반 답변)을 씁니다.
+ * 모델 경로는 개발 = Codex(GPT) CLI, 운영 = Letsur Staix(OpenAI 호환 게이트웨이) 입니다.
+ * 권한 분리는 resolveScope 가 담당합니다(관리자=전체, 시험자=본인 배정분).
+ * 프런트엔드는 기존 Dify 호환 SSE 포맷을 그대로 재사용합니다.
  *           data: {"event":"message","answer":"...","conversation_id":"..."}\n\n
  *           data: [DONE]\n\n
  */
@@ -11,8 +13,9 @@ import { randomUUID } from 'crypto'
 import { DELETED_STATUS } from '@shared/qc-status'
 import { supabaseAdmin, supabaseAdmin as supabase } from '@backend/lib/supabase'
 import { runLetsurText } from '@backend/lib/letsurClient'
-import { runMisoText } from '@backend/lib/misoClient'
+import { resolveChatImages } from '@backend/lib/chatUploads'
 import { codexAssistantModel, runCodexText, type CodexCliError } from '@backend/lib/codexCli'
+import { runClaudeText } from '@backend/lib/claudeCli'
 import { buildQthinkAnswerPrompt } from '@backend/lib/qthinkPrompts'
 import {
   analyzeQthinkIntent,
@@ -43,7 +46,7 @@ interface ChatRequest {
   conversationId?: string
   viewer: ChatViewer
   signal?: AbortSignal
-  /** 첨부 이미지 file id 목록 (시험자/MISO 전용) */
+  /** 첨부 이미지 id 목록 (chatUploads 가 발급). Codex CLI 경로에서만 반영된다. */
   imageFileIds?: string[]
   /** 브라우저가 보유한 최근 대화. DB 저장 지연 시 문맥 폴백으로 사용한다. */
   recentHistory?: ChatMsg[]
@@ -620,27 +623,51 @@ function isUnsupportedCodexModelError(error: unknown): boolean {
   return message.includes('model is not supported when using Codex with a ChatGPT account')
 }
 
-async function runAdminCliAssistant(prompt: string, model: string | null, signal?: AbortSignal): Promise<string> {
+async function runAdminCliAssistant(
+  prompt: string,
+  model: string | null,
+  signal?: AbortSignal,
+  imagePaths: string[] = [],
+): Promise<string> {
   try {
-    return await runCodexText(prompt, { signal, model })
+    return await runCodexText(prompt, { signal, model, imagePaths })
   } catch (error) {
     // 계정에서 지원하지 않는 모델은 Codex CLI의 계정별 기본 모델로 한 번만 재시도한다.
     if (!isUnsupportedCodexModelError(error)) throw error
     console.warn(`[chat] Codex 모델 ${model ?? '(기본값)'}을 사용할 수 없어 CLI 기본 모델로 재시도합니다.`)
-    return runCodexText(prompt, { signal, model: null })
+    return runCodexText(prompt, { signal, model: null, imagePaths })
   }
 }
 
-function createAdminModelRunner(signal?: AbortSignal): QthinkModelRunner {
+/**
+ * CLI 경로에서 쓸 제공자. 기본값은 Codex(GPT).
+ * Claude CLI 로 바꾸려면 `CHAT_ADMIN_CLI_PROVIDER=claude`.
+ */
+function adminCliProvider(): 'claude' | 'codex' {
+  return process.env.CHAT_ADMIN_CLI_PROVIDER?.trim().toLowerCase() === 'claude' ? 'claude' : 'codex'
+}
+
+/**
+ * 답변 생성 러너. 관리자·시험자 모두 같은 경로를 쓴다.
+ * imagePaths 는 Codex CLI 에서만 반영된다(Letsur 는 텍스트 전용 — 아래 주석 참고).
+ */
+function createModelRunner(signal?: AbortSignal, imagePaths: string[] = []): QthinkModelRunner {
   if (shouldUseCliAssistantForAdmin()) {
+    if (adminCliProvider() === 'claude') {
+      return prompt => runClaudeText(prompt, { signal })
+    }
     const model = codexAssistantModel()
-    return prompt => runAdminCliAssistant(prompt, model, signal)
+    return prompt => runAdminCliAssistant(prompt, model, signal, imagePaths)
+  }
+  // Letsur 경로는 아직 이미지 입력을 붙이지 않았다. 첨부가 있으면 로그로 남긴다.
+  if (imagePaths.length > 0) {
+    console.warn(`[chat] Letsur 경로는 이미지 첨부를 지원하지 않습니다(${imagePaths.length}건 무시).`)
   }
   return prompt => runLetsurText(prompt, { signal })
 }
 
 /**
- * 채팅 메시지를 역할별 QCink 백엔드(admin=에이전트, tester=MISO)로 전송합니다.
+ * 채팅 메시지를 QCink 파이프라인으로 전송합니다. 역할에 따라 조회 범위만 달라집니다.
  */
 export async function sendChatMessage({ message, conversationId, viewer, signal, imageFileIds, recentHistory }: ChatRequest): Promise<Response> {
   const convId = conversationId && conversationId.trim() ? conversationId : randomUUID()
@@ -649,21 +676,17 @@ export async function sendChatMessage({ message, conversationId, viewer, signal,
     return new Response(createCliStream(convId, async () => fixedAnswer))
   }
 
-  // 시험자(admin 외): MISO 앱(자체 지식·시스템 프롬프트 보유)에 사용자 메시지를 그대로 전달.
-  // QC DB 컨텍스트/시스템 프롬프트를 덧붙이지 않는다(앱 고유 도메인을 침범하지 않도록). 첨부 이미지(시험일지 등)도 함께 전달.
-  if (viewer.role !== 'admin') {
-    const stream = createCliStream(convId, () => runMisoText(message, { signal, user: viewer.userSub, imageFileIds }))
-    return new Response(stream)
-  }
-
-  // 관리자: 의도 분석 → 허용 도구 조회 → 검증된 컨텍스트 기반 답변.
+  // 관리자·시험자 공통: 의도 분석 → 허용 도구 조회 → 검증된 컨텍스트 기반 답변.
+  // (2026-08-23: 시험자를 MISO 로 보내던 분기를 제거했다. resolveScope 가 시험자를
+  //  본인 배정 오더·작업·예약으로 제한하므로 같은 파이프라인을 그대로 쓸 수 있다.)
   const scope = await resolveScope(viewer)
+  const imagePaths = await resolveChatImages(imageFileIds ?? [], viewer.userSub)
   const storedHistory = conversationId ? await loadHistory(conversationId, viewer.userSub) : [] as ChatMsg[]
   const history = recentHistory && recentHistory.length > 0
     ? recentHistory.slice(-HISTORY_LIMIT)
     : storedHistory
   const relevantHistory = selectRelevantHistory(message, history)
-  const runModel = createAdminModelRunner(signal)
+  const runModel = createModelRunner(signal, imagePaths)
   const intent = await analyzeQthinkIntent({ question: message, history, runModel })
 
   if (intent.responseType === 'chat' && intent.chatAnswer) {
