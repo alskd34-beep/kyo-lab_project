@@ -404,7 +404,7 @@ export default function MonthlySchedulePage() {
                   총 <b className={`text-base ${TXT_PRIMARY}`}>{pctSnapshot.length}</b>건 · 이번 달 <b className={`text-base ${TXT_PRIMARY}`}>{pctSchedulesMerged.length}</b>건
                 </span>
                 {pctGeneratedAt && (
-                  <span className={`text-[10px] ${TXT_MUTED}`}>
+                  <span className={`text-xs leading-normal ${TXT_MUTED}`}>
                     생성: {new Date(pctGeneratedAt).toLocaleString('ko-KR')}
                   </span>
                 )}
@@ -498,7 +498,7 @@ export default function MonthlySchedulePage() {
                 <CardContent className="flex items-center gap-3 py-4">
                   <Calendar size={20} className="text-blue-600 dark:text-blue-400" />
                   <div>
-                    <p className={`text-[11px] font-medium ${TXT_MUTED}`}>총 배정</p>
+                    <p className={`text-xs leading-normal font-medium ${TXT_MUTED}`}>총 배정</p>
                     <p className={`text-xl font-bold tabular-nums ${TXT_PRIMARY}`}>{stats.total}건</p>
                   </div>
                 </CardContent>
@@ -507,7 +507,7 @@ export default function MonthlySchedulePage() {
                 <CardContent className="flex items-center gap-3 py-4">
                   <Users size={20} className="text-slate-600 dark:text-slate-300" />
                   <div>
-                    <p className={`text-[11px] font-medium ${TXT_MUTED}`}>활동 시험자</p>
+                    <p className={`text-xs leading-normal font-medium ${TXT_MUTED}`}>활동 시험자</p>
                     <p className={`text-xl font-bold tabular-nums ${TXT_PRIMARY}`}>{stats.testers}명</p>
                   </div>
                 </CardContent>
@@ -516,7 +516,7 @@ export default function MonthlySchedulePage() {
                 <CardContent className="flex items-center gap-3 py-4">
                   <AlertTriangle size={20} className="text-red-600 dark:text-red-400" />
                   <div>
-                    <p className={`text-[11px] font-medium ${TXT_MUTED}`}>긴급</p>
+                    <p className={`text-xs leading-normal font-medium ${TXT_MUTED}`}>긴급</p>
                     <p className="text-xl font-bold tabular-nums text-red-700 dark:text-red-300">{stats.urgent}건</p>
                   </div>
                 </CardContent>
@@ -525,7 +525,7 @@ export default function MonthlySchedulePage() {
                 <CardContent className="flex items-center gap-3 py-4">
                   <Users size={20} className="text-teal-600 dark:text-teal-400" />
                   <div>
-                    <p className={`text-[11px] font-medium ${TXT_MUTED}`}>듀오</p>
+                    <p className={`text-xs leading-normal font-medium ${TXT_MUTED}`}>듀오</p>
                     <p className="text-xl font-bold tabular-nums text-teal-700 dark:text-teal-300">{stats.duo}건</p>
                   </div>
                 </CardContent>
@@ -553,7 +553,7 @@ export default function MonthlySchedulePage() {
                   >
                     <Icon size={15} />
                     {t.label}
-                    <span className={`hidden text-[10px] font-normal sm:inline ${active ? 'text-blue-100' : TXT_MUTED}`}>
+                    <span className={`hidden text-xs leading-normal font-normal sm:inline ${active ? 'text-blue-100' : TXT_MUTED}`}>
                       {t.hint}
                     </span>
                   </button>
@@ -583,7 +583,7 @@ export default function MonthlySchedulePage() {
                       <TableHeader>
                         <TableRow className="bg-slate-100 dark:bg-slate-800/60">
                           <TableHead
-                            className={`sticky left-0 z-10 border-b ${BORDER} bg-slate-100 dark:bg-slate-800/60 px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide ${TXT_TERTIARY}`}
+                            className={`sticky left-0 z-10 border-b ${BORDER} bg-slate-100 dark:bg-slate-800/60 px-3 py-2 text-left text-xs leading-normal font-semibold uppercase tracking-wide ${TXT_TERTIARY}`}
                             style={{ minWidth: 120 }}
                           >
                             시험자
@@ -594,13 +594,13 @@ export default function MonthlySchedulePage() {
                             return (
                               <TableHead
                                 key={d}
-                                className={`border-b border-l ${BORDER} px-1 py-2 text-center text-[10px] font-semibold ${
+                                className={`border-b border-l ${BORDER} px-1 py-2 text-center text-xs leading-normal font-semibold ${
                                   isWeekend ? 'text-red-500 dark:text-red-400' : TXT_TERTIARY
                                 }`}
                                 style={{ minWidth: 38 }}
                               >
                                 <div>{Number(d.slice(-2))}</div>
-                                <div className="text-[9px] font-normal opacity-70">{DOW_KOR[dow]}</div>
+                                <div className="text-xs leading-normal font-normal opacity-70">{DOW_KOR[dow]}</div>
                               </TableHead>
                             )
                           })}
@@ -639,7 +639,7 @@ export default function MonthlySchedulePage() {
                                         <div
                                           key={`${r.id}-${d}`}
                                           title={`${r.product_name} (배치 ${r.batch_no ?? r.batch_id})\n시험항목: ${r.test_items?.join(', ') ?? '-'}\n공수: ${r.avg_hours != null && r.avg_hours > 0 ? `${r.avg_hours.toFixed(1)}h (${r.workdays}일)` : `${r.workdays}일`}\n${r.note ?? ''}`}
-                                          className={`truncate rounded-md border px-1 py-0.5 text-[9px] font-medium cursor-help transition-colors ${style.bg} ${style.border} ${TXT_PRIMARY}`}
+                                          className={`truncate rounded-md border px-1 py-0.5 text-xs leading-normal font-medium cursor-help transition-colors ${style.bg} ${style.border} ${TXT_PRIMARY}`}
                                         >
                                           {r.product_name.slice(0, 6)}
                                         </div>
@@ -682,7 +682,7 @@ export default function MonthlySchedulePage() {
                   <span className="inline-block h-3 w-3 rounded-md bg-slate-200 dark:bg-slate-700" />
                   <span className={TXT_TERTIARY}>주말</span>
                 </div>
-                <span className={`ml-auto text-[10px] italic ${TXT_MUTED}`}>
+                <span className={`ml-auto text-xs leading-normal italic ${TXT_MUTED}`}>
                   셀에 마우스를 올리면 상세 정보가 표시됩니다.
                 </span>
               </CardContent>

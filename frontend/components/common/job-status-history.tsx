@@ -146,17 +146,17 @@ export function JobStatusHistory({
                         <ArrowRight className="size-3 text-muted-foreground" />
                       </>
                     ) : (
-                      <span className="text-[11px] text-muted-foreground">작업 시작</span>
+                      <span className="text-xs leading-normal text-muted-foreground">작업 시작</span>
                     )}
                     <StatusChip status={r.toStatus} />
-                    <Badge variant="outline" className={cn("text-[10px]", src.cls)}>{src.label}</Badge>
+                    <Badge variant="outline" className={cn("text-xs leading-normal", src.cls)}>{src.label}</Badge>
                   </div>
-                  <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+                  <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs leading-normal text-muted-foreground">
                     <span className="font-mono tabular-nums">{formatDateTime(r.createdAt)}</span>
                     <span>{r.changedByName ?? (r.source === "auto" ? "시스템 자동" : "변경자 미상")}</span>
                   </p>
                   {r.note && (
-                    <p className="mt-1 rounded-md bg-muted/50 px-2 py-1 text-[11px] text-foreground">{r.note}</p>
+                    <p className="mt-1 rounded-md bg-muted/50 px-2 py-1 text-xs leading-normal text-foreground">{r.note}</p>
                   )}
                 </div>
               </li>

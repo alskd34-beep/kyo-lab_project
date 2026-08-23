@@ -481,7 +481,7 @@ function AddModal({
             <DateField label="종료일" value={endDate} onChange={setEndDate} />
           </div>
 
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-xs leading-normal text-muted-foreground">
             같은 장비에 기간이 겹치는 예약이 있으면 대기(WAITING)로 등록됩니다.
           </p>
         </div>

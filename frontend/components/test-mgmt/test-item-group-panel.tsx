@@ -466,10 +466,10 @@ export function TestItemGroupPanel({
                   {row.isActive ? "활성" : "비활성"}
                 </Tag>
               </div>
-              <div className="mt-1 text-[11px] text-muted-foreground">
+              <div className="mt-1 text-xs leading-normal text-muted-foreground">
                 {row.description || "설명 없음"}
               </div>
-              <div className="mt-2 border-t pt-2 text-[11px] text-muted-foreground">
+              <div className="mt-2 border-t pt-2 text-xs leading-normal text-muted-foreground">
                 <span className="font-medium text-foreground">항목 수:</span>{" "}
                 <span className="tabular-nums">{row.itemCount}</span>개
               </div>
@@ -666,7 +666,7 @@ export function TestItemGroupPanel({
                           key={itemId}
                           className="flex items-center gap-2 rounded-md border bg-background px-2 py-1.5"
                         >
-                          <span className="w-5 shrink-0 text-center text-[11px] tabular-nums text-muted-foreground">
+                          <span className="w-5 shrink-0 text-center text-xs leading-normal tabular-nums text-muted-foreground">
                             {index + 1}
                           </span>
                           <div className="min-w-0 flex-1">

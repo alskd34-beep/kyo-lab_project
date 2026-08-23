@@ -156,7 +156,7 @@ export default function GroupsPage() {
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       {g.groupLock && (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                        <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-xs leading-normal font-semibold text-slate-600">
                           <Lock size={10} /> 잠김
                         </span>
                       )}

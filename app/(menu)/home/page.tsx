@@ -360,7 +360,7 @@ export default function HomePage() {
                   {kpi.value}
                   <span className="ml-1 text-xs font-medium text-muted-foreground">{kpi.unit}</span>
                 </span>
-                <span className="text-[11px] text-muted-foreground">{kpi.sub}</span>
+                <span className="text-xs leading-normal text-muted-foreground">{kpi.sub}</span>
               </Card>
             ))}
       </div>
@@ -476,7 +476,7 @@ export default function HomePage() {
                       <span className="text-xs font-medium text-muted-foreground">{row.label}</span>
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-semibold tabular-nums text-foreground">{count}건</span>
-                        <span className="w-7 text-right text-[10px] tabular-nums text-muted-foreground">{pct}%</span>
+                        <span className="w-7 text-right text-xs leading-normal tabular-nums text-muted-foreground">{pct}%</span>
                       </div>
                     </div>
                     <div className="h-2 w-full overflow-hidden rounded-md bg-muted">
@@ -499,7 +499,7 @@ export default function HomePage() {
             <span className="text-sm font-semibold text-foreground">시험자별 작업 현황</span>
             <Badge variant="outline" className="text-muted-foreground">진행중 {totalActive}건</Badge>
           </div>
-          <span className="text-[11px] text-muted-foreground">시험자를 클릭하면 배정 상세를 봅니다.</span>
+          <span className="text-xs leading-normal text-muted-foreground">시험자를 클릭하면 배정 상세를 봅니다.</span>
         </div>
         <CardContent className="px-4 py-4">
           {isLoading ? (
@@ -535,7 +535,7 @@ export default function HomePage() {
                     <TesterAvatar testerId={tester.id} name={tester.name} size="md" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-xs font-semibold text-foreground">{tester.name}</p>
-                      <p className="text-[11px] text-muted-foreground">
+                      <p className="text-xs leading-normal text-muted-foreground">
                         진행중 <span className="font-semibold text-foreground">{tester.activeCount}</span>건
                         <span className="px-1 text-border">·</span>
                         대기 <span className="font-semibold text-foreground">{tester.pendingCount}</span>건
@@ -544,7 +544,7 @@ export default function HomePage() {
                   </div>
 
                   {tester.items.length === 0 ? (
-                    <p className="rounded-md bg-muted/40 px-2.5 py-2 text-[11px] text-muted-foreground">
+                    <p className="rounded-md bg-muted/40 px-2.5 py-2 text-xs leading-normal text-muted-foreground">
                       배정된 작업이 없습니다.
                     </p>
                   ) : (
@@ -556,23 +556,23 @@ export default function HomePage() {
                           title={`${item.productName} / ${item.batchNo} · ${item.status} · ${item.dueDate ?? '기한 미정'}`}
                         >
                           <span className={cn('size-1.5 shrink-0 rounded-full', stageStyle(item.status).dot)} />
-                          <span className="min-w-0 flex-1 truncate text-[11px] text-foreground">
+                          <span className="min-w-0 flex-1 truncate text-xs leading-normal text-foreground">
                             {item.productName}
                             <span className="text-muted-foreground"> / {item.batchNo}</span>
                           </span>
                           {item.isUrgent && (
-                            <span className="shrink-0 rounded-md bg-destructive/10 px-1 text-[10px] font-semibold text-destructive">
+                            <span className="shrink-0 rounded-md bg-destructive/10 px-1 text-xs leading-normal font-semibold text-destructive">
                               긴급
                             </span>
                           )}
-                          <span className="shrink-0 text-[10px] text-muted-foreground">{item.status}</span>
-                          <span className={cn('w-9 shrink-0 text-right text-[10px] tabular-nums', dDayColor(item.dDay))}>
+                          <span className="shrink-0 text-xs leading-normal text-muted-foreground">{item.status}</span>
+                          <span className={cn('w-9 shrink-0 text-right text-xs leading-normal tabular-nums', dDayColor(item.dDay))}>
                             {dDayLabel(item.dDay)}
                           </span>
                         </li>
                       ))}
                       {tester.items.length > MAX_ITEMS_PER_TESTER && (
-                        <li className="px-2.5 pt-0.5 text-[11px] text-muted-foreground">
+                        <li className="px-2.5 pt-0.5 text-xs leading-normal text-muted-foreground">
                           외 {tester.items.length - MAX_ITEMS_PER_TESTER}건
                         </li>
                       )}

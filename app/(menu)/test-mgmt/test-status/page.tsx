@@ -266,7 +266,7 @@ export default function TestStatusPage() {
                     >
                       <span>{tab}</span>
                       {tab === '일탈관리' && (
-                        <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-red-100 text-[10px] font-bold text-red-600">3</span>
+                        <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-red-100 text-xs leading-normal font-bold text-red-600">3</span>
                       )}
                       {/* Pin / Star toggle */}
                       <span
@@ -334,12 +334,12 @@ export default function TestStatusPage() {
                   className={`cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md ${kpi.bg} border ${kpi.border} shadow-none rounded-md py-0`}
                 >
                   <CardContent className="px-3.5 py-3">
-                    <p className="text-[10px] font-medium text-slate-500 mb-0.5">{kpi.label}</p>
+                    <p className="text-xs leading-normal font-medium text-slate-500 mb-0.5">{kpi.label}</p>
                     <div className="flex items-baseline gap-0.5">
-                      <span className={`text-[22px] font-bold tabular-nums leading-none ${kpi.accent}`}>{kpi.value}</span>
+                      <span className={`text-[1.1rem] font-bold tabular-nums leading-none ${kpi.accent}`}>{kpi.value}</span>
                       <span className="text-xs font-medium text-slate-400 ml-0.5">{kpi.unit}</span>
                     </div>
-                    <p className="mt-1 text-[10px] text-slate-400 leading-none">{kpi.sub}</p>
+                    <p className="mt-1 text-xs text-slate-400 leading-none">{kpi.sub}</p>
                   </CardContent>
                 </Card>
               ))}
@@ -462,23 +462,23 @@ export default function TestStatusPage() {
                           />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-medium ${
+                              <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs leading-normal font-medium ${
                                 row.category === '완제품' ? 'bg-slate-100 text-slate-600' : 'bg-blue-50 text-blue-700'
                               }`}>{row.category}</span>
-                              <span className="text-[10px] text-slate-500">{row.type}</span>
-                              <span className={`ml-auto inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-semibold ${status.cls}`}>
+                              <span className="text-xs leading-normal text-slate-500">{row.type}</span>
+                              <span className={`ml-auto inline-flex items-center rounded-md px-2 py-0.5 text-xs leading-normal font-semibold ${status.cls}`}>
                                 {status.label}
                               </span>
                             </div>
                             <p className="mt-1 text-sm font-medium text-slate-800 truncate">{row.product}</p>
-                            <p className="text-[11px] font-mono text-slate-500">{row.testNo}</p>
-                            <p className="mt-1 text-[11px] text-slate-600 truncate">{row.items}</p>
+                            <p className="text-xs leading-normal font-mono text-slate-500">{row.testNo}</p>
+                            <p className="mt-1 text-xs leading-normal text-slate-600 truncate">{row.items}</p>
                             <div className="mt-1.5 flex items-center justify-between gap-2">
                               <div className="flex items-center gap-1.5 min-w-0">
                                 <TesterAvatar name={row.manager} size="xs" />
-                                <span className="text-[11px] text-slate-700">{row.manager}</span>
+                                <span className="text-xs leading-normal text-slate-700">{row.manager}</span>
                               </div>
-                              <span className="text-[10px] font-mono text-slate-400">~{row.dueDate}</span>
+                              <span className="text-xs leading-normal font-mono text-slate-400">~{row.dueDate}</span>
                             </div>
                           </div>
                         </div>
@@ -608,7 +608,7 @@ export default function TestStatusPage() {
                           />
                         </TableCell>
                         <TableCell className="px-3 py-2">
-                          <span className={`inline-flex items-center rounded-md px-2.5 py-0.5 text-[11px] font-semibold ${status.cls}`}>
+                          <span className={`inline-flex items-center rounded-md px-2.5 py-0.5 text-xs leading-normal font-semibold ${status.cls}`}>
                             {status.label}
                           </span>
                         </TableCell>
@@ -630,7 +630,7 @@ export default function TestStatusPage() {
                     </span>
                   )}
                   {loadError && (
-                    <span className="ml-2 inline-flex items-center rounded-md bg-red-50 px-2 py-0.5 text-[10px] font-medium text-red-700 border border-red-200">
+                    <span className="ml-2 inline-flex items-center rounded-md bg-red-50 px-2 py-0.5 text-xs leading-normal font-medium text-red-700 border border-red-200">
                       조회 실패
                     </span>
                   )}

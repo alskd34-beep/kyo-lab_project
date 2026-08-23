@@ -178,7 +178,7 @@ export default function SheetBoardSection() {
         )}
 
         {data && (
-          <p className="text-[10px] italic text-slate-500 dark:text-slate-400">
+          <p className="text-xs leading-normal italic text-slate-500 dark:text-slate-400">
             * 포장일 기준 주차별 그룹입니다. 상태/담당자는 표시 전용이며, 다음 단계에서 변경 가능해질 예정입니다.
           </p>
         )}

@@ -236,7 +236,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                 <span className="flex aspect-square size-8 items-center justify-center rounded-md bg-primary text-sm font-bold text-primary-foreground">KD</span>
                 <div className="grid flex-1 text-left leading-tight">
                   <span className="truncate font-bold">QC 관리</span>
-                  <span className="truncate text-[11px] text-muted-foreground">Quality Control</span>
+                  <span className="truncate text-xs leading-normal text-muted-foreground">Quality Control</span>
                 </div>
               </Link>
             </SidebarMenuButton>
@@ -338,7 +338,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                     <span className="truncate text-xs text-muted-foreground">
                       {isAdmin ? "관리자" : "시험자"}
                       {user?.customerNo != null && (
-                        <span className="ml-1.5 font-mono text-[10px] opacity-70">
+                        <span className="ml-1.5 font-mono text-xs leading-normal opacity-70">
                           #{String(user.customerNo).padStart(5, '0')}
                         </span>
                       )}

@@ -58,7 +58,7 @@ function formatDateTime(iso: string): string {
 function SummaryField({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
-      <span className="text-[11px] text-muted-foreground">{label}</span>
+      <span className="text-xs leading-normal text-muted-foreground">{label}</span>
       <span className={cn("truncate text-sm font-medium text-foreground", mono && "font-mono text-xs")}>
         {value || "-"}
       </span>
@@ -176,7 +176,7 @@ export function TestDetailDrawer({
               <SummaryField label="진행방법" value={row.type} />
               <SummaryField label="수탁사" value={row.contractor} />
               <div className="flex min-w-0 flex-col gap-0.5">
-                <span className="text-[11px] text-muted-foreground">담당자</span>
+                <span className="text-xs leading-normal text-muted-foreground">담당자</span>
                 <span className="flex min-w-0 items-center gap-1.5 text-sm font-medium text-foreground">
                   {row.manager ? <TesterAvatar name={row.manager} size="xs" /> : null}
                   <span className="truncate">{row.manager || "미배정"}</span>
@@ -211,7 +211,7 @@ export function TestDetailDrawer({
                       style={{ width: `${pct}%` }}
                     />
                   </span>
-                  <span className="shrink-0 text-[11px] font-medium tabular-nums text-muted-foreground">
+                  <span className="shrink-0 text-xs leading-normal font-medium tabular-nums text-muted-foreground">
                     {cleared}/{total}
                   </span>
                 </span>
@@ -256,7 +256,7 @@ export function TestDetailDrawer({
                             {it.testItemName}
                           </span>
                         </span>
-                        <span className="shrink-0 text-[11px] text-muted-foreground">
+                        <span className="shrink-0 text-xs leading-normal text-muted-foreground">
                           {done ? (
                             <>
                               {it.clearedAt && formatDateTime(it.clearedAt)}

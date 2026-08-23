@@ -8,7 +8,7 @@ export default function NotFound() {
         <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-md bg-blue-600 text-white shadow-lg shadow-blue-200/60">
           <Home size={24} />
         </div>
-        <p className="mt-5 text-[11px] font-bold tracking-[0.3em] text-slate-400 uppercase">
+        <p className="mt-5 text-xs leading-normal font-bold tracking-[0.3em] text-slate-400 uppercase">
           404
         </p>
         <h1 className="mt-2 text-2xl font-black tracking-tight text-slate-950">

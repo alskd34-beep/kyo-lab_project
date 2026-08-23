@@ -342,7 +342,7 @@ export default function UsersAdminPage() {
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-slate-800">{u.displayName ?? '-'}</p>
                   <p className="truncate font-mono text-xs text-slate-500">{u.username}</p>
-                  <p className="font-mono text-[10px] text-slate-400">#{fmtCustomerNo(u.customerNo)}</p>
+                  <p className="font-mono text-xs leading-normal text-slate-400">#{fmtCustomerNo(u.customerNo)}</p>
                 </div>
               </div>
             </div>
@@ -350,7 +350,7 @@ export default function UsersAdminPage() {
               <RoleBadge role={u.role} />
               <StatusBadge isActive={u.isActive} />
             </div>
-            <p className="mt-2 text-[11px] text-slate-500">
+            <p className="mt-2 text-xs leading-normal text-slate-500">
               마지막 로그인: {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('ko-KR') : '-'}
             </p>
           </div>
@@ -557,7 +557,7 @@ function EditUserDialog({
         <>
           {user.username} 계정 정보를 수정합니다.
           {user.customerNo != null && (
-            <span className="ml-2 font-mono text-[11px] text-muted-foreground">고객번호 {fmtCustomerNo(user.customerNo)}</span>
+            <span className="ml-2 font-mono text-xs leading-normal text-muted-foreground">고객번호 {fmtCustomerNo(user.customerNo)}</span>
           )}
         </>
       )}
@@ -628,7 +628,7 @@ function EditUserDialog({
                 </SelectContent>
               </Select>
               {role === 'tester' && (
-                <p className="mt-1 text-[10px] text-slate-400">시험자 역할 저장 시 시험자 목록에 자동 등록됩니다.</p>
+                <p className="mt-1 text-xs leading-normal text-slate-400">시험자 역할 저장 시 시험자 목록에 자동 등록됩니다.</p>
               )}
             </label>
             <label className="block text-xs font-medium text-slate-600">

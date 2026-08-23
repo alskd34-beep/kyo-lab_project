@@ -117,7 +117,7 @@ export default function MondayBoard({ groups, columns, emptyMessage, onCellChang
           <div className="mb-2 flex items-center justify-end">
             <button
               onClick={allClosed ? expandAll : collapseAll}
-              className="inline-flex items-center gap-1 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-colors"
+              className="inline-flex items-center gap-1 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-xs leading-normal font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-colors"
             >
               {allClosed
                 ? <><ChevronDown size={13} /> 전체 펼치기</>
@@ -140,10 +140,10 @@ export default function MondayBoard({ groups, columns, emptyMessage, onCellChang
                   ? <ChevronRight size={16} className="text-slate-500 dark:text-slate-400" />
                   : <ChevronDown  size={16} className="text-slate-500 dark:text-slate-400" />}
                 <span className={`inline-block h-4 w-1.5 rounded-md ${group.color}`} />
-                <span className={`text-[15px] font-bold ${textColorFromBg(group.color)}`}>
+                <span className={`text-xs leading-normal font-bold ${textColorFromBg(group.color)}`}>
                   {group.label}
                 </span>
-                <span className="rounded-md bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                <span className="rounded-md bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-xs leading-normal font-semibold text-slate-600 dark:text-slate-300">
                   {group.rows.length}
                 </span>
               </button>
@@ -156,7 +156,7 @@ export default function MondayBoard({ groups, columns, emptyMessage, onCellChang
                         {columns.map(c => (
                           <th
                             key={c.key}
-                            className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50"
+                            className="px-3 py-2.5 text-left text-xs leading-normal font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50"
                             style={c.width ? { width: c.width, minWidth: c.width } : undefined}
                           >
                             {c.label}
@@ -354,7 +354,7 @@ function renderCellStatic(col: ColumnDef, val: unknown) {
     case 'number':
       return <span className="tabular-nums text-slate-800 dark:text-slate-100">{s}</span>
     case 'date':
-      return <span className="font-mono text-[11px] text-slate-600 dark:text-slate-300">{s}</span>
+      return <span className="font-mono text-xs leading-normal text-slate-600 dark:text-slate-300">{s}</span>
     case 'chip': {
       // Monday 스타일: 셀 전체 컬러로 채움 (td padding 무효화)
       const colorKey = col.chipColor?.[s] ?? 'slate'
@@ -370,7 +370,7 @@ function renderCellStatic(col: ColumnDef, val: unknown) {
       const color = avatarColor(s)
       return (
         <div className="flex items-center gap-1.5">
-          <div className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white shadow-sm ${color}`}>
+          <div className={`flex h-6 w-6 items-center justify-center rounded-full text-xs leading-normal font-bold text-white shadow-sm ${color}`}>
             {initial}
           </div>
           <span className="text-xs text-slate-700 dark:text-slate-200">{s}</span>

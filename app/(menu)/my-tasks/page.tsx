@@ -132,7 +132,7 @@ function ReadinessModal({
           )}
           {warnings.length > 0 && (
             <div className={blocked.length > 0 ? "mt-3" : ""}>
-              <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              <p className="mb-1.5 flex items-center gap-1.5 text-xs leading-normal font-semibold uppercase tracking-wide text-slate-400">
                 <AlertTriangle size={12} /> 장비 경고 ({warnings.length})
               </p>
               <ul className="flex flex-col gap-2">
@@ -152,7 +152,7 @@ function ReadinessModal({
           )}
           {notes.length > 0 && (
             <div className={blocked.length > 0 || warnings.length > 0 ? "mt-3" : ""}>
-              <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              <p className="mb-1.5 flex items-center gap-1.5 text-xs leading-normal font-semibold uppercase tracking-wide text-slate-400">
                 <ClipboardList size={12} /> 시험 전 확인사항 ({notes.length})
               </p>
               <ul className="flex flex-col gap-2">
@@ -161,7 +161,7 @@ function ReadinessModal({
                     <p className="font-semibold text-blue-900">{n.content}</p>
                     {n.remark && <p className="mt-0.5 text-blue-700">특이사항: {n.remark}</p>}
                     {(n.issueLot || n.createdByName) && (
-                      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-blue-600">
+                      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs leading-normal text-blue-600">
                         {n.issueLot && <span>이슈 로트 {n.issueLot}</span>}
                         {n.createdByName && <span>작성 {n.createdByName}</span>}
                       </div>
@@ -731,7 +731,7 @@ export default function MyTasksPage() {
                 value={job.status}
                 onValueChange={v => patchJob(job.id, { status: v })}
               >
-                <SelectTrigger className={`h-8 shrink-0 rounded-md border px-2.5 text-[11px] font-semibold focus-visible:outline-none ${statusCls(job.status)}`}>
+                <SelectTrigger className={`h-8 shrink-0 rounded-md border px-2.5 text-xs leading-normal font-semibold focus-visible:outline-none ${statusCls(job.status)}`}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -742,7 +742,7 @@ export default function MyTasksPage() {
               <span
                 title="검토·승인 단계는 관리자가 변경합니다."
                 className={cn(
-                  'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-[11px] font-semibold',
+                  'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs leading-normal font-semibold',
                   statusCls(job.status),
                 )}
               >
@@ -781,7 +781,7 @@ export default function MyTasksPage() {
                       </span>
                     </div>
                     {done ? (
-                      <span className="text-[11px] text-blue-700">
+                      <span className="text-xs leading-normal text-blue-700">
                         {it.clearedAt && new Date(it.clearedAt).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
                         {/* 작업 시작 기준 누적 소요시간 (구간이 다르면 함께 표기) */}
                         {(() => {

@@ -212,7 +212,7 @@ export default function ConcurrentItemsPage() {
               <div className="flex flex-wrap gap-1.5 border-t px-4 py-3">
                 {f.members.map(m => (
                   <span key={m.productCode} className="inline-flex items-center gap-1.5 rounded-md border bg-muted/40 px-2 py-1 text-xs">
-                    <span className="font-mono text-[11px] text-muted-foreground">{m.productCode}</span>
+                    <span className="font-mono text-xs leading-normal text-muted-foreground">{m.productCode}</span>
                     <span className="text-foreground">{m.productName ?? "-"}</span>
                   </span>
                 ))}
@@ -330,7 +330,7 @@ function FamilyModal({ open, family, onClose, onDelete, onSaved }: {
             <div role="group" aria-labelledby={`${uid}-members-label`} className="flex flex-wrap gap-1.5">
               {members.map(m => (
                 <span key={m.productCode} className="inline-flex items-center gap-1.5 rounded-md border bg-muted/40 py-1 pl-2 pr-1 text-xs">
-                  <span className="font-mono text-[11px] text-muted-foreground">{m.productCode}</span>
+                  <span className="font-mono text-xs leading-normal text-muted-foreground">{m.productCode}</span>
                   <span className="text-foreground">{m.productName ?? "-"}</span>
                   <button onClick={() => removeMember(m.productCode)} className="rounded-md p-0.5 text-muted-foreground hover:bg-muted hover:text-destructive">
                     <X className="size-3" />
@@ -358,9 +358,9 @@ function FamilyModal({ open, family, onClose, onDelete, onSaved }: {
                   <button key={p.productCode} onClick={() => addMember(p)} disabled={codes.has(p.productCode)}
                     className={cn("flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-muted/50 disabled:opacity-40",
                       codes.has(p.productCode) && "cursor-default")}>
-                    <span className="font-mono text-[11px] text-muted-foreground">{p.productCode}</span>
+                    <span className="font-mono text-xs leading-normal text-muted-foreground">{p.productCode}</span>
                     <span className="flex-1 truncate text-foreground">{p.name}</span>
-                    {codes.has(p.productCode) ? <span className="text-[10px] text-muted-foreground">추가됨</span> : <Plus className="size-3.5 text-muted-foreground" />}
+                    {codes.has(p.productCode) ? <span className="text-xs leading-normal text-muted-foreground">추가됨</span> : <Plus className="size-3.5 text-muted-foreground" />}
                   </button>
                 ))}
               </div>

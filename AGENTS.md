@@ -113,8 +113,21 @@ Four different providers are in use. Keep this table accurate — it was wrong b
 - 상세 패턴·예시는 `.claude/commands/design-standard.md` 참조.
 
 ## 타이포그래피
-Pretendard(변수 폰트) 하나로 통일한다. `app/layout.tsx`에서 `next/font/local`로 `pretendard` npm 패키지의
-`PretendardVariable.woff2`를 로드해 `--font-sans`에 매핑한다(`app/globals.css`가 `font-sans`에 연결).
+Pretendard(변수 폰트) 하나로 통일한다. 폰트 파일은 **저장소에 직접 둔다** —
+`frontend/assets/fonts/PretendardVariable.woff2`를 `app/layout.tsx`의 `next/font/local`이 읽어
+`--font-sans`에 매핑한다(npm 패키지·외부 CDN 의존 없음, `fallback` 목록까지 `--font-sans` 안에 포함).
+- 기본 폰트 연결은 `app/globals.css`의 `@theme inline`이 담당한다. `--default-font-family`/`--default-mono-font-family`를
+  각각 `--font-sans`/`--font-mono`에 물려서 Tailwind preflight의 `html`·`input`·`code`까지 전부 따라오게 해 뒀다.
+- 폰트 종류·크기의 단일 기준은 **`app/styles/typography.scss`** 다. 루트 크기(`$font-size-root`, 현재 18px)와
+  최소 크기(`$font-size-min`, 13.5px = `text-xs`)를 여기서 선언하고 `--font-size-*` CSS 변수로 노출한다. 크기를 바꿀 일이
+  있으면 이 파일만 고친다(`app/globals.css`는 색·라운드 등 나머지 토큰 담당).
+- **`text-xs`보다 작은 폰트를 쓰지 않는다.** 루트 18px 기준 `text-xs`(0.75rem)가 곧 13.5px이며 이게 최소값이다.
+  scss 안에서는 `font-size()`(최소 크기 보장) · `rem()`(px → rem 환산) 함수를 쓴다.
+- Tailwind `text-*` 스케일은 `app/globals.css`의 `@theme`에 rem으로 명시돼 있다(px 환산값 주석 포함).
+  커스텀 `text-*` 유틸리티는 만들지 않는다 — tailwind-merge가 색상 클래스로 오인해 `cn()`에서 지워 버린다.
+- 폰트 크기는 `text-[15px]` 같은 고정 px 대신 Tailwind 클래스나 rem 임의값(`text-[0.9rem]`)을 쓴다.
+  고정 px는 루트 크기를 바꿔도 안 따라와서 자기만 작아진다.
+- `text-xs`는 line-height 1.333을 함께 건다. 기존 상속(1.5)을 유지해야 하는 자리에는 `leading-normal`을 같이 붙인다.
 - 새 폰트를 추가로 import하지 않는다. 고정폭이 필요하면 기존 `--font-mono`(Geist Mono)를 쓴다.
 - 참고: [bizday UI Guideline](http://localhost:3000/bizday-ui-guideline)도 Pretendard를 사용해 톤을 맞췄다.
 

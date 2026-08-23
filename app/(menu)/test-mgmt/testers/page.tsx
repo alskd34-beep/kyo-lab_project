@@ -539,18 +539,18 @@ export default function TestersPage() {
       {/* KPI cards */}
       <div className="grid shrink-0 grid-cols-3 gap-2">
         <Card className="gap-0.5 border-l-4 border-l-primary px-3 py-2">
-          <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+          <span className="text-xs leading-normal font-medium tracking-wide text-muted-foreground uppercase">
             활성 시험자
           </span>
           <span className="text-lg font-semibold tabular-nums text-foreground">
             {summary.active}
-            <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">
+            <span className="ml-1.5 text-xs leading-normal font-normal text-muted-foreground">
               / {testers.length}명
             </span>
           </span>
         </Card>
         <Card className="gap-0.5 border-l-4 border-l-blue-500 px-3 py-2">
-          <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+          <span className="text-xs leading-normal font-medium tracking-wide text-muted-foreground uppercase">
             단독 가능
           </span>
           <span className="text-lg font-semibold tabular-nums text-blue-600">
@@ -558,7 +558,7 @@ export default function TestersPage() {
           </span>
         </Card>
         <Card className="gap-0.5 border-l-4 border-l-amber-500 px-3 py-2">
-          <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+          <span className="text-xs leading-normal font-medium tracking-wide text-muted-foreground uppercase">
             2인 가능
           </span>
           <span className="text-lg font-semibold tabular-nums text-amber-600">
@@ -607,13 +607,13 @@ export default function TestersPage() {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="text-[11px] font-medium text-muted-foreground">
+                        <span className="text-xs leading-normal font-medium text-muted-foreground">
                           #{idx + 1}
                         </span>
-                        <span className="font-mono text-[11px] font-semibold text-foreground">
+                        <span className="font-mono text-xs leading-normal font-semibold text-foreground">
                           {tester.employeeNo}
                         </span>
-                        <Tag color={tester.isActive ? "green" : "mono"} className="text-[10px]">
+                        <Tag color={tester.isActive ? "green" : "mono"} className="text-xs leading-normal">
                           {tester.isActive ? "활성" : "비활성"}
                         </Tag>
                       </div>
@@ -627,19 +627,19 @@ export default function TestersPage() {
                   {/* 가능한 항목만 노출 — '불가'는 표시하지 않는다 */}
                   <div className="flex flex-wrap items-center gap-1.5 border-t pt-2">
                     {tester.canSolo && (
-                      <Badge variant="outline" className="gap-1.5 border-blue-200 text-[10px] text-blue-700">
+                      <Badge variant="outline" className="gap-1.5 border-blue-200 text-xs leading-normal text-blue-700">
                         <span className="size-1.5 rounded-full bg-blue-500" />
                         단독 가능
                       </Badge>
                     )}
                     {tester.canDuo && (
-                      <Badge variant="outline" className="gap-1.5 border-amber-200 text-[10px] text-amber-700">
+                      <Badge variant="outline" className="gap-1.5 border-amber-200 text-xs leading-normal text-amber-700">
                         <span className="size-1.5 rounded-full bg-amber-500" />
                         2인 가능
                       </Badge>
                     )}
                     {!tester.canSolo && !tester.canDuo && (
-                      <span className="text-[10px] text-muted-foreground/50">—</span>
+                      <span className="text-xs leading-normal text-muted-foreground/50">—</span>
                     )}
                   </div>
                 </Card>
@@ -726,7 +726,7 @@ export default function TestersPage() {
                           헤더 6칸 / 본문 5칸으로 어긋났고, 남는 칸이 폭 0으로 접혀
                           '2인'과 '상태'가 화면에서 사라졌다. (2026-08-22) */}
                       <TableCell className="px-3 py-2">
-                        <Tag color={tester.isActive ? "green" : "mono"} className="text-[10px]">
+                        <Tag color={tester.isActive ? "green" : "mono"} className="text-xs leading-normal">
                           {tester.isActive ? "활성" : "비활성"}
                         </Tag>
                       </TableCell>
@@ -760,7 +760,7 @@ export default function TestersPage() {
               <span key={level} className="flex items-center gap-1">
                 <span
                   className={cn(
-                    "inline-flex h-5 w-8 items-center justify-center rounded-md border text-[11px] font-bold",
+                    "inline-flex h-5 w-8 items-center justify-center rounded-md border text-xs leading-normal font-bold",
                     LEVEL_STYLE[level]
                   )}
                 >
@@ -819,7 +819,7 @@ export default function TestersPage() {
                           <p className="text-sm font-semibold text-foreground">
                             {tester.name}
                           </p>
-                          <p className="font-mono text-[11px] text-muted-foreground">
+                          <p className="font-mono text-xs leading-normal text-muted-foreground">
                             {tester.employeeNo}
                           </p>
                         </div>
@@ -841,12 +841,12 @@ export default function TestersPage() {
                                   : "hover:border-ring hover:bg-muted/50"
                               )}
                             >
-                              <span className="flex-1 truncate text-[11px] font-medium text-foreground">
+                              <span className="flex-1 truncate text-xs leading-normal font-medium text-foreground">
                                 {capability.name}
                               </span>
                               <span
                                 className={cn(
-                                  "inline-flex h-6 w-8 shrink-0 items-center justify-center rounded-md border text-[10px] font-bold",
+                                  "inline-flex h-6 w-8 shrink-0 items-center justify-center rounded-md border text-xs leading-normal font-bold",
                                   LEVEL_STYLE[level]
                                 )}
                               >
@@ -907,7 +907,7 @@ export default function TestersPage() {
                                 onClick={() => void cycleLevel(tester, capability)}
                                 disabled={isSaving}
                                 className={cn(
-                                  "inline-flex h-7 w-11 items-center justify-center rounded-md border text-[11px] font-bold transition-transform",
+                                  "inline-flex h-7 w-11 items-center justify-center rounded-md border text-xs leading-normal font-bold transition-transform",
                                   isSaving ? "cursor-wait opacity-50" : "hover:scale-105",
                                   LEVEL_STYLE[level]
                                 )}
@@ -1051,7 +1051,7 @@ export default function TestersPage() {
                         }))
                       }
                     />
-                    <p className="text-[11px] text-muted-foreground">
+                    <p className="text-xs leading-normal text-muted-foreground">
                       사번이 로그인 ID로 자동 계정 생성됩니다 (기본 비밀번호 qc1234).
                     </p>
                   </div>
@@ -1158,7 +1158,7 @@ export default function TestersPage() {
                     <span className="font-mono text-sm font-semibold text-foreground">
                       {selected?.employeeNo ?? '-'}
                     </span>
-                    <span className="ml-auto text-[10px] text-muted-foreground">변경 불가</span>
+                    <span className="ml-auto text-xs leading-normal text-muted-foreground">변경 불가</span>
                   </div>
                   <div className="flex items-center gap-2 rounded-md border border-dashed bg-muted/40 px-3 py-2.5">
                     <Lock size={13} className="shrink-0 text-muted-foreground" />
@@ -1166,7 +1166,7 @@ export default function TestersPage() {
                     <span className="text-sm font-semibold text-foreground">
                       {selected?.name ?? '-'}
                     </span>
-                    <span className="ml-auto text-[10px] text-muted-foreground">사용자 관리에서 변경</span>
+                    <span className="ml-auto text-xs leading-normal text-muted-foreground">사용자 관리에서 변경</span>
                   </div>
                 </div>
               </section>

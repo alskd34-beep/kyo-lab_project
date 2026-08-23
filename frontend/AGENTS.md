@@ -13,6 +13,7 @@ All browser/client code: React components (shadcn/ui primitives, dashboard chrom
 | `components/dashboard/` | App chrome: `sidebar.tsx` (nav), `chatbot.tsx` (AI assistant, consumes `/api/chat` SSE) |
 | `components/board/` | `MondayBoard.tsx`, `SheetBoardSection.tsx` — Monday-style scheduling boards |
 | `components/providers/` | `theme-provider.tsx` (wraps `next-themes`) |
+| `assets/fonts/` | Self-hosted `PretendardVariable.woff2` — loaded by `app/layout.tsx` via `next/font/local` |
 | `hooks/` | Custom React hooks (currently empty / reserved) |
 | `lib/` | Client utilities & contexts (see table) |
 

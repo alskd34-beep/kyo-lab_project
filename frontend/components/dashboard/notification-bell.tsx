@@ -70,7 +70,7 @@ export default function NotificationBell() {
       >
         <Bell size={16} />
         {unread > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-xs leading-normal font-bold text-white">
             {unread > 9 ? "9+" : unread}
           </span>
         )}
@@ -81,7 +81,7 @@ export default function NotificationBell() {
           <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
             <span className="text-sm font-bold text-slate-900">알림</span>
             {unread > 0 && (
-              <button onClick={markAll} className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-600 hover:text-blue-700">
+              <button onClick={markAll} className="inline-flex items-center gap-1 text-xs leading-normal font-medium text-blue-600 hover:text-blue-700">
                 <Check size={12} />모두 읽음
               </button>
             )}
@@ -102,7 +102,7 @@ export default function NotificationBell() {
                     {!n.isRead && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />}
                   </div>
                   {n.body && <p className="mt-0.5 line-clamp-2 text-xs text-slate-500">{n.body}</p>}
-                  <p className="mt-0.5 text-[10px] text-slate-400">{new Date(n.createdAt).toLocaleString("ko-KR")}</p>
+                  <p className="mt-0.5 text-xs leading-normal text-slate-400">{new Date(n.createdAt).toLocaleString("ko-KR")}</p>
                 </div>
               </button>
             ))}

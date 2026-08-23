@@ -287,7 +287,7 @@ export default function StabStatusPage() {
           <p className="mt-1 text-sm text-slate-500">
             시트의 안정성 품목을 기준으로 품목코드 매칭 시 스케줄 동시분석 후보로 표시합니다.
           </p>
-          <p className="mt-1 flex items-center gap-1 text-[11px] text-slate-400">
+          <p className="mt-1 flex items-center gap-1 text-xs leading-normal text-slate-400">
             <Clock3 size={12} /> 최종 확인 {formatSyncTime(syncedAt)}
           </p>
         </div>
@@ -311,13 +311,13 @@ export default function StabStatusPage() {
       <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-5">
         <Card className="rounded-md border-slate-200 py-0 shadow-none">
           <CardContent className="px-4 py-3">
-            <p className="text-[11px] font-medium text-slate-500">전체 건수</p>
+            <p className="text-xs leading-normal font-medium text-slate-500">전체 건수</p>
             <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900">{rows.length}</p>
           </CardContent>
         </Card>
         <Card className="rounded-md border-blue-100 bg-blue-50/50 py-0 shadow-none">
           <CardContent className="px-4 py-3">
-            <p className="flex items-center gap-1 text-[11px] font-medium text-blue-700">
+            <p className="flex items-center gap-1 text-xs leading-normal font-medium text-blue-700">
               <CalendarClock size={13} /> 스케줄 후보
             </p>
             <p className="mt-1 text-2xl font-bold tabular-nums text-blue-700">{stats.active}</p>
@@ -325,7 +325,7 @@ export default function StabStatusPage() {
         </Card>
         <Card className="rounded-md border-emerald-100 bg-emerald-50/50 py-0 shadow-none">
           <CardContent className="px-4 py-3">
-            <p className="flex items-center gap-1 text-[11px] font-medium text-emerald-700">
+            <p className="flex items-center gap-1 text-xs leading-normal font-medium text-emerald-700">
               <CheckCircle2 size={13} /> 완료
             </p>
             <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-700">{stats.completed}</p>
@@ -333,7 +333,7 @@ export default function StabStatusPage() {
         </Card>
         <Card className="rounded-md border-blue-100 bg-blue-50/50 py-0 shadow-none">
           <CardContent className="px-4 py-3">
-            <p className="flex items-center gap-1 text-[11px] font-medium text-blue-700">
+            <p className="flex items-center gap-1 text-xs leading-normal font-medium text-blue-700">
               <FlaskConical size={13} /> 품목코드
             </p>
             <p className="mt-1 text-2xl font-bold tabular-nums text-blue-700">{stats.uniqueProducts}</p>
@@ -341,7 +341,7 @@ export default function StabStatusPage() {
         </Card>
         <Card className="col-span-2 rounded-md border-slate-200 py-0 shadow-none lg:col-span-1">
           <CardContent className="px-4 py-3">
-            <p className="flex items-center gap-1 text-[11px] font-medium text-slate-600">
+            <p className="flex items-center gap-1 text-xs leading-normal font-medium text-slate-600">
               <DatabaseZap size={13} /> 의뢰 정보
             </p>
             <p className="mt-1 text-2xl font-bold tabular-nums text-slate-800">{stats.requestCount}</p>
@@ -438,7 +438,7 @@ export default function StabStatusPage() {
                       />
                     </TableCell>
                     <TableCell className="px-3 py-2.5">
-                      <div className="min-w-0 text-[11px] leading-4 text-muted-foreground" title={`제조 ${row.manufacturedAt || '—'} / 기한 ${row.expiryDate || '—'} / 의뢰 ${row.requestedAt || '—'}`}>
+                      <div className="min-w-0 text-xs leading-4 text-muted-foreground" title={`제조 ${row.manufacturedAt || '—'} / 기한 ${row.expiryDate || '—'} / 의뢰 ${row.requestedAt || '—'}`}>
                         <div className="truncate">제조 {row.manufacturedAt || '—'}</div>
                         <div className="truncate">기한 {row.expiryDate || '—'}</div>
                         <div className="truncate">의뢰 {row.requestedAt || '—'}</div>

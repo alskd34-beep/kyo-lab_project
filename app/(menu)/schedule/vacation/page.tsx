@@ -278,7 +278,7 @@ export default function VacationPage() {
           <button onClick={goToday} className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50">오늘</button>
         </div>
         {/* 범례 */}
-        <div className="flex items-center gap-3 text-[11px] font-medium text-slate-500">
+        <div className="flex items-center gap-3 text-xs leading-normal font-medium text-slate-500">
           {(Object.keys(TYPE_LABEL) as ScheduleType[]).map(t => (
             <span key={t} className="inline-flex items-center gap-1.5">
               <span className={`h-2.5 w-2.5 rounded-md ${TYPE_BAR[t].split(" ")[0]}`} /> {TYPE_LABEL[t]}
@@ -291,7 +291,7 @@ export default function VacationPage() {
       </div>
 
       <Card className="gap-0 overflow-hidden py-0">
-        <div className="grid grid-cols-7 border-b bg-muted/40 text-center text-[11px] font-medium text-muted-foreground">
+        <div className="grid grid-cols-7 border-b bg-muted/40 text-center text-xs leading-normal font-medium text-muted-foreground">
           {["일", "월", "화", "수", "목", "금", "토"].map((d, i) => (
             <div key={d} className={`py-2 ${i === 0 ? "text-destructive/70" : i === 6 ? "text-primary" : ""}`}>{d}</div>
           ))}
@@ -344,7 +344,7 @@ export default function VacationPage() {
                       const holidayName = holidays[iso(d)]
                       return (
                         <div key={di} className="px-1.5 pt-1">
-                          <span className={`inline-flex h-5 min-w-5 items-center justify-center px-1 text-[11px] font-semibold ${
+                          <span className={`inline-flex h-5 min-w-5 items-center justify-center px-1 text-xs leading-normal font-semibold ${
                             isToday ? "rounded-md bg-blue-600 text-white"
                             : holidayName ? "text-rose-600"
                             : inMonth ? (di === 0 ? "text-red-500" : di === 6 ? "text-blue-500" : "text-slate-600")
@@ -353,7 +353,7 @@ export default function VacationPage() {
                           {holidayName && (
                             <div
                               title={holidayName}
-                              className={`mt-0.5 truncate text-[10px] font-semibold leading-tight ${inMonth ? "text-rose-600" : "text-rose-300"}`}
+                              className={`mt-0.5 truncate text-xs font-semibold leading-tight ${inMonth ? "text-rose-600" : "text-rose-300"}`}
                             >
                               {holidayName}
                             </div>
@@ -375,7 +375,7 @@ export default function VacationPage() {
                               onClick={() => setDetail(seg.row)}
                               title={`${seg.row.userName ?? ""} · ${TYPE_LABEL[seg.row.type]} · ${seg.row.startDate}~${seg.row.endDate}${seg.row.memo ? ` · ${seg.row.memo}` : ""}`}
                               style={{ gridColumn: `${seg.startCol + 1} / ${seg.endCol + 2}` }}
-                              className={`pointer-events-auto flex h-[18px] items-center gap-1 overflow-hidden whitespace-nowrap px-1.5 text-[10px] font-semibold text-white transition-colors ${TYPE_BAR[seg.row.type]} ${
+                              className={`pointer-events-auto flex h-[18px] items-center gap-1 overflow-hidden whitespace-nowrap px-1.5 text-xs leading-normal font-semibold text-white transition-colors ${TYPE_BAR[seg.row.type]} ${
                                 seg.isStart ? "rounded-l-md" : ""} ${seg.isEnd ? "rounded-r-md" : ""}`}
                             >
                               {showLabel && (
@@ -657,9 +657,9 @@ function SuggestionPanel({ from, to }: { from: string; to: string }) {
           <li key={p.productCode} className="flex items-start justify-between gap-2 px-3 py-2">
             <div className="min-w-0">
               <div className="truncate text-sm font-medium text-slate-800">{p.productName}</div>
-              <div className="truncate text-[11px] text-slate-400">{p.productCode} · {p.testItems.slice(0, 4).join(", ")}{p.testItems.length > 4 ? " 외" : ""}</div>
+              <div className="truncate text-xs leading-normal text-slate-400">{p.productCode} · {p.testItems.slice(0, 4).join(", ")}{p.testItems.length > 4 ? " 외" : ""}</div>
             </div>
-            <span className="shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">대기 {p.waitingCount}</span>
+            <span className="shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-xs leading-normal font-semibold text-slate-600">대기 {p.waitingCount}</span>
           </li>
         ))}
       </Group>
@@ -677,15 +677,15 @@ function SuggestionPanel({ from, to }: { from: string; to: string }) {
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="truncate text-sm font-medium text-slate-800">{p.productName}</div>
-                  <div className="truncate text-[11px] text-slate-400">{p.productCode}</div>
+                  <div className="truncate text-xs leading-normal text-slate-400">{p.productCode}</div>
                 </div>
-                <span className="shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">대기 {p.waitingCount}</span>
+                <span className="shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-xs leading-normal font-semibold text-slate-600">대기 {p.waitingCount}</span>
               </div>
               {p.recoverableBy && p.recoverableBy.length > 0 && (
-                <div className="mt-1 text-[11px] text-amber-700">복귀 시 가능: {p.recoverableBy.join(", ")}</div>
+                <div className="mt-1 text-xs leading-normal text-amber-700">복귀 시 가능: {p.recoverableBy.join(", ")}</div>
               )}
               {p.blockingCapabilities && p.blockingCapabilities.length > 0 && (
-                <div className="mt-0.5 text-[11px] text-slate-400">부족 역량: {p.blockingCapabilities.join(", ")}</div>
+                <div className="mt-0.5 text-xs leading-normal text-slate-400">부족 역량: {p.blockingCapabilities.join(", ")}</div>
               )}
             </li>
           ))}
@@ -705,12 +705,12 @@ function SuggestionPanel({ from, to }: { from: string; to: string }) {
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="truncate text-sm font-medium text-slate-800">{p.productName}</div>
-                  <div className="truncate text-[11px] text-slate-400">{p.productCode}</div>
+                  <div className="truncate text-xs leading-normal text-slate-400">{p.productCode}</div>
                 </div>
-                <span className="shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">대기 {p.waitingCount}</span>
+                <span className="shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-xs leading-normal font-semibold text-slate-600">대기 {p.waitingCount}</span>
               </div>
               {p.blockingCapabilities && p.blockingCapabilities.length > 0 && (
-                <div className="mt-0.5 text-[11px] text-slate-400">부족 역량: {p.blockingCapabilities.join(", ")}</div>
+                <div className="mt-0.5 text-xs leading-normal text-slate-400">부족 역량: {p.blockingCapabilities.join(", ")}</div>
               )}
             </li>
           ))}
