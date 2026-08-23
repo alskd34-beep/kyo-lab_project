@@ -35,7 +35,7 @@ interface PromptHistory {
 const DOMAIN_CATALOG = `
 - overview: 품목·시험자·시험항목·PCT 오더·QC 작업·장비의 전체 현황/개수
 - products: 품목 마스터, 품목코드, 규격, 품목 유형
-- testers: 시험자, 사번, 단독/2인 시험 자격
+- testers: 시험자, 사번, 단독/2인 시험 자격, 시험 역량(성상·포장확인·HPLC·GC 등) 보유 여부
 - test_items: 시험항목, 예상 공수, 2인 시험 필요 여부
 - orders: 제조 PCT 오더, 배치, 완료예정일, 긴급 여부, 담당자, 진행 상태
 - jobs: QC 번호, QC 작업 및 시험항목 진행 상태
@@ -83,7 +83,7 @@ ${DOMAIN_CATALOG}
   "responseType": "chat|data",
   "domains": ["overview|products|testers|test_items|orders|jobs|equipment"],
   "operation": "summary|count|list|detail|comparison",
-  "keywords": ["질문에 명시된 품목명·품목코드·시험자명·장비명 등의 검색어"],
+  "keywords": ["질문에 명시된 품목명·품목코드·시험자명·역량명(성상·HPLC 등)·장비명 등의 검색어"],
   "status": "질문에 명시된 상태 또는 null",
   "urgent": true 또는 false 또는 null,
   "dateFrom": "YYYY-MM-DD 또는 null",
