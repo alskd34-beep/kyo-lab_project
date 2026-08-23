@@ -497,7 +497,7 @@ export default function ProdStatusPage() {
         jobId={detailJobId}
         open={detailOpen}
         onOpenChange={setDetailOpen}
-        canAdvance={isAdmin}
+        isAdmin={isAdmin}
         onAdvanced={() => void load()}
       />
     </div>

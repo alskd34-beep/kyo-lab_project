@@ -14,7 +14,8 @@
 import { useState } from "react"
 import { ArrowRight, LoaderCircle, PenLine, ShieldAlert } from "lucide-react"
 import {
-  DELAYED_STATUS, JOB_STAGES, NEXT_STAGE, STAGE_ACTION_LABEL, isJobStage,
+  CLOSED_STAGE, DELAYED_STATUS, IN_PROGRESS_STATUS, JOB_STAGES,
+  NEXT_STAGE, STAGE_ACTION_LABEL, isJobStage,
 } from "@shared/qc-status"
 import { cn } from "@frontend/lib/utils"
 import { Button } from "@frontend/components/ui/button"
@@ -110,10 +111,14 @@ export function JobStatusControl({
               {nextLabel} → {nextStage}
             </Button>
           ) : (
-            <span className="text-[11px] text-muted-foreground">
-              {status === DELAYED_STATUS
-                ? "지연은 단계 순서 밖의 상태라 직접 변경으로만 바꿉니다."
-                : "이 단계에서 자동으로 넘길 다음 단계가 없습니다."}
+            <span className="max-w-[22rem] text-right text-[11px] text-muted-foreground">
+              {status === IN_PROGRESS_STATUS
+                ? "전 시험항목이 완료되면 서버가 자동으로 “검토전”으로 넘깁니다."
+                : status === CLOSED_STAGE
+                  ? "마지막 단계입니다. 잘못 승인했다면 직접 변경으로 되돌리세요."
+                  : status === DELAYED_STATUS
+                    ? "지연은 단계 순서 밖의 상태라 직접 변경으로만 바꿉니다."
+                    : "이 단계에서 넘길 다음 단계가 없습니다."}
             </span>
           )}
           <Button

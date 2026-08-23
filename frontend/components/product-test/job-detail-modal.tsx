@@ -3,9 +3,12 @@
 /**
  * [FRONTEND] QC 작업 상세 모달
  *
- * 작업현황(prod-status)에서 진행 중인 작업 카드를 클릭하면 열린다.
+ * 작업현황(prod-status)에서 작업 카드(진행 중·완료)를 클릭하면 열린다.
  * "진행중" 이라는 상태값만으로는 알 수 없는 **어떤 시험항목을 수행 중인지**를
  * 항목 체크리스트 + 현재 항목 강조 + 항목별 소요시간으로 보여준다.
+ *
+ * 관리자는 여기서 상태도 바꾼다 — 다음 단계 전진과, 잘못 넘긴 단계를 사유와 함께
+ * 되돌리는 직접 변경 두 경로 모두 공통 JobStatusControl 이 담당한다(시험현황과 동일).
  *
  * qc_job_items 에는 항목별 '진행중' 플래그가 없다(pending|cleared).
  * 백엔드 getJobDetail 이 미완료 항목 중 순번이 가장 빠른 항목을 현재 항목으로 계산해 내려준다.
@@ -13,7 +16,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import {
-  ArrowRight, CheckCircle2, Circle, Clock, LoaderCircle, TriangleAlert, User,
+  CheckCircle2, Circle, Clock, LoaderCircle, TriangleAlert, User,
 } from "lucide-react"
 import { IN_PROGRESS_STATUS, stageStyle } from "@shared/qc-status"
 import { cn } from "@frontend/lib/utils"
@@ -21,6 +24,7 @@ import { Badge } from "@frontend/components/ui/badge"
 import { Button } from "@frontend/components/ui/button"
 import { ManagementDrawer } from "@frontend/components/common/management-drawer"
 import { JobStageTrack } from "@frontend/components/common/job-stage-track"
+import { JobStatusControl } from "@frontend/components/common/job-status-control"
 import { JobStatusHistory } from "@frontend/components/common/job-status-history"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 
@@ -73,22 +77,20 @@ function SummaryField({ label, value, mono }: { label: string; value: string; mo
 
 // ─── 모달 ────────────────────────────────────────────────────────────────────
 export function JobDetailModal({
-  jobId, open, onOpenChange, canAdvance = false, onAdvanced,
+  jobId, open, onOpenChange, isAdmin = false, onAdvanced,
 }: {
   jobId: string | null
   open: boolean
   onOpenChange: (v: boolean) => void
-  /** 관리자만 검토·승인 버튼을 쓸 수 있다 */
-  canAdvance?: boolean
-  /** 단계 전이 후 목록을 새로고침하도록 알린다 */
+  /** 관리자만 상태를 바꿀 수 있다(단계 전이 + 직접 변경) */
+  isAdmin?: boolean
+  /** 상태가 바뀐 뒤 목록을 새로고침하도록 알린다 */
   onAdvanced?: () => void
 }) {
   const [detail, setDetail] = useState<JobDetail | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [advancing, setAdvancing] = useState(false)
-  const [advanceError, setAdvanceError] = useState<string | null>(null)
-  // 단계를 넘긴 뒤 상태 이력을 다시 읽게 하는 키
+  // 상태를 바꾼 뒤 상세·이력을 다시 읽게 하는 키
   const [historyKey, setHistoryKey] = useState(0)
 
   const load = useCallback(async (id: string) => {
@@ -106,34 +108,16 @@ export function JobDetailModal({
     }
   }, [])
 
-  /** 다음 단계로 넘기기 (관리자) */
-  const advance = useCallback(async () => {
-    if (!detail?.nextStage) return
-    setAdvancing(true)
-    setAdvanceError(null)
-    try {
-      const res = await fetch(`/api/qc-jobs/${detail.jobId}/stage`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        // 화면이 보고 있던 단계를 함께 보내 동시 클릭을 막는다
-        body: JSON.stringify({ expected: detail.status }),
-      })
-      const data = await res.json() as { error?: string }
-      if (!res.ok) throw new Error(data.error ?? "단계 변경 실패")
-      await load(detail.jobId)
-      setHistoryKey(k => k + 1)
-      onAdvanced?.()
-    } catch (e) {
-      setAdvanceError(e instanceof Error ? e.message : "단계 변경 실패")
-    } finally {
-      setAdvancing(false)
-    }
-  }, [detail, load, onAdvanced])
+  /** 상태가 바뀌면 상세·이력·목록을 모두 최신으로 맞춘다 */
+  const handleChanged = useCallback(() => {
+    if (jobId) void load(jobId)
+    setHistoryKey(k => k + 1)
+    onAdvanced?.()
+  }, [jobId, load, onAdvanced])
 
   useEffect(() => {
     if (open && jobId) void load(jobId)
-    if (!open) { setDetail(null); setError(null); setAdvanceError(null) }
+    if (!open) { setDetail(null); setError(null) }
   }, [open, jobId, load])
 
   const cleared = detail?.items.filter(i => i.status === "cleared").length ?? 0
@@ -168,23 +152,10 @@ export function JobDetailModal({
             )}
         </span>
       )}
-      description="수행 중인 시험항목과 항목별 진행 내역을 확인합니다."
+      description="시험항목 진행 내역을 확인하고, 관리자는 작업 상태를 변경합니다."
       footer={(
-        <div className="flex w-full flex-col items-stretch gap-2 sm:flex-row sm:items-center">
-          {advanceError && (
-            <p className="min-w-0 flex-1 text-left text-xs font-medium text-destructive sm:mr-auto">
-              {advanceError}
-            </p>
-          )}
+        <div className="flex w-full justify-end">
           <Button variant="outline" onClick={() => onOpenChange(false)}>닫기</Button>
-          {canAdvance && detail?.nextStage && detail.nextStageLabel && (
-            <Button onClick={() => void advance()} disabled={advancing}>
-              {advancing
-                ? <LoaderCircle className="animate-spin" />
-                : <ArrowRight />}
-              {advancing ? "처리 중..." : `${detail.nextStageLabel} → ${detail.nextStage}`}
-            </Button>
-          )}
         </div>
       )}
     >
@@ -229,6 +200,15 @@ export function JobDetailModal({
                   <SummaryField label="시험방법" value={detail.method ?? "-"} />
                 </div>
               </section>
+
+              {/* 상태 변경 (관리자) — 잘못 넘긴 단계를 사유와 함께 되돌릴 수 있다 */}
+              {isAdmin && (
+                <JobStatusControl
+                  jobId={detail.jobId}
+                  status={detail.status}
+                  onChanged={handleChanged}
+                />
+              )}
 
               {/* 현재 수행 항목 */}
               {currentItem ? (
