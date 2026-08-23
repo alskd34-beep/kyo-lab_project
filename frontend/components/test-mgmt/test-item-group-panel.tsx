@@ -16,6 +16,7 @@ import { useCallback, useEffect, useId, useMemo, useState } from "react"
 import {
   ArrowDown,
   ArrowUp,
+  FilterX,
   Layers,
   Plus,
   Save,
@@ -37,8 +38,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@frontend/components/ui/dialog"
+import { FilterBar, PageHeader } from "@frontend/components/common/page-header"
 import { Input } from "@frontend/components/ui/input"
 import { ManagementDrawer } from "@frontend/components/common/management-drawer"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@frontend/components/ui/select"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import {
   SortColumnHeader,
@@ -46,10 +55,7 @@ import {
   type SortColumnDef,
   type SortDir,
 } from "@frontend/components/ui/table-sort"
-import {
-  StatusFilterTabs,
-  type StatusFilterValue,
-} from "@frontend/components/ui/status-filter-tabs"
+import type { StatusFilterValue } from "@frontend/components/ui/status-filter-tabs"
 import {
   Table,
   TableBody,
@@ -347,69 +353,84 @@ export function TestItemGroupPanel({
     })
   }, [candidates, memberIds, pickerSearch])
 
+  const filterActive = statusFilter !== "all" || search.trim() !== ""
+
+  function resetFilters() {
+    setStatusFilter("all")
+    setSearch("")
+  }
+
   return (
     <>
-      {/* KPI 카드 */}
-      <div className="grid shrink-0 grid-cols-3 gap-2">
-        <Card className="gap-0.5 px-3 py-2">
-          <span className="text-[10px] font-medium text-muted-foreground">전체 그룹</span>
-          <span className="text-lg font-semibold tabular-nums text-foreground">{groups.length}</span>
-          <span className="text-[11px] text-muted-foreground">
-            현재 표시{" "}
-            <span className="font-semibold tabular-nums text-foreground">{filtered.length}</span>건
-          </span>
-        </Card>
-        <Card className="gap-0.5 px-3 py-2">
-          <span className="text-[10px] font-medium text-muted-foreground">활성 그룹</span>
-          <span className="text-lg font-semibold tabular-nums text-blue-600">{activeCount}</span>
-        </Card>
-        <Card className="gap-0.5 px-3 py-2">
-          <span className="text-[10px] font-medium text-muted-foreground">담긴 항목 합계</span>
-          <span className="text-lg font-semibold tabular-nums text-amber-600">
-            {groups.reduce((sum, row) => sum + row.itemCount, 0)}
-          </span>
-        </Card>
-      </div>
-
-      <StatusFilterTabs
-        value={statusFilter}
-        onChange={setStatusFilter}
-        counts={{
-          all: groups.length,
-          active: activeCount,
-          inactive: groups.length - activeCount,
-        }}
-        activeLabel="활성 그룹"
-        inactiveLabel="비활성 그룹"
-        className="shrink-0"
-      />
-
-      <div className="flex shrink-0 flex-col gap-3">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <Layers className="size-5 text-muted-foreground" />
-          <h1 className="text-xl font-semibold text-foreground">시험항목 그룹</h1>
-          <Badge variant="secondary" className="tabular-nums">{filtered.length}건</Badge>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          &lsquo;전공정&rsquo;처럼 여러 시험항목을 순서대로 묶은 템플릿입니다. 대분류와는 별개 개념입니다.
-        </p>
-
-        <div className="flex gap-2 sm:ml-auto">
-          <div className="relative w-full sm:w-56">
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="그룹명·설명 검색..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="h-9 pl-9"
-            />
-          </div>
+      <PageHeader
+        icon={Layers}
+        title="시험항목 그룹"
+        count={groups.length}
+        description="‘전공정’처럼 여러 시험항목을 순서대로 묶은 템플릿입니다. 시험항목 마스터의 대분류와는 별개 개념입니다."
+        stats={[
+          { label: "활성", value: activeCount, tone: "blue" },
+          {
+            label: "담긴 항목 합계",
+            value: groups.reduce((sum, row) => sum + row.itemCount, 0),
+            tone: "amber",
+          },
+        ]}
+        actions={(
           <Button onClick={openAddDrawer} size="lg">
             <Plus />
             그룹 추가
           </Button>
+        )}
+      />
+
+      {/* 필터 한 줄 — 검색 · 상태 */}
+      <FilterBar
+        trailing={(
+          <span className="tabular-nums">
+            <span className="font-semibold text-foreground">{filtered.length}</span>
+            {" / "}
+            {groups.length}건 표시
+          </span>
+        )}
+      >
+        <div className="relative w-full sm:w-64">
+          <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="그룹명·설명 검색..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="h-8 pl-9"
+          />
         </div>
-      </div>
+
+        <Select
+          value={statusFilter}
+          onValueChange={(value) => setStatusFilter(value as StatusFilterValue)}
+        >
+          <SelectTrigger
+            aria-label="상태 필터"
+            className={cn(
+              "min-w-32",
+              statusFilter !== "all" && "border-blue-500 bg-blue-50 text-blue-700",
+            )}
+          >
+            <span className="text-muted-foreground">상태</span>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">전체 ({groups.length})</SelectItem>
+            <SelectItem value="active">활성 ({activeCount})</SelectItem>
+            <SelectItem value="inactive">비활성 ({groups.length - activeCount})</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {filterActive && (
+          <Button variant="ghost" size="sm" onClick={resetFilters} className="h-8">
+            <FilterX />
+            초기화
+          </Button>
+        )}
+      </FilterBar>
 
       {error && !drawerOpen && !deleteOpen && (
         <div className="rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
