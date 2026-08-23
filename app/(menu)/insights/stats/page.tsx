@@ -231,8 +231,8 @@ export default function TesterEvaluationPage() {
             <ResponsiveContainer width="100%" height={Math.max(160, data!.byTester.length * 38)}>
               <BarChart data={data!.byTester} layout="vertical" margin={{ left: 8, right: 24, top: 4, bottom: 4 }}>
                 <CartesianGrid horizontal={false} stroke="#f1f5f9" />
-                <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: "#64748b" }} />
-                <YAxis type="category" dataKey="name" width={84} tick={{ fontSize: 11, fill: "#334155" }} />
+                <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 15, fill: "#64748b" }} />
+                <YAxis type="category" dataKey="name" width={84} tick={{ fontSize: 15, fill: "#334155" }} />
                 <Tooltip formatter={(v) => [`${v}%`, "준수율"]} cursor={{ fill: "#f8fafc" }} />
                 <Bar dataKey="adherenceRate" radius={[0, 4, 4, 0]} barSize={18}>
                   {data!.byTester.map((t) => <Cell key={t.testerId} fill={rateColor(t.adherenceRate)} />)}
@@ -247,8 +247,8 @@ export default function TesterEvaluationPage() {
               <ResponsiveContainer width="100%" height={Math.max(160, data!.byTester.length * 38)}>
                 <BarChart data={data!.byTester} layout="vertical" margin={{ left: 8, right: 16, top: 4, bottom: 4 }}>
                   <CartesianGrid horizontal={false} stroke="#f1f5f9" />
-                  <XAxis type="number" tick={{ fontSize: 11, fill: "#64748b" }} allowDecimals={false} />
-                  <YAxis type="category" dataKey="name" width={84} tick={{ fontSize: 11, fill: "#334155" }} />
+                  <XAxis type="number" tick={{ fontSize: 15, fill: "#64748b" }} allowDecimals={false} />
+                  <YAxis type="category" dataKey="name" width={84} tick={{ fontSize: 15, fill: "#334155" }} />
                   <Tooltip cursor={{ fill: "#f8fafc" }} />
                   <Bar dataKey="completed" name="완료건" fill="#3b82f6" radius={[0, 3, 3, 0]} barSize={9} />
                   <Bar dataKey="weightedThroughput" name="가중처리량" fill="#a78bfa" radius={[0, 3, 3, 0]} barSize={9} />
@@ -264,8 +264,8 @@ export default function TesterEvaluationPage() {
                 <ResponsiveContainer width="100%" height={Math.max(160, data!.byItem.length * 34)}>
                   <BarChart data={data!.byItem.slice(0, 15)} layout="vertical" margin={{ left: 8, right: 24, top: 4, bottom: 4 }}>
                     <CartesianGrid horizontal={false} stroke="#f1f5f9" />
-                    <XAxis type="number" tick={{ fontSize: 11, fill: "#64748b" }} />
-                    <YAxis type="category" dataKey="testItemName" width={110} tick={{ fontSize: 10, fill: "#334155" }} />
+                    <XAxis type="number" tick={{ fontSize: 15, fill: "#64748b" }} />
+                    <YAxis type="category" dataKey="testItemName" width={110} tick={{ fontSize: 15, fill: "#334155" }} />
                     <Tooltip formatter={(v, _n, p) => [`${v}분 (${(p?.payload as ItemRow)?.count}건)`, "평균"]} cursor={{ fill: "#f8fafc" }} />
                     <Bar dataKey="avgMinutes" fill="#f59e0b" radius={[0, 4, 4, 0]} barSize={16} />
                   </BarChart>
@@ -356,7 +356,7 @@ function ChartCard({ title, hint, children }: { title: string; hint?: string; ch
   return (
     <div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
       <h2 className="text-sm font-bold text-slate-800">{title}</h2>
-      {hint && <p className="mt-0.5 mb-3 text-[11px] text-slate-400">{hint}</p>}
+      {hint && <p className="mt-0.5 mb-3 text-xs leading-normal text-slate-400">{hint}</p>}
       {children}
     </div>
   )

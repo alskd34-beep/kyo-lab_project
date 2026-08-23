@@ -725,16 +725,16 @@ export default function TestItemsPage() {
                         <div className="flex items-center gap-2">
                           <span
                             className={cn(
-                              "font-mono text-[10px] font-medium",
+                              "font-mono text-xs leading-normal font-medium",
                               isSelected ? "text-primary" : "text-muted-foreground"
                             )}
                           >
                             {product.productCode}
                           </span>
                           {product.isActive ? (
-                            <Tag color="green" className="text-[10px]">활성</Tag>
+                            <Tag color="green" className="text-xs leading-normal">활성</Tag>
                           ) : (
-                            <Tag color="mono" className="text-[10px]">비활성</Tag>
+                            <Tag color="mono" className="text-xs leading-normal">비활성</Tag>
                           )}
                         </div>
                         <p className="mt-0.5 truncate text-sm leading-snug font-medium text-foreground">
@@ -782,7 +782,7 @@ export default function TestItemsPage() {
               <div className="border-b px-4 py-4">
                 <div className="flex flex-col gap-3 md:flex-row md:items-center">
                   <div className="min-w-0 flex-1">
-                    <p className="font-mono text-[10px] font-medium text-muted-foreground">
+                    <p className="font-mono text-xs leading-normal font-medium text-muted-foreground">
                       {selectedProduct.productCode}
                     </p>
                     <h2 className="truncate text-base font-semibold text-foreground">
@@ -865,16 +865,16 @@ export default function TestItemsPage() {
                                   onClick={(event) => event.stopPropagation()}
                                   onChange={() => toggleSelectLinked(item.testItemId)}
                                 />
-                                <span className="text-[11px] text-muted-foreground">
+                                <span className="text-xs leading-normal text-muted-foreground">
                                   {idx + 1}
                                 </span>
                                 {item.isMandatory ? (
-                                  <Badge variant="outline" className="gap-1 text-[10px]">
+                                  <Badge variant="outline" className="gap-1 text-xs leading-normal">
                                     <span className="size-1.5 rounded-full bg-red-500" />
                                     필수
                                   </Badge>
                                 ) : (
-                                  <Badge variant="outline" className="gap-1 text-[10px]">
+                                  <Badge variant="outline" className="gap-1 text-xs leading-normal">
                                     <span className="size-1.5 rounded-full bg-muted-foreground" />
                                     선택
                                   </Badge>
@@ -1084,7 +1084,7 @@ export default function TestItemsPage() {
                     {tab}
                     <span
                       className={cn(
-                        "ml-1.5 rounded-md px-1.5 py-0.5 text-[10px]",
+                        "ml-1.5 rounded-md px-1.5 py-0.5 text-xs leading-normal",
                         dialogTab === tab
                           ? "bg-primary-foreground/20 text-primary-foreground"
                           : "bg-muted text-muted-foreground"
@@ -1157,7 +1157,7 @@ export default function TestItemsPage() {
                             </span>
                             <span
                               className={cn(
-                                "rounded-md border px-2 py-0.5 text-[10px] font-medium",
+                                "rounded-md border px-2 py-0.5 text-xs leading-normal font-medium",
                                 CATEGORY_COLORS[item.category] ??
                                   CATEGORY_COLORS["기타"]
                               )}
@@ -1274,7 +1274,7 @@ export default function TestItemsPage() {
                                 copySource?.id === p.id && "bg-primary/5"
                               )}
                             >
-                              <span className="font-mono text-[10px] font-medium text-muted-foreground">
+                              <span className="font-mono text-xs leading-normal font-medium text-muted-foreground">
                                 {p.productCode}
                               </span>
                               <span className="flex-1 truncate text-sm font-medium text-foreground">
@@ -1364,7 +1364,7 @@ export default function TestItemsPage() {
                                       {r.testItemName}
                                     </span>
                                     {already && (
-                                      <span className="text-[10px] text-muted-foreground">
+                                      <span className="text-xs leading-normal text-muted-foreground">
                                         이미 연결됨
                                       </span>
                                     )}
@@ -1527,7 +1527,7 @@ export default function TestItemsPage() {
                                 already && "opacity-50"
                               )}
                             >
-                              <span className="w-5 shrink-0 text-right text-[11px] text-muted-foreground tabular-nums">
+                              <span className="w-5 shrink-0 text-right text-xs leading-normal text-muted-foreground tabular-nums">
                                 {idx + 1}
                               </span>
                               <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
@@ -1535,7 +1535,7 @@ export default function TestItemsPage() {
                               </span>
                               <span
                                 className={cn(
-                                  "rounded-md border px-2 py-0.5 text-[10px] font-medium",
+                                  "rounded-md border px-2 py-0.5 text-xs leading-normal font-medium",
                                   CATEGORY_COLORS[item.category] ??
                                     CATEGORY_COLORS["기타"]
                                 )}
@@ -1543,11 +1543,11 @@ export default function TestItemsPage() {
                                 {item.category || "기타"}
                               </span>
                               {already ? (
-                                <span className="w-14 shrink-0 text-right text-[10px] text-muted-foreground">
+                                <span className="w-14 shrink-0 text-right text-xs leading-normal text-muted-foreground">
                                   이미 있음
                                 </span>
                               ) : (
-                                <span className="w-14 shrink-0 text-right text-[10px] font-medium text-primary">
+                                <span className="w-14 shrink-0 text-right text-xs leading-normal font-medium text-primary">
                                   추가 예정
                                 </span>
                               )}

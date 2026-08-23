@@ -385,7 +385,7 @@ export default function TestCapabilitiesPage() {
                   placeholder="예: HPLC, 용출, 성상"
                   disabled={!isAdmin}
                 />
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs leading-normal text-muted-foreground">
                   매트릭스 컬럼 머리글에 그대로 표시됩니다.
                 </p>
               </div>
@@ -402,7 +402,7 @@ export default function TestCapabilitiesPage() {
                     placeholder="예: HPLC, UV_VIS"
                     className="font-mono"
                   />
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-xs leading-normal text-muted-foreground">
                     영문 대문자·숫자·밑줄(_)만. 등록 후에는 바꿀 수 없습니다.
                   </p>
                 </div>
@@ -415,7 +415,7 @@ export default function TestCapabilitiesPage() {
                   <span className="font-mono text-sm font-semibold text-foreground">
                     {selected?.code ?? "-"}
                   </span>
-                  <span className="ml-auto text-[10px] text-muted-foreground">변경 불가</span>
+                  <span className="ml-auto text-xs leading-normal text-muted-foreground">변경 불가</span>
                 </div>
               )}
 
@@ -432,7 +432,7 @@ export default function TestCapabilitiesPage() {
                   placeholder={isNew ? "비우면 맨 뒤에 놓입니다" : ""}
                   disabled={!isAdmin}
                 />
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs leading-normal text-muted-foreground">
                   작을수록 왼쪽. 목록의 ↑↓ 버튼으로도 바꿀 수 있습니다.
                 </p>
               </div>
@@ -448,7 +448,7 @@ export default function TestCapabilitiesPage() {
                   : "아직 이 역량에 숙련도가 기록된 시험자가 없습니다."}
               </p>
               {selected.ratedCount > 0 && (
-                <p className="mt-1 text-[11px] text-muted-foreground">
+                <p className="mt-1 text-xs leading-normal text-muted-foreground">
                   삭제하면 이 기록도 함께 사라집니다.
                 </p>
               )}

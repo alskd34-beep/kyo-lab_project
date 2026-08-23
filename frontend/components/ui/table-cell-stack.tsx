@@ -33,7 +33,7 @@ export function CellStack({
       >
         <div className={cn("min-w-0 truncate", primaryClass)}>{primary}</div>
         {secondary ? (
-          <div className="min-w-0 truncate text-[11px] leading-4 text-muted-foreground">{secondary}</div>
+          <div className="min-w-0 truncate text-xs leading-4 text-muted-foreground">{secondary}</div>
         ) : null}
       </div>
     </div>

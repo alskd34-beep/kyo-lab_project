@@ -34,7 +34,7 @@ export function JobStageTrack({ status, className }: { status: string; className
                 : undefined}
             />
             <span className={cn(
-              "truncate text-[10px]",
+              "truncate text-xs leading-normal",
               here ? "font-semibold text-foreground" : "text-muted-foreground",
             )}>
               {s}

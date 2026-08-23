@@ -265,7 +265,7 @@ function StatusLine({
     <div className="flex min-w-0 items-center gap-1.5">
       <span className={cn("size-1.5 shrink-0 rounded-full", color)} />
       <span className="min-w-0 truncate text-xs text-foreground">{label}</span>
-      {extra ? <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{extra}</span> : null}
+      {extra ? <span className="shrink-0 text-xs leading-normal tabular-nums text-muted-foreground">{extra}</span> : null}
     </div>
   )
 }
@@ -367,8 +367,8 @@ const ProductCard = memo(function ProductCard({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="font-mono text-[11px] text-muted-foreground">{row.productCode}</span>
-            <Tag color={row.isActive ? "green" : "mono"} className="text-[10px]">
+            <span className="font-mono text-xs leading-normal text-muted-foreground">{row.productCode}</span>
+            <Tag color={row.isActive ? "green" : "mono"} className="text-xs leading-normal">
               {row.isActive ? "활성" : "비활성"}
             </Tag>
             <DifficultyBadge difficulty={row.difficulty} />
@@ -378,11 +378,11 @@ const ProductCard = memo(function ProductCard({
             {row.nameAlt && <span className="ml-1.5 text-xs font-normal text-muted-foreground">{row.nameAlt}</span>}
           </div>
           {row.abbreviation && (
-            <div className="font-mono text-[11px] text-muted-foreground">약호: {row.abbreviation}</div>
+            <div className="font-mono text-xs leading-normal text-muted-foreground">약호: {row.abbreviation}</div>
           )}
         </div>
       </div>
-      <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 border-t pt-2 text-[11px] text-muted-foreground">
+      <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 border-t pt-2 text-xs leading-normal text-muted-foreground">
         <div><span className="font-medium text-foreground">품목구분:</span> {row.categoryName ?? "—"}</div>
         <div><span className="font-medium text-foreground">전문분류:</span> {row.classificationName ?? "—"}</div>
         <div><span className="font-medium text-foreground">단위:</span> {row.unit ?? "—"}</div>
@@ -902,10 +902,10 @@ export function ProductTestWorkspace() {
         ) : (
           <>
             <Card className="gap-0.5 border-l-4 border-l-primary px-3 py-2">
-              <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">전체 품목</span>
+              <span className="text-xs leading-normal font-medium tracking-wide text-muted-foreground uppercase">전체 품목</span>
               <span className="text-lg font-semibold tabular-nums text-foreground">
                 {summary.total}
-                <span className="ml-2 text-[11px] font-normal text-muted-foreground">
+                <span className="ml-2 text-xs leading-normal font-normal text-muted-foreground">
                   활성 <span className="font-semibold text-blue-600">{summary.active}</span>
                   {" · "}
                   비활성 {summary.total - summary.active}
@@ -914,10 +914,10 @@ export function ProductTestWorkspace() {
             </Card>
 
             <Card className="gap-0.5 px-3 py-2">
-              <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">품목구분</span>
+              <span className="text-xs leading-normal font-medium tracking-wide text-muted-foreground uppercase">품목구분</span>
               <div className="flex flex-wrap gap-x-2 gap-y-0.5">
                 {Object.entries(summary.byCat).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([name, cnt]) => (
-                  <span key={name} className="text-[11px] text-muted-foreground">
+                  <span key={name} className="text-xs leading-normal text-muted-foreground">
                     {name} <span className="font-semibold tabular-nums text-foreground">{cnt}</span>
                   </span>
                 ))}
@@ -925,10 +925,10 @@ export function ProductTestWorkspace() {
             </Card>
 
             <Card className="gap-0.5 px-3 py-2">
-              <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">전문분류</span>
+              <span className="text-xs leading-normal font-medium tracking-wide text-muted-foreground uppercase">전문분류</span>
               <div className="flex flex-wrap gap-x-2 gap-y-0.5">
                 {Object.entries(summary.byCls).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([name, cnt]) => (
-                  <span key={name} className="text-[11px] text-muted-foreground">
+                  <span key={name} className="text-xs leading-normal text-muted-foreground">
                     {name} <span className="font-semibold tabular-nums text-foreground">{cnt}</span>
                   </span>
                 ))}
@@ -936,7 +936,7 @@ export function ProductTestWorkspace() {
             </Card>
 
             <Card className="gap-0.5 px-3 py-2">
-              <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">난이도</span>
+              <span className="text-xs leading-normal font-medium tracking-wide text-muted-foreground uppercase">난이도</span>
               <div className="flex flex-wrap gap-x-2 gap-y-0.5">
                 {[
                   { key: "High", dot: "bg-red-500" },
@@ -947,7 +947,7 @@ export function ProductTestWorkspace() {
                   const cnt = summary.byDiff[key] ?? 0
                   if (!cnt) return null
                   return (
-                    <span key={key} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                    <span key={key} className="inline-flex items-center gap-1 text-xs leading-normal text-muted-foreground">
                       <span className={cn("size-1.5 rounded-full", dot)} />
                       {key} <span className="font-semibold tabular-nums text-foreground">{cnt}</span>
                     </span>
@@ -1095,7 +1095,7 @@ export function ProductTestWorkspace() {
                   <span className="font-mono text-sm font-semibold text-foreground">
                     {editTarget?.productCode ?? "—"}
                   </span>
-                  <span className="ml-auto text-[10px] text-muted-foreground">변경 불가</span>
+                  <span className="ml-auto text-xs leading-normal text-muted-foreground">변경 불가</span>
                 </div>
               </section>
 

@@ -10,7 +10,8 @@ The Next.js App Router root. Holds the global layout/providers, the authenticate
 | File | Description |
 |------|-------------|
 | `layout.tsx` | Root layout (server). Sets `<html>`, fonts (Geist), metadata (Korean title), wraps app in `ThemeProvider` + `AuthProvider`. |
-| `globals.css` | Tailwind v4 global styles / theme tokens. |
+| `globals.css` | Tailwind v4 global styles / theme tokens (color, radius, rem-based `--text-*` scale). |
+| `styles/typography.scss` | Single source of truth for fonts — family, root size (18px), minimum size (13.5px = `text-xs`), rem-based `--font-size-*` vars. |
 | `page.tsx` | Root page (protected by middleware — root `/` requires auth). |
 
 ## Subdirectories

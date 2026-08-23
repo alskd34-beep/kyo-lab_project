@@ -122,7 +122,7 @@ export function JobStatusControl({
               <ArrowRight />{nextLabel} → {nextStage}
             </Button>
           ) : (
-            <span className="max-w-[22rem] text-right text-[11px] text-muted-foreground">
+            <span className="max-w-[22rem] text-right text-xs leading-normal text-muted-foreground">
               {status === IN_PROGRESS_STATUS
                 ? "전 시험항목이 완료되면 서버가 자동으로 “검토전”으로 넘깁니다."
                 : status === CLOSED_STAGE
@@ -147,7 +147,7 @@ export function JobStatusControl({
       {/* 전이 확인 — 무엇이 어떻게 바뀌는지 보여주고 한 번 더 받는다 */}
       {confirming && nextStage && nextLabel && (
         <div className="mt-3 flex flex-col gap-2 rounded-md border bg-muted/40 p-2.5 sm:flex-row sm:items-center">
-          <p className="min-w-0 flex-1 text-[11px] text-foreground">
+          <p className="min-w-0 flex-1 text-xs leading-normal text-foreground">
             <span className="font-semibold">{nextLabel}</span> 처리하면 상태가{" "}
             <span className="font-semibold">{status}</span> → <span className="font-semibold">{nextStage}</span>
             {" "}로 바뀝니다.
@@ -168,7 +168,7 @@ export function JobStatusControl({
 
       {manualOpen && (
         <div className="mt-3 flex flex-col gap-2 rounded-md border border-amber-200 bg-amber-50/60 p-2.5">
-          <p className="flex items-start gap-1.5 text-[11px] text-amber-800">
+          <p className="flex items-start gap-1.5 text-xs leading-normal text-amber-800">
             <ShieldAlert className="mt-px size-3.5 shrink-0 text-amber-500" />
             순서를 벗어난 상태 변경입니다. 사유는 상태 이력에 그대로 남습니다.
           </p>

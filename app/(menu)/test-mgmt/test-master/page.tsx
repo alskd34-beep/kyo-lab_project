@@ -464,7 +464,7 @@ export default function TestMasterPage() {
                 </div>
               </div>
 
-              <div className="mt-2 grid grid-cols-1 gap-x-2 gap-y-1 border-t pt-2 text-[11px] text-muted-foreground min-[420px]:grid-cols-2">
+              <div className="mt-2 grid grid-cols-1 gap-x-2 gap-y-1 border-t pt-2 text-xs leading-normal text-muted-foreground min-[420px]:grid-cols-2">
                 <div>
                   <span className="font-medium text-foreground">예상시간:</span>{" "}
                   {row.estimatedHours != null ? `${row.estimatedHours}h` : "—"}

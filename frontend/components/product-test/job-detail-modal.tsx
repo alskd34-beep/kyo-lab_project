@@ -69,7 +69,7 @@ function formatDateTime(iso: string): string {
 function SummaryField({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="text-[11px] text-muted-foreground">{label}</span>
+      <span className="text-xs leading-normal text-muted-foreground">{label}</span>
       <span className={cn("text-sm font-medium text-foreground", mono && "font-mono")}>{value}</span>
     </div>
   )
@@ -213,7 +213,7 @@ export function JobDetailModal({
               {/* 현재 수행 항목 */}
               {currentItem ? (
                 <section className="rounded-md border bg-muted/40 p-3">
-                  <p className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
+                  <p className="flex items-center gap-1.5 text-xs leading-normal font-semibold text-muted-foreground">
                     <LoaderCircle className="size-3" />
                     현재 수행 중인 시험항목
                   </p>
@@ -228,7 +228,7 @@ export function JobDetailModal({
                       </span>
                     )}
                   </div>
-                  <p className="mt-1 text-[11px] text-muted-foreground">
+                  <p className="mt-1 text-xs leading-normal text-muted-foreground">
                     미완료 항목 중 순번이 가장 빠른 항목입니다. ({currentIdx + 1}번째 / 총 {total}개)
                   </p>
                 </section>
@@ -300,7 +300,7 @@ export function JobDetailModal({
 
                         <div className="flex shrink-0 items-center gap-2">
                           {done ? (
-                            <span className="text-[11px] text-blue-700">
+                            <span className="text-xs leading-normal text-blue-700">
                               {it.clearedAt && formatDateTime(it.clearedAt)}
                               {it.elapsedMinutes != null && ` · ${formatMinutes(it.elapsedMinutes)}`}
                             </span>
@@ -322,7 +322,7 @@ export function JobDetailModal({
               <JobStatusHistory jobId={detail.jobId} reloadKey={historyKey} />
 
               {/* 담당자 안내 */}
-              <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <p className="flex items-center gap-1.5 text-xs leading-normal text-muted-foreground">
                 <User className="size-3" />
                 항목 완료 처리는 담당자의 “내 작업” 화면에서만 가능합니다.
               </p>

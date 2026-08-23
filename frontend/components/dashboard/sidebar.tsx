@@ -386,7 +386,7 @@ export default function Sidebar({
           {!collapsed && (
             <div className="leading-tight">
               <p className="text-sm font-bold text-slate-900">QC 관리</p>
-              <p className="text-[11px] font-medium text-slate-400">
+              <p className="text-xs leading-normal font-medium text-slate-400">
                 Quality Control
               </p>
             </div>
@@ -419,7 +419,7 @@ export default function Sidebar({
         {sections.map((section) => (
           <div key={section.title} className="mb-4 last:mb-0">
             {!collapsed && (
-              <p className="mb-1.5 px-2 text-[11px] font-semibold tracking-[0.12em] text-slate-400">
+              <p className="mb-1.5 px-2 text-xs leading-normal font-semibold tracking-[0.12em] text-slate-400">
                 {section.title.toUpperCase()}
               </p>
             )}
@@ -454,7 +454,7 @@ export default function Sidebar({
                       >
                         {item.icon}
                         {item.badge != null && (
-                          <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold leading-none text-white">
+                          <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-xs font-bold leading-none text-white">
                             {item.badge}
                           </span>
                         )}

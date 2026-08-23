@@ -147,19 +147,19 @@ export function OrderTestItemsSection({ orderId, productName, canEdit, locked }:
         )}
       </div>
 
-      <p className="mt-1.5 text-[11px] text-muted-foreground">
+      <p className="mt-1.5 text-xs leading-normal text-muted-foreground">
         품목 기준 시험항목 전체입니다. 이 오더에서만 빼거나 더할 수 있고, 품목 기준은 바뀌지 않습니다.
       </p>
 
       {locked && (
-        <p className="mt-2 flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800">
+        <p className="mt-2 flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs leading-normal text-amber-800">
           <Lock className="size-3 shrink-0" />
           확정(LOCK)된 오더입니다. 확정을 해제해야 시험항목을 바꿀 수 있습니다.
         </p>
       )}
 
       {err && (
-        <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-2.5 py-2 text-[11px] text-red-600">{err}</p>
+        <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-2.5 py-2 text-xs leading-normal text-red-600">{err}</p>
       )}
 
       {rows === null ? (
@@ -170,7 +170,7 @@ export function OrderTestItemsSection({ orderId, productName, canEdit, locked }:
         <p className="mt-2 rounded-md border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
           이 품목에 등록된 시험항목이 없습니다.
           <br />
-          <span className="text-[11px]">기준 설정 › 품목별 시험항목 관리에서 먼저 등록하거나, 「항목 추가」로 이 오더에만 넣으세요.</span>
+          <span className="text-xs leading-normal">기준 설정 › 품목별 시험항목 관리에서 먼저 등록하거나, 「항목 추가」로 이 오더에만 넣으세요.</span>
         </p>
       ) : (
         <ul className="mt-2 flex flex-col gap-1.5">
@@ -215,7 +215,7 @@ export function OrderTestItemsSection({ orderId, productName, canEdit, locked }:
                         className={reasonInputCls}
                       />
                     ) : row.excludedReason ? (
-                      <p className="mt-1 text-[11px] text-muted-foreground">사유: {row.excludedReason}</p>
+                      <p className="mt-1 text-xs leading-normal text-muted-foreground">사유: {row.excludedReason}</p>
                     ) : null)}
                   </div>
                   {busy ? (

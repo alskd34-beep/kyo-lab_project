@@ -267,9 +267,9 @@ export function TesterAvatar({
   const label = name ?? profile?.name ?? '?'
   const emoji = profile?.profileEmoji ?? profileEmoji(testerId ?? label)
   const sizeClass = {
-    xs: 'size-5 rounded-md text-[12px]',
-    sm: 'size-7 rounded-md text-[16px]',
-    md: 'size-8 rounded-md text-[18px]',
+    xs: 'size-5 rounded-md text-xs leading-normal',
+    sm: 'size-7 rounded-md text-[0.8rem]',
+    md: 'size-8 rounded-md text-[0.9rem]',
     lg: 'size-24 rounded-md text-5xl',
   }[size]
   const sizePx = { xs: 20, sm: 28, md: 32, lg: 96 }[size]

@@ -22,7 +22,7 @@ const COLOR_CLASS: Record<TagColor, string> = {
 }
 
 const SIZE_CLASS: Record<TagSize, string> = {
-  sm: "h-5 gap-1 px-2 text-[11px]",
+  sm: "h-5 gap-1 px-2 text-xs leading-normal",
   md: "h-6 gap-1.5 px-2.5 text-xs",
 }
 

@@ -145,7 +145,7 @@ function LoginForm() {
           <div className="flex size-11 items-center justify-center rounded-md bg-primary text-primary-foreground">
             <FlaskConical size={20} />
           </div>
-          <p className="text-[11px] font-medium tracking-widest text-muted-foreground uppercase">광동제약</p>
+          <p className="text-xs leading-normal font-medium tracking-widest text-muted-foreground uppercase">광동제약</p>
           <h1 className="text-base font-semibold text-foreground">QC 시험 관리 시스템</h1>
         </div>
 

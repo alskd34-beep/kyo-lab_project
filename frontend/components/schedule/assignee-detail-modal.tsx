@@ -226,7 +226,7 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
                     <Layers className="size-4 text-blue-600" />
                     <span className="text-sm font-bold text-slate-900">{g.label}</span>
                     {g.isFamily && (
-                      <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">동시분석 {g.rows.length}건</span>
+                      <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-0.5 text-xs leading-normal font-semibold text-blue-700">동시분석 {g.rows.length}건</span>
                     )}
                     <div className="ml-auto flex items-center gap-4 text-xs font-medium text-slate-500">
                       <span>총 과제 <b className="text-slate-800">{g.rows.length}건</b></span>
@@ -238,7 +238,7 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
                     <div className="overflow-x-auto border-t border-slate-100">
                       <table className="w-full min-w-[900px] text-sm">
                         <thead>
-                          <tr className="border-b border-slate-100 bg-slate-50 text-left text-[11px] font-semibold tracking-wide text-slate-500">
+                          <tr className="border-b border-slate-100 bg-slate-50 text-left text-xs leading-normal font-semibold tracking-wide text-slate-500">
                             <th className="px-3 py-2">품목명</th><th className="px-3 py-2">품목코드</th><th className="px-3 py-2">제조번호</th>
                             <th className="px-3 py-2">제형</th><th className="px-3 py-2">포장일</th><th className="px-3 py-2">완료예정</th>
                             <th className="px-3 py-2">긴급</th><th className="px-3 py-2">진행방법</th><th className="px-3 py-2">공수</th>
@@ -255,7 +255,7 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
                               <td className="px-3 py-2.5">{r.packagingDate ?? "-"}</td>
                               <td className={cn("px-3 py-2.5", r.dueDate && "font-semibold text-red-500")}>{r.dueDate ?? "-"}</td>
                               <td className="px-3 py-2.5">
-                                {r.isUrgent ? <span className="inline-flex items-center rounded-md bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-600">긴급</span> : <span className="text-slate-400">-</span>}
+                                {r.isUrgent ? <span className="inline-flex items-center rounded-md bg-red-50 px-2 py-0.5 text-xs leading-normal font-semibold text-red-600">긴급</span> : <span className="text-slate-400">-</span>}
                               </td>
                               <td className="px-3 py-2.5">{r.method}</td>
                               <td className="px-3 py-2.5">{r.workdays != null ? `${r.workdays}일` : "-"}</td>
@@ -293,12 +293,12 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
             {/* 공수/과제 카드 */}
             <div className="mt-4 grid grid-cols-4 gap-2">
               <div className="col-span-1 rounded-md border border-slate-200 px-2.5 py-2">
-                <p className="text-[10px] font-bold text-slate-400">오늘 공수</p>
+                <p className="text-xs leading-normal font-bold text-slate-400">오늘 공수</p>
                 <p className="mt-1 text-sm font-black text-slate-900">{todayLoad}<span className="text-slate-400"> / {DAILY_CAPACITY}일</span></p>
                 <div className="mt-1.5 h-1.5 overflow-hidden rounded-md bg-slate-100">
                   <div className="h-full rounded-md bg-blue-600" style={{ width: `${loadPct}%` }} />
                 </div>
-                <p className="mt-1 text-[10px] text-slate-400">{loadPct}%</p>
+                <p className="mt-1 text-xs leading-normal text-slate-400">{loadPct}%</p>
               </div>
               <MiniStat label="배정 과제" value={`${totalCount}건`} />
               <MiniStat label="긴급 과제" value={`${urgentCount}건`} tone="red" />
@@ -309,10 +309,10 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
             <div className="mt-5">
               <div className="mb-2 flex items-center justify-between">
                 <p className="text-sm font-bold text-slate-900">일정 요약</p>
-                <span className="inline-flex items-center gap-1 text-[11px] text-slate-400"><Calendar className="size-3" />주간</span>
+                <span className="inline-flex items-center gap-1 text-xs leading-normal text-slate-400"><Calendar className="size-3" />주간</span>
               </div>
               <div className="rounded-md border border-slate-200 px-3 py-3">
-                <div className="mb-1.5 grid grid-cols-[40px_repeat(7,1fr)] gap-1 text-center text-[10px] text-slate-400">
+                <div className="mb-1.5 grid grid-cols-[40px_repeat(7,1fr)] gap-1 text-center text-xs leading-normal text-slate-400">
                   <span />{["월", "화", "수", "목", "금", "토", "일"].map(d => <span key={d}>{d}</span>)}
                 </div>
                 {weeks.length === 0 ? (
@@ -321,14 +321,14 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
                   const filled = Math.min(7, Math.round(w.work))
                   return (
                     <div key={w.key} className="mb-1 grid grid-cols-[40px_repeat(7,1fr)] items-center gap-1">
-                      <span className="text-[10px] font-medium text-slate-500">{w.label}</span>
+                      <span className="text-xs leading-normal font-medium text-slate-500">{w.label}</span>
                       {Array.from({ length: 7 }).map((_, i) => (
                         <span key={i} className={cn("h-3.5 rounded-md", i < filled ? "bg-blue-500" : "bg-slate-100")} />
                       ))}
                     </div>
                   )
                 })}
-                <div className="mt-2 flex items-center gap-3 text-[10px] text-slate-400">
+                <div className="mt-2 flex items-center gap-3 text-xs leading-normal text-slate-400">
                   <span className="inline-flex items-center gap-1"><span className="size-2 rounded-md bg-blue-500" />배정 공수</span>
                   <span className="inline-flex items-center gap-1"><span className="size-2 rounded-md bg-slate-100" />여유 공수</span>
                 </div>
@@ -339,7 +339,7 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
             <div className="mt-5">
               <div className="mb-2 flex items-center justify-between">
                 <p className="text-sm font-bold text-slate-900">최근 배정 과제</p>
-                {onOpenDetail && <button onClick={onOpenDetail} className="text-[11px] font-medium text-blue-600 hover:underline">전체보기</button>}
+                {onOpenDetail && <button onClick={onOpenDetail} className="text-xs leading-normal font-medium text-blue-600 hover:underline">전체보기</button>}
               </div>
               <div className="flex flex-col gap-2">
                 {recent.length === 0 ? (
@@ -352,11 +352,11 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
                       <span className={cn("absolute inset-y-0 left-0 w-1", accent)} />
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <p className="flex items-center gap-1.5 text-[13px] font-semibold text-slate-800">
+                          <p className="flex items-center gap-1.5 text-xs leading-normal font-semibold text-slate-800">
                             <span className="truncate">{r.productName} (제조 {r.batchNo})</span>
-                            {r.isUrgent && <span className="shrink-0 rounded-md bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-600">긴급</span>}
+                            {r.isUrgent && <span className="shrink-0 rounded-md bg-red-50 px-1.5 py-0.5 text-xs leading-normal font-semibold text-red-600">긴급</span>}
                           </p>
-                          <p className="mt-0.5 text-[11px] text-slate-500">완료예정 {r.dueDate ?? "-"} · 공수 {r.workdays ?? "-"}일</p>
+                          <p className="mt-0.5 text-xs leading-normal text-slate-500">완료예정 {r.dueDate ?? "-"} · 공수 {r.workdays ?? "-"}일</p>
                         </div>
                         <StatusBadge status={r.status} />
                       </div>
@@ -389,7 +389,7 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
 function StatChip({ label, value, tone }: { label: string; value: string | number; tone?: "red" }) {
   return (
     <div className="rounded-md border border-slate-200 px-3 py-1.5 text-center">
-      <p className="text-[10px] font-bold text-slate-400">{label}</p>
+      <p className="text-xs leading-normal font-bold text-slate-400">{label}</p>
       <p className={cn("text-sm font-black", tone === "red" ? "text-red-500" : "text-slate-900")}>{value}</p>
     </div>
   )
@@ -397,14 +397,14 @@ function StatChip({ label, value, tone }: { label: string; value: string | numbe
 function MiniStat({ label, value, tone }: { label: string; value: string; tone?: "red" }) {
   return (
     <div className="rounded-md border border-slate-200 px-2.5 py-2">
-      <p className="text-[10px] font-bold text-slate-400">{label}</p>
+      <p className="text-xs leading-normal font-bold text-slate-400">{label}</p>
       <p className={cn("mt-1 text-sm font-black", tone === "red" ? "text-red-500" : "text-slate-900")}>{value}</p>
     </div>
   )
 }
 function StatusBadge({ status }: { status: string }) {
   return (
-    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-slate-200 px-2 py-0.5 text-xs leading-normal font-semibold text-slate-600">
       <span className={cn("size-1.5 rounded-full", statusDot(status))} />{status}
     </span>
   )

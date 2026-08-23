@@ -67,7 +67,7 @@ export function DateRangeField({
 
   const cell = (caption: string, value: string) => (
     <span className="flex flex-1 flex-col justify-center gap-0.5 px-3 py-1.5">
-      <span className="text-[10px] font-medium text-muted-foreground">{caption}</span>
+      <span className="text-xs leading-normal font-medium text-muted-foreground">{caption}</span>
       <span
         className={cn(
           "flex items-center gap-1.5 text-sm",

@@ -402,7 +402,7 @@ export default function PretestChecklistPage() {
                         selected?.id === p.id && "bg-primary/5"
                       )}
                     >
-                      <span className="font-mono text-[10px] font-semibold text-muted-foreground">
+                      <span className="font-mono text-xs leading-normal font-semibold text-muted-foreground">
                         {p.productCode}
                       </span>
                       <span className="w-full truncate text-sm font-medium text-foreground">
@@ -439,7 +439,7 @@ export default function PretestChecklistPage() {
           ) : (
             <div className="flex min-h-0 flex-1 flex-col">
               <div className="border-b px-4 py-4">
-                <p className="font-mono text-[10px] font-semibold text-muted-foreground">
+                <p className="font-mono text-xs leading-normal font-semibold text-muted-foreground">
                   {selected.productCode}
                 </p>
                 <div className="flex items-center gap-2">
@@ -460,7 +460,7 @@ export default function PretestChecklistPage() {
                   </div>
                   <div className="grid gap-2.5 md:grid-cols-2">
                     <div>
-                      <label htmlFor={`${uid}-issueLot`} className="mb-1 block text-[11px] font-medium text-muted-foreground">이슈발생 로트(제조번호)</label>
+                      <label htmlFor={`${uid}-issueLot`} className="mb-1 block text-xs leading-normal font-medium text-muted-foreground">이슈발생 로트(제조번호)</label>
                       <Input
                         id={`${uid}-issueLot`}
                         value={issueLot}
@@ -471,7 +471,7 @@ export default function PretestChecklistPage() {
                     </div>
                   </div>
                   <div className="mt-2.5">
-                    <label htmlFor={`${uid}-content`} className="mb-1 block text-[11px] font-medium text-muted-foreground">
+                    <label htmlFor={`${uid}-content`} className="mb-1 block text-xs leading-normal font-medium text-muted-foreground">
                       확인사항 <span className="text-destructive">*</span>
                     </label>
                     <Input
@@ -483,7 +483,7 @@ export default function PretestChecklistPage() {
                     />
                   </div>
                   <div className="mt-2.5">
-                    <label htmlFor={`${uid}-remark`} className="mb-1 block text-[11px] font-medium text-muted-foreground">특이사항</label>
+                    <label htmlFor={`${uid}-remark`} className="mb-1 block text-xs leading-normal font-medium text-muted-foreground">특이사항</label>
                     <textarea
                       id={`${uid}-remark`}
                       value={remark}
@@ -505,7 +505,7 @@ export default function PretestChecklistPage() {
                         <Copy className="size-3.5" />
                         유사 품목에도 적용
                       </Button>
-                      <span className="text-[11px] text-muted-foreground">
+                      <span className="text-xs leading-normal text-muted-foreground">
                         {extraIds.size > 0
                           ? <>이 품목 포함 <span className="font-semibold text-foreground">{extraIds.size + 1}개</span> 품목에 동일하게 등록됩니다.</>
                           : "동일한 확인사항을 여러 유사 품목에 한 번에 등록할 수 있습니다."}
@@ -516,7 +516,7 @@ export default function PretestChecklistPage() {
                         {extraProducts.map(p => (
                           <span
                             key={p.id}
-                            className="inline-flex items-center gap-1 rounded-md border bg-muted/60 py-0.5 pr-1 pl-2 text-[11px] text-foreground"
+                            className="inline-flex items-center gap-1 rounded-md border bg-muted/60 py-0.5 pr-1 pl-2 text-xs leading-normal text-foreground"
                           >
                             {p.name}
                             <button
@@ -743,7 +743,7 @@ export default function PretestChecklistPage() {
                         checked={extraIds.has(p.id)}
                         onChange={() => toggleExtra(p.id)}
                       />
-                      <span className="font-mono text-[10px] font-semibold text-muted-foreground">
+                      <span className="font-mono text-xs leading-normal font-semibold text-muted-foreground">
                         {p.productCode}
                       </span>
                       <span className="truncate text-sm font-medium text-foreground">

@@ -151,7 +151,7 @@ export default function QcDashboardPage() {
               <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3">
                 <CalendarDays size={16} className="text-blue-600" />
                 <h2 className="text-sm font-bold text-slate-900">시험자별 보유 DAY</h2>
-                <span className="ml-auto text-[11px] font-medium text-slate-400">미완료 배정 공수 합 · 근사치</span>
+                <span className="ml-auto text-xs leading-normal font-medium text-slate-400">미완료 배정 공수 합 · 근사치</span>
               </div>
               <div className="flex flex-col gap-2.5 px-4 py-4">
                 {data.byTesterDays.length === 0 ? (
@@ -176,10 +176,10 @@ export default function QcDashboardPage() {
               <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3">
                 <Layers size={16} className="text-blue-600" />
                 <h2 className="text-sm font-bold text-slate-900">시험자별 난이도 분포</h2>
-                <span className="ml-auto text-[11px] font-medium text-slate-400">미완료 배정 기준</span>
+                <span className="ml-auto text-xs leading-normal font-medium text-slate-400">미완료 배정 기준</span>
               </div>
               <div className="flex flex-col gap-2 px-4 py-4">
-                <div className="flex items-center gap-3 px-1 text-[11px] font-semibold text-slate-400">
+                <div className="flex items-center gap-3 px-1 text-xs leading-normal font-semibold text-slate-400">
                   <span className="w-20 shrink-0">시험자</span>
                   <span className="flex-1" />
                   <span className="w-10 text-center text-red-600">HIGH</span>

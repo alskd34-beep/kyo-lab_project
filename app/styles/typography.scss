@@ -1,0 +1,64 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// 공용 타이포그래피 — 시스템 폰트의 단일 기준
+//
+// 폰트 종류·크기를 바꿀 일이 생기면 **이 파일만** 고친다.
+//   $font-size-root : html 루트 크기. Tailwind 의 rem 기반 값(text-sm, p-4 …)이 전부 이 값을 따른다.
+//   $font-size-min  : 최소 폰트 크기. 이보다 작은 글자는 쓰지 않는다.
+//
+// 루트가 18px 이므로 Tailwind text-xs 는 13.5px, text-sm 은 15.75px 이다.
+// 최소 크기는 Tailwind text-xs 와 같은 값이다 — 즉 text-xs 가 가장 작은 글자다.
+//
+// 크기는 px 로 적되 **밖으로는 전부 rem 으로 내보낸다**(루트 크기를 바꾸면 같이 따라오도록).
+// Tailwind 의 text-* 스케일도 같은 기준의 rem 으로 `app/globals.css` 의 @theme 에 선언돼 있다.
+//
+// 컴포넌트에서 쓸 때는 Tailwind 클래스(text-xs/sm/base …)나 CSS 변수(`var(--font-size-min)`)를 쓰고,
+// scss 안에서는 `font-size()`(최소 크기 보장) · `rem()`(px → rem 환산) 함수를 쓴다.
+// 색·라운드 등 나머지 디자인 토큰은 `app/globals.css` 가 담당한다.
+// ─────────────────────────────────────────────────────────────────────────────
+
+@use "sass:math";
+
+// 1. 폰트 종류 ---------------------------------------------------------------
+// `app/layout.tsx` 의 next/font 가 저장소에 벤더링한 Pretendard 파일
+// (frontend/assets/fonts/PretendardVariable.woff2)을 읽어 `--font-sans` 로 주입한다.
+// fallback 목록까지 그 안에 들어 있으므로 여기서는 마지막 안전망만 덧붙인다.
+$font-family-sans: var(--font-sans, "Pretendard"), sans-serif;
+$font-family-mono: var(--font-mono, ui-monospace), monospace;
+
+// 2. 기준 크기 ---------------------------------------------------------------
+$font-size-root: 18px; // 루트(html) 폰트 크기
+$font-size-min: 13.5px; // 최소 폰트 크기 = Tailwind text-xs(0.75rem) — 캡션·배지·표 보조 텍스트
+
+// 3. 최소 크기 보장 ----------------------------------------------------------
+// 최소보다 작은 값을 넣어도 최소 크기로 올려 준다.
+@function font-size($size) {
+  @if $size < $font-size-min {
+    @return $font-size-min;
+  }
+
+  @return $size;
+}
+
+// 4. px → rem 환산 -----------------------------------------------------------
+// 루트 크기 기준으로 나눈다. 최소 크기 보장(font-size())을 거친 뒤 환산하므로
+// rem(9px) 처럼 작은 값을 넣어도 최소 크기의 rem 값이 나온다.
+@function rem($px) {
+  @return math.div(font-size($px), $font-size-root) * 1rem;
+}
+
+// 5. CSS 변수로 노출 (tsx·css 어디서든 var() 로 참조) --------------------------
+// 루트(--font-size-root)만 px 이고 나머지는 rem 이다.
+// 크기 단계 자체는 Tailwind text-* 스케일(app/globals.css @theme)이 담당하므로 여기서 늘리지 않는다.
+:root {
+  --font-size-root: #{$font-size-root};
+  --font-size-min: #{rem($font-size-min)};
+}
+
+html {
+  font-family: $font-family-sans;
+  font-size: $font-size-root;
+}
+
+// 최소 크기 전용 클래스는 두지 않는다.
+// 최소 크기($font-size-min)가 Tailwind `text-xs` 와 같은 값이라 그대로 `text-xs` 를 쓰면 되고,
+// 커스텀 `text-*` 클래스는 tailwind-merge 가 색상으로 오인해 cn() 에서 사라진다.

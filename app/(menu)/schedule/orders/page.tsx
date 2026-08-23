@@ -696,7 +696,7 @@ export default function OrdersPage() {
               </Badge>
             )}
           </div>
-          {isAdmin && <span className="text-[11px] text-muted-foreground">카드를 눌러 수정</span>}
+          {isAdmin && <span className="text-xs leading-normal text-muted-foreground">카드를 눌러 수정</span>}
         </div>
       </article>
     )
@@ -1007,7 +1007,7 @@ export default function OrdersPage() {
             <div className="pointer-events-auto flex w-full max-w-3xl flex-wrap items-center gap-3 rounded-md border bg-card px-4 py-2.5 shadow-lg">
               <div className="flex flex-col leading-tight">
                 <span className="text-sm font-semibold text-foreground tabular-nums">{selected.size}건 선택됨</span>
-                <span className="text-[11px] text-muted-foreground tabular-nums">확정 {lockedCount} · 미확정 {unlockedCount}</span>
+                <span className="text-xs leading-normal text-muted-foreground tabular-nums">확정 {lockedCount} · 미확정 {unlockedCount}</span>
               </div>
 
               <span className="h-8 w-px bg-border" />
@@ -1316,7 +1316,7 @@ function CreateModal({ testers, onClose, onCreated }: {
         </>
       }
     >
-      <p className="mb-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] text-blue-700">
+      <p className="mb-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-normal text-blue-700">
         제조 시트 적재가 아닌 수동 등록 오더입니다. 등록 후 담당자를 지정하세요.
       </p>
 
@@ -1529,7 +1529,7 @@ function EditModal({ order, testers, onClose, onSaved }: {
       }
     >
       <p className={cn(
-        "mb-3 rounded-md border px-3 py-2 text-[11px]",
+        "mb-3 rounded-md border px-3 py-2 text-xs leading-normal",
         isAutoOrder
           ? "border-emerald-200 bg-emerald-50 text-emerald-700"
           : "border-blue-200 bg-blue-50 text-blue-700",
@@ -1589,7 +1589,7 @@ function EditModal({ order, testers, onClose, onSaved }: {
             </SelectContent>
           </Select>
           {order.locked && (
-            <p className="mt-1 text-[11px] text-muted-foreground">
+            <p className="mt-1 text-xs leading-normal text-muted-foreground">
               확정(LOCK)된 오더입니다. 확정 해제 후 배정을 변경·해제할 수 있습니다.
             </p>
           )}
@@ -1684,13 +1684,13 @@ function HistoryModal({ order, testers, onClose }: { order: OrderRow; testers: T
               {/* 헤더: 작성자 · 시각 · 변경 필드 수 */}
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5">
-                  <span className="inline-flex items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-[11px] font-semibold text-primary">
+                  <span className="inline-flex items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-xs leading-normal font-semibold text-primary">
                     {sessions.length - i}회차
                   </span>
                   <span className="text-sm font-semibold text-foreground">{s.editorName ?? "시스템/미상"}</span>
-                  <Badge variant="secondary" className="text-[10px]">{s.edits.length}개 변경</Badge>
+                  <Badge variant="secondary" className="text-xs leading-normal">{s.edits.length}개 변경</Badge>
                 </div>
-                <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
+                <span className="shrink-0 text-xs leading-normal text-muted-foreground tabular-nums">
                   {new Date(s.editedAt).toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" })}
                 </span>
               </div>
@@ -1824,7 +1824,7 @@ function IngestLogModal({ onClose }: { onClose: () => void }) {
               <section key={g.bucket}>
                 <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
                   <span className="text-sm font-bold text-foreground">{dateLabel} {timeLabel}</span>
-                  <span className="text-[11px] text-muted-foreground">{relativeKo(g.runAt)}</span>
+                  <span className="text-xs leading-normal text-muted-foreground">{relativeKo(g.runAt)}</span>
                 </div>
                 <div className="mb-2 flex flex-wrap gap-1.5">
                   {CHANGE_ORDER.filter(t => g.counts[t]).map(t => (
@@ -1842,7 +1842,7 @@ function IngestLogModal({ onClose }: { onClose: () => void }) {
                           <Badge variant="outline" className={cn("shrink-0", meta.cls)}>{meta.label}</Badge>
                           <span className="truncate text-sm font-semibold text-foreground">{r.productName ?? "(품목명 미확인)"}</span>
                         </div>
-                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs leading-normal text-muted-foreground">
                           <span>{meta.desc}</span>
                           <span className="text-border">·</span>
                           <span className="font-mono">제조 {r.batchNo || "-"}</span>
