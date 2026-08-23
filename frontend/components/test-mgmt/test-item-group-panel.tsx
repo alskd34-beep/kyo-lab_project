@@ -12,7 +12,7 @@
  *   GET/PUT               /api/test-item-groups/[id]/items  (PUT 은 통째 교체)
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useId, useMemo, useState } from "react"
 import {
   ArrowDown,
   ArrowUp,
@@ -117,6 +117,7 @@ export function TestItemGroupPanel({
   candidates: GroupCandidateItem[]
   candidatesLoading: boolean
 }) {
+  const uid = useId()
   const [groups, setGroups] = useState<TestItemGroupRow[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
@@ -568,26 +569,29 @@ export function TestItemGroupPanel({
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="flex flex-col gap-1.5 sm:col-span-2">
-                <label className="text-xs font-medium text-muted-foreground">
+                <label htmlFor={`${uid}-name`} className="text-xs font-medium text-muted-foreground">
                   그룹명 <span className="text-destructive">*</span>
                 </label>
                 <Input
+                  id={`${uid}-name`}
                   value={form.name}
                   onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
                   placeholder="예) 전공정"
                 />
               </div>
               <div className="flex flex-col gap-1.5 sm:col-span-2">
-                <label className="text-xs font-medium text-muted-foreground">설명</label>
+                <label htmlFor={`${uid}-description`} className="text-xs font-medium text-muted-foreground">설명</label>
                 <Input
+                  id={`${uid}-description`}
                   value={form.description}
                   onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
                   placeholder="그룹을 어떤 상황에 쓰는지 적어 주세요"
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground">정렬 순서</label>
+                <label htmlFor={`${uid}-sortOrder`} className="text-xs font-medium text-muted-foreground">정렬 순서</label>
                 <Input
+                  id={`${uid}-sortOrder`}
                   type="number"
                   value={form.sortOrder}
                   onChange={(e) => setForm((prev) => ({ ...prev, sortOrder: e.target.value }))}
@@ -595,7 +599,7 @@ export function TestItemGroupPanel({
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-muted-foreground">상태</label>
+                <span className="text-xs font-medium text-muted-foreground">상태</span>
                 <label className="flex items-center gap-2 rounded-md border px-3 py-2.5 text-sm font-medium text-foreground">
                   <input
                     type="checkbox"

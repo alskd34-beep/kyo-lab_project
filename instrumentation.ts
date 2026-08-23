@@ -20,12 +20,31 @@ export async function register() {
   const cron = (await import('node-cron')).default
   const { ingestPctSheet } = await import('@backend/services/pctIngest')
 
+  // 적재는 읽기-판정-쓰기가 분리돼 있어 동시 실행 시 중복 로그/알림/이력이 생긴다.
+  // 크론 두 개와 수동 트리거(POST /api/cron/ingest-pct)가 겹치지 않도록 프로세스 내 잠금을 건다.
+  // ⚠️ 다중 인스턴스 배포에서는 이것만으로 부족하다 — DB advisory lock 이 필요하다.
+  const g2 = globalThis as unknown as { __pctIngestRunning?: boolean }
+
   const run = async (label: string) => {
+    if (g2.__pctIngestRunning) {
+      console.warn(`[pct-cron:${label}] 이전 적재가 아직 진행 중이라 이번 회차를 건너뜁니다.`)
+      return
+    }
+    g2.__pctIngestRunning = true
     try {
       const r = await ingestPctSheet()
-      console.log(`[pct-cron:${label}] 적재 완료 — 신규 ${r.created} / 변경 ${r.updated} / 삭제 ${r.deleted} / 미동기화 ${r.unsynced}`)
+      const failed = r.failures.length
+      const line = `[pct-cron:${label}] 적재 완료 — 신규 ${r.created} / 변경 ${r.updated} / 삭제 ${r.deleted} / 미동기화 ${r.unsynced}`
+      if (failed > 0) {
+        // 실패를 성공 로그에 묻으면 적재 누락이 무증상으로 지나간다.
+        console.error(`${line} / ⚠ 실패 ${failed}`, r.failures)
+      } else {
+        console.log(line)
+      }
     } catch (err) {
       console.error(`[pct-cron:${label}] 적재 실패`, err)
+    } finally {
+      g2.__pctIngestRunning = false
     }
   }
 

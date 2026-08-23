@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useId, useMemo, useState } from "react"
 import { CellStack } from "@frontend/components/ui/table-cell-stack"
 import {
   ClipboardList,
@@ -103,6 +103,7 @@ const SORT_COLUMNS: SortColumnDef<SortField>[] = [
 
 
 export default function TestMasterPage() {
+  const uid = useId()
   const [view, setView] = useState<MasterView>("items")
   const [rows, setRows] = useState<TestItemRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -603,10 +604,11 @@ export default function TestMasterPage() {
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="flex flex-col gap-1.5 sm:col-span-2">
-                    <label className="text-xs font-medium text-muted-foreground">
+                    <label htmlFor={`${uid}-name`} className="text-xs font-medium text-muted-foreground">
                       시험항목명 <span className="text-destructive">*</span>
                   </label>
                     <Input
+                      id={`${uid}-name`}
                       value={form.name}
                       onChange={(e) =>
                         setForm((prev) => ({ ...prev, name: e.target.value }))
@@ -615,14 +617,14 @@ export default function TestMasterPage() {
                     />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">대분류</label>
+                    <label htmlFor={`${uid}-category`} className="text-xs font-medium text-muted-foreground">대분류</label>
                     <Select
                       value={form.category}
                       onValueChange={(value) =>
                         setForm((prev) => ({ ...prev, category: value as Category }))
                       }
                     >
-                      <SelectTrigger className="!h-9 px-3">
+                      <SelectTrigger id={`${uid}-category`} className="!h-9 px-3">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -635,7 +637,7 @@ export default function TestMasterPage() {
                     </Select>
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">
+                    <label htmlFor={`${uid}-hours`} className="text-xs font-medium text-muted-foreground">
                       예상시간 (h)
                   </label>
                   <label className="mt-2 flex items-center gap-2 rounded-md border px-3 py-2.5 text-sm font-medium text-foreground">
@@ -648,6 +650,7 @@ export default function TestMasterPage() {
                     활성 상태
                   </label>
                     <Input
+                      id={`${uid}-hours`}
                       type="number"
                       min={0}
                       value={form.estimatedHours}

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useId, useMemo, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
 import {
   CalendarDays, Plus, Trash2, Loader2, Check, ChevronLeft, ChevronRight, CheckCircle2,
@@ -272,9 +272,9 @@ export default function VacationPage() {
       {/* Month nav */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <button onClick={prevMonth} className="rounded-md p-2 text-slate-500 hover:bg-slate-100"><ChevronLeft size={18} /></button>
+          <button type="button" onClick={prevMonth} aria-label="이전 달" className="rounded-md p-2 text-slate-500 hover:bg-slate-100"><ChevronLeft size={18} /></button>
           <span className="min-w-32 text-center text-base font-bold text-slate-900">{year}년 {month + 1}월</span>
-          <button onClick={nextMonth} className="rounded-md p-2 text-slate-500 hover:bg-slate-100"><ChevronRight size={18} /></button>
+          <button type="button" onClick={nextMonth} aria-label="다음 달" className="rounded-md p-2 text-slate-500 hover:bg-slate-100"><ChevronRight size={18} /></button>
           <button onClick={goToday} className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50">오늘</button>
         </div>
         {/* 범례 */}
@@ -531,8 +531,10 @@ function EventDetail({
         )}
         {(isAdmin || isOwner) && (
           <button
+            type="button"
             onClick={onDelete}
             disabled={busy}
+            aria-label="일정 삭제"
             className="ml-auto inline-flex items-center gap-1 rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-60"
           >
             {busy ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
@@ -761,6 +763,7 @@ function AddModal({
   onSaved: () => void
   onError: (m: string) => void
 }) {
+  const uid = useId()
   const [userId, setUserId] = useState("")
   const [type, setType] = useState<ScheduleType>("ANNUAL")
   const [startDate, setStartDate] = useState(defaults.start)
@@ -805,9 +808,9 @@ function AddModal({
         <div className="grid gap-3">
           {isAdmin && (
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600">대상자</label>
+              <label htmlFor={`${uid}-user`} className="mb-1 block text-xs font-medium text-slate-600">대상자</label>
               <Select value={userId || "self"} onValueChange={v => setUserId(v === "self" ? "" : v)}>
-                <SelectTrigger className="h-10 w-full rounded-md border border-slate-200 px-3 text-sm">
+                <SelectTrigger id={`${uid}-user`} className="h-10 w-full rounded-md border border-slate-200 px-3 text-sm">
                   <SelectValue placeholder="본인 (관리자)" />
                 </SelectTrigger>
                 <SelectContent>
@@ -821,8 +824,8 @@ function AddModal({
           )}
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600">유형</label>
-            <div className="flex gap-2">
+            <span id={`${uid}-type-label`} className="mb-1 block text-xs font-medium text-slate-600">유형</span>
+            <div role="group" aria-labelledby={`${uid}-type-label`} className="flex gap-2">
               {(Object.keys(TYPE_LABEL) as ScheduleType[]).map(t => (
                 <button
                   key={t}
@@ -846,8 +849,9 @@ function AddModal({
           />
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">메모</label>
+            <label htmlFor={`${uid}-memo`} className="mb-1 block text-xs font-medium text-muted-foreground">메모</label>
             <Input
+              id={`${uid}-memo`}
               value={memo}
               onChange={e => setMemo(e.target.value)}
               placeholder="선택 입력"

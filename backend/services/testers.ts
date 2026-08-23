@@ -1,4 +1,4 @@
-import { supabase } from '@backend/lib/supabase'
+import { supabaseAdmin as supabase } from '@backend/lib/supabase'
 import { selectAll } from '@backend/lib/supabasePage'
 import { hashPassword } from '@backend/lib/auth'
 

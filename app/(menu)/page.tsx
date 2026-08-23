@@ -259,7 +259,7 @@ export default function QCDashboard() {
                         }}
                         title={isPinned ? '즐겨찾기 해제' : '즐겨찾기'}
                         className={cn(
-                          'inline-flex cursor-pointer rounded p-0.5',
+                          'inline-flex cursor-pointer rounded-md p-0.5',
                           isPinned ? 'text-amber-500' : 'text-transparent group-hover:text-muted-foreground',
                         )}
                       >
@@ -277,7 +277,7 @@ export default function QCDashboard() {
                           }
                         }}
                         title="탭 닫기"
-                        className="inline-flex cursor-pointer rounded p-0.5 text-transparent group-hover:text-muted-foreground hover:bg-muted"
+                        className="inline-flex cursor-pointer rounded-md p-0.5 text-transparent group-hover:text-muted-foreground hover:bg-muted"
                       >
                         <X size={11} />
                       </span>
@@ -416,7 +416,7 @@ export default function QCDashboard() {
                 <TableBody>
                   {isLoading && Array.from({ length: 6 }).map((_, i) => (
                     <TableRow key={`sk-${i}`} className="hover:bg-transparent">
-                      <TableCell className="px-3 py-2"><Skeleton className="h-4 w-4 rounded" /></TableCell>
+                      <TableCell className="px-3 py-2"><Skeleton className="h-4 w-4 rounded-md" /></TableCell>
                       <TableCell className="px-3 py-2"><Skeleton className="h-8 w-40" /></TableCell>
                       <TableCell className="px-3 py-2"><Skeleton className="h-8 w-32" /></TableCell>
                       <TableCell className="px-3 py-2"><Skeleton className="h-8 w-24" /></TableCell>

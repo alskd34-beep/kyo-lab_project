@@ -98,6 +98,25 @@ async function dispatch(channel: string, input: CreateNotificationInput): Promis
  * - 본인 대상(target_user_id = userId)
  * - admin 이면 전체 공지(target_user_id is null)도 포함
  */
+/**
+ * 조회 스코프를 요청자에게 한정한다.
+ * - admin  : 본인 대상 + 전체 공지(target_user_id is null)
+ * - tester : 본인 대상만
+ *
+ * userId 는 우리가 발급한 JWT 의 sub(UUID)라 현재는 공격자 제어가 아니지만,
+ * PostgREST 필터 문자열에 값을 이어붙이는 자리이므로 UUID 형식을 강제해 둔다.
+ */
+function scopeToViewer<T extends { or: (f: string) => T; eq: (c: string, v: string) => T }>(
+  query: T, userId: string, role: 'admin' | 'tester',
+): T {
+  if (!/^[0-9a-fA-F-]{36}$/.test(userId)) {
+    throw new Error('잘못된 사용자 식별자입니다.')
+  }
+  return role === 'admin'
+    ? query.or(`target_user_id.eq.${userId},target_user_id.is.null`)
+    : query.eq('target_user_id', userId)
+}
+
 export async function listForUser(
   userId: string,
   role: 'admin' | 'tester',
@@ -109,11 +128,7 @@ export async function listForUser(
     .order('created_at', { ascending: false })
     .limit(opts.limit ?? 50)
 
-  if (role === 'admin') {
-    query = query.or(`target_user_id.eq.${userId},target_user_id.is.null`)
-  } else {
-    query = query.eq('target_user_id', userId)
-  }
+  query = scopeToViewer(query, userId, role)
   if (opts.unreadOnly) query = query.eq('is_read', false)
 
   const { data, error } = await query
@@ -121,16 +136,19 @@ export async function listForUser(
   return (data ?? []).map(mapRow)
 }
 
-/** 읽음 처리 (단건 또는 전체) */
+/**
+ * 읽음 처리 (단건 또는 전체).
+ *
+ * 2026-08-23 보안 수정: 단건(id 지정) 경로에만 소유자 조건이 빠져 있어
+ * 임의 사용자가 타인의 미읽음 알림을 읽음 처리할 수 있었다. 마감 임박(D-7,
+ * severity=critical) 알림이 대상자에게 도달하지 못한 채 사라질 수 있는 경로였다.
+ * 이제 단건도 전체와 동일한 스코프를 적용한다.
+ */
 export async function markRead(userId: string, role: 'admin' | 'tester', id?: string): Promise<void> {
   let query = supabaseAdmin.from('notifications').update({ is_read: true })
-  if (id) {
-    query = query.eq('id', id)
-  } else if (role === 'admin') {
-    query = query.or(`target_user_id.eq.${userId},target_user_id.is.null`)
-  } else {
-    query = query.eq('target_user_id', userId)
-  }
+  if (id) query = query.eq('id', id)
+  // 스코프는 단건/전체 공통으로 적용한다.
+  query = scopeToViewer(query, userId, role)
   const { error } = await query
   if (error) throw error
 }

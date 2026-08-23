@@ -362,7 +362,9 @@ export default function Chatbot() {
               {isClearing ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
             </button>
             <button
+              type="button"
               onClick={handleClose}
+              aria-label="챗봇 닫기"
               className="rounded-full p-1.5 text-white/60 hover:bg-white/15 hover:text-white transition-colors"
             >
               <X size={16} />
@@ -378,7 +380,7 @@ export default function Chatbot() {
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 py-1 space-y-3">
+        <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-1 space-y-3">
           {messages.map(msg => (
             <div
               key={msg.id}
@@ -482,6 +484,7 @@ export default function Chatbot() {
             <input
               ref={inputRef}
               type="text"
+              aria-label="질문 입력"
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -490,8 +493,10 @@ export default function Chatbot() {
               className="flex-1 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400 disabled:opacity-50"
             />
             <button
+              type="button"
               onClick={sendMessage}
               disabled={(!input.trim() && attachments.length === 0) || isStreaming || uploading}
+              aria-label="전송"
               className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-600 text-white transition-all hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
             >
               <Send size={13} />

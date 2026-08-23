@@ -244,7 +244,7 @@ export default function TestStatusPage() {
                       className={`
                         group relative flex shrink-0 items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors
                         ${isActive
-                          ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600 after:rounded-t-full'
+                          ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600 after:rounded-t-md'
                           : 'text-slate-500 hover:text-slate-700'}
                       `}
                     >
@@ -266,7 +266,7 @@ export default function TestStatusPage() {
                         }}
                         title={isPinned ? '즐겨찾기 해제' : '즐겨찾기'}
                         className={`
-                          ml-0.5 inline-flex rounded p-0.5 transition-all cursor-pointer
+                          ml-0.5 inline-flex rounded-md p-0.5 transition-all cursor-pointer
                           ${isPinned
                             ? 'text-amber-400 hover:text-amber-500'
                             : 'text-transparent group-hover:text-slate-300 hover:!text-amber-400'}
@@ -287,7 +287,7 @@ export default function TestStatusPage() {
                           }
                         }}
                         title="탭 닫기"
-                        className="ml-0.5 inline-flex rounded p-0.5 text-transparent transition-all cursor-pointer group-hover:text-slate-400 hover:!bg-slate-100 hover:!text-slate-700"
+                        className="ml-0.5 inline-flex rounded-md p-0.5 text-transparent transition-all cursor-pointer group-hover:text-slate-400 hover:!bg-slate-100 hover:!text-slate-700"
                       >
                         <X size={11} />
                       </span>
@@ -436,6 +436,7 @@ export default function TestStatusPage() {
                             checked={isSelected}
                             onChange={() => toggleRow(row.id)}
                             onClick={e => e.stopPropagation()}
+                            aria-label={`${row.testNo} ${row.product} 선택`}
                             className="cb-custom mt-0.5"
                           />
                           <div className="flex-1 min-w-0">
@@ -480,6 +481,7 @@ export default function TestStatusPage() {
                         type="checkbox"
                         checked={selectedRows.size === tableData.length && tableData.length > 0}
                         onChange={toggleAll}
+                        aria-label="전체 선택"
                         className="cb-custom"
                       />
                     </TableHead>
@@ -543,6 +545,7 @@ export default function TestStatusPage() {
                             checked={isSelected}
                             onChange={() => toggleRow(row.id)}
                             onClick={e => e.stopPropagation()}
+                            aria-label={`${row.testNo} ${row.product} 선택`}
                             className="cb-custom"
                           />
                         </TableCell>

@@ -13,6 +13,8 @@
  * LLM 구현으로 교체 가능.
  */
 
+import { nextFriday } from '@backend/services/assignRules'
+
 // ─── 입력 타입 ─────────────────────────────────────────────────────────────────
 export interface EnginePctRow {
   품목코드: string
@@ -422,6 +424,17 @@ export function generatePctSchedule(input: EngineInput): EngineResult {
     return { dates: fwd, deadlineRisk: last > due }
   }
 
+  /**
+   * [규칙2] 개별 중금속 시험 윈도우 — 공수 1DAY, 시험일은 금요일로 고정.
+   * 시작 가능일(포장일+1근무일) 이후 첫 금요일에 배치한다.
+   * 완료예정일을 넘기면 deadlineRisk 로 표시한다(금요일 고정이 마감보다 우선).
+   */
+  const heavyMetalWindow = (packISO: string, due: string | null, hol: Set<string>): { dates: string[]; deadlineRisk: boolean } => {
+    const earliest = workingDaysAfter(packISO, 1, hol)[0] ?? addDays(packISO, 1)
+    const friday = nextFriday(earliest, hol)
+    return { dates: [friday], deadlineRisk: !!due && friday > due }
+  }
+
   // 우선순위 정렬: 긴급 → 포장일 빠른 순
   const indexed = rows.map((r, i) => ({ r, i, date: normalizeDate(r.포장일, year) }))
   indexed.sort((a, b) => {
@@ -434,7 +447,7 @@ export function generatePctSchedule(input: EngineInput): EngineResult {
   const assignments: EngineAssignment[] = []
   const unassigned: EngineUnassigned[] = []
   // dense 패킹용: assignments[i] 와 동일 인덱스. 시작가능일(포장일+1)/완료요청일/공수.
-  const packInfo: { earliestStart: string; due: string | null; workdays: number }[] = []
+  const packInfo: { earliestStart: string; due: string | null; workdays: number; pinned: boolean }[] = []
   let workloadMatched = 0, workloadMissing = 0
 
   for (const { r, date } of indexed) {
@@ -474,10 +487,13 @@ export function generatePctSchedule(input: EngineInput): EngineResult {
       const assignedThisProduct = new Set<string>()
       const unassignedItems: string[] = []
       for (const ti of effectiveItems) {
-        // [규칙2] 개별 중금속 시험은 공수 1DAY 고정(PRD). 그 외 항목은 품목 공수를 따른다(공수 폴백).
+        // [규칙2] 개별 중금속 시험은 공수 1DAY 고정 + **금요일 배치**(프로세스 정의).
+        // 예전에는 1DAY 고정만 구현돼 있고 요일 조건이 빠져 있었다(2026-08-23 점검).
         const isHeavyMetal = ti.includes('중금속')
         const itemWorkdays = isHeavyMetal ? 1 : workdays
-        const itemWin = isHeavyMetal ? computeWindow(date, due, 1) : window
+        const itemWin = isHeavyMetal
+          ? heavyMetalWindow(date, due, holidays)
+          : window
         const itemDates = itemWin.dates
         const itemStart = itemDates[0] ?? startDate
         const { caps, duo } = reqOf(ti)
@@ -506,7 +522,8 @@ export function generatePctSchedule(input: EngineInput): EngineResult {
           deadlineRisk: itemWin.deadlineRisk,
           assignmentType: 'INDIVIDUAL_ITEM', testItemName: ti, parentProductName: r.품목명, parentProductCode: code,
         })
-        packInfo.push({ earliestStart, due, workdays: itemWorkdays })
+        // 중금속은 금요일에 고정된 날짜라 dense 패킹으로 옮기지 않는다.
+        packInfo.push({ earliestStart, due, workdays: itemWorkdays, pinned: isHeavyMetal })
       }
       if (unassignedItems.length > 0) {
         unassigned.push({ productCode: code, productName: r.품목명, batchNo: r.제조번호, testItems: unassignedItems, reason: `개별항목 자격 시험자 없음: ${unassignedItems.join(', ')}` })
@@ -554,7 +571,7 @@ export function generatePctSchedule(input: EngineInput): EngineResult {
         deadlineRisk: window.deadlineRisk,
         assignmentType: 'PRODUCT',
       })
-      packInfo.push({ earliestStart, due, workdays })
+      packInfo.push({ earliestStart, due, workdays, pinned: false })
     }
   }
 
@@ -562,6 +579,18 @@ export function generatePctSchedule(input: EngineInput): EngineResult {
   // 시험자별로 완료요청일(없으면 맨 뒤) 순으로 정렬해, 시작가능일(포장일+1) 이후 가능한 빨리
   // 직전 작업 종료 다음 근무일부터 연속 배치한다 → 한 시험자의 빈 근무일·작업 겹침 제거.
   // 완료요청일을 넘기면 deadlineRisk 로 표시(마감 못 맞춤).
+  //
+  // ⚠️ 문서와의 불일치 — 결정 필요 (2026-08-23 점검):
+  //   docs/PRD-current-system.md:163 은 "완료예정일 기준 **역순 ALAP** → 시험자별 dense 패킹"
+  //   이라고 적혀 있고, 위 computeWindow() 는 실제로 ALAP(가능한 늦게) 배치를 계산한다.
+  //   그런데 이 패스가 모든 배정의 dates 를 earliestStart 부터 **정방향(ASAP)** 으로 다시
+  //   계산해 덮어쓰므로, ALAP 결과는 한 번도 쓰이지 않고 버려진다(packInfo 에도 담기지 않는다).
+  //
+  //   즉 현재 실제 동작은 "ASAP + EDD 순 dense 패킹"이다. 어느 쪽이 맞는 정책인지는
+  //   업무 판단이라 코드에서 임의로 뒤집지 않았다. 결정 후 둘 중 하나로 정리할 것:
+  //     (a) ALAP 이 맞다  → 이 패스를 due 기준 역방향 패킹으로 바꾼다.
+  //     (b) ASAP 이 맞다  → computeWindow 의 ALAP 분기를 제거하고 PRD 문구를 고친다.
+  //   (b) 가 운영상 안전한 쪽이다 — 시험이 마감 직전이 아니라 일찍 끝나 여유가 생긴다.
   const byTester = new Map<string, number[]>()
   assignments.forEach((a, i) => {
     const arr = byTester.get(a.testerId) ?? []
@@ -581,6 +610,13 @@ export function generatePctSchedule(input: EngineInput): EngineResult {
     let freeFrom: string | null = null
     for (const i of idxs) {
       const info = packInfo[i]
+      // [규칙2] 금요일 고정 배정은 날짜를 재계산하지 않는다.
+      // 다만 그 날은 실제로 점유되므로 이후 작업의 시작 하한(freeFrom)에는 반영한다.
+      if (info.pinned) {
+        const pinnedLast = assignments[i].dates[assignments[i].dates.length - 1]
+        if (pinnedLast) freeFrom = addDays(pinnedLast, 1)
+        continue
+      }
       const start0 = freeFrom && freeFrom > info.earliestStart ? freeFrom : info.earliestStart
       const dts = workingDaysFromInclusive(start0, info.workdays, holidays, skipDays)
       const last = dts[dts.length - 1] ?? start0
@@ -591,6 +627,40 @@ export function generatePctSchedule(input: EngineInput): EngineResult {
       const baseNote = assignments[i].note.replace(/\s*⚠마감위험/g, '').trim()
       assignments[i].note = [baseNote, risk ? '⚠마감위험' : ''].filter(Boolean).join(' ')
       freeFrom = addDays(last, 1)
+    }
+  }
+
+  // ── 반차 겹침 알림 재계산 ────────────────────────────────────────────────────
+  // halfDayNotices 는 후보 선정 시점의 dates 로 만들어졌는데, 위 dense 패킹이 dates 를
+  // 통째로 다시 계산하므로 그대로 두면 실제 배정 기간과 다른 날짜를 관리자에게 보고한다
+  // (없는 겹침을 알리거나 진짜 겹침을 놓친다). 최종 dates 기준으로 다시 만든다.
+  halfDayNotices.length = 0
+  for (const a of assignments) {
+    const days = halfOverlap(a.testerId, a.dates)
+    if (days.length > 0) {
+      halfDayNotices.push({
+        testerId: a.testerId,
+        productCode: a.productCode,
+        batchNo: a.batchNo,
+        testItemName: a.assignmentType === 'INDIVIDUAL_ITEM' ? (a.testItemName ?? null) : null,
+        dates: days,
+      })
+    }
+    // 듀오 보조자의 반차도 함께 본다(부하는 이미 반영됐지만 알림에는 빠져 있었다).
+    if (a.isDuo && a.duoPartner) {
+      const partner = activeTesters.find(t => t.name === a.duoPartner)
+      if (partner) {
+        const pDays = halfOverlap(partner.id, a.dates)
+        if (pDays.length > 0) {
+          halfDayNotices.push({
+            testerId: partner.id,
+            productCode: a.productCode,
+            batchNo: a.batchNo,
+            testItemName: a.assignmentType === 'INDIVIDUAL_ITEM' ? (a.testItemName ?? null) : null,
+            dates: pDays,
+          })
+        }
+      }
     }
   }
 

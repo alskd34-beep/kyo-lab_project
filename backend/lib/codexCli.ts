@@ -7,8 +7,12 @@
  * 운영 전환 시 확인할 것 (2026-08-22 점검):
  *  - `spawn('sh', ['-c', ...])` — Windows 서버에서는 동작하지 않는다.
  *  - 서버에 설치·로그인된 CLI 세션에 의존해 배포 환경에서 재현이 어렵다.
- *  - `runCodexText` 는 `--dangerously-bypass-approvals-and-sandbox` 로 실행한다.
  *  - 호출 이력이 남지 않아 AI 배정 근거를 감사추적할 수 없다(GMP 관점).
+ *
+ * 2026-08-23 보안 수정:
+ *  - `runCodexText` 의 `--dangerously-bypass-approvals-and-sandbox` 를 `--sandbox read-only` 로 교체했다.
+ *    챗봇 경로는 사용자 입력이 프롬프트에 그대로 실리므로, 승인·샌드박스를 끄면
+ *    프롬프트 인젝션이 서버 임의 코드 실행으로 직결된다. 되돌리지 말 것.
  *
  * 현재 사용처는 모두 전환 스위치를 갖고 있다:
  *   - `pctAssign` : `ENABLE_CODEX_ASSIGN=1` 옵트인, 실패 시 규칙엔진 폴백
@@ -203,7 +207,11 @@ export async function runCodexText(
       extraArgs: [
         '--output-last-message',
         lastMessagePath,
-        '--dangerously-bypass-approvals-and-sandbox',
+        // 챗봇 프롬프트에는 사용자 입력이 그대로 실린다. 승인·샌드박스를 끄면
+        // 프롬프트 인젝션이 곧바로 서버 임의 코드 실행이 되므로 읽기 전용 샌드박스를 강제한다.
+        // (읽기 전용이어도 파일 열람은 가능하니, 운영 전환 시 CLI 경로 자체를 API 로 대체할 것)
+        '--sandbox',
+        'read-only',
         '--skip-git-repo-check',
         '--ignore-user-config',
         '--ignore-rules',

@@ -15,12 +15,15 @@ import { useCallback, useEffect, useState } from "react"
 import {
   ArrowRight, CheckCircle2, Circle, Clock, LoaderCircle, TriangleAlert, User,
 } from "lucide-react"
-import { JOB_STAGES, stageStyle } from "@shared/qc-status"
+import { IN_PROGRESS_STATUS, JOB_STAGES, stageStyle } from "@shared/qc-status"
 import { cn } from "@frontend/lib/utils"
 import { Badge } from "@frontend/components/ui/badge"
 import { Button } from "@frontend/components/ui/button"
 import { ManagementDrawer } from "@frontend/components/common/management-drawer"
 import { Skeleton } from "@frontend/components/ui/skeleton"
+
+/** "진행중" 표시색은 상태 팔레트(types/qc-status.ts)에서 가져온다. 화면마다 색이 갈리지 않게. */
+const IN_PROGRESS_STYLE = stageStyle(IN_PROGRESS_STATUS)
 
 // ─── Types (백엔드 JobDetail 과 동일) ────────────────────────────────────────
 interface JobItem {
@@ -255,23 +258,23 @@ export function JobDetailModal({
 
               {/* 현재 수행 항목 */}
               {currentItem ? (
-                <section className="rounded-md border border-violet-200 bg-violet-50/60 p-3">
-                  <p className="flex items-center gap-1.5 text-[11px] font-semibold text-violet-700">
+                <section className="rounded-md border bg-muted/40 p-3">
+                  <p className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
                     <LoaderCircle className="size-3" />
                     현재 수행 중인 시험항목
                   </p>
                   <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-sm font-semibold text-violet-900">
+                    <span className="text-sm font-semibold text-foreground">
                       {currentItem.testItemName}
                     </span>
                     {currentElapsed !== null && (
-                      <span className="flex items-center gap-1 text-xs text-violet-700">
+                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
                         <Clock className="size-3" />
                         경과 {formatMinutes(currentElapsed)}
                       </span>
                     )}
                   </div>
-                  <p className="mt-1 text-[11px] text-violet-700/80">
+                  <p className="mt-1 text-[11px] text-muted-foreground">
                     미완료 항목 중 순번이 가장 빠른 항목입니다. ({currentIdx + 1}번째 / 총 {total}개)
                   </p>
                 </section>
@@ -293,7 +296,7 @@ export function JobDetailModal({
                   <div
                     className={cn(
                       "h-full rounded-md transition-all",
-                      total > 0 && cleared === total ? "bg-emerald-500" : "bg-violet-500",
+                      total > 0 && cleared === total ? "bg-emerald-500" : IN_PROGRESS_STYLE.dot,
                     )}
                     style={{ width: `${pct}%` }}
                   />
@@ -319,7 +322,7 @@ export function JobDetailModal({
                         className={cn(
                           "flex items-center justify-between gap-2 rounded-md border px-3 py-2.5",
                           done && "border-emerald-200 bg-emerald-50/60",
-                          isCurrent && "border-violet-300 bg-violet-50/60",
+                          isCurrent && "border-primary/40 bg-primary/5",
                         )}
                       >
                         <div className="flex min-w-0 items-center gap-2">
@@ -329,12 +332,12 @@ export function JobDetailModal({
                           {done
                             ? <CheckCircle2 className="size-4 shrink-0 text-emerald-500" />
                             : isCurrent
-                              ? <LoaderCircle className="size-4 shrink-0 text-violet-500" />
+                              ? <LoaderCircle className="size-4 shrink-0 text-primary" />
                               : <Circle className="size-4 shrink-0 text-muted-foreground" />}
                           <span className={cn(
                             "truncate text-sm",
                             done ? "font-medium text-emerald-800"
-                              : isCurrent ? "font-semibold text-violet-900"
+                              : isCurrent ? "font-semibold text-foreground"
                               : "text-foreground",
                           )}>
                             {it.testItemName}
@@ -348,8 +351,8 @@ export function JobDetailModal({
                               {it.elapsedMinutes != null && ` · ${formatMinutes(it.elapsedMinutes)}`}
                             </span>
                           ) : isCurrent ? (
-                            <Badge variant="outline" className="gap-1 border-violet-200 text-violet-700">
-                              <span className="size-1.5 rounded-full bg-violet-500" />진행 중
+                            <Badge variant="outline" className={cn("gap-1", IN_PROGRESS_STYLE.cls)}>
+                              <span className={cn("size-1.5 rounded-full", IN_PROGRESS_STYLE.dot)} />진행 중
                             </Badge>
                           ) : (
                             <Badge variant="secondary">대기</Badge>

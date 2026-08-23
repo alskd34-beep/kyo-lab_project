@@ -328,8 +328,13 @@ export default function UsersAdminPage() {
           : users.map(u => (
           <div
             key={u.id}
-            className="cursor-pointer rounded-md border border-slate-200 bg-white p-3 transition-colors hover:bg-muted/30"
+            role="button"
+            tabIndex={0}
             onClick={() => setEditingUser(u)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditingUser(u) }
+            }}
+            className="cursor-pointer rounded-md border border-slate-200 bg-white p-3 transition-colors hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
           >
             <div className="flex items-start gap-3">
               <div className="flex min-w-0 items-center gap-2">

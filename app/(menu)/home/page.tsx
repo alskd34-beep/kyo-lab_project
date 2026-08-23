@@ -325,7 +325,7 @@ export default function HomePage() {
                     <TableRow key={i}>
                       <TableCell className="px-3 py-2"><Skeleton className="h-8 w-40" /></TableCell>
                       <TableCell className="px-3 py-2"><Skeleton className="h-8 w-24" /></TableCell>
-                      <TableCell className="px-3 py-2"><Skeleton className="h-5 w-14 rounded-full" /></TableCell>
+                      <TableCell className="px-3 py-2"><Skeleton className="h-5 w-14 rounded-md" /></TableCell>
                     </TableRow>
                   ))
                 : sortedData.length === 0
@@ -397,9 +397,9 @@ export default function HomePage() {
                         <span className="w-7 text-right text-[10px] tabular-nums text-muted-foreground">{pct}%</span>
                       </div>
                     </div>
-                    <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                    <div className="h-2 w-full overflow-hidden rounded-md bg-muted">
                       <div
-                        className={cn('h-full rounded-full transition-all', row.color)}
+                        className={cn('h-full rounded-md transition-all', row.color)}
                         style={{ width: `${pct}%` }}
                       />
                     </div>

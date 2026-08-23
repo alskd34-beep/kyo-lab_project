@@ -7,7 +7,7 @@
  * Phase 1: 표시만 (상태/배정 변경은 다음 단계)
  */
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@frontend/components/ui/card'
 import { Button } from '@frontend/components/ui/button'
 import { FileSpreadsheet, Loader2, AlertCircle, RefreshCw } from 'lucide-react'
@@ -47,6 +47,7 @@ const GROUP_COLORS = ['bg-blue-500', 'bg-emerald-500', 'bg-violet-500', 'bg-ambe
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function SheetBoardSection() {
+  const sheetIdInputId = useId()
   const [fileId, setFileId]   = useState(DEFAULT_FILE_ID)
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState<string | null>(null)
@@ -137,10 +138,11 @@ export default function SheetBoardSection() {
         {/* 시트 ID 입력 + 불러오기 */}
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex flex-1 min-w-[280px] flex-col gap-1.5">
-            <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
+            <label htmlFor={sheetIdInputId} className="text-xs font-medium text-slate-600 dark:text-slate-300">
               구글 시트 ID
             </label>
             <input
+              id={sheetIdInputId}
               type="text"
               value={fileId}
               onChange={e => setFileId(e.target.value)}

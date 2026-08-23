@@ -19,28 +19,30 @@ function writeAutoLoginCookie(enabled: boolean) {
     : `${AUTO_LOGIN_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`
 }
 
-function readLoginPrefs() {
-  if (typeof window === 'undefined') {
-    return {
-      username: 'kyo-admin',
-      rememberId: false,
-      autoLogin: false,
-    }
-  }
+interface LoginPrefs {
+  username: string
+  rememberId: boolean
+  autoLogin: boolean
+}
 
+const EMPTY_PREFS: LoginPrefs = { username: '', rememberId: false, autoLogin: false }
+
+/**
+ * 저장된 로그인 환경설정을 읽는다.
+ *
+ * 반드시 마운트 후(effect)에만 호출한다. 렌더 중에 부르면 서버 렌더 결과(빈 값)와
+ * 클라이언트 첫 렌더 결과(localStorage 값)가 달라져 hydration 불일치가 난다.
+ */
+function readLoginPrefs(): LoginPrefs {
   try {
     const savedId = localStorage.getItem(LS_SAVED_ID)
     return {
-      username: savedId || 'kyo-admin',
+      username: savedId ?? '',
       rememberId: Boolean(savedId),
       autoLogin: localStorage.getItem(LS_AUTO_LOGIN) === '1',
     }
   } catch {
-    return {
-      username: 'kyo-admin',
-      rememberId: false,
-      autoLogin: false,
-    }
+    return EMPTY_PREFS
   }
 }
 
@@ -49,17 +51,25 @@ function LoginForm() {
   const params       = useSearchParams()
   const { user, loading, login } = useAuth()
 
-  // TODO: 개발 편의용 기본값. 운영 배포 전 빈 문자열로 되돌릴 것.
-  const initialPrefs = readLoginPrefs()
-  const [username,   setUsername]   = useState(initialPrefs.username)
-  const [password,   setPassword]   = useState('kyo-admin')
-  const [rememberId, setRememberId] = useState(initialPrefs.rememberId)
-  const [autoLogin,  setAutoLogin]  = useState(initialPrefs.autoLogin)
+  // 초기값은 서버 렌더와 동일하게 빈 값으로 두고, 저장된 설정은 마운트 후에 채운다.
+  const [username,   setUsername]   = useState('')
+  const [password,   setPassword]   = useState('')
+  const [rememberId, setRememberId] = useState(false)
+  const [autoLogin,  setAutoLogin]  = useState(false)
   const [showPw,     setShowPw]     = useState(false)
   const [error,      setError]      = useState<string | null>(null)
   const [busy,       setBusy]       = useState(false)
 
   const next = params.get('next') || '/home'
+
+  useEffect(() => {
+    const prefs = readLoginPrefs()
+    /* eslint-disable react-hooks/set-state-in-effect -- localStorage(외부 시스템)를 마운트 1회 읽어 동기화. 렌더 중에 읽으면 hydration 불일치가 난다. */
+    if (prefs.username) setUsername(prefs.username)
+    setRememberId(prefs.rememberId)
+    setAutoLogin(prefs.autoLogin)
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [])
 
   // 자동로그인 체크되어있고 토큰이 유효해 user가 복원되면 홈으로 이동
   useEffect(() => {
@@ -116,7 +126,7 @@ function LoginForm() {
                 autoComplete="username"
                 autoFocus
                 className="pl-9"
-                placeholder="kyo-admin"
+                placeholder="아이디를 입력하세요"
               />
             </div>
           </label>
@@ -176,10 +186,6 @@ function LoginForm() {
             {busy ? '로그인 중…' : '로그인'}
           </Button>
         </form>
-
-        <p className="mt-5 text-center text-[11px] text-muted-foreground">
-          기본 관리자 계정: <span className="font-mono">kyo-admin / kyo-admin</span>
-        </p>
       </Card>
     </div>
   )

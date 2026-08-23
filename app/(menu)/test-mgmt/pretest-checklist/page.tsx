@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useDeferredValue, useEffect, useId, useMemo, useState } from "react"
 import {
   ClipboardCheck,
   Search,
@@ -13,6 +13,7 @@ import {
 } from "lucide-react"
 
 import { cn } from "@frontend/lib/utils"
+import { useVirtualWindow } from "@frontend/hooks/use-virtual-window"
 import { useAuth } from "@frontend/lib/auth-context"
 import { Badge } from "@frontend/components/ui/badge"
 import { Button } from "@frontend/components/ui/button"
@@ -121,7 +122,11 @@ function isSimilarName(a: string, b: string): boolean {
   return ta === tb || ta.startsWith(tb) || tb.startsWith(ta)
 }
 
+/** 품목 사이드바 한 줄의 고정 높이(px). 가상 스크롤 계산의 기준이라 마크업과 반드시 일치해야 한다. */
+const PRODUCT_ITEM_HEIGHT = 56
+
 export default function PretestChecklistPage() {
+  const uid = useId()
   const { user } = useAuth()
   const myName = user?.displayName || user?.username || "본인"
 
@@ -194,15 +199,27 @@ export default function PretestChecklistPage() {
     }
   }
 
+  const deferredSearch = useDeferredValue(search)
+
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
+    const q = deferredSearch.trim().toLowerCase()
     if (!q) return products
     return products.filter(
       (p) =>
         p.name.toLowerCase().includes(q) ||
         p.productCode.toLowerCase().includes(q)
     )
-  }, [products, search])
+  }, [products, deferredSearch])
+
+  /** 품목이 2,000건까지 오므로 보이는 구간만 그린다. */
+  const {
+    containerRef: productListRef,
+    start: productStart,
+    end: productEnd,
+    padTop: productPadTop,
+    padBottom: productPadBottom,
+  } = useVirtualWindow(filtered.length, PRODUCT_ITEM_HEIGHT)
+  const windowedProducts = filtered.slice(productStart, productEnd)
 
   const sortedNotes = useMemo(() => {
     const arr = [...notes]
@@ -358,7 +375,7 @@ export default function PretestChecklistPage() {
               />
             </div>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div ref={productListRef} className="min-h-0 flex-1 overflow-y-auto">
             {productsLoading ? (
               <ul className="divide-y">
                 {Array.from({ length: 7 }, (_, index) => (
@@ -373,25 +390,28 @@ export default function PretestChecklistPage() {
                 품목이 없습니다.
               </p>
             ) : (
-              <ul className="divide-y">
-                {filtered.map((p) => (
+              <ul>
+                {productPadTop > 0 && <li aria-hidden style={{ height: productPadTop }} />}
+                {windowedProducts.map((p) => (
                   <li key={p.id}>
                     <button
+                      type="button"
                       onClick={() => setSelected(p)}
                       className={cn(
-                        "flex w-full flex-col items-start gap-0.5 px-4 py-2.5 text-left transition-colors hover:bg-muted/50",
+                        "flex h-14 w-full flex-col items-start justify-center gap-0.5 overflow-hidden border-b px-4 text-left transition-colors hover:bg-muted/50",
                         selected?.id === p.id && "bg-primary/5"
                       )}
                     >
                       <span className="font-mono text-[10px] font-semibold text-muted-foreground">
                         {p.productCode}
                       </span>
-                      <span className="truncate text-sm font-medium text-foreground">
+                      <span className="w-full truncate text-sm font-medium text-foreground">
                         {p.name}
                       </span>
                     </button>
                   </li>
                 ))}
+                {productPadBottom > 0 && <li aria-hidden style={{ height: productPadBottom }} />}
               </ul>
             )}
           </div>
@@ -440,8 +460,9 @@ export default function PretestChecklistPage() {
                   </div>
                   <div className="grid gap-2.5 md:grid-cols-2">
                     <div>
-                      <label className="mb-1 block text-[11px] font-medium text-muted-foreground">이슈발생 로트(제조번호)</label>
+                      <label htmlFor={`${uid}-issueLot`} className="mb-1 block text-[11px] font-medium text-muted-foreground">이슈발생 로트(제조번호)</label>
                       <Input
+                        id={`${uid}-issueLot`}
                         value={issueLot}
                         onChange={(e) => setIssueLot(e.target.value)}
                         placeholder="예: 26041 (선택)"
@@ -450,10 +471,11 @@ export default function PretestChecklistPage() {
                     </div>
                   </div>
                   <div className="mt-2.5">
-                    <label className="mb-1 block text-[11px] font-medium text-muted-foreground">
+                    <label htmlFor={`${uid}-content`} className="mb-1 block text-[11px] font-medium text-muted-foreground">
                       확인사항 <span className="text-destructive">*</span>
                     </label>
                     <Input
+                      id={`${uid}-content`}
                       value={content}
                       onChange={(e) => setContent(e.target.value)}
                       placeholder="예: 표준품 유효기한 확인, 항온수조 온도 설정 등"
@@ -461,8 +483,9 @@ export default function PretestChecklistPage() {
                     />
                   </div>
                   <div className="mt-2.5">
-                    <label className="mb-1 block text-[11px] font-medium text-muted-foreground">특이사항</label>
+                    <label htmlFor={`${uid}-remark`} className="mb-1 block text-[11px] font-medium text-muted-foreground">특이사항</label>
                     <textarea
+                      id={`${uid}-remark`}
                       value={remark}
                       onChange={(e) => setRemark(e.target.value)}
                       rows={2}

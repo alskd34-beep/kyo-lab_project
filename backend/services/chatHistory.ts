@@ -2,7 +2,7 @@
  * [BACKEND] Chat History 서비스 - Supabase에 대화 이력 저장/조회
  */
 
-import { supabase } from '@backend/lib/supabase'
+import { supabaseAdmin as supabase } from '@backend/lib/supabase'
 
 export interface StoredMessage {
   id: string

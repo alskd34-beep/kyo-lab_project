@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useId, useMemo, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
 import {
   Plus, Trash2, X, Loader2, Search, Sparkles, Layers, AlertCircle,
@@ -145,7 +145,7 @@ export default function ConcurrentItemsPage() {
           />
           {search && (
             <button onClick={() => setSearch("")} title="검색어 지우기"
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground">
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground">
               <X className="size-3.5" />
             </button>
           )}
@@ -240,6 +240,7 @@ export default function ConcurrentItemsPage() {
 function FamilyModal({ open, family, onClose, onDelete, onSaved }: {
   open: boolean; family: FamilyRow | null; onClose: () => void; onDelete?: () => void; onSaved: () => void
 }) {
+  const uid = useId()
   const [name, setName] = useState(family?.name ?? "")
   const [note, setNote] = useState(family?.note ?? "")
   const [members, setMembers] = useState<FamilyMember[]>(family?.members ?? [])
@@ -315,23 +316,23 @@ function FamilyModal({ open, family, onClose, onDelete, onSaved }: {
     >
         <div className="grid gap-3">
           <div>
-            <label className="mb-1 block text-xs font-semibold text-foreground">품목군 이름 <span className="text-destructive">*</span></label>
-            <Input value={name} onChange={e => setName(e.target.value)} placeholder="예: 네비레트엠 계열" />
+            <label htmlFor={`${uid}-name`} className="mb-1 block text-xs font-semibold text-foreground">품목군 이름 <span className="text-destructive">*</span></label>
+            <Input id={`${uid}-name`} value={name} onChange={e => setName(e.target.value)} placeholder="예: 네비레트엠 계열" />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-foreground">비고</label>
-            <Input value={note} onChange={e => setNote(e.target.value)} placeholder="(선택)" />
+            <label htmlFor={`${uid}-note`} className="mb-1 block text-xs font-semibold text-foreground">비고</label>
+            <Input id={`${uid}-note`} value={note} onChange={e => setNote(e.target.value)} placeholder="(선택)" />
           </div>
 
           {/* 선택된 멤버 */}
           <div>
-            <label className="mb-1 block text-xs font-semibold text-foreground">묶을 품목 <span className="text-muted-foreground">({members.length})</span></label>
-            <div className="flex flex-wrap gap-1.5">
+            <span id={`${uid}-members-label`} className="mb-1 block text-xs font-semibold text-foreground">묶을 품목 <span className="text-muted-foreground">({members.length})</span></span>
+            <div role="group" aria-labelledby={`${uid}-members-label`} className="flex flex-wrap gap-1.5">
               {members.map(m => (
                 <span key={m.productCode} className="inline-flex items-center gap-1.5 rounded-md border bg-muted/40 py-1 pl-2 pr-1 text-xs">
                   <span className="font-mono text-[11px] text-muted-foreground">{m.productCode}</span>
                   <span className="text-foreground">{m.productName ?? "-"}</span>
-                  <button onClick={() => removeMember(m.productCode)} className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-destructive">
+                  <button onClick={() => removeMember(m.productCode)} className="rounded-md p-0.5 text-muted-foreground hover:bg-muted hover:text-destructive">
                     <X className="size-3" />
                   </button>
                 </span>

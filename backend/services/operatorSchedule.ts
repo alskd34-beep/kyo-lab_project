@@ -32,6 +32,12 @@ export interface CreateScheduleInput {
   memo?: string | null
 }
 
+/** 요청자 신원 — 소유권 검사용 */
+export interface ScheduleActor {
+  userId: string
+  role: 'admin' | 'tester'
+}
+
 export interface UpdateScheduleInput {
   startDate?: string
   endDate?: string
@@ -98,7 +104,43 @@ export async function createSchedule(input: CreateScheduleInput): Promise<Operat
   return mapRow(data as Record<string, unknown>)
 }
 
-export async function updateSchedule(id: string, input: UpdateScheduleInput): Promise<void> {
+/** 일정 1건의 소유자(user_id). 없으면 null */
+export async function scheduleOwnerId(id: string): Promise<string | null> {
+  const { data } = await supabaseAdmin
+    .from('operator_schedule')
+    .select('user_id')
+    .eq('id', id)
+    .maybeSingle()
+  return (data?.user_id as string) ?? null
+}
+
+/**
+ * 소유권 확인. 관리자는 전체, 담당자는 본인 일정만.
+ *
+ * 2026-08-23 보안 수정: 예전에는 update/delete 가 id 만 받아 소유권을 전혀 보지 않았다.
+ * operator_schedule 은 testerAbsences() 를 통해 **AI 자동배정의 하드 제외 기준**이므로,
+ * 타인의 연차를 지우면 그 사람이 휴가 중에 배정되고 본인 연차를 늘리면 배정을 회피할 수 있었다.
+ * (형제 리소스인 equipment_reservation 은 같은 상황에서 소유권을 검사하고 있었다 — 누락된 쪽이었다)
+ */
+async function assertScheduleAccess(id: string, actor: ScheduleActor): Promise<void> {
+  if (actor.role === 'admin') return
+  const ownerId = await scheduleOwnerId(id)
+  if (ownerId === null) throw new Error('일정을 찾을 수 없습니다.')
+  if (ownerId !== actor.userId) throw new Error('본인 일정만 변경할 수 있습니다.')
+}
+
+export async function updateSchedule(
+  id: string,
+  input: UpdateScheduleInput,
+  actor: ScheduleActor,
+): Promise<void> {
+  await assertScheduleAccess(id, actor)
+
+  // manager_checked(관리자 확인)는 관리자만 토글할 수 있다.
+  if (input.managerChecked !== undefined && actor.role !== 'admin') {
+    throw new Error('관리자만 확인 처리할 수 있습니다.')
+  }
+
   const patch: Record<string, unknown> = {}
   if (input.startDate      !== undefined) patch.start_date      = input.startDate
   if (input.endDate        !== undefined) patch.end_date        = input.endDate
@@ -106,11 +148,28 @@ export async function updateSchedule(id: string, input: UpdateScheduleInput): Pr
   if (input.managerChecked !== undefined) patch.manager_checked = input.managerChecked
   if (input.memo           !== undefined) patch.memo            = input.memo
   if (Object.keys(patch).length === 0) return
+
+  // 기간 정합성 — POST 경로에만 있던 검증이 PATCH 에는 없어 end < start 가 통과했다.
+  // 부분 수정이므로 저장된 값과 합쳐서 확인한다.
+  if (patch.start_date !== undefined || patch.end_date !== undefined) {
+    const { data: cur } = await supabaseAdmin
+      .from('operator_schedule')
+      .select('start_date, end_date')
+      .eq('id', id)
+      .maybeSingle()
+    const start = (patch.start_date as string) ?? (cur?.start_date as string)
+    const end   = (patch.end_date   as string) ?? (cur?.end_date   as string)
+    if (start && end && end < start) {
+      throw new Error('종료일은 시작일 이후여야 합니다.')
+    }
+  }
+
   const { error } = await supabaseAdmin.from('operator_schedule').update(patch).eq('id', id)
   if (error) throw error
 }
 
-export async function deleteSchedule(id: string): Promise<void> {
+export async function deleteSchedule(id: string, actor: ScheduleActor): Promise<void> {
+  await assertScheduleAccess(id, actor)
   const { error } = await supabaseAdmin.from('operator_schedule').delete().eq('id', id)
   if (error) throw error
 }

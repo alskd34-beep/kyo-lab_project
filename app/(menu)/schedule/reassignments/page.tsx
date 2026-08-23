@@ -237,7 +237,7 @@ export default function ReassignmentsPage() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3 md:p-5">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-3 md:p-5">
       <div className="flex flex-col gap-3 rounded-md border border-slate-200 bg-white px-4 py-3 shadow-sm md:flex-row md:items-center md:justify-between md:py-4">
         <div>
           <h1 className="text-base font-bold text-slate-900 sm:text-lg">AI 스케줄 전체 이력</h1>
@@ -313,7 +313,7 @@ export default function ReassignmentsPage() {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-md border border-slate-200 bg-white py-0 shadow-sm">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-slate-200 bg-white py-0 shadow-sm">
         <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
           <div className="flex items-center gap-1.5">
             <History className="size-4 text-slate-400" />

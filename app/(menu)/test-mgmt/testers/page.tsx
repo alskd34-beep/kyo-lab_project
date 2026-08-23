@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useId, useMemo, useState } from "react"
 import {
   Grid2x2,
   Lock,
@@ -120,6 +120,7 @@ function StatusLine({ color, label }: { color: string; label: string }) {
 }
 
 export default function TestersPage() {
+  const uid = useId()
   const [activeTab, setActiveTab] = useState<TabId>("testers")
   const [testers, setTesters] = useState<TesterRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -652,7 +653,7 @@ export default function TestersPage() {
               <span key={level} className="flex items-center gap-1">
                 <span
                   className={cn(
-                    "inline-flex h-5 w-8 items-center justify-center rounded border text-[11px] font-bold",
+                    "inline-flex h-5 w-8 items-center justify-center rounded-md border text-[11px] font-bold",
                     LEVEL_STYLE[level]
                   )}
                 >
@@ -721,7 +722,7 @@ export default function TestersPage() {
                               </span>
                               <span
                                 className={cn(
-                                  "inline-flex h-6 w-8 shrink-0 items-center justify-center rounded border text-[10px] font-bold",
+                                  "inline-flex h-6 w-8 shrink-0 items-center justify-center rounded-md border text-[10px] font-bold",
                                   LEVEL_STYLE[level]
                                 )}
                               >
@@ -782,7 +783,7 @@ export default function TestersPage() {
                                 onClick={() => void cycleLevel(tester, capability)}
                                 disabled={isSaving}
                                 className={cn(
-                                  "inline-flex h-7 w-11 items-center justify-center rounded border text-[11px] font-bold transition-transform",
+                                  "inline-flex h-7 w-11 items-center justify-center rounded-md border text-[11px] font-bold transition-transform",
                                   isSaving ? "cursor-wait opacity-50" : "hover:scale-105",
                                   LEVEL_STYLE[level]
                                 )}
@@ -837,10 +838,11 @@ export default function TestersPage() {
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium tracking-wide text-foreground">
+                    <label htmlFor={`${uid}-employeeNo`} className="text-xs font-medium tracking-wide text-foreground">
                       사번 <span className="text-destructive">*</span>
                     </label>
                     <Input
+                      id={`${uid}-employeeNo`}
                       placeholder="예: 16242"
                       value={form.employeeNo}
                       onChange={(e) =>
@@ -855,10 +857,11 @@ export default function TestersPage() {
                     </p>
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium tracking-wide text-foreground">
+                    <label htmlFor={`${uid}-name`} className="text-xs font-medium tracking-wide text-foreground">
                       이름 <span className="text-destructive">*</span>
                     </label>
                     <Input
+                      id={`${uid}-name`}
                       placeholder="홍길동"
                       value={form.name}
                       onChange={(e) =>

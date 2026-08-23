@@ -11,6 +11,7 @@
  */
 
 import { useState, useRef, useEffect } from 'react'
+import { DateField } from '@frontend/components/ui/date-field'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@frontend/components/ui/select'
 
@@ -241,8 +242,8 @@ function EditableCell({ col, value, onChange }: EditableCellProps) {
 
   // chip/person 같은 옵션 선택형
   const isSelect = (col.kind === 'chip' || col.kind === 'person') && (col.options?.length ?? 0) > 0
-  // date / number 형
-  const inputType = col.kind === 'date' ? 'date' : col.kind === 'number' ? 'number' : 'text'
+  // 날짜는 공통 <DateField> 를 쓴다(프로젝트 규칙). 여기서는 숫자/텍스트만 네이티브 input.
+  const inputType = col.kind === 'number' ? 'number' : 'text'
 
   if (!editing) {
     // Chip 셀: 셀 전체 풀 컬러 button (monday.com 스타일)
@@ -266,10 +267,26 @@ function EditableCell({ col, value, onChange }: EditableCellProps) {
       <button
         type="button"
         onClick={() => setEditing(true)}
-        className="group/cell -mx-1 flex w-full items-center rounded px-1 py-0.5 text-left hover:bg-blue-50 dark:hover:bg-blue-950/30 hover:ring-1 hover:ring-blue-200 dark:hover:ring-blue-800 transition-colors"
+        className="group/cell -mx-1 flex w-full items-center rounded-md px-1 py-0.5 text-left hover:bg-blue-50 dark:hover:bg-blue-950/30 hover:ring-1 hover:ring-blue-200 dark:hover:ring-blue-800 transition-colors"
       >
         <span className="flex-1">{renderCellStatic(col, value)}</span>
       </button>
+    )
+  }
+
+  if (col.kind === 'date') {
+    return (
+      <DateField
+        size="sm"
+        noLabel
+        value={draft}
+        onChange={v => {
+          // 달력 선택·8자리 입력이 끝나면 바로 커밋한다(Select 분기와 동일한 규칙).
+          setDraft(v)
+          setEditing(false)
+          if (v !== value) onChange(v)
+        }}
+      />
     )
   }
 
@@ -305,7 +322,7 @@ function EditableCell({ col, value, onChange }: EditableCellProps) {
       onChange={e => setDraft(e.target.value)}
       onBlur={commit}
       onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') cancel() }}
-      className="w-full rounded border border-blue-300 dark:border-blue-700 bg-white dark:bg-slate-800 px-1.5 py-0.5 text-xs text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900/40"
+      className="w-full rounded-md border border-blue-300 dark:border-blue-700 bg-white dark:bg-slate-800 px-1.5 py-0.5 text-xs text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900/40"
     />
   )
 }
