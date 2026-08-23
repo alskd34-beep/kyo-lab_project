@@ -5,6 +5,8 @@ import {
   Grid2x2,
   Lock,
   Save,
+  ShieldCheck,
+  SlidersHorizontal,
   Trash2,
   Users,
 } from "lucide-react"
@@ -28,6 +30,9 @@ import {
 } from "@frontend/components/ui/dialog"
 import { ManagementDrawer } from "@frontend/components/common/management-drawer"
 import { Input } from "@frontend/components/ui/input"
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@frontend/components/ui/select"
 import { TesterAvatar, primeTesterProfileCache } from "@frontend/lib/tester-profiles"
 import {
   Table,
@@ -37,6 +42,19 @@ import {
   TableHeader,
   TableRow,
 } from "@frontend/components/ui/table"
+import {
+  QualificationEditDrawer, type QualEditTarget,
+} from "@frontend/components/qualification/qualification-edit-drawer"
+import { QualificationItemsPanel } from "@frontend/components/qualification/qualification-items-panel"
+import { QualificationMatrix } from "@frontend/components/qualification/qualification-matrix"
+import { TesterQualificationDrawer } from "@frontend/components/qualification/tester-qualification-drawer"
+import { useQualificationData } from "@frontend/components/qualification/use-qualification-data"
+import {
+  STATUS_DOT_STYLE, type QualItem, type QualTester, type TesterQual,
+} from "@frontend/components/qualification/types"
+import {
+  EXPIRING_SOON_DAYS, QUALIFICATION_ROLES, QUALIFICATION_STATUS_LABEL,
+} from "@shared/qualification"
 
 interface TesterRow {
   id: string
@@ -82,7 +100,33 @@ const LEVEL_LABEL: Record<ProficiencyLevel, string> = {
   X: "-",
 }
 
-type TabId = "testers" | "capability"
+type TabId = "testers" | "capability" | "qualification" | "qual-items"
+
+const TAB_ORDER: TabId[] = ["testers", "capability", "qualification", "qual-items"]
+
+/** 탭별 머리말 — 아이콘·제목·설명을 한 곳에서 정의해 탭이 늘어도 분기문이 늘지 않게 한다. */
+const TAB_META: Record<TabId, { icon: React.ReactNode; label: string; description: string }> = {
+  testers: {
+    icon: <Users className="size-5 text-muted-foreground" />,
+    label: "시험자 관리",
+    description: "시험자 정보와 활성 상태를 관리합니다.",
+  },
+  capability: {
+    icon: <Grid2x2 className="size-5 text-muted-foreground" />,
+    label: "시험자 역량",
+    description: "활성 시험자의 역량 매트릭스를 관리합니다.",
+  },
+  qualification: {
+    icon: <ShieldCheck className="size-5 text-muted-foreground" />,
+    label: "시험자 자격",
+    description: "시험자별 OJT 자격 보유·만료 현황을 관리합니다.",
+  },
+  "qual-items": {
+    icon: <SlidersHorizontal className="size-5 text-muted-foreground" />,
+    label: "자격 항목",
+    description: "Qualification List 의 카테고리와 OJT 항목을 관리합니다.",
+  },
+}
 
 type SortField = "name" | "employeeNo" | "canSolo" | "canDuo" | "isActive"
 
@@ -147,6 +191,15 @@ export default function TestersPage() {
   const [sortDir, setSortDir] = useState<SortDir>("asc")
   const [statusFilter, setStatusFilter] = useState<StatusFilterValue>("all")
 
+  // ─── 자격 인증 ──────────────────────────────────────────────────────────────
+  const [qualRole, setQualRole] = useState<string>("시험자")
+  const qual = useQualificationData(qualRole)
+  // 훅이 돌려주는 함수는 useCallback 이라 안정적이다. 객체(qual) 자체를 의존성에 두면
+  // 매 렌더마다 새 참조가 되어 memo/effect 가 헛돈다 — 쓰는 함수만 꺼내 쓴다.
+  const { ensureLoaded: ensureQualLoaded, countByStatus: countQualByStatus } = qual
+  const [qualEditTarget, setQualEditTarget] = useState<QualEditTarget | null>(null)
+  const [qualDetailTester, setQualDetailTester] = useState<QualTester | null>(null)
+
   useEffect(() => {
     void fetchTesters()
   }, [])
@@ -184,6 +237,11 @@ export default function TestersPage() {
   useEffect(() => {
     if (activeTab === "capability") void fetchCapabilities()
   }, [activeTab, fetchCapabilities])
+
+  useEffect(() => {
+    if (activeTab === "qualification" || activeTab === "qual-items") void ensureQualLoaded()
+    // ensureLoaded 는 이미 받아왔으면 아무것도 하지 않는다
+  }, [activeTab, ensureQualLoaded])
 
   function openEdit(row: TesterRow) {
     setSelected(row)
@@ -378,35 +436,80 @@ export default function TestersPage() {
     setSortDir(dir)
   }, [])
 
+  // ─── 자격 탭 파생값 ─────────────────────────────────────────────────────────
+
+  /**
+   * 자격 매트릭스의 행. 정렬은 다른 탭과 같은 `sortedTesters`(활성 우선 + 선택한 정렬)를 그대로 쓴다.
+   * 비활성 시험자는 원칙적으로 감추지만 **보유 자격이 있으면 남긴다** — 자격은 유효기간이 있는
+   * 인증 기록이라 사람이 비활성으로 바뀐 순간 화면에서 사라지면 만료 관리가 끊긴다.
+   */
+  const qualTesters = useMemo<QualTester[]>(() => {
+    const heldBy = new Set(
+      qual.data.quals.filter(q => q.qualificationRole === qualRole).map(q => q.testerId),
+    )
+    return sortedTesters
+      .filter(tester => tester.isActive || heldBy.has(tester.id))
+      .map(tester => ({
+        id: tester.id,
+        employeeNo: tester.employeeNo,
+        name: tester.name,
+        isActive: tester.isActive,
+      }))
+  }, [sortedTesters, qual.data.quals, qualRole])
+
+  /**
+   * 자격 매트릭스의 열. 미사용 항목·미사용 카테고리는 감추되, 보유자가 있으면 열을 남긴다
+   * (만료일을 계속 볼 수 있어야 한다). 열 순서는 서버가 카테고리 정렬순으로 내려준 순서를 따른다.
+   */
+  const qualItems = useMemo<QualItem[]>(() => {
+    const held = new Set(
+      qual.data.quals.filter(q => q.qualificationRole === qualRole).map(q => q.qualificationItemId),
+    )
+    const activeCategories = new Set(qual.data.categories.filter(c => c.isActive).map(c => c.id))
+    return qual.data.items.filter(item =>
+      (item.isActive && activeCategories.has(item.categoryId)) || held.has(item.id),
+    )
+  }, [qual.data.items, qual.data.categories, qual.data.quals, qualRole])
+
+  const qualSummary = useMemo(
+    () => countQualByStatus(qualTesters.map(tester => tester.id), qualItems),
+    [countQualByStatus, qualTesters, qualItems],
+  )
+
+  const openQualCell = useCallback(
+    (tester: QualTester, item: QualItem, existing: TesterQual | null) => {
+      setQualEditTarget({ tester, item, role: qualRole, existing })
+    },
+    [qualRole],
+  )
+
+  /** 시험자 상세 패널의 행을 누르면 그 항목의 편집 패널로 이어준다 */
+  const openQualFromDetail = useCallback(
+    (item: QualItem, existing: TesterQual | null) => {
+      if (!qualDetailTester) return
+      setQualEditTarget({ tester: qualDetailTester, item, role: qualRole, existing })
+    },
+    [qualDetailTester, qualRole],
+  )
+
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden p-4 md:p-6">
       {/* Header */}
       <div className="flex shrink-0 flex-col gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <div className="flex items-center gap-2">
-            {activeTab === "testers" ? (
-              <Users className="size-5 text-muted-foreground" />
-            ) : (
-              <Grid2x2 className="size-5 text-muted-foreground" />
-            )}
+            {TAB_META[activeTab].icon}
             <h1 className="text-xl font-semibold text-foreground">
-              {activeTab === "testers" ? "시험자 관리" : "시험자 역량"}
+              {TAB_META[activeTab].label}
             </h1>
           </div>
-          <p className="text-sm text-muted-foreground">
-            {activeTab === "testers"
-              ? "시험자 정보와 활성 상태를 관리합니다."
-              : "활성 시험자의 역량 매트릭스를 관리합니다."}
-          </p>
+          <p className="text-sm text-muted-foreground">{TAB_META[activeTab].description}</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           {/* Tab switcher */}
           <div className="inline-flex h-9 w-fit items-center gap-0.5 rounded-md bg-muted p-0.5 text-muted-foreground">
-            {[
-              { id: "testers", label: "시험자 관리" },
-              { id: "capability", label: "시험자 역량" },
-            ].map((tab) => (
+            {TAB_ORDER.map((id) => ({ id, label: TAB_META[id].label })).map((tab) => (
               <button
                 key={tab.id}
                 type="button"
@@ -812,6 +915,81 @@ export default function TestersPage() {
           )}
         </div>
       )}
+
+      {/* ─── 시험자 자격 탭 ─────────────────────────────────────────────────── */}
+      {activeTab === "qualification" && (
+        <div className="flex min-h-0 flex-1 flex-col gap-3">
+          {/* 범례 + 상태 집계 — 역량 탭의 범례 줄과 같은 자리·같은 형식 */}
+          <div className="flex shrink-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">범례</span>
+            {(["valid", "expiring", "expired", "none"] as const).map((status) => (
+              <span key={status} className="flex items-center gap-1">
+                <span className={cn("size-1.5 rounded-full", STATUS_DOT_STYLE[status])} />
+                <span>{QUALIFICATION_STATUS_LABEL[status]}</span>
+                <span className="tabular-nums text-foreground">{qualSummary[status]}</span>
+              </span>
+            ))}
+            <span className="text-muted-foreground">
+              만료 임박 = {EXPIRING_SOON_DAYS}일 이내 · 셀 클릭으로 부여·수정, 이름 클릭으로 상세
+            </span>
+
+            <div className="ml-auto flex items-center gap-2">
+              <span className="font-medium text-foreground">자격종류</span>
+              <Select value={qualRole} onValueChange={setQualRole}>
+                <SelectTrigger className="!h-8 w-28 px-2 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {QUALIFICATION_ROLES.map((role) => (
+                    <SelectItem key={role} value={role}>{role}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {qual.error && (
+            <div className="shrink-0 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive">
+              {qual.error}
+            </div>
+          )}
+
+          <QualificationMatrix
+            loading={qual.loading}
+            testers={qualTesters}
+            categories={qual.data.categories}
+            items={qualItems}
+            qualAt={qual.qualAt}
+            onPickCell={openQualCell}
+            onPickTester={setQualDetailTester}
+          />
+        </div>
+      )}
+
+      {/* ─── 자격 항목 탭 ───────────────────────────────────────────────────── */}
+      {activeTab === "qual-items" && (
+        <QualificationItemsPanel
+          loading={qual.loading}
+          categories={qual.data.categories}
+          items={qual.data.items}
+          quals={qual.data.quals}
+          onChanged={() => void qual.reload()}
+        />
+      )}
+
+      <QualificationEditDrawer
+        target={qualEditTarget}
+        onClose={() => setQualEditTarget(null)}
+        onSaved={() => void qual.reload()}
+      />
+
+      <TesterQualificationDrawer
+        tester={qualDetailTester}
+        role={qualRole}
+        categories={qual.data.categories}
+        items={qual.data.items}
+        quals={qual.data.quals}
+        onClose={() => setQualDetailTester(null)}
+        onPickItem={openQualFromDetail}
+      />
 
       {/* Add Dialog */}
       <ManagementDrawer
