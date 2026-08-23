@@ -6,6 +6,7 @@
  */
 
 import { supabaseAdmin } from '@backend/lib/supabase'
+import { sanitizeFilterTerm } from '@backend/lib/postgrestFilter'
 import { DELETED_STATUS } from '@shared/qc-status'
 import {
   QCINK_NAME,
@@ -45,6 +46,8 @@ const ALLOWED_OPERATIONS = new Set<QthinkIntent['operation']>([
 ])
 const DATA_TERMS = /QC|품질|품목|제품|시험자|시험항목|시험 항목|오더|배치|일정|스케줄|완료예정|긴급|담당|작업|장비|검교정|예약|진행중|대기|지연|검토중/i
 const HISTORY_REFERENCES = /그거|그것|그 품목|그 제품|그 시험자|그 사람|그 장비|앞에서|아까|위에서|이전 답변|그럼|그러면|작년은|지난달은/
+/** 역량·자격으로 사람을 찾는 질문 — 검색어(역량명)가 반드시 필요하다. */
+const CAPABILITY_CUES = /역량|자격|가능한|할\s*수\s*있는|다룰\s*수|숙련/
 const QUESTION_CUES = /[?？]\s*$|어느|어떤|무엇|어디|언제|누구|말씀해\s*주세요|알려\s*주실래요|알려\s*드릴까요/
 
 function kstToday(): string {
@@ -176,8 +179,12 @@ export async function analyzeQthinkIntent(params: {
   runModel: QthinkModelRunner
 }): Promise<QthinkIntent> {
   const deterministic = fallbackIntent(params.question)
+  // 역량("성상 가능한 시험자")처럼 검색어가 답의 핵심인 질문은 짧은 경로로 처리하면 안 된다.
+  // fallbackIntent 는 keywords 를 채우지 않아 역량 매칭이 아예 동작하지 않는다.
+  const needsKeyword = CAPABILITY_CUES.test(params.question)
   if (
-    deterministic.responseType === 'data'
+    !needsKeyword
+    && deterministic.responseType === 'data'
     && (deterministic.operation === 'count' || /^(전체|QC)\s*현황(\s*(알려줘|보여줘))?[!?.~]?$/.test(params.question.trim()))
   ) {
     return deterministic
@@ -246,15 +253,34 @@ async function productsContext(intent: QthinkIntent): Promise<string> {
   const keyword = primaryKeyword(intent)
   let query = supabaseAdmin
     .from('products')
-    .select('product_code, name, name_alt, product_type, package_spec, difficulty', { count: 'exact' })
+    .select('id, product_code, name, name_alt, product_type, package_spec, difficulty', { count: 'exact' })
     .eq('is_active', true)
-  if (keyword) query = query.ilike('name', `%${keyword}%`)
+
+  // 이름으로 먼저 찾고, 없으면 "HPLC 시험하는 품목"처럼 시험항목으로 좁힌다.
+  let link: LinkMatch | null = null
+  if (keyword) {
+    const { count: byName } = await supabaseAdmin
+      .from('products').select('id', { count: 'exact', head: true })
+      .eq('is_active', true).ilike('name', `%${keyword}%`)
+    if (!byName) link = await resolveLink('products', keyword)
+    if (link) {
+      if (link.targetIds.length === 0) {
+        return `### 품목 마스터 — ${link.label} "${link.masterName}" 포함: 0건\n- 해당 ${link.label}을(를) 쓰는 품목이 없습니다.`
+      }
+      query = query.in('id', link.targetIds)
+    } else {
+      query = query.ilike('name', `%${keyword}%`)
+    }
+  }
   const { data, count, error } = await query.order('name').limit(30)
   if (error) throw error
 
   const rows = data ?? []
-  const lines = [`### 품목 마스터${keyword ? ` — 검색어 "${keyword}"` : ''}: ${count ?? rows.length}건`]
-  if (intent.operation === 'count') return lines.join('\n')
+  const filterLabel = link
+    ? ` — ${link.label} "${link.masterName}" 포함`
+    : keyword ? ` — 검색어 "${keyword}"` : ''
+  const lines = [`### 품목 마스터${filterLabel}: ${count ?? rows.length}건`]
+  if (intent.operation === 'count' && !link) return lines.join('\n')
   if (rows.length === 0) lines.push('- 조회된 품목이 없습니다.')
   for (const row of rows) {
     lines.push(`- ${row.name} | 품목코드 ${row.product_code} | 규격 ${row.package_spec ?? '-'} | 유형 ${row.product_type ?? '-'} | 난이도 ${row.difficulty ?? '-'}`)
@@ -262,25 +288,155 @@ async function productsContext(intent: QthinkIntent): Promise<string> {
   return lines.join('\n')
 }
 
+// ─── 연결 조회 레지스트리 ─────────────────────────────────────────────────────
+//
+// "성상이 가능한 시험자" 처럼 **다른 마스터를 통해** 대상을 좁히는 질문을 위한 선언형 규칙.
+// 도메인마다 조인을 하드코딩하지 않고, 아래 규칙만 추가하면 새 질문 유형이 열린다.
+//
+// 규칙은 코드가 해석한다. 모델은 검색어만 주고, 어떤 테이블·컬럼을 탈지는 결정하지 못한다.
+// (qthinkAgent 의 원칙: 모델이 만든 SQL·임의 테이블은 실행하지 않는다)
+//
+// 대상 id 집합만 돌려주므로, 호출부의 스코프 필터(`scope.testerId` 등)는 그대로 유지된다.
+// 즉 시험자가 "성상 가능한 시험자"를 물어도 본인 밖으로 넓어지지 않는다.
+
+/** 숙련도 코드 → 표기. 'O'(우수)/'Y'(가능) 만 "수행 가능"으로 본다. */
+const PROFICIENCY_LABEL: Record<string, string> = { O: '우수', Y: '가능', N: '불가', X: '미평가' }
+
+interface LinkRule {
+  /** 사람이 읽을 관계 이름 — 답변 헤더에 쓰인다. */
+  label: string
+  /** 검색어를 찾을 마스터 테이블 */
+  master: { table: string; matchColumns: string[]; orderColumn?: string }
+  /** 마스터와 대상을 잇는 연결 테이블 */
+  link: { table: string; masterColumn: string; targetColumn: string }
+  /** 연결 행을 걸러낼 조건 (예: 숙련도 O/Y 만) */
+  include?: { column: string; values: string[] }
+  /** 대상마다 붙일 부가 표기 (연결 행 컬럼값 → 라벨) */
+  annotate?: { column: string; labels: Record<string, string> }
+}
+
+/** 도메인별 연결 규칙. 위에서부터 시도해 첫 매칭을 쓴다. */
+const LINK_RULES: Partial<Record<QthinkDomain, LinkRule[]>> = {
+  testers: [{
+    label: '역량',
+    master: { table: 'test_capabilities', matchColumns: ['name', 'code'], orderColumn: 'sort_order' },
+    link: { table: 'tester_capability_matrix', masterColumn: 'capability_id', targetColumn: 'tester_id' },
+    include: { column: 'proficiency_level', values: ['O', 'Y'] },
+    annotate: { column: 'proficiency_level', labels: PROFICIENCY_LABEL },
+  }],
+  products: [{
+    label: '시험항목',
+    master: { table: 'test_items', matchColumns: ['name'], orderColumn: 'name' },
+    link: { table: 'product_test_items', masterColumn: 'test_item_id', targetColumn: 'product_id' },
+  }],
+  test_items: [{
+    label: '품목',
+    master: { table: 'products', matchColumns: ['name', 'name_alt', 'product_code'], orderColumn: 'name' },
+    link: { table: 'product_test_items', masterColumn: 'product_id', targetColumn: 'test_item_id' },
+  }, {
+    label: '시험항목 그룹',
+    master: { table: 'test_item_groups', matchColumns: ['name'], orderColumn: 'sort_order' },
+    link: { table: 'test_item_group_items', masterColumn: 'group_id', targetColumn: 'test_item_id' },
+  }],
+}
+
+interface LinkMatch {
+  /** 관계 이름 (역량 / 시험항목 / 품목 …) */
+  label: string
+  /** 매칭된 마스터 항목 이름 */
+  masterName: string
+  /** 좁혀진 대상 id 목록 */
+  targetIds: string[]
+  /** 대상 id → 부가 표기 */
+  annotationByTarget: Map<string, string>
+}
+
+/**
+ * 검색어를 도메인의 연결 규칙에 대입해 대상 id 집합을 구한다.
+ * 어떤 규칙에도 걸리지 않으면 null — 호출부는 기존 이름 검색으로 넘어간다.
+ */
+async function resolveLink(domain: QthinkDomain, keyword: string): Promise<LinkMatch | null> {
+  const rules = LINK_RULES[domain]
+  if (!rules) return null
+  const term = sanitizeFilterTerm(keyword)
+  if (!term) return null
+
+  for (const rule of rules) {
+    const orFilter = rule.master.matchColumns.map(col => `${col}.ilike.%${term}%`).join(',')
+    let masterQuery = supabaseAdmin
+      .from(rule.master.table)
+      .select('id, name')
+      .or(orFilter)
+    if (rule.master.orderColumn) masterQuery = masterQuery.order(rule.master.orderColumn)
+    const { data: masters } = await masterQuery.limit(1)
+    const master = masters?.[0]
+    if (!master) continue
+
+    const annotateColumn = rule.annotate?.column
+    const columns = [rule.link.targetColumn, ...(annotateColumn ? [annotateColumn] : [])].join(', ')
+    let linkQuery = supabaseAdmin
+      .from(rule.link.table)
+      .select(columns)
+      .eq(rule.link.masterColumn, master.id as string)
+    if (rule.include) linkQuery = linkQuery.in(rule.include.column, rule.include.values)
+    const { data: links } = await linkQuery
+
+    const rows = (links ?? []) as unknown as Record<string, unknown>[]
+    const annotationByTarget = new Map<string, string>()
+    const targetIds: string[] = []
+    for (const row of rows) {
+      const targetId = row[rule.link.targetColumn] as string
+      if (!targetId) continue
+      targetIds.push(targetId)
+      if (annotateColumn && rule.annotate) {
+        const raw = row[annotateColumn] as string
+        annotationByTarget.set(targetId, rule.annotate.labels[raw] ?? raw)
+      }
+    }
+    return { label: rule.label, masterName: master.name as string, targetIds, annotationByTarget }
+  }
+  return null
+}
+
 async function testersContext(intent: QthinkIntent, scope: QthinkScope): Promise<string> {
   if (!scope.isAdmin && !scope.testerId) return '### 시험자\n- 계정에 연결된 시험자 정보가 없습니다.'
   const keyword = primaryKeyword(intent)
+
+  // 검색어가 역량이면 이름 대신 역량 보유자로 좁힌다.
+  const link = keyword ? await resolveLink('testers', keyword) : null
+
   let query = supabaseAdmin
     .from('testers')
     .select('id, employee_no, name, can_solo, can_duo', { count: 'exact' })
     .eq('is_active', true)
+  // 스코프 필터가 먼저다 — 연결 조회가 본인 밖으로 범위를 넓히지 못한다.
   if (!scope.isAdmin && scope.testerId) query = query.eq('id', scope.testerId)
-  if (keyword) query = query.ilike('name', `%${keyword}%`)
+  if (link) {
+    if (link.targetIds.length === 0) {
+      return `### 시험자 — ${link.label} "${link.masterName}" 보유자: 0명\n- 해당 ${link.label}이(가) 등록된 시험자가 없습니다.`
+    }
+    query = query.in('id', link.targetIds)
+  } else if (keyword) {
+    query = query.ilike('name', `%${keyword}%`)
+  }
   const { data, count, error } = await query.order('name').limit(30)
   if (error) throw error
 
   const rows = data ?? []
-  const lines = [`### ${scope.isAdmin ? '시험자' : '본인 시험자'}${keyword ? ` — 검색어 "${keyword}"` : ''}: ${count ?? rows.length}명`]
-  if (intent.operation === 'count') return lines.join('\n')
+  const scopeLabel = scope.isAdmin ? '시험자' : '본인 시험자'
+  const filterLabel = link
+    ? ` — ${link.label} "${link.masterName}" 보유자`
+    : keyword ? ` — 검색어 "${keyword}"` : ''
+  const lines = [`### ${scopeLabel}${filterLabel}: ${count ?? rows.length}명`]
+
+  // 연결 질의는 "누가 가능한가"가 곧 답이라 이름을 빼면 답이 되지 않는다.
+  if (intent.operation === 'count' && !link) return lines.join('\n')
   if (rows.length === 0) lines.push('- 조회된 시험자가 없습니다.')
   for (const row of rows) {
     const qualifications = [row.can_solo ? '단독시험 가능' : null, row.can_duo ? '2인시험 가능' : null].filter(Boolean).join(', ') || '등록 자격 없음'
-    lines.push(`- ${row.name} | 사번 ${row.employee_no} | ${qualifications}`)
+    const annotation = link?.annotationByTarget.get(row.id as string)
+    const annotationText = annotation ? ` | ${link!.masterName} ${annotation}` : ''
+    lines.push(`- ${row.name} | 사번 ${row.employee_no} | ${qualifications}${annotationText}`)
   }
   return lines.join('\n')
 }
@@ -289,15 +445,34 @@ async function testItemsContext(intent: QthinkIntent): Promise<string> {
   const keyword = primaryKeyword(intent)
   let query = supabaseAdmin
     .from('test_items')
-    .select('name, estimated_hours, requires_duo', { count: 'exact' })
+    .select('id, name, estimated_hours, requires_duo', { count: 'exact' })
     .eq('is_active', true)
-  if (keyword) query = query.ilike('name', `%${keyword}%`)
+
+  // 이름으로 먼저 찾고, 없으면 "타이레놀 시험항목"처럼 품목·그룹으로 좁힌다.
+  let link: LinkMatch | null = null
+  if (keyword) {
+    const { count: byName } = await supabaseAdmin
+      .from('test_items').select('id', { count: 'exact', head: true })
+      .eq('is_active', true).ilike('name', `%${keyword}%`)
+    if (!byName) link = await resolveLink('test_items', keyword)
+    if (link) {
+      if (link.targetIds.length === 0) {
+        return `### 시험항목 — ${link.label} "${link.masterName}" 기준: 0개\n- 해당 ${link.label}에 등록된 시험항목이 없습니다.`
+      }
+      query = query.in('id', link.targetIds)
+    } else {
+      query = query.ilike('name', `%${keyword}%`)
+    }
+  }
   const { data, count, error } = await query.order('name').limit(30)
   if (error) throw error
 
   const rows = data ?? []
-  const lines = [`### 시험항목${keyword ? ` — 검색어 "${keyword}"` : ''}: ${count ?? rows.length}개`]
-  if (intent.operation === 'count') return lines.join('\n')
+  const filterLabel = link
+    ? ` — ${link.label} "${link.masterName}" 기준`
+    : keyword ? ` — 검색어 "${keyword}"` : ''
+  const lines = [`### 시험항목${filterLabel}: ${count ?? rows.length}개`]
+  if (intent.operation === 'count' && !link) return lines.join('\n')
   if (rows.length === 0) lines.push('- 조회된 시험항목이 없습니다.')
   for (const row of rows) {
     lines.push(`- ${row.name} | 예상 ${row.estimated_hours ?? '-'}시간 | ${row.requires_duo ? '2인시험 필요' : '단독시험 가능'}`)
