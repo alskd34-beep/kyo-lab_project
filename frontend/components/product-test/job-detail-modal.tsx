@@ -15,11 +15,13 @@ import { useCallback, useEffect, useState } from "react"
 import {
   ArrowRight, CheckCircle2, Circle, Clock, LoaderCircle, TriangleAlert, User,
 } from "lucide-react"
-import { IN_PROGRESS_STATUS, JOB_STAGES, stageStyle } from "@shared/qc-status"
+import { IN_PROGRESS_STATUS, stageStyle } from "@shared/qc-status"
 import { cn } from "@frontend/lib/utils"
 import { Badge } from "@frontend/components/ui/badge"
 import { Button } from "@frontend/components/ui/button"
 import { ManagementDrawer } from "@frontend/components/common/management-drawer"
+import { JobStageTrack } from "@frontend/components/common/job-stage-track"
+import { JobStatusHistory } from "@frontend/components/common/job-status-history"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 
 /** "진행중" 표시색은 상태 팔레트(types/qc-status.ts)에서 가져온다. 화면마다 색이 갈리지 않게. */
@@ -70,37 +72,6 @@ function SummaryField({ label, value, mono }: { label: string; value: string; mo
 }
 
 // ─── 모달 ────────────────────────────────────────────────────────────────────
-/** 진행중 → 검토전 → 검토중 → 승인전 → 승인완료 진행 막대 */
-function StageTrack({ status }: { status: string }) {
-  const idx = (JOB_STAGES as readonly string[]).indexOf(status)
-  // '지연' 등 단계에 없는 상태는 막대를 그리지 않는다
-  if (idx < 0) return null
-  return (
-    <div className="flex items-center gap-1">
-      {JOB_STAGES.map((s, i) => {
-        const done = i < idx
-        const here = i === idx
-        return (
-          <div key={s} className="flex min-w-0 flex-1 flex-col items-center gap-1">
-            <div
-              className={cn(
-                "h-1 w-full rounded-md",
-                done ? "bg-emerald-400" : here ? stageStyle(s).dot : "bg-muted",
-              )}
-            />
-            <span className={cn(
-              "truncate text-[10px]",
-              here ? "font-semibold text-foreground" : "text-muted-foreground",
-            )}>
-              {s}
-            </span>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
 export function JobDetailModal({
   jobId, open, onOpenChange, canAdvance = false, onAdvanced,
 }: {
@@ -117,6 +88,8 @@ export function JobDetailModal({
   const [error, setError] = useState<string | null>(null)
   const [advancing, setAdvancing] = useState(false)
   const [advanceError, setAdvanceError] = useState<string | null>(null)
+  // 단계를 넘긴 뒤 상태 이력을 다시 읽게 하는 키
+  const [historyKey, setHistoryKey] = useState(0)
 
   const load = useCallback(async (id: string) => {
     setLoading(true)
@@ -149,6 +122,7 @@ export function JobDetailModal({
       const data = await res.json() as { error?: string }
       if (!res.ok) throw new Error(data.error ?? "단계 변경 실패")
       await load(detail.jobId)
+      setHistoryKey(k => k + 1)
       onAdvanced?.()
     } catch (e) {
       setAdvanceError(e instanceof Error ? e.message : "단계 변경 실패")
@@ -234,7 +208,7 @@ export function JobDetailModal({
             <>
               {/* 단계 진행 막대 */}
               <section className="rounded-md border bg-card p-3 shadow-sm">
-                <StageTrack status={detail.status} />
+                <JobStageTrack status={detail.status} />
               </section>
 
               {/* 작업 요약 */}
@@ -363,6 +337,9 @@ export function JobDetailModal({
                   })}
                 </ul>
               )}
+
+              {/* 상태 변경 이력 */}
+              <JobStatusHistory jobId={detail.jobId} reloadKey={historyKey} />
 
               {/* 담당자 안내 */}
               <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">

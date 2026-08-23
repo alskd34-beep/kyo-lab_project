@@ -16,18 +16,29 @@ export type StatusKey =
 
 // ─── 테이블 행 ────────────────────────────────────────────────────────────────
 export interface TestRow {
+  /** 화면 표시용 순번(1부터). 서버 조회 결과 안에서만 유효한 값이라 키로 쓰지 않는다. */
   id: number
+  /** pct_orders.id — 미리보기·상태 변경의 실제 키 */
+  orderId: string
+  /** qc_jobs.id — 아직 시작되지 않은 오더는 null */
+  jobId: string | null
   category: string
   type: string
   product: string
+  batchNo: string
   testNo: string
   items: string
+  /** items 를 쪼개지 않고 쓰도록 원본 배열도 함께 내려준다(미리보기 체크리스트) */
+  itemList: string[]
   contractor: string
   manager: string
   managerInit: string
   receiveDate: string
   dueDate: string
   status: StatusKey
+  /** DB 원본 한글 상태(진행중/검토전/…) — 단계 표시·상태 변경에 쓴다 */
+  rawStatus: string
+  isUrgent: boolean
 }
 
 // ─── KPI 카드 ─────────────────────────────────────────────────────────────────

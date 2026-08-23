@@ -14,6 +14,7 @@ import { createNotification } from '@backend/services/notifications'
 import { checkEquipmentReadiness, type ReadinessResult } from '@backend/services/equipmentMaster'
 import { listByProduct, type PretestNoteRow } from '@backend/services/productPretestNotes'
 import { METHOD_PARTIAL, listByOrder as listOrderTestItems } from '@backend/services/pctOrderTestItems'
+import { logJobStatusChange } from '@backend/services/qcJobStatusHistory'
 import {
   ACTIVE_JOB_STATUSES,
   APPROVAL_READY_STATUS,
@@ -21,6 +22,7 @@ import {
   DELAYED_STATUS,
   DELETED_STATUS,
   IN_PROGRESS_STATUS,
+  JOB_STATUSES,
   NEXT_STAGE,
   PENDING_STATUS,
   REVIEWING_STATUS,
@@ -270,6 +272,7 @@ export interface OverviewJobRow {
   itemsTotal: number
   itemsCleared: number
   workStartDate: string | null
+  workEndDate: string | null
 }
 export interface OverviewPendingRow {
   orderId: string
@@ -289,6 +292,8 @@ export interface WorkerOverviewRow {
   delayed: number
   completedTotal: number
   activeJobs: OverviewJobRow[]
+  /** 승인완료된 작업 (최근 완료일 순, 시험자당 COMPLETED_JOBS_LIMIT 건까지) */
+  completedJobs: OverviewJobRow[]
   pendingOrders: OverviewPendingRow[]
 }
 export interface WorkerOverview {
@@ -298,11 +303,37 @@ export interface WorkerOverview {
     pending: number          // 시작 대기 오더 총수
     delayed: number          // 지연 작업 총수
     completedToday: number   // 오늘 완료한 작업 수
+    completedTotal: number   // 승인완료 작업 총수(기간 제한 없음)
   }
   workers: WorkerOverviewRow[]
 }
 
 // 진행 중으로 간주하는 작업 상태는 @shared/qc-status 의 ACTIVE_JOB_STATUSES 를 쓴다.
+
+/** 시험자 1명당 응답에 싣는 완료 작업 상한 — 화면은 기간 필터로 더 좁혀 본다. */
+const COMPLETED_JOBS_LIMIT = 50
+
+/** qc_jobs 행 + 오더 메타 → 화면용 작업 요약 (진행 중/완료 공통) */
+function toOverviewJob(
+  j: Record<string, unknown>,
+  o: Record<string, unknown> | undefined,
+  itemAgg: Map<string, { total: number; cleared: number }>,
+): OverviewJobRow {
+  const agg = itemAgg.get(j.id as string) ?? { total: 0, cleared: 0 }
+  return {
+    jobId: j.id as string,
+    qcNo: j.qc_no as string,
+    productName: (o?.product_name as string) ?? '',
+    batchNo: (o?.batch_no as string) ?? '',
+    status: j.status as string,
+    dueDate: (o?.due_date as string) ?? null,
+    isUrgent: !!o?.is_urgent,
+    itemsTotal: agg.total,
+    itemsCleared: agg.cleared,
+    workStartDate: (j.work_start_date as string) ?? null,
+    workEndDate: (j.work_end_date as string) ?? null,
+  }
+}
 
 // ─── 작업 상세 (시험항목 진행 내역) ──────────────────────────────────────────
 export interface JobDetail {
@@ -482,6 +513,7 @@ export async function listWorkerOverview(): Promise<WorkerOverview> {
       delayed: 0,
       completedTotal: 0,
       activeJobs: [],
+      completedJobs: [],
       pendingOrders: [],
     })
   }
@@ -502,6 +534,9 @@ export async function listWorkerOverview(): Promise<WorkerOverview> {
     if (status === CLOSED_STAGE) {
       row.completedTotal += 1
       if ((j.work_end_date as string) === today) completedToday += 1
+      // 예전에는 여기서 건너뛰어 화면에서 완료 작업을 아예 볼 수 없었다.
+      // 집계만 하지 말고 목록도 함께 내려준다(화면에서 기간으로 좁혀 본다).
+      row.completedJobs.push(toOverviewJob(j, o, itemAgg))
       continue
     }
     if (!ACTIVE_JOB_STATUSES.has(status)) continue
@@ -511,19 +546,7 @@ export async function listWorkerOverview(): Promise<WorkerOverview> {
     else if (status === REVIEW_READY_STATUS || status === REVIEWING_STATUS || status === APPROVAL_READY_STATUS) row.reviewing += 1
     else if (status === DELAYED_STATUS) row.delayed += 1
 
-    const agg = itemAgg.get(j.id as string) ?? { total: 0, cleared: 0 }
-    row.activeJobs.push({
-      jobId: j.id as string,
-      qcNo: j.qc_no as string,
-      productName: (o?.product_name as string) ?? '',
-      batchNo: (o?.batch_no as string) ?? '',
-      status,
-      dueDate: (o?.due_date as string) ?? null,
-      isUrgent: !!o?.is_urgent,
-      itemsTotal: agg.total,
-      itemsCleared: agg.cleared,
-      workStartDate: (j.work_start_date as string) ?? null,
-    })
+    row.activeJobs.push(toOverviewJob(j, o, itemAgg))
   }
 
   // 시작 대기 오더 집계 (배정됐고 status '대기' & 아직 미시작)
@@ -549,6 +572,9 @@ export async function listWorkerOverview(): Promise<WorkerOverview> {
   for (const row of rowByTester.values()) {
     row.activeJobs.sort((a, b) => dueRank(a.dueDate) - dueRank(b.dueDate))
     row.pendingOrders.sort((a, b) => dueRank(a.dueDate) - dueRank(b.dueDate))
+    // 완료 작업은 최근 완료일 순. 오래된 이력까지 전부 실어 보내면 응답이 커지므로 상한을 둔다.
+    row.completedJobs.sort((a, b) => (b.workEndDate ?? '').localeCompare(a.workEndDate ?? ''))
+    row.completedJobs = row.completedJobs.slice(0, COMPLETED_JOBS_LIMIT)
   }
 
   // 작업량 많은 순(진행중→대기) 정렬, 활성 시험자 우선
@@ -566,6 +592,7 @@ export async function listWorkerOverview(): Promise<WorkerOverview> {
     pending: workers.reduce((s, w) => s + w.pendingCount, 0),
     delayed: workers.reduce((s, w) => s + w.delayed, 0),
     completedToday,
+    completedTotal: workers.reduce((s, w) => s + w.completedTotal, 0),
   }
 
   return { totals, workers }
@@ -689,6 +716,12 @@ export async function startJob(orderId: string, userSub: string): Promise<{ jobI
     console.error('[qcJobs.startJob] 오더 상태 동기화 실패 — 작업은 생성됨:', orderId, ordErr)
   }
 
+  // 상태 이력 — 작업 생성이 첫 전이(null → 진행중)다.
+  await logJobStatusChange({
+    jobId, orderId, fromStatus: null, toStatus: IN_PROGRESS_STATUS,
+    changedBy: userSub, source: 'manual', note: `QC ${qcNo} 작업 시작`,
+  })
+
   // 감독관 알림 (경고 있으면 본문에 덧붙임)
   const warnSuffix = warnings ? ` ⚠ 경고: ${warnings.join(', ')}` : ''
   await createNotification({
@@ -749,7 +782,7 @@ async function autoAdvanceToReview(jobId: string): Promise<{ allCleared: boolean
     .neq('status', 'cleared')
   if (cntErr || remaining === null || remaining > 0) return { allCleared: false, statusChangedTo: null }
 
-  const target = NEXT_STAGE[IN_PROGRESS_STATUS]   // '검토전'
+  const target = NEXT_STAGE[IN_PROGRESS_STATUS] ?? REVIEW_READY_STATUS   // '검토전'
 
   // '진행중' 인 경우에만 전환 (동시 호출 시 한 번만 성공)
   const { data: updated } = await supabaseAdmin
@@ -761,8 +794,13 @@ async function autoAdvanceToReview(jobId: string): Promise<{ allCleared: boolean
     .maybeSingle()
   if (!updated) return { allCleared: true, statusChangedTo: null }
 
-  // 오더 상태 동기화 + 감독관 알림
+  // 오더 상태 동기화 + 이력 + 감독관 알림
   await supabaseAdmin.from('pct_orders').update({ status: target }).eq('id', updated.order_id as string)
+  await logJobStatusChange({
+    jobId, orderId: updated.order_id as string,
+    fromStatus: IN_PROGRESS_STATUS, toStatus: target,
+    source: 'auto', note: '전 시험항목 완료로 서버가 자동 전환했습니다.',
+  })
   await createNotification({
     type: 'status_changed',
     title: '검토 대기',
@@ -781,11 +819,13 @@ async function autoAdvanceToReview(jobId: string): Promise<{ allCleared: boolean
  * - `expected` 를 주면 화면이 보고 있던 단계와 실제 단계가 같을 때만 전환한다(동시 클릭 방지).
  * - 조건부 update 로 한 번만 성공하게 한다.
  * - 마지막 단계(승인완료) 도달 시 work_end_date 를 오늘로 기록한다(이미 있으면 유지).
- * - 오더 상태를 함께 동기화하고 알림을 남긴다.
+ * - 오더 상태를 함께 동기화하고, 상태 이력·알림을 남긴다.
  */
 export async function advanceJobStage(
   jobId: string,
   expected?: string,
+  /** 전이를 실행한 관리자(로그인 사용자) id — 상태 이력에 남긴다 */
+  changedBy?: string,
 ): Promise<{ from: JobStage; to: JobStage }> {
   const { data: job } = await supabaseAdmin
     .from('qc_jobs')
@@ -824,6 +864,12 @@ export async function advanceJobStage(
   }
 
   await supabaseAdmin.from('pct_orders').update({ status: target }).eq('id', updated.order_id as string)
+  await logJobStatusChange({
+    jobId, orderId: updated.order_id as string,
+    fromStatus: current, toStatus: target,
+    changedBy: changedBy ?? null, source: 'manual',
+    note: STAGE_ACTION_LABEL[current] ?? '단계 전이',
+  })
   await createNotification({
     type: 'status_changed',
     title: `${STAGE_ACTION_LABEL[current] ?? '단계 변경'} 처리`,
@@ -916,12 +962,84 @@ export async function changeJobStatus(jobId: string, userSub: string, status: st
   if (error) throw error
   if (!job) throw new Error('다른 사용자가 먼저 상태를 변경했습니다. 새로고침 후 다시 시도하세요.')
   await supabaseAdmin.from('pct_orders').update({ status }).eq('id', job.order_id)
+  await logJobStatusChange({
+    jobId, orderId: job.order_id as string,
+    fromStatus: current, toStatus: status,
+    changedBy: userSub, source: 'manual', note: '담당자 상태 변경',
+  })
   await createNotification({
     type: 'status_changed',
     title: '상태 변경',
     body: `작업 상태가 "${status}" 로 변경되었습니다.`,
     relatedOrderId: job.order_id as string, relatedQcJobId: jobId, severity: 'info',
   })
+}
+
+/**
+ * 관리자 상태 직접 변경 — 정해진 순서(advanceJobStage) 밖으로 상태를 옮긴다.
+ *
+ * 되돌리기(승인완료 → 검토중), 지연 지정/해제처럼 순차 전이로는 표현할 수 없는 정정이
+ * 실제로 필요하다. 다만 임의 변경은 시험 기록의 신뢰도를 떨어뜨리므로
+ *  ① 관리자만(라우트에서 requireAdmin), ② **사유 필수**, ③ 상태 이력에 사유까지 남긴다.
+ *
+ * work_end_date 는 종결 여부를 따라간다 — 승인완료로 가면 오늘로 기록하고,
+ * 승인완료에서 되돌리면 지운다(완료일이 남아 있으면 완료 집계·공수 통계가 어긋난다).
+ */
+export async function setJobStatusByAdmin(
+  jobId: string, adminUserSub: string, status: string, reason: string,
+): Promise<{ from: string; to: string }> {
+  if (!JOB_STATUSES.includes(status)) {
+    throw new Error(`"${status}" 는 작업에 지정할 수 없는 상태입니다.`)
+  }
+  const note = reason.trim()
+  if (note.length < 2) {
+    throw new Error('상태를 직접 변경하려면 사유를 입력해야 합니다.')
+  }
+
+  const { data: before } = await supabaseAdmin
+    .from('qc_jobs').select('status, order_id, qc_no, work_end_date').eq('id', jobId).maybeSingle()
+  if (!before) throw new Error('작업을 찾을 수 없습니다.')
+  const current = before.status as string
+  if (current === status) return { from: current, to: status }
+
+  const patch: Record<string, unknown> = { status }
+  if (status === CLOSED_STAGE) {
+    if (!before.work_end_date) patch.work_end_date = kstToday()
+  } else if (current === CLOSED_STAGE) {
+    patch.work_end_date = null
+  }
+
+  const { data: updated, error } = await supabaseAdmin
+    .from('qc_jobs').update(patch).eq('id', jobId)
+    .eq('status', current)          // 낙관적 잠금 — 그 사이 바뀌었으면 실패
+    .select('order_id').maybeSingle()
+  if (error) throw error
+  if (!updated) throw new Error('다른 사용자가 먼저 상태를 변경했습니다. 새로고침 후 다시 시도하세요.')
+
+  await supabaseAdmin.from('pct_orders').update({ status }).eq('id', updated.order_id as string)
+  await logJobStatusChange({
+    jobId, orderId: updated.order_id as string,
+    fromStatus: current, toStatus: status,
+    changedBy: adminUserSub, source: 'manual', note: `관리자 직접 변경 — ${note}`,
+  })
+  await createNotification({
+    type: 'status_changed',
+    title: '관리자 상태 변경',
+    body: `QC ${before.qc_no} 작업 상태가 "${current}" → "${status}" 로 변경되었습니다. (사유: ${note})`,
+    relatedOrderId: updated.order_id as string,
+    relatedQcJobId: jobId,
+    severity: 'warning',
+  })
+
+  return { from: current, to: status }
+}
+
+/** 작업 소유자(로그인 사용자) id — 라우트의 소유권 검사용. 없는 작업이면 undefined */
+export async function getJobAssigneeUserId(jobId: string): Promise<string | null | undefined> {
+  const { data } = await supabaseAdmin
+    .from('qc_jobs').select('assignee_user_id').eq('id', jobId).maybeSingle()
+  if (!data) return undefined
+  return (data.assignee_user_id as string) ?? null
 }
 
 async function assertOwner(jobId: string, userSub: string): Promise<void> {

@@ -31,6 +31,7 @@ interface OrderLite {
   method: string | null
   due_date: string | null
   status: string
+  is_urgent: boolean | null
   assignee_tester_id: string | null
   created_at: string
 }
@@ -100,7 +101,7 @@ export async function listTests(q: TestsQuery = {}): Promise<TestRow[]> {
   // 1) 오더 (작업현황 원본, 삭제 제외)
   const { data: orderData, error } = await supabaseAdmin
     .from('pct_orders')
-    .select('id, product_code, product_name, batch_no, dosage_form, method, due_date, status, assignee_tester_id, created_at')
+    .select('id, product_code, product_name, batch_no, dosage_form, method, due_date, status, is_urgent, assignee_tester_id, created_at')
     .neq('status', DELETED_STATUS)
     .order('created_at', { ascending: false })
   if (error) throw error
@@ -153,17 +154,23 @@ export async function listTests(q: TestsQuery = {}): Promise<TestRow[]> {
     const items = (job ? itemsByJob.get(job.id) : planned) ?? []
     return {
       id:          i + 1,
+      orderId:     o.id,
+      jobId:       job?.id ?? null,
       category:    meta?.productType ?? o.dosage_form ?? '-',
       type:        o.method ?? '-',
       product:     o.product_name,
+      batchNo:     o.batch_no,
       testNo:      job?.qcNo ?? '-',
       items:       items.join(', '),
+      itemList:    items,
       contractor:  CONTRACTOR,
       manager:     name,
       managerInit: name ? name.slice(0, 1) : '',
       receiveDate: fmtDate(o.created_at),
       dueDate:     fmtDate(o.due_date),
       status:      toStatusKey(koStatus),
+      rawStatus:   koStatus,
+      isUrgent:    !!o.is_urgent,
     }
   })
 
@@ -178,7 +185,7 @@ export async function listTests(q: TestsQuery = {}): Promise<TestRow[]> {
     if (q.status && r.status !== q.status) return false
     if (q.deviationOnly && r.status !== 'fail') return false   // 일탈(부적합)은 현재 데이터 소스에 없음
     if (search) {
-      const hay = `${r.product} ${r.testNo} ${r.manager} ${r.items}`.toLowerCase()
+      const hay = `${r.product} ${r.testNo} ${r.manager} ${r.items} ${r.batchNo}`.toLowerCase()
       if (!hay.includes(search)) return false
     }
     return true

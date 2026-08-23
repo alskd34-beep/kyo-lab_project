@@ -113,15 +113,18 @@ qc_jobs + qc_job_items 생성 (QC번호 채번 qcNumber.ts)
 
 ### 6.4 내 작업(시험자) ✅
 - 본인 배정 qc_jobs 조회 — 대기/진행중/종료 3단. 시작 전 장비 준비상태 표시(`getStartReadiness`).
-- 항목별 시작/완료(`cleared_at`, `elapsed_minutes`), 상태 진행중→검토중→완료. `qcJobs.ts`, `/api/qc-jobs/*`.
+- 항목별 시작/완료(`cleared_at`, `elapsed_minutes`), 상태 진행중→검토전→검토중→승인전→승인완료. `qcJobs.ts`, `/api/qc-jobs/*`.
+- **상태 변경 이력**(2026-08-23) — 모든 전이를 `qc_job_status_history` 에 적재(변경자·사유·자동/수동 구분).
+  조회 `GET /api/qc-jobs/[id]/history`(관리자 전체·담당자 본인), 관리자 직접 변경 `PATCH /api/qc-jobs/[id]/status`(사유 필수).
+  마이그레이션 `supabase/migrations/0032_qc_job_status_history.sql`.
 
 ### 6.5 시험관리 & 기준 설정 (마스터)
 사이드바상 **"시험관리"**(작업/시험 현황·결과·성적서·시험자)와 **"기준 설정"**(마스터) 2개 그룹으로 분리돼 있다.
 
 | 화면(라벨) | 경로 | 그룹 | 상태 | 내용 |
 |------|------|------|------|------|
-| 작업 현황 | `/product-test/prod-status` | 시험관리 | ✅ | 품목별 작업/시험 현황(`product-test-workspace`) |
-| 시험현황 | `/test-mgmt/test-status` | 시험관리 | ✅ | 시험 상태 현황(`tests.ts`) |
+| 작업 현황 | `/product-test/prod-status` | 시험관리 | ✅ | 작업자별 진행 현황 + **완료 작업 보기**(작업 있는 인원/전체/완료 작업 · 오늘~전체 기간, 작업자당 최근 50건). 카드 클릭 → 작업 상세(시험항목·단계·상태 이력) |
+| 시험현황 | `/test-mgmt/test-status` | 시험관리 | ✅ | 시험 상태 현황(`tests.ts`). 행 클릭 → **미리보기 패널**(요약·시험항목·상태 변경·상태 이력), 관리자는 단계 전이·상태 직접 변경(사유 필수) |
 | 시험자 관리 | `/test-mgmt/testers` | 시험관리 | ✅ | 시험자 CRUD, can_solo/can_duo, 역량 매트릭스(Y/N/X/O) |
 | 결과입력 | `/test-mgmt/test-result` | 시험관리 | 🧩 | 화면만 |
 | 성적서관리 | `/test-mgmt/test-cert` | 시험관리 | 🧩 | 화면만 |
