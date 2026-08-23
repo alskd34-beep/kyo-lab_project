@@ -646,8 +646,11 @@ export default function TestersPage() {
 
       {activeTab === "capability" && (
         <div className="flex min-h-0 flex-1 flex-col gap-3">
-          {/* Legend */}
-          <div className="flex shrink-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          {/* Legend — 셀이 하나도 없으면 설명할 대상이 없어 숨긴다 */}
+          <div className={cn(
+            "flex shrink-0 flex-wrap items-center gap-2 text-xs text-muted-foreground",
+            (capLoading || capabilities.length === 0) && "hidden",
+          )}>
             <span className="font-medium text-foreground">범례</span>
             {(["O", "Y", "N", "X"] as ProficiencyLevel[]).map((level) => (
               <span key={level} className="flex items-center gap-1">
@@ -678,6 +681,18 @@ export default function TestersPage() {
                 </Card>
               ))}
             </div>
+          ) : capabilities.length === 0 ? (
+            /* 매트릭스의 열은 시험 역량 마스터를 그대로 그린다. 마스터가 비면 열이 0개가
+               되는데, 그때 표를 그냥 그리면 '이름'이 화면 끝까지 늘어난 깨진 표가 나오고
+               왜 비었는지 알 방법이 없다. 표 대신 이유를 말한다. */
+            <Card className="items-center gap-1 py-16 text-center">
+              <Grid2x2 className="mb-1 size-6 text-muted-foreground/60" />
+              <p className="text-sm font-medium text-foreground">등록된 역량 항목이 없습니다.</p>
+              <p className="max-w-md text-xs text-muted-foreground">
+                역량 매트릭스의 열은 시험 역량 마스터(성상 · HPLC · GC 등)를 그대로 그립니다.
+                마스터가 비어 있어 표시할 열이 없습니다.
+              </p>
+            </Card>
           ) : (
             <>
               {/* Mobile capability cards */}
