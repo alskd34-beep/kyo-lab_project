@@ -412,7 +412,8 @@ export function TestItemGroupPanel({
             /* 모바일에서는 한 줄을 통째로 쓰고, sm 부터 내용 폭에 맞춘다 */
             className={cn(
               "w-full sm:w-auto sm:min-w-32",
-              statusFilter !== "all" && "border-blue-500 bg-blue-50 text-blue-700",
+              // 필터가 걸린 상태 표시 — 연한 파랑이라 다크에서 명도만 뒤집는다(50->950, 700->300, 500->600)
+              statusFilter !== "all" && "border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-600 dark:bg-blue-950 dark:text-blue-300",
             )}
           >
             <span className="text-muted-foreground">상태</span>

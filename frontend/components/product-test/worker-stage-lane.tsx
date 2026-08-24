@@ -72,12 +72,13 @@ export function DDay({ due, className }: { due: string | null; className?: strin
   const dd = dDay(due)
   if (dd === null) return null
   const label = dd === 0 ? "D-Day" : dd > 0 ? `D-${dd}` : `D+${-dd}`
-  // 임박도(적·황·중립)는 색 자체가 의미라 그대로 둔다
+  // 임박도(적·황·중립)는 색 자체가 의미라 그대로 둔다.
+  // 다크에서는 색상은 두고 명도만 뒤집는다(배경 50->950, 글자 600->300, 테두리 300->700).
   const cls =
     dd <= 3
-      ? "border-red-300 bg-red-50 text-red-600"
+      ? "border-red-300 bg-red-50 text-red-600 dark:border-red-700 dark:bg-red-950 dark:text-red-300"
       : dd <= 7
-        ? "border-amber-300 bg-amber-50 text-amber-600"
+        ? "border-amber-300 bg-amber-50 text-amber-600 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-300"
         : "border-border bg-muted text-muted-foreground"
 
   return (
@@ -113,16 +114,17 @@ export function JobChip({
       title={`${job.productName} / ${job.batchNo} — ${job.status}`}
       className={cn(
         "w-full cursor-pointer rounded-md border bg-card p-2.5 text-left shadow-sm transition-colors",
-        "hover:border-blue-300 hover:bg-blue-50/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-        tone === "done" && "border-blue-200 bg-blue-50/40",
-        delayed && "border-red-200 bg-red-50/50",
+        // 연한 hover·완료·지연 배경은 밝은 배경 전제라 다크에서 명도만 뒤집는다(50->950, 200->800, 300->700)
+        "hover:border-blue-300 hover:bg-blue-50/50 dark:hover:border-blue-700 dark:hover:bg-blue-950/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+        tone === "done" && "border-blue-200 bg-blue-50/40 dark:border-blue-800 dark:bg-blue-950/40",
+        delayed && "border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/50",
       )}
     >
       <div className="flex items-center justify-between gap-1">
-        <span className="truncate font-mono text-xs leading-normal font-bold text-blue-700">QC {job.qcNo}</span>
+        <span className="truncate font-mono text-xs leading-normal font-bold text-blue-700 dark:text-blue-300">QC {job.qcNo}</span>
         <span className="flex shrink-0 items-center gap-1">
           {job.isUrgent && (
-            <Badge variant="outline" className="border-red-200 px-1 py-0 text-xs leading-normal text-red-700">
+            <Badge variant="outline" className="border-red-200 px-1 py-0 text-xs leading-normal text-red-700 dark:border-red-800 dark:text-red-300">
               긴급
             </Badge>
           )}
@@ -269,7 +271,7 @@ export function WorkerStageLane({
                   /* transition-all → 실제로 바뀌는 색만. 폭 제한도 칸에 맡긴다(max-w-full) */
                   className={cn(
                     "relative z-20 w-full max-w-full min-w-0 cursor-pointer rounded-md border bg-card p-2.5 text-left shadow-md transition-colors",
-                    "hover:border-blue-300 hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                    "hover:border-blue-300 dark:hover:border-blue-700 hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
                   )}
                 >
                   <div className="flex min-w-0 items-center justify-between gap-1">
@@ -303,7 +305,7 @@ export function WorkerStageLane({
                   )}
 
                   {restCount > 0 && (
-                    <div className="mt-1 text-right text-xs leading-normal font-semibold text-blue-600">
+                    <div className="mt-1 text-right text-xs leading-normal font-semibold text-blue-600 dark:text-blue-300">
                       외 {restCount}건
                     </div>
                   )}
@@ -449,7 +451,7 @@ export function WorkerStageLane({
                       {order.isUrgent && (
                         <Badge
                           variant="outline"
-                          className="border-red-200 px-1 py-0 text-xs leading-normal text-red-700"
+                          className="border-red-200 px-1 py-0 text-xs leading-normal text-red-700 dark:border-red-800 dark:text-red-300"
                         >
                           긴급
                         </Badge>

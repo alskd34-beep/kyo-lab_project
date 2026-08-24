@@ -195,9 +195,9 @@ export default function TestCapabilitiesPage() {
       </div>
 
       {/* 자동배정이 이 값을 키로 쓴다 — 이름만 바꾸는 화면이 아니라는 걸 먼저 알린다 */}
-      <Card className="shrink-0 flex-row items-start gap-2 border-amber-200 bg-amber-50 px-4 py-3">
+      <Card className="shrink-0 flex-row items-start gap-2 border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950">
         <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-500" />
-        <p className="text-xs leading-5 break-keep text-amber-800">
+        <p className="text-xs leading-5 break-keep text-amber-800 dark:text-amber-200">
           코드와 역량명은 <span className="font-medium">AI 자동배정</span>이 오더의 필요장비(required_equipment)를
           역량에 연결할 때 쓰는 키입니다. 이름을 바꾸면 매칭 결과가 달라질 수 있으니
           기존 항목의 이름은 신중히 수정하세요. 코드는 등록 후 변경할 수 없습니다.
@@ -205,7 +205,7 @@ export default function TestCapabilitiesPage() {
       </Card>
 
       {notice && (
-        <div className="shrink-0 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">
+        <div className="shrink-0 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300">
           {notice}
         </div>
       )}

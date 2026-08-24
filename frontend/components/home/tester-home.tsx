@@ -89,7 +89,7 @@ function dDayColor(dDay: number | null): string {
   if (dDay === null) return 'text-muted-foreground'
   if (dDay <= 0) return 'font-semibold text-destructive'
   if (dDay <= 3) return 'font-medium text-destructive'
-  if (dDay <= 7) return 'font-medium text-amber-600'
+  if (dDay <= 7) return 'font-medium text-amber-700 dark:text-amber-300'
   /* 여유 있는 건은 색을 빼고 중립으로 둔다. 초록으로 칠하면 화면 대부분이
      초록이 되어 정작 급한 빨강·앰버가 묻히고, 브랜드 색에서도 벗어난다. */
   return 'text-muted-foreground'
@@ -300,7 +300,7 @@ export function TesterHome() {
   const tiles = [
     { label: '진행 중', value: summary.active, hint: '내가 착수한 작업', tone: 'text-foreground' },
     { label: '시작 전', value: summary.waiting, hint: '배정만 된 오더', tone: 'text-foreground' },
-    { label: 'D-7 임박', value: summary.dueSoon, hint: '7일 안에 끝내야 함', tone: summary.dueSoon > 0 ? 'text-amber-600' : 'text-muted-foreground' },
+    { label: 'D-7 임박', value: summary.dueSoon, hint: '7일 안에 끝내야 함', tone: summary.dueSoon > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground' },
     { label: '기한 초과', value: summary.overdue, hint: '완료예정일이 지남', tone: summary.overdue > 0 ? 'text-destructive' : 'text-muted-foreground' },
   ]
 
@@ -324,7 +324,7 @@ export function TesterHome() {
       </header>
 
       {notLinked && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs text-amber-800">
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
           <p className="font-semibold">시험자 계정과 연결되지 않았습니다.</p>
           <p className="mt-0.5">배정된 작업을 보려면 관리자에게 시험자 연결을 요청하세요.</p>
         </div>
@@ -469,7 +469,7 @@ function TeamLeaveBoard({
       ) : (
         <>
           {conflictDays.length > 0 && (
-            <div className="rounded-md border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs leading-normal text-amber-800">
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs leading-normal text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
               <p className="font-semibold">
                 같은 날 2명 이상이 자리를 비우는 날이 {conflictDays.length}일 있습니다.
               </p>

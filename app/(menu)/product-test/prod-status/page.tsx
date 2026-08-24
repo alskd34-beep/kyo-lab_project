@@ -157,7 +157,7 @@ export default function ProdStatusPage() {
       foot: <span className="text-xs leading-normal break-keep tabular-nums text-muted-foreground">전체 {data?.workers.filter(w => w.isActive).length ?? 0}명 중</span>,
     },
     {
-      label: "진행 중 작업", value: totals?.activeJobs ?? 0, valueCls: "text-blue-700", icon: ClipboardList,
+      label: "진행 중 작업", value: totals?.activeJobs ?? 0, valueCls: "text-blue-700 dark:text-blue-300", icon: ClipboardList,
       foot: itemProgress.total > 0 ? (
         /* 좁은 칸에서 막대와 글자가 한 줄에 안 들어가면 아랫줄로 접힌다 */
         <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
@@ -176,7 +176,7 @@ export default function ProdStatusPage() {
       foot: <span className="text-xs leading-normal break-keep text-muted-foreground">완료예정일 경과</span>,
     },
     {
-      label: "완료 작업", value: totals?.completedToday ?? 0, valueCls: "text-blue-800", icon: CheckCircle2,
+      label: "완료 작업", value: totals?.completedToday ?? 0, valueCls: "text-blue-800 dark:text-blue-200", icon: CheckCircle2,
       foot: <span className="text-xs leading-normal break-keep tabular-nums text-muted-foreground">오늘 · 누적 {totals?.completedTotal ?? 0}건</span>,
       onClick: () => { setView("completed"); setCompletedRange("today") },
       hint: "클릭하면 오늘 완료한 작업 목록으로 이동합니다",
@@ -224,7 +224,7 @@ export default function ProdStatusPage() {
                 : {})}
               className={cn(
                 "min-w-0 gap-1 px-4 py-3",
-                card.onClick && "cursor-pointer transition-colors hover:border-blue-300 hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                card.onClick && "cursor-pointer transition-colors hover:border-blue-300 dark:hover:border-blue-700 hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
               )}
             >
               <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-muted-foreground">
@@ -295,10 +295,10 @@ export default function ProdStatusPage() {
       </div>
 
       {error && (
-        <Card className="shrink-0 items-center gap-1 border-amber-200 bg-amber-50 py-8 text-center">
+        <Card className="shrink-0 items-center gap-1 border-amber-200 bg-amber-50 py-8 text-center dark:border-amber-800 dark:bg-amber-950">
           <TriangleAlert className="mb-1 size-6 text-amber-500" />
-          <p className="text-sm font-semibold break-keep text-amber-800">{error}</p>
-          {!isAdmin && <p className="text-xs leading-normal break-keep text-amber-700">관리자 계정으로 로그인하세요.</p>}
+          <p className="text-sm font-semibold break-keep text-amber-800 dark:text-amber-200">{error}</p>
+          {!isAdmin && <p className="text-xs leading-normal break-keep text-amber-700 dark:text-amber-300">관리자 계정으로 로그인하세요.</p>}
         </Card>
       )}
 
@@ -344,7 +344,7 @@ export default function ProdStatusPage() {
                     /* transition-all → 실제로 바뀌는 색만 애니메이션한다 */
                     "flex min-w-0 shrink-0 items-center gap-2.5 rounded-md border px-2.5 py-2.5 text-left transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none md:w-full md:shrink",
                     selectedWorker?.testerId === w.testerId
-                      ? "border-blue-300 bg-blue-50 text-foreground"
+                      ? "border-blue-300 bg-blue-50 text-foreground dark:border-blue-700 dark:bg-blue-950"
                       : "border-transparent text-foreground hover:bg-muted/60",
                   )}
                 >

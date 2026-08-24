@@ -79,9 +79,10 @@ export function LeaveChip({ conflicts }: { conflicts: readonly TesterAbsence[] }
     <span
       className={cn(
         "ml-1 inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs leading-normal font-medium",
+        // 연한 칩은 밝은 배경 전제라 다크에서 명도만 뒤집는다(50->950, 700->300, 200->800).
         hard
-          ? "border-red-200 bg-red-50 text-red-700"
-          : "border-amber-200 bg-amber-50 text-amber-700",
+          ? "border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300"
+          : "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300",
       )}
     >
       <CalendarOff className="size-2.5" />
@@ -106,9 +107,10 @@ export function LeaveConflictNotice({
     <div
       className={cn(
         "flex items-start gap-2 rounded-md border px-3 py-2 text-xs",
+        // 위 LeaveChip 과 같은 규칙 — 글자 800 은 다크에서 200 으로 간다.
         hard
-          ? "border-red-200 bg-red-50 text-red-700"
-          : "border-amber-200 bg-amber-50 text-amber-800",
+          ? "border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300"
+          : "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200",
         className,
       )}
     >

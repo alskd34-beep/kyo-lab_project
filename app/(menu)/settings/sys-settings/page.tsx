@@ -67,7 +67,7 @@ export default function SysSettingsPage() {
             <p className={cn(
               'rounded-md border px-3 py-2 text-xs break-keep',
               msg.type === 'ok'
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
                 : 'border-destructive/20 bg-destructive/10 text-destructive',
             )}>{msg.text}</p>
           )}

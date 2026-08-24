@@ -224,10 +224,11 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
                 <div key={g.key} className="overflow-hidden rounded-md border bg-card shadow-sm">
                   <button onClick={() => toggle(g.key)} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/40">
                     {isCol ? <ChevronRight className="size-4 text-muted-foreground" /> : <ChevronDown className="size-4 text-muted-foreground" />}
-                    <Layers className="size-4 text-blue-600" />
+                    <Layers className="size-4 text-blue-600 dark:text-blue-300" />
                     <span className="min-w-0 truncate text-sm font-semibold text-foreground">{g.label}</span>
                     {g.isFamily && (
-                      <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-0.5 text-xs leading-normal font-semibold text-blue-700">동시분석 {g.rows.length}건</span>
+                      /* 연한 칩 — 다크에서는 명도만 뒤집는다(배경 50->950, 글자 700->300) */
+                      <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-0.5 text-xs leading-normal font-semibold text-blue-700 dark:bg-blue-950 dark:text-blue-300">동시분석 {g.rows.length}건</span>
                     )}
                     <div className="ml-auto hidden shrink-0 items-center gap-4 text-xs font-medium text-muted-foreground sm:flex">
                       <span>총 과제 <b className="text-foreground">{g.rows.length}건</b></span>
@@ -251,7 +252,7 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
                           <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-normal text-muted-foreground">
                             <StatusBadge status={r.status} />
                             {r.isUrgent && (
-                              <span className="inline-flex shrink-0 items-center rounded-md bg-red-50 px-2 py-0.5 text-xs leading-normal font-semibold text-red-600">
+                              <span className="inline-flex shrink-0 items-center rounded-md bg-red-50 px-2 py-0.5 text-xs leading-normal font-semibold text-red-600 dark:bg-red-950 dark:text-red-300">
                                 긴급
                               </span>
                             )}
@@ -276,13 +277,13 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
                           {g.rows.map(r => (
                             <tr key={r.id} className="border-b last:border-0 text-foreground hover:bg-muted/40">
                               <td className="px-3 py-2.5 font-medium text-foreground">{r.productName}</td>
-                              <td className="px-3 py-2.5 font-mono text-xs text-blue-600">{r.productCode}</td>
+                              <td className="px-3 py-2.5 font-mono text-xs text-blue-600 dark:text-blue-300">{r.productCode}</td>
                               <td className="px-3 py-2.5 font-mono text-xs">{r.batchNo}</td>
                               <td className="px-3 py-2.5">{r.dosageForm ?? "-"}</td>
                               <td className="px-3 py-2.5">{r.packagingDate ?? "-"}</td>
                               <td className={cn("px-3 py-2.5", r.dueDate && "font-semibold text-red-500")}>{r.dueDate ?? "-"}</td>
                               <td className="px-3 py-2.5">
-                                {r.isUrgent ? <span className="inline-flex items-center rounded-md bg-red-50 px-2 py-0.5 text-xs leading-normal font-semibold text-red-600">긴급</span> : <span className="text-muted-foreground">-</span>}
+                                {r.isUrgent ? <span className="inline-flex items-center rounded-md bg-red-50 px-2 py-0.5 text-xs leading-normal font-semibold text-red-600 dark:bg-red-950 dark:text-red-300">긴급</span> : <span className="text-muted-foreground">-</span>}
                               </td>
                               <td className="px-3 py-2.5">{r.method}</td>
                               <td className="px-3 py-2.5">{r.workdays != null ? `${r.workdays}일` : "-"}</td>
@@ -368,7 +369,7 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
             <div className="mt-5">
               <div className="mb-2 flex items-center justify-between">
                 <p className="text-sm font-semibold text-foreground">최근 배정 과제</p>
-                {onOpenDetail && <button onClick={onOpenDetail} className="text-xs leading-normal font-medium text-blue-600 hover:underline">전체보기</button>}
+                {onOpenDetail && <button onClick={onOpenDetail} className="text-xs leading-normal font-medium text-blue-600 hover:underline dark:text-blue-300">전체보기</button>}
               </div>
               <div className="flex flex-col gap-2">
                 {recent.length === 0 ? (
@@ -383,7 +384,7 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
                         <div className="min-w-0">
                           <p className="flex items-center gap-1.5 text-xs leading-normal font-semibold text-foreground">
                             <span className="truncate">{r.productName} (제조 {r.batchNo})</span>
-                            {r.isUrgent && <span className="shrink-0 rounded-md bg-red-50 px-1.5 py-0.5 text-xs leading-normal font-semibold text-red-600">긴급</span>}
+                            {r.isUrgent && <span className="shrink-0 rounded-md bg-red-50 px-1.5 py-0.5 text-xs leading-normal font-semibold text-red-600 dark:bg-red-950 dark:text-red-300">긴급</span>}
                           </p>
                           <p className="mt-0.5 text-xs leading-normal text-muted-foreground">완료예정 {r.dueDate ?? "-"} · 공수 {r.workdays ?? "-"}일</p>
                         </div>

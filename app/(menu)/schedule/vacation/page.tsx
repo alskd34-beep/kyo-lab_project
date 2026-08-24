@@ -58,10 +58,12 @@ const TYPE_LABEL: Record<ScheduleType, string> = {
 }
 /* 연차와 출장이 같은 파랑이라 캘린더에서 둘을 구분할 수 없었다.
    출장은 휴가가 아니라 성격이 다른 일정이므로 중립색(slate)으로 떼어 놓는다. */
+/* 연한 칩은 밝은 배경을 전제하므로 다크에선 명도를 뒤집은 짝을 함께 준다(색상은 그대로).
+   출장의 중립색은 회색이라 색 램프 대신 시맨틱 토큰으로 간다. */
 const TYPE_CLS: Record<ScheduleType, string> = {
-  ANNUAL:        "bg-blue-50 text-blue-700 border-blue-200",
-  HALF_DAY:      "bg-amber-50 text-amber-700 border-amber-200",
-  BUSINESS_TRIP: "bg-slate-100 text-slate-700 border-slate-300",
+  ANNUAL:        "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800",
+  HALF_DAY:      "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800",
+  BUSINESS_TRIP: "bg-slate-100 text-slate-700 border-slate-300 dark:bg-muted dark:text-muted-foreground dark:border-border",
 }
 // 연속 막대 색(채움)
 const TYPE_BAR: Record<ScheduleType, string> = {
@@ -315,7 +317,7 @@ export default function VacationPage() {
             </span>
           ))}
           {/* 공휴일 rose 는 뜻이 곧 색이다 — 일요일(destructive)과 겹치지 않게 일부러 다른 빨강을 쓴다 */}
-          <span className="inline-flex items-center gap-1.5 text-rose-600">
+          <span className="inline-flex items-center gap-1.5 text-rose-600 dark:text-rose-300">
             <span className="size-2.5 rounded-md bg-rose-500" /> 공휴일
           </span>
         </div>
@@ -353,7 +355,7 @@ export default function VacationPage() {
                   {/* 요일 색은 뜻이라 그대로 둔다(일=destructive · 토=primary · 공휴일=rose) */}
                   <span className={`shrink-0 text-sm font-semibold tabular-nums ${
                     day.ds === todayIso ? "text-primary"
-                    : day.holiday ? "text-rose-600"
+                    : day.holiday ? "text-rose-600 dark:text-rose-300"
                     : day.dow === 0 ? "text-destructive"
                     : day.dow === 6 ? "text-primary"
                     : "text-foreground"
@@ -365,7 +367,7 @@ export default function VacationPage() {
                     <span className="shrink-0 rounded-md bg-primary px-1.5 py-0.5 text-xs leading-normal font-medium text-primary-foreground">오늘</span>
                   )}
                   {day.holiday && (
-                    <span className="min-w-0 truncate text-xs leading-normal font-medium text-rose-600">{day.holiday}</span>
+                    <span className="min-w-0 truncate text-xs leading-normal font-medium text-rose-600 dark:text-rose-300">{day.holiday}</span>
                   )}
                   <Plus size={14} className="ml-auto shrink-0 text-muted-foreground" />
                 </button>
@@ -393,7 +395,7 @@ export default function VacationPage() {
                           )}
                           {/* 관리자 확인은 '승인'이라 이 프로젝트의 승인색(짙은 파랑)을 쓴다.
                               연차 막대의 blue-500 과는 농도가 달라 섞이지 않는다. */}
-                          {r.managerChecked && <CheckCircle2 size={13} className="shrink-0 text-blue-700" />}
+                          {r.managerChecked && <CheckCircle2 size={13} className="shrink-0 text-blue-700 dark:text-blue-300" />}
                         </button>
                       </li>
                     ))}
@@ -466,7 +468,7 @@ export default function VacationPage() {
                           {/* 요일 색은 뜻이 있어 그대로 두되, 머리글 줄(일=destructive·토=primary)과 같은 색으로 맞춘다. */}
                           <span className={`inline-flex h-5 min-w-5 items-center justify-center px-1 text-xs leading-normal font-semibold tabular-nums ${
                             isToday ? "rounded-md bg-primary text-primary-foreground"
-                            : holidayName ? "text-rose-600"
+                            : holidayName ? "text-rose-600 dark:text-rose-300"
                             : inMonth ? (di === 0 ? "text-destructive" : di === 6 ? "text-primary" : "text-foreground")
                             : "text-muted-foreground/50"
                           }`}>{d.getUTCDate()}</span>
@@ -474,7 +476,8 @@ export default function VacationPage() {
                             <div
                               title={holidayName}
                               /* leading-tight 유지: HOLIDAY_H(16px)에 맞춘 줄 높이라 늘리면 주 높이가 어긋난다 */
-                              className={`mt-0.5 truncate text-xs leading-tight font-medium ${inMonth ? "text-rose-600" : "text-rose-300"}`}
+                              /* 다른 달 칸은 흐리게 두는 자리다 — 다크에선 명도가 뒤집혀 rose-700 이 그 자리를 맡는다 */
+                              className={`mt-0.5 truncate text-xs leading-tight font-medium ${inMonth ? "text-rose-600 dark:text-rose-300" : "text-rose-300 dark:text-rose-700"}`}
                             >
                               {holidayName}
                             </div>
@@ -567,7 +570,7 @@ export default function VacationPage() {
                     <span className="mt-1 flex min-w-0 items-center gap-2 text-xs leading-normal text-muted-foreground">
                       <span className="font-mono tabular-nums">{r.startDate} ~ {r.endDate}</span>
                       {r.managerChecked && (
-                        <span className="ml-auto inline-flex shrink-0 items-center gap-1 font-medium text-blue-700">
+                        <span className="ml-auto inline-flex shrink-0 items-center gap-1 font-medium text-blue-700 dark:text-blue-300">
                           <CheckCircle2 size={13} /> 확인됨
                         </span>
                       )}
@@ -623,7 +626,7 @@ export default function VacationPage() {
                 <TableCell className="text-xs text-muted-foreground">{r.memo || "—"}</TableCell>
                 <TableCell>
                   {r.managerChecked && (
-                    <span className="inline-flex items-center gap-1 text-xs leading-normal font-medium text-blue-700">
+                    <span className="inline-flex items-center gap-1 text-xs leading-normal font-medium text-blue-700 dark:text-blue-300">
                       <CheckCircle2 size={13} /> 확인됨
                     </span>
                   )}
@@ -708,7 +711,7 @@ function EventDetail({
       {row.memo && <p className="mt-1 text-xs leading-normal break-keep text-muted-foreground">{row.memo}</p>}
       <div className="mt-3 flex items-center gap-2">
         {row.managerChecked ? (
-          <span className="inline-flex items-center gap-1 text-xs leading-normal font-medium text-blue-700">
+          <span className="inline-flex items-center gap-1 text-xs leading-normal font-medium text-blue-700 dark:text-blue-300">
             <CheckCircle2 size={13} /> 관리자 확인됨
           </span>
         ) : isAdmin ? (
@@ -830,7 +833,7 @@ function SuggestionPanel({ from, to }: { from: string; to: string }) {
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             <span className="text-xs leading-normal text-muted-foreground">휴가/출장 제외</span>
             {data.excludedTesters.map(t => (
-              <span key={t.id} className="rounded-md bg-amber-50 px-2 py-0.5 text-xs leading-normal font-medium text-amber-700">{t.name}</span>
+              <span key={t.id} className="rounded-md bg-amber-50 px-2 py-0.5 text-xs leading-normal font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-300">{t.name}</span>
             ))}
           </div>
         ) : (
@@ -876,7 +879,7 @@ function SuggestionPanel({ from, to }: { from: string; to: string }) {
                 <span className="shrink-0 text-xs leading-normal tabular-nums text-muted-foreground">대기 {p.waitingCount}</span>
               </div>
               {p.recoverableBy && p.recoverableBy.length > 0 && (
-                <p className="mt-1 text-xs leading-normal break-keep text-amber-700">복귀 시 가능: {p.recoverableBy.join(", ")}</p>
+                <p className="mt-1 text-xs leading-normal break-keep text-amber-700 dark:text-amber-300">복귀 시 가능: {p.recoverableBy.join(", ")}</p>
               )}
               {p.blockingCapabilities && p.blockingCapabilities.length > 0 && (
                 <p className="mt-0.5 text-xs leading-normal break-keep text-muted-foreground">부족 역량: {p.blockingCapabilities.join(", ")}</p>

@@ -663,10 +663,10 @@ export default function OrdersPage() {
           isAdmin && "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
           /* 기한임박은 이 앱의 경고색인 앰버다. 오렌지는 앰버와 눈으로 구분도 안 되면서
              베이스 밖의 색을 하나 더 늘리기만 했다. 확정(아래)보다 테두리를 한 단 진하게 둔다. */
-          dueSoon && "border-amber-300 bg-amber-50/60",
+          dueSoon && "border-amber-300 bg-amber-50/60 dark:border-amber-700 dark:bg-amber-950/60",
           /* 확정(LOCK)은 승인 성격이라 파랑 램프를 쓴다.
              앰버로 두면 기한임박(앰버)과 겹쳐 급한 건과 확정 건을 못 가른다. */
-          r.locked && "border-blue-200 bg-blue-50/40",
+          r.locked && "border-blue-200 bg-blue-50/40 dark:border-blue-800 dark:bg-blue-950/40",
           selected.has(r.id) && "border-primary/40 bg-primary/5 ring-1 ring-primary/20",
         )}
       >
@@ -697,9 +697,9 @@ export default function OrdersPage() {
               </p>
               <SourceBadge source={r.source} />
               {r.source === "auto" && !r.productSynced && (
-                <Badge variant="outline" className="border-amber-200 text-amber-700">미동기화</Badge>
+                <Badge variant="outline" className="border-amber-200 text-amber-700 dark:border-amber-800 dark:text-amber-300">미동기화</Badge>
               )}
-              {r.isUrgent && <Badge variant="outline" className="border-red-200 text-red-700">긴급</Badge>}
+              {r.isUrgent && <Badge variant="outline" className="border-red-200 text-red-700 dark:border-red-800 dark:text-red-300">긴급</Badge>}
             </div>
             {/* 코드·제조번호는 부가정보다 — 품목명과 같은 굵기로 두면 위계가 없어진다 */}
             <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-xs leading-normal text-muted-foreground">
@@ -739,7 +739,7 @@ export default function OrdersPage() {
           </div>
           <div className="min-w-0">
             <dt className="text-muted-foreground">완료예정</dt>
-            <dd className={cn("mt-0.5 text-sm font-medium tabular-nums text-foreground", dueSoon && "font-semibold text-amber-700")}>
+            <dd className={cn("mt-0.5 text-sm font-medium tabular-nums text-foreground", dueSoon && "font-semibold text-amber-700 dark:text-amber-300")}>
               {r.dueDate ?? "-"}
             </dd>
           </div>
@@ -766,7 +766,7 @@ export default function OrdersPage() {
 
         {/* 미배정 사유 — 카드 안에 또 카드를 두지 않는다. 실선 하나로 나누고 잉크 색으로만 구분한다 */}
         {unassignedReason && (
-          <div className="mt-3 border-t border-amber-200 pt-2.5 text-xs leading-normal text-amber-800">
+          <div className="mt-3 border-t border-amber-200 pt-2.5 text-xs leading-normal text-amber-800 dark:border-amber-800 dark:text-amber-200">
             <p className="font-medium">미배정 사유</p>
             <p className="mt-0.5 break-keep break-words">{unassignedReason}</p>
           </div>
@@ -776,7 +776,7 @@ export default function OrdersPage() {
           <div className="flex items-center gap-1">
             <StatusBadge status={r.status} />
             {r.locked && (
-              <Badge variant="outline" className="gap-0.5 border-amber-200 text-amber-700">
+              <Badge variant="outline" className="gap-0.5 border-amber-200 text-amber-700 dark:border-amber-800 dark:text-amber-300">
                 <Lock className="size-2.5" />확정
               </Badge>
             )}
@@ -816,7 +816,7 @@ export default function OrdersPage() {
                   확정 {rows.filter(r => r.locked).length}건
                 </span>
                 {unsyncedCount > 0 && (
-                  <Badge variant="outline" className="gap-1 border-amber-200 text-amber-700">
+                  <Badge variant="outline" className="gap-1 border-amber-200 text-amber-700 dark:border-amber-800 dark:text-amber-300">
                     <AlertCircle className="size-3" /> 미동기화 {unsyncedCount}
                   </Badge>
                 )}
@@ -842,12 +842,12 @@ export default function OrdersPage() {
       </div>
 
       {msg && (
-        <div className="shrink-0 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium break-keep text-blue-700">{msg}</div>
+        <div className="shrink-0 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium break-keep text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300">{msg}</div>
       )}
 
       {/* 반차 겹침 배정 확인 — 연차·출장은 자동배정에서 제외되지만 반차는 근무일이라 배정된다 */}
       {halfDayNotices.length > 0 && (
-        <div className="shrink-0 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-amber-800">
+        <div className="shrink-0 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="flex items-center gap-1.5 text-sm font-semibold">
@@ -870,7 +870,7 @@ export default function OrdersPage() {
             <button
               type="button"
               onClick={() => setHalfDayNotices([])}
-              className="shrink-0 rounded-md p-1 text-amber-700 transition-colors hover:bg-amber-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              className="shrink-0 rounded-md p-1 text-amber-700 transition-colors hover:bg-amber-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none dark:text-amber-300 dark:hover:bg-amber-900/60"
               title="닫기"
             >
               <X className="size-3.5" />
@@ -1174,10 +1174,12 @@ export default function OrdersPage() {
 
               <span className="hidden h-8 w-px shrink-0 bg-background/15 sm:block" />
 
-              {/* 가운데 — 담당자 일괄 배정 (확정 해제된 미확정 건만) */}
+              {/* 가운데 — 담당자 일괄 배정 (확정 해제된 미확정 건만)
+                  아래 안내 글자: 이 막대는 bg-foreground 라 테마가 뒤집힌 면이다 — 다크에선 바탕이
+                  밝아지므로 앰버도 반대로 진하게 내려야 읽힌다(다른 칩과 명도 방향이 반대인 이유). */}
               <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:flex-1 sm:flex-nowrap sm:justify-center">
                 {unlockedCount === 0 ? (
-                  <span className="text-sm font-medium break-keep text-amber-300">확정된 대상은 배정불가합니다.</span>
+                  <span className="text-sm font-medium break-keep text-amber-300 dark:text-amber-700">확정된 대상은 배정불가합니다.</span>
                 ) : (
                   <>
                     <Select value={bulkTester} onValueChange={setBulkTester}>
@@ -1268,7 +1270,7 @@ function StatusBadge({ status }: { status: string }) {
    드문 쪽인 수동에만 잉크(브랜드 파랑)를 남긴다 — 초록은 여기서 뜻이 없었다. */
 function SourceBadge({ source }: { source: OrderRow["source"] }) {
   return source === "manual" ? (
-    <Badge variant="outline" className="border-blue-200 text-blue-700">수동</Badge>
+    <Badge variant="outline" className="border-blue-200 text-blue-700 dark:border-blue-800 dark:text-blue-300">수동</Badge>
   ) : (
     <Badge variant="outline" className="text-muted-foreground">자동</Badge>
   )
@@ -1352,7 +1354,7 @@ function TestItemPickerDialog({
               {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-11 w-full rounded-md" />)}
             </div>
           ) : error ? (
-            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-6 text-center text-sm text-amber-800">
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-6 text-center text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
               시험항목을 불러오지 못했습니다. {error}
             </p>
           ) : rows.length === 0 ? (
@@ -1384,7 +1386,7 @@ function TestItemPickerDialog({
                       />
                       <span className="min-w-0 flex-1 truncate text-sm text-foreground">{r.testItemName}</span>
                       {r.isMandatory && (
-                        <Badge variant="outline" className="border-amber-200 text-amber-700">필수</Badge>
+                        <Badge variant="outline" className="border-amber-200 text-amber-700 dark:border-amber-800 dark:text-amber-300">필수</Badge>
                       )}
                     </label>
                   </li>
@@ -1529,7 +1531,7 @@ function CreateModal({ testers, absences, onClose, onCreated }: {
         </>
       }
     >
-      <p className="mb-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-normal break-keep text-blue-700">
+      <p className="mb-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-normal break-keep text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300">
         제조 시트 적재가 아닌 수동 등록 오더입니다. 등록 후 담당자를 지정하세요.
       </p>
 
@@ -1784,7 +1786,7 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
         isAutoOrder
           /* SourceBadge 와 같은 규칙 — 자동은 중립, 수동만 파랑 */
           ? "bg-muted text-muted-foreground"
-          : "border-blue-200 bg-blue-50 text-blue-700",
+          : "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300",
       )}>
         {isAutoOrder
           ? "자동 적재 오더입니다. 품목코드·제조번호·품목명은 제조팀 원본 기준으로 고정됩니다."
@@ -1999,10 +2001,10 @@ interface IngestLog {
    타입이 Record<string, ...> 이라 컴파일러도 못 잡아 준다 - 조회는 반드시
    changeMeta() 를 거쳐 기본값을 받는다(값 하나에 화면 전체가 죽지 않도록). */
 const CHANGE_META: Record<string, { label: string; desc: string; cls: string }> = {
-  new:     { label: "신규 추가", desc: "생산계획에서 새로 들어온 오더",  cls: "border-blue-200 text-blue-700" },
-  updated: { label: "내용 변경", desc: "기존 오더 정보가 갱신됨",        cls: "border-amber-200 text-amber-700" },
-  blocked: { label: "변경 차단", desc: "작업 진행·확정 상태라 미반영됨", cls: "border-blue-200 text-blue-700" },
-  deleted: { label: "삭제됨",   desc: "생산계획에서 사라져 제외됨",      cls: "border-red-200 text-red-700" },
+  new:     { label: "신규 추가", desc: "생산계획에서 새로 들어온 오더",  cls: "border-blue-200 text-blue-700 dark:border-blue-800 dark:text-blue-300" },
+  updated: { label: "내용 변경", desc: "기존 오더 정보가 갱신됨",        cls: "border-amber-200 text-amber-700 dark:border-amber-800 dark:text-amber-300" },
+  blocked: { label: "변경 차단", desc: "작업 진행·확정 상태라 미반영됨", cls: "border-blue-200 text-blue-700 dark:border-blue-800 dark:text-blue-300" },
+  deleted: { label: "삭제됨",   desc: "생산계획에서 사라져 제외됨",      cls: "border-red-200 text-red-700 dark:border-red-800 dark:text-red-300" },
 }
 
 function changeMeta(key: string): { label: string; desc: string; cls: string } {

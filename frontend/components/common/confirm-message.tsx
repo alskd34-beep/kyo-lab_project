@@ -48,9 +48,10 @@ const VARIANT_STYLE: Record<
     iconClassName: "bg-primary/10 text-primary",
     buttonVariant: "default",
   },
+  // 앰버는 토큰이 없어 리터럴을 쓴다 — 다크에서는 명도만 뒤집는다(50->950, 600->300).
   warning: {
     icon: AlertTriangle,
-    iconClassName: "bg-amber-50 text-amber-600",
+    iconClassName: "bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-300",
     buttonVariant: "default",
   },
   danger: {

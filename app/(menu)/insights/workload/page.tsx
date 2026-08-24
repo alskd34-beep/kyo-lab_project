@@ -306,7 +306,7 @@ export default function ProductWorkloadPage() {
 
       {/* 마이그레이션 미적용 안내 */}
       {!loading && !schemaReady && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm break-keep text-amber-800">
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm break-keep text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
           공수 표준 테이블이 아직 생성되지 않아 <strong>예제 데이터(쌍화탕)</strong>를 보여주고 있습니다.
           저장은 되지 않습니다 — <code className="font-mono text-xs">supabase/migrations/0026_workload_standard.sql</code> 을 적용해 주세요.
         </div>
@@ -660,9 +660,9 @@ export default function ProductWorkloadPage() {
                     <Badge
                       variant="outline"
                       className={`shrink-0 gap-1.5 font-normal tabular-nums ${
-                        level === "risk" ? "border-red-200 bg-red-50 text-red-700"
-                          : level === "caution" ? "border-amber-200 bg-amber-50 text-amber-700"
-                          : "border-blue-200 bg-blue-50 text-blue-700"
+                        level === "risk" ? "border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300"
+                          : level === "caution" ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                          : "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300"
                       }`}
                     >
                       {formatVarianceRate(r.varianceRate)}
@@ -723,9 +723,9 @@ export default function ProductWorkloadPage() {
                       <Badge
                         variant="outline"
                         className={`gap-1.5 font-normal tabular-nums ${
-                          level === "risk" ? "border-red-200 bg-red-50 text-red-700"
-                            : level === "caution" ? "border-amber-200 bg-amber-50 text-amber-700"
-                            : "border-blue-200 bg-blue-50 text-blue-700"
+                          level === "risk" ? "border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300"
+                            : level === "caution" ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                            : "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300"
                         }`}
                       >
                         {formatVarianceRate(r.varianceRate)}

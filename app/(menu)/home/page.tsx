@@ -107,7 +107,9 @@ function dDayColor(dDay: number | null): string {
   if (dDay < 0) return 'font-semibold text-destructive'
   if (dDay === 0) return 'font-semibold text-destructive'
   if (dDay <= 3)  return 'font-medium text-destructive'
-  if (dDay <= 7)  return 'font-medium text-amber-600'
+  /* amber-600 은 흰 배경에서 3.2:1 이라 본문 기준(4.5:1)에 못 미친다.
+     한 단 내려 대비를 확보하고, 다크에서는 반대로 올린다. */
+  if (dDay <= 7)  return 'font-medium text-amber-700 dark:text-amber-400'
   /* 여유 있는 건은 색을 빼고 중립으로 둔다. 초록으로 칠하면 화면 대부분이
      초록이 되어 정작 급한 빨강·앰버가 묻히고, 브랜드 색에서도 벗어난다. */
   return 'text-muted-foreground'
@@ -349,7 +351,7 @@ function AdminHome() {
       label: 'D-7 임박',
       value: stats.dueSoon7,
       hint: '7일 안에 완료해야 합니다',
-      tone: stats.dueSoon7 > 0 ? 'text-amber-600' : 'text-muted-foreground',
+      tone: stats.dueSoon7 > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground',
     },
   ]
 

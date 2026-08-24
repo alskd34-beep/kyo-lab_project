@@ -71,8 +71,8 @@ function calibrationDueLine(dueDate: string | null) {
   if (!dueDate) return "다음 미등록"
   const urgency = getCalibrationUrgency(dueDate)
   // 날짜는 세로로 열을 이루므로 폭이 고정되는 tabular-nums 로 맞춘다
-  if (urgency === "expired") return <span className="font-medium tabular-nums text-red-600">다음 {dueDate} · 만료</span>
-  if (urgency === "soon") return <span className="font-medium tabular-nums text-amber-600">다음 {dueDate} · 30일 이내</span>
+  if (urgency === "expired") return <span className="font-medium tabular-nums text-red-600 dark:text-red-300">다음 {dueDate} · 만료</span>
+  if (urgency === "soon") return <span className="font-medium tabular-nums text-amber-600 dark:text-amber-300">다음 {dueDate} · 30일 이내</span>
   return <span className="tabular-nums">다음 {dueDate}</span>
 }
 
@@ -237,7 +237,7 @@ export default function EquipmentMasterPage() {
               30일 이내{" "}
               <span className={cn(
                 "font-semibold tabular-nums",
-                calibrationAlert.soon > 0 ? "text-amber-600" : "text-foreground",
+                calibrationAlert.soon > 0 ? "text-amber-600 dark:text-amber-300" : "text-foreground",
               )}>{calibrationAlert.soon}</span>대
             </p>
           )}
@@ -321,7 +321,7 @@ export default function EquipmentMasterPage() {
                     const tone = getCalibrationUrgency(row.calibrationDueDate)
                     const cls = cn(
                       "block w-full px-4 py-3 text-left",
-                      tone === "expired" ? "bg-red-50/40" : tone === "soon" ? "bg-amber-50/40" : "",
+                      tone === "expired" ? "bg-red-50/40 dark:bg-red-950/40" : tone === "soon" ? "bg-amber-50/40 dark:bg-amber-950/40" : "",
                     )
                     return isAdmin ? (
                       <button
@@ -381,8 +381,8 @@ export default function EquipmentMasterPage() {
                   : sortedRows.map(row => {
                   const urgency = getCalibrationUrgency(row.calibrationDueDate)
                   const rowHighlight =
-                    urgency === "expired" ? "bg-red-50/40" :
-                    urgency === "soon"    ? "bg-amber-50/40" : ""
+                    urgency === "expired" ? "bg-red-50/40 dark:bg-red-950/40" :
+                    urgency === "soon"    ? "bg-amber-50/40 dark:bg-amber-950/40" : ""
                   return (
                     <TableRow
                       key={row.id}

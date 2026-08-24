@@ -30,12 +30,16 @@ export interface JobStatusHistoryRow {
   createdAt: string
 }
 
-/** 전이를 일으킨 주체 — 사람이 누른 것과 서버가 자동으로 넘긴 것을 구분해 읽게 한다. */
+/*
+ * 전이를 일으킨 주체 — 사람이 누른 것과 서버가 자동으로 넘긴 것을 구분해 읽게 한다.
+ * 연한 칩은 밝은 배경 전제라 다크에서 명도만 뒤집어 짝을 붙인다(50->950, 700->300, 200->800).
+ * 이미 시맨틱 토큰인 manual·system 은 테마를 따라가므로 그대로 둔다.
+ */
 const SOURCE_META: Record<JobStatusHistoryRow["source"], { label: string; cls: string }> = {
   manual:   { label: "수동",        cls: "border-border text-muted-foreground" },
-  auto:     { label: "자동 전환",   cls: "border-blue-200 bg-blue-50 text-blue-700" },
+  auto:     { label: "자동 전환",   cls: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300" },
   system:   { label: "시스템",      cls: "border-border text-muted-foreground" },
-  backfill: { label: "이력 도입 전", cls: "border-amber-200 bg-amber-50 text-amber-700" },
+  backfill: { label: "이력 도입 전", cls: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300" },
 }
 
 function formatDateTime(iso: string): string {
@@ -118,7 +122,7 @@ export function JobStatusHistory({
           {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-md" />)}
         </div>
       ) : error ? (
-        <p className="mt-3 flex items-center justify-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 py-6 text-center text-xs font-medium text-amber-800">
+        <p className="mt-3 flex items-center justify-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 py-6 text-center text-xs font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
           <TriangleAlert className="size-3.5 text-amber-500" />{error}
         </p>
       ) : rows.length === 0 ? (

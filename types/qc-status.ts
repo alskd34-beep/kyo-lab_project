@@ -105,15 +105,23 @@ export const LOCKED_STATUSES: ReadonlySet<string> = new Set<string>([
  */
 export interface StageStyle { dot: string; cls: string }
 
+/*
+ * `cls` 는 밝은 테마의 연한 칩(옅은 배경 + 진한 글자)이라 다크에서 그대로 두면
+ * 어두운 바탕 위에 흰 알약처럼 떠 보인다. 그래서 각 단계마다 `dark:` 짝을 함께 둔다.
+ * 규칙은 명도를 뒤집는 것뿐이다 — 배경 50->950 / 100->900, 글자 600~700->300,
+ * 800~900->200, 테두리 200->800 / 300->700 / 400->600. 색상(hue)은 건드리지 않는다.
+ * `dot` 은 솔리드(500대)라 두 테마에서 그대로 읽힌다.
+ * 중립인 대기·삭제는 파랑이 아니므로 시맨틱 토큰을 쓴다.
+ */
 export const STAGE_STYLE: Record<string, StageStyle> = {
-  진행중:   { dot: 'bg-blue-400',  cls: 'border-blue-200 text-blue-600 bg-blue-50' },
-  검토전:   { dot: 'bg-blue-500',  cls: 'border-blue-200 text-blue-700 bg-blue-50' },
-  검토중:   { dot: 'bg-blue-600',  cls: 'border-blue-300 text-blue-700 bg-blue-50' },
-  승인전:   { dot: 'bg-blue-700',  cls: 'border-blue-300 text-blue-800 bg-blue-100/60' },
-  승인완료: { dot: 'bg-blue-800',  cls: 'border-blue-400 text-blue-900 bg-blue-100' },
-  지연:     { dot: 'bg-red-500',     cls: 'border-red-200 text-red-700 bg-red-50' },
-  대기:     { dot: 'bg-slate-400',   cls: 'border-slate-200 text-slate-600 bg-slate-50' },
-  삭제:     { dot: 'bg-slate-300',   cls: 'border-slate-200 text-slate-400 bg-slate-50' },
+  진행중:   { dot: 'bg-blue-400',  cls: 'border-blue-200 text-blue-600 bg-blue-50 dark:border-blue-800 dark:text-blue-300 dark:bg-blue-950' },
+  검토전:   { dot: 'bg-blue-500',  cls: 'border-blue-200 text-blue-700 bg-blue-50 dark:border-blue-800 dark:text-blue-300 dark:bg-blue-950' },
+  검토중:   { dot: 'bg-blue-600',  cls: 'border-blue-300 text-blue-700 bg-blue-50 dark:border-blue-700 dark:text-blue-300 dark:bg-blue-950' },
+  승인전:   { dot: 'bg-blue-700',  cls: 'border-blue-300 text-blue-800 bg-blue-100/60 dark:border-blue-700 dark:text-blue-200 dark:bg-blue-900/40' },
+  승인완료: { dot: 'bg-blue-800',  cls: 'border-blue-400 text-blue-900 bg-blue-100 dark:border-blue-600 dark:text-blue-200 dark:bg-blue-900/60' },
+  지연:     { dot: 'bg-red-500',     cls: 'border-red-200 text-red-700 bg-red-50 dark:border-red-800 dark:text-red-300 dark:bg-red-950' },
+  대기:     { dot: 'bg-slate-400',   cls: 'border-slate-200 text-slate-600 bg-slate-50 dark:border-border dark:text-muted-foreground dark:bg-muted' },
+  삭제:     { dot: 'bg-slate-300',   cls: 'border-slate-200 text-slate-400 bg-slate-50 dark:border-border dark:text-muted-foreground/70 dark:bg-muted/60' },
 }
 
 export function stageStyle(status: string): StageStyle {

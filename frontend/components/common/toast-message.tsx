@@ -36,29 +36,35 @@ function createId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
+/*
+ * `ring` 은 토스트 판 전체를 칠한다 — 연한 배경을 다크에서 그대로 두면
+ * 어두운 화면 위에 흰 판이 뜨고 그 위의 `text-foreground` 글자가 안 읽힌다.
+ * 명도만 뒤집는다(배경 50->950, 글자 700->300, 테두리 200->800). 색상(hue)은 그대로.
+ * `accent`(솔리드 600대 + 흰 글자)는 두 테마에서 그대로 읽히므로 건드리지 않는다.
+ */
 const TOAST_STYLE: Record<
   ToastVariant,
   { ring: string; accent: string; icon: ReactElement }
 > = {
   info: {
-    ring: "border-blue-200 bg-blue-50 text-blue-700",
+    ring: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300",
     accent: "bg-blue-600",
     icon: <Info size={16} />,
   },
   // 성공 초록은 CLAUDE.md 가 명시한 브랜드색 예외라 그대로 둔다.
   success: {
-    ring: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    ring: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
     accent: "bg-emerald-600",
     icon: <CheckCircle2 size={16} />,
   },
   warning: {
-    ring: "border-amber-200 bg-amber-50 text-amber-700",
+    ring: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300",
     accent: "bg-amber-500",
     icon: <TriangleAlert size={16} />,
   },
   // 오류는 앱 전체가 쓰는 빨강으로 맞춘다 — rose 는 같은 뜻을 다른 빨강으로 말하던 자리다.
   error: {
-    ring: "border-red-200 bg-red-50 text-red-700",
+    ring: "border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300",
     accent: "bg-red-600",
     icon: <AlertCircle size={16} />,
   },

@@ -35,15 +35,21 @@ import {
 // ─── Static Data ──────────────────────────────────────────────────────────────
 const ALL_TABS = ['시험현황', '제품시험', '안정성시험', '일탈관리'] as const
 
+/*
+ * 연한 칩(옅은 배경 + 진한 글자)은 밝은 배경을 전제해서, 다크에서 그대로 두면
+ * 어두운 바탕 위에 흰 알약처럼 뜬다. 그래서 단계마다 `dark:` 짝을 함께 둔다.
+ * 명도만 뒤집고 색상(hue)은 그대로다 — types/qc-status.ts 의 STAGE_STYLE 과 같은 규칙.
+ * 중립인 '시작대기'는 파랑이 아니라 회색이므로 시맨틱 토큰을 쓴다.
+ */
 const STATUS_CONFIG: Record<StatusKey, { label: string; cls: string }> = {
-  waiting:    { label: '시작대기', cls: 'bg-slate-50 text-slate-600 border border-slate-200' },
-  inprogress: { label: '진행중',   cls: 'bg-blue-50 text-blue-700 border border-blue-200' },
-  prereview:  { label: '검토대기', cls: 'bg-amber-50 text-amber-700 border border-amber-200' },
-  reviewing:  { label: '검토중',   cls: 'bg-blue-50 text-blue-700 border border-blue-200' },
+  waiting:    { label: '시작대기', cls: 'bg-slate-50 text-slate-600 border border-slate-200 dark:bg-muted dark:text-muted-foreground dark:border-border' },
+  inprogress: { label: '진행중',   cls: 'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800' },
+  prereview:  { label: '검토대기', cls: 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800' },
+  reviewing:  { label: '검토중',   cls: 'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800' },
   // 승인대기는 파랑 램프의 '승인전'이다(types/qc-status.ts STAGE_STYLE 과 같은 값)
-  pending:    { label: '승인대기', cls: 'bg-blue-100/60 text-blue-800 border border-blue-300' },
-  completed:  { label: '적합완료', cls: 'bg-blue-100 text-blue-900 border border-blue-400' },
-  fail:       { label: '부적합',   cls: 'bg-red-50 text-red-700 border border-red-200' },
+  pending:    { label: '승인대기', cls: 'bg-blue-100/60 text-blue-800 border border-blue-300 dark:bg-blue-900/40 dark:text-blue-200 dark:border-blue-700' },
+  completed:  { label: '적합완료', cls: 'bg-blue-100 text-blue-900 border border-blue-400 dark:bg-blue-900/60 dark:text-blue-200 dark:border-blue-600' },
+  fail:       { label: '부적합',   cls: 'bg-red-50 text-red-700 border border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800' },
 }
 
 /**
@@ -71,11 +77,11 @@ function buildKpis(rows: TestRow[]): KpiItem[] {
   return [
     { label: '전체시험', value: String(rows.length),     unit: '건', sub: '조회 기간 전체', accent: 'text-foreground',        bg: 'bg-foreground',  border: 'border' },
     { label: '시작대기', value: String(by('waiting')),    unit: '건', sub: '배정 후 미착수', accent: 'text-muted-foreground',  bg: 'bg-slate-400',   border: 'border' },
-    { label: '진행중',   value: String(by('inprogress')), unit: '건', sub: '처리 진행 중',   accent: 'text-blue-600',          bg: 'bg-blue-500',    border: 'border' },
-    { label: '검토',     value: String(by('prereview') + by('reviewing')), unit: '건', sub: '검토대기·검토중', accent: 'text-blue-600', bg: 'bg-blue-600', border: 'border' },
-    { label: '승인대기', value: String(by('pending')),    unit: '건', sub: '검토 후 승인 대기', accent: 'text-blue-800',       bg: 'bg-blue-700',    border: 'border' },
-    { label: '완료',     value: String(by('completed')),  unit: '건', sub: '승인 완료',      accent: 'text-blue-900',          bg: 'bg-blue-800',    border: 'border' },
-    { label: '부적합',   value: String(by('fail')),       unit: '건', sub: '기준 이탈',      accent: 'text-red-600',           bg: 'bg-red-500',     border: 'border' },
+    { label: '진행중',   value: String(by('inprogress')), unit: '건', sub: '처리 진행 중',   accent: 'text-blue-600 dark:text-blue-300',   bg: 'bg-blue-500',    border: 'border' },
+    { label: '검토',     value: String(by('prereview') + by('reviewing')), unit: '건', sub: '검토대기·검토중', accent: 'text-blue-600 dark:text-blue-300', bg: 'bg-blue-600', border: 'border' },
+    { label: '승인대기', value: String(by('pending')),    unit: '건', sub: '검토 후 승인 대기', accent: 'text-blue-800 dark:text-blue-200', bg: 'bg-blue-700',    border: 'border' },
+    { label: '완료',     value: String(by('completed')),  unit: '건', sub: '승인 완료',      accent: 'text-blue-900 dark:text-blue-200',   bg: 'bg-blue-800',    border: 'border' },
+    { label: '부적합',   value: String(by('fail')),       unit: '건', sub: '기준 이탈',      accent: 'text-red-600 dark:text-red-300',     bg: 'bg-red-500',     border: 'border' },
   ]
 }
 
@@ -279,7 +285,7 @@ export default function TestStatusPage() {
                       className={`
                         group relative flex shrink-0 items-center gap-0.5 py-1.5 pr-1.5 pl-3 text-sm font-medium whitespace-nowrap transition-colors md:gap-1.5 md:py-3 md:pr-2 md:pl-4
                         ${isActive
-                          ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600 after:rounded-t-md'
+                          ? 'text-blue-600 dark:text-blue-300 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600 after:rounded-t-md'
                           : 'text-muted-foreground hover:text-foreground'}
                       `}
                     >
@@ -344,7 +350,7 @@ export default function TestStatusPage() {
                    모바일에 눌러도 아무 일이 없는 버튼을 남겨 두지 않는다. */
                 className={`ml-2 hidden h-7 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none md:inline-flex ${
                   stickyHeader
-                    ? 'border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100'
+                    ? 'border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300 dark:hover:bg-blue-900/60'
                     : 'bg-card text-muted-foreground hover:bg-muted/50'
                 }`}
               >
@@ -400,7 +406,7 @@ export default function TestStatusPage() {
                 {/* Search */}
                 {/* transition-all → transition-colors: 실제로 바뀌는 건 테두리·링 색뿐이다.
                     전 속성 전환은 폭·높이까지 애니메이션 대상으로 삼아 입력할 때 흔들린다. */}
-                <div className="flex min-w-0 w-full items-center gap-2 rounded-md border bg-card px-3 py-1.5 transition-colors focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 sm:w-auto sm:flex-1 sm:max-w-[240px]">
+                <div className="flex min-w-0 w-full items-center gap-2 rounded-md border bg-card px-3 py-1.5 transition-colors focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 dark:focus-within:border-blue-600 dark:focus-within:ring-blue-900 sm:w-auto sm:flex-1 sm:max-w-[240px]">
                   <Search size={13} className="shrink-0 text-muted-foreground" />
                   <input
                     type="text"
@@ -467,7 +473,7 @@ export default function TestStatusPage() {
                           if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPreview(row) }
                         }}
                         className={`cursor-pointer rounded-md border p-3 transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none ${
-                          isSelected ? 'border-blue-200 bg-blue-50/60' : 'bg-card hover:bg-muted/40'
+                          isSelected ? 'border-blue-200 bg-blue-50/60 dark:border-blue-800 dark:bg-blue-950/60' : 'bg-card hover:bg-muted/40'
                         }`}
                       >
                         <div className="flex items-start gap-2">
@@ -482,7 +488,7 @@ export default function TestStatusPage() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs leading-normal font-medium ${
-                                row.category === '완제품' ? 'bg-muted text-muted-foreground' : 'bg-blue-50 text-blue-700'
+                                row.category === '완제품' ? 'bg-muted text-muted-foreground' : 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
                               }`}>{row.category}</span>
                               <span className="text-xs leading-normal text-muted-foreground">{row.type}</span>
                               <span className={`ml-auto inline-flex items-center rounded-md px-2 py-0.5 text-xs leading-normal font-semibold ${status.cls}`}>
@@ -577,7 +583,7 @@ export default function TestStatusPage() {
                         onClick={() => openPreview(row)}
                         title="클릭하면 미리보기가 열립니다"
                         className={`cursor-pointer text-sm transition-colors ${
-                          isSelected ? 'bg-blue-50/60' : 'hover:bg-muted/40'
+                          isSelected ? 'bg-blue-50/60 dark:bg-blue-950/60' : 'hover:bg-muted/40'
                         }`}
                       >
                         <TableCell className="px-3 py-2">
@@ -649,12 +655,12 @@ export default function TestStatusPage() {
                   <p className="text-xs text-muted-foreground">
                     총 <span className="font-semibold tabular-nums text-foreground">{sortedData.length}</span>건
                     {selectedRows.size > 0 && (
-                      <span className="ml-2 text-blue-600">
+                      <span className="ml-2 text-blue-600 dark:text-blue-300">
                         · <span className="font-semibold tabular-nums">{selectedRows.size}</span>건 선택됨
                       </span>
                     )}
                     {loadError && (
-                      <span className="ml-2 inline-flex items-center rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-xs leading-normal font-medium text-red-700">
+                      <span className="ml-2 inline-flex items-center rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-xs leading-normal font-medium text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
                         조회 실패
                       </span>
                     )}

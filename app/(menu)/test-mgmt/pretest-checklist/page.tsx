@@ -364,7 +364,7 @@ export default function PretestChecklistPage() {
 
       {/* 성공 알림 초록은 CLAUDE.md 가 명시한 브랜드색 예외다(성공 토스트와 같은 색을 쓴다) */}
       {okMsg && (
-        <div className="shrink-0 rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium break-keep text-emerald-700">
+        <div className="shrink-0 rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium break-keep text-emerald-700 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
           {okMsg}
         </div>
       )}

@@ -135,7 +135,7 @@ export function OrderTestItemsSection({ orderId, productName, canEdit, locked }:
           <ListChecks className="size-4 text-muted-foreground" />
           <span className="text-xs font-semibold text-foreground">시험항목</span>
           {rows !== null && (
-            <Badge variant="outline" className="border-blue-200 tabular-nums text-blue-700">
+            <Badge variant="outline" className="border-blue-200 tabular-nums text-blue-700 dark:border-blue-800 dark:text-blue-300">
               {total}개 중 {activeCount}개 진행
             </Badge>
           )}
@@ -152,14 +152,14 @@ export function OrderTestItemsSection({ orderId, productName, canEdit, locked }:
       </p>
 
       {locked && (
-        <p className="mt-2 flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs leading-normal text-amber-800">
+        <p className="mt-2 flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs leading-normal text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
           <Lock className="size-3 shrink-0" />
           확정(LOCK)된 오더입니다. 확정을 해제해야 시험항목을 바꿀 수 있습니다.
         </p>
       )}
 
       {err && (
-        <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-2.5 py-2 text-xs leading-normal text-red-600">{err}</p>
+        <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-2.5 py-2 text-xs leading-normal text-red-600 dark:border-red-800 dark:bg-red-950 dark:text-red-300">{err}</p>
       )}
 
       {rows === null ? (
@@ -200,10 +200,10 @@ export function OrderTestItemsSection({ orderId, productName, canEdit, locked }:
                         {row.testItemName}
                       </span>
                       {row.source === "manual" && (
-                        <Badge variant="outline" className="border-blue-200 text-blue-700">추가</Badge>
+                        <Badge variant="outline" className="border-blue-200 text-blue-700 dark:border-blue-800 dark:text-blue-300">추가</Badge>
                       )}
                       {row.isExcluded && (
-                        <Badge variant="outline" className="border-amber-200 text-amber-700">제외</Badge>
+                        <Badge variant="outline" className="border-amber-200 text-amber-700 dark:border-amber-800 dark:text-amber-300">제외</Badge>
                       )}
                     </div>
                     {row.isExcluded && (canEdit ? (
@@ -333,7 +333,7 @@ function AddTestItemDialog({ productName, existing, onClose, onConfirm }: {
               {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-11 w-full rounded-md" />)}
             </div>
           ) : err ? (
-            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-6 text-center text-sm text-amber-800">{err}</p>
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-6 text-center text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">{err}</p>
           ) : visible.length === 0 ? (
             <p className="rounded-md border border-dashed py-10 text-center text-sm text-muted-foreground">
               검색 결과가 없습니다.
@@ -366,8 +366,8 @@ function AddTestItemDialog({ productName, existing, onClose, onConfirm }: {
                       {m.category && (
                         <Badge variant="outline" className="shrink-0 font-normal text-muted-foreground">{m.category}</Badge>
                       )}
-                      {already && <Badge variant="outline" className="shrink-0 border-blue-200 text-blue-700">포함됨</Badge>}
-                      {wasExcluded && <Badge variant="outline" className="shrink-0 border-amber-200 text-amber-700">제외됨 · 다시 포함</Badge>}
+                      {already && <Badge variant="outline" className="shrink-0 border-blue-200 text-blue-700 dark:border-blue-800 dark:text-blue-300">포함됨</Badge>}
+                      {wasExcluded && <Badge variant="outline" className="shrink-0 border-amber-200 text-amber-700 dark:border-amber-800 dark:text-amber-300">제외됨 · 다시 포함</Badge>}
                     </label>
                   </li>
                 )

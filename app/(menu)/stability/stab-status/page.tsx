@@ -123,10 +123,11 @@ function makeSignature(rows: StabilitySheetRow[]): string {
 function getStatusClass(status: string): string {
   const value = status.replace(/\s/g, '')
   // 완료·승인은 파랑 램프의 끝(짙은 파랑)이다 — 진행(연한 파랑)에서 색이 진해지며 끝난다.
-  if (/(완료|종료|승인)/.test(value)) return 'border-blue-400 bg-blue-100 text-blue-900'
-  if (/(진행|시험중|분석중|의뢰)/.test(value)) return 'border-blue-200 bg-blue-50 text-blue-700'
-  if (/(대기|예정|준비)/.test(value)) return 'border-amber-200 bg-amber-50 text-amber-700'
-  if (/(보류|지연|중단|취소)/.test(value)) return 'border-red-200 bg-red-50 text-red-700'
+  // 연한 칩은 밝은 배경 전제라 다크에서 흰 알약처럼 뜬다 — 명도만 뒤집은 `dark:` 짝을 함께 둔다.
+  if (/(완료|종료|승인)/.test(value)) return 'border-blue-400 bg-blue-100 text-blue-900 dark:border-blue-600 dark:bg-blue-900/60 dark:text-blue-200'
+  if (/(진행|시험중|분석중|의뢰)/.test(value)) return 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300'
+  if (/(대기|예정|준비)/.test(value)) return 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300'
+  if (/(보류|지연|중단|취소)/.test(value)) return 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300'
   // 분류되지 않은 상태는 색을 주지 않고 중립 토큰으로 둔다.
   return 'border bg-muted/50 text-muted-foreground'
 }
@@ -275,12 +276,12 @@ export default function StabStatusPage() {
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <h1 className="text-lg font-semibold text-foreground">안정성 현황</h1>
             {changeState === 'changed' && (
-              <Badge className="border-blue-200 bg-blue-50 text-blue-700" variant="outline">
+              <Badge className="border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300" variant="outline">
                 변경 감지
               </Badge>
             )}
             {changeState === 'new' && (
-              <Badge className="border-amber-200 bg-amber-50 text-amber-700" variant="outline">
+              <Badge className="border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300" variant="outline">
                 최초 동기화
               </Badge>
             )}
@@ -399,7 +400,7 @@ export default function StabStatusPage() {
                         <span className="min-w-0 truncate">{row.testType || '미분류'}</span>
                         <span className="ml-auto shrink-0">
                           {isScheduleCandidate(row)
-                            ? <span className="font-medium text-blue-700">동시분석 후보</span>
+                            ? <span className="font-medium text-blue-700 dark:text-blue-300">동시분석 후보</span>
                             : '후보 제외'}
                         </span>
                       </div>
@@ -488,7 +489,7 @@ export default function StabStatusPage() {
                             해당될 때만 배지를 달고, 아닐 때는 잔글씨로 남긴다. */}
                         <div className="mt-1">
                           {isScheduleCandidate(row) ? (
-                            <Badge className="border-blue-200 bg-blue-50 text-blue-700" variant="outline">
+                            <Badge className="border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300" variant="outline">
                               동시분석 후보
                             </Badge>
                           ) : (

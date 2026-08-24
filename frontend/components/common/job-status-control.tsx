@@ -167,8 +167,9 @@ export function JobStatusControl({
       )}
 
       {manualOpen && (
-        <div className="mt-3 flex flex-col gap-2 rounded-md border border-amber-200 bg-amber-50/60 p-2.5">
-          <p className="flex items-start gap-1.5 text-xs leading-normal text-amber-800">
+        /* 연한 경고 박스 — 다크에서는 명도만 뒤집는다(배경 50->950, 글자 800->200, 테두리 200->800) */
+        <div className="mt-3 flex flex-col gap-2 rounded-md border border-amber-200 bg-amber-50/60 p-2.5 dark:border-amber-800 dark:bg-amber-950/60">
+          <p className="flex items-start gap-1.5 text-xs leading-normal text-amber-800 dark:text-amber-200">
             <ShieldAlert className="mt-px size-3.5 shrink-0 text-amber-500" />
             순서를 벗어난 상태 변경입니다. 사유는 상태 이력에 그대로 남습니다.
           </p>

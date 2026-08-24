@@ -22,12 +22,18 @@ export const WORKLOAD_TYPE_HEX: Record<WorkloadType, string> = {
   REVIEW: "#10b981",     // emerald-500
 }
 
-/** 배지·점 표시용 Tailwind 클래스 */
+/*
+ * 배지·점 표시용 Tailwind 클래스.
+ * `chip` 은 밝은 배경을 전제한 연한 칩이라 다크에서는 흰 알약처럼 뜬다.
+ * 명도만 뒤집어 짝을 붙인다(배경 50->950 / 100->900, 글자 700->300, 테두리 200->800).
+ * 중립인 WAITING 은 색이 아니라 회색이므로 시맨틱 토큰을 쓴다.
+ * `dot` 은 솔리드(500~600대)라 두 테마에서 그대로 읽히므로 건드리지 않는다.
+ */
 export const WORKLOAD_TYPE_CLASS: Record<WorkloadType, { dot: string; chip: string }> = {
-  HUMAN: { dot: "bg-blue-600", chip: "border-blue-200 bg-blue-50 text-blue-700" },
-  EQUIPMENT: { dot: "bg-amber-500", chip: "border-amber-200 bg-amber-50 text-amber-700" },
-  WAITING: { dot: "bg-slate-400", chip: "border-slate-200 bg-slate-100 text-slate-600" },
-  REVIEW: { dot: "bg-emerald-500", chip: "border-emerald-200 bg-emerald-50 text-emerald-700" },
+  HUMAN: { dot: "bg-blue-600", chip: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300" },
+  EQUIPMENT: { dot: "bg-amber-500", chip: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300" },
+  WAITING: { dot: "bg-slate-400", chip: "border-slate-200 bg-slate-100 text-slate-600 dark:border-border dark:bg-muted dark:text-muted-foreground" },
+  REVIEW: { dot: "bg-emerald-500", chip: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" },
 }
 
 export function WorkloadTypeBadge({ type, short = false }: { type: WorkloadType; short?: boolean }) {

@@ -283,7 +283,9 @@ export function TesterAvatar({
           width={sizePx}
           height={sizePx}
           unoptimized
-          className="size-full object-cover"
+          /* 증명사진이 대부분이라 정사각형으로 자를 때 가운데를 기준 삼으면
+             머리 위쪽이 잘리고 가슴께가 남는다. 상단을 기준으로 자른다. */
+          className="size-full object-cover object-top"
         />
       </span>
     )

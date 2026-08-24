@@ -154,7 +154,7 @@ export default function UsersAdminPage() {
   if (me && me.role !== 'admin') {
     return (
       <div className="p-8">
-        <p className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+        <p className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
           관리자만 접근할 수 있습니다.
         </p>
       </div>

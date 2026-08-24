@@ -131,7 +131,7 @@ export function TestDetailDrawer({
       size="lg"
       title={(
         <span className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-blue-700">
+          <span className="font-mono text-blue-700 dark:text-blue-300">
             {row?.testNo && row.testNo !== "-" ? `QC ${row.testNo}` : "시험 미리보기"}
           </span>
           {statusMeta && (
@@ -140,7 +140,7 @@ export function TestDetailDrawer({
               {status}
             </Badge>
           )}
-          {row?.isUrgent && <Badge variant="outline" className="border-red-200 text-red-700">긴급</Badge>}
+          {row?.isUrgent && <Badge variant="outline" className="border-red-200 text-red-700 dark:border-red-800 dark:text-red-300">긴급</Badge>}
         </span>
       )}
       description="시험 요약·시험항목 진행·상태 변경 이력을 한 곳에서 확인합니다."
@@ -156,7 +156,7 @@ export function TestDetailDrawer({
           <section className="flex flex-col gap-1.5 rounded-md border bg-card p-3 shadow-sm">
             <JobStageTrack status={status} />
             {status === DELAYED_STATUS && (
-              <p className="text-center text-xs font-medium text-red-700">지연 — 완료예정일이 지났습니다.</p>
+              <p className="text-center text-xs font-medium text-red-700 dark:text-red-300">지연 — 완료예정일이 지났습니다.</p>
             )}
             {row.jobId === null && (
               <p className="text-center text-xs text-muted-foreground">
@@ -223,7 +223,7 @@ export function TestDetailDrawer({
                 {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-10 w-full rounded-md" />)}
               </div>
             ) : error ? (
-              <p className="mt-3 flex items-center justify-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 py-6 text-center text-xs font-medium text-amber-800">
+              <p className="mt-3 flex items-center justify-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 py-6 text-center text-xs font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
                 <TriangleAlert className="size-3.5 text-amber-500" />{error}
               </p>
             ) : items ? (
@@ -241,18 +241,19 @@ export function TestDetailDrawer({
                         key={it.id}
                         className={cn(
                           "flex items-center justify-between gap-2 rounded-md border px-3 py-2",
-                          done && "border-blue-200 bg-blue-50/60",
+                          // 완료 행의 연한 파랑은 밝은 배경 전제 — 다크에서 명도만 뒤집는다
+                          done && "border-blue-200 bg-blue-50/60 dark:border-blue-800 dark:bg-blue-950/60",
                           isCurrent && "border-primary/40 bg-primary/5",
                         )}
                       >
                         <span className="flex min-w-0 items-center gap-2">
                           <span className="w-5 shrink-0 text-xs tabular-nums text-muted-foreground">{idx + 1}</span>
                           {done
-                            ? <CheckCircle2 className="size-4 shrink-0 text-blue-600" />
+                            ? <CheckCircle2 className="size-4 shrink-0 text-blue-600 dark:text-blue-300" />
                             : isCurrent
                               ? <LoaderCircle className="size-4 shrink-0 text-primary" />
                               : <Circle className="size-4 shrink-0 text-muted-foreground" />}
-                          <span className={cn("truncate text-sm", done && "text-blue-800")}>
+                          <span className={cn("truncate text-sm", done && "text-blue-800 dark:text-blue-200")}>
                             {it.testItemName}
                           </span>
                         </span>

@@ -81,7 +81,7 @@ export default function NotificationBell() {
           <div className="flex items-center justify-between border-b px-3 py-2">
             <span className="text-sm font-bold text-foreground">알림</span>
             {unread > 0 && (
-              <button onClick={markAll} className="inline-flex items-center gap-1 text-xs leading-normal font-medium text-blue-600 hover:text-blue-700">
+              <button onClick={markAll} className="inline-flex items-center gap-1 text-xs leading-normal font-medium text-blue-600 hover:text-blue-700 dark:text-blue-300 dark:hover:text-blue-200">
                 <Check size={12} />모두 읽음
               </button>
             )}
@@ -93,7 +93,7 @@ export default function NotificationBell() {
               <button
                 key={n.id}
                 onClick={() => !n.isRead && markOne(n.id)}
-                className={`flex w-full items-start gap-2 border-b px-3 py-2.5 text-left transition-colors hover:bg-muted/50 ${n.isRead ? "" : "bg-blue-50/40"}`}
+                className={`flex w-full items-start gap-2 border-b px-3 py-2.5 text-left transition-colors hover:bg-muted/50 ${n.isRead ? "" : "bg-blue-50/40 dark:bg-blue-950/40"}`}
               >
                 <span className="mt-0.5 shrink-0">{SEV_ICON[n.severity] ?? SEV_ICON.info}</span>
                 <div className="min-w-0 flex-1">

@@ -139,7 +139,7 @@ export function JobDetailModal({
       size="lg"
       title={(
         <span className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-blue-700">QC {detail?.qcNo ?? ""}</span>
+            <span className="font-mono text-blue-700 dark:text-blue-300">QC {detail?.qcNo ?? ""}</span>
             {statusMeta && (
               <Badge variant="outline" className={cn("gap-1.5", statusMeta.cls)}>
                 <span className={cn("size-1.5 rounded-full", statusMeta.dot)} />
@@ -147,7 +147,7 @@ export function JobDetailModal({
               </Badge>
             )}
             {detail?.isUrgent && (
-              <Badge variant="outline" className="border-red-200 text-red-700">긴급</Badge>
+              <Badge variant="outline" className="border-red-200 text-red-700 dark:border-red-800 dark:text-red-300">긴급</Badge>
             )}
         </span>
       )}
@@ -170,9 +170,9 @@ export function JobDetailModal({
               </div>
             </>
           ) : error ? (
-            <div className="flex flex-col items-center gap-1 rounded-md border border-amber-200 bg-amber-50 py-10 text-center">
+            <div className="flex flex-col items-center gap-1 rounded-md border border-amber-200 bg-amber-50 py-10 text-center dark:border-amber-800 dark:bg-amber-950">
               <TriangleAlert className="mb-1 size-6 text-amber-500" />
-              <p className="text-sm font-semibold text-amber-800">{error}</p>
+              <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">{error}</p>
             </div>
           ) : detail ? (
             <>
@@ -234,8 +234,8 @@ export function JobDetailModal({
                   </p>
                 </section>
               ) : detail.items.length > 0 && cleared === total ? (
-                <section className="rounded-md border border-blue-200 bg-blue-50/60 p-3">
-                  <p className="flex items-center gap-1.5 text-sm font-semibold text-blue-800">
+                <section className="rounded-md border border-blue-200 bg-blue-50/60 p-3 dark:border-blue-800 dark:bg-blue-950/60">
+                  <p className="flex items-center gap-1.5 text-sm font-semibold text-blue-800 dark:text-blue-200">
                     <CheckCircle2 className="size-4" />
                     모든 시험항목이 완료되었습니다.
                   </p>
@@ -276,7 +276,8 @@ export function JobDetailModal({
                         key={it.id}
                         className={cn(
                           "flex items-center justify-between gap-2 rounded-md border px-3 py-2.5",
-                          done && "border-blue-200 bg-blue-50/60",
+                          // 완료 행의 연한 파랑은 밝은 배경 전제 — 다크에서 명도만 뒤집는다
+                          done && "border-blue-200 bg-blue-50/60 dark:border-blue-800 dark:bg-blue-950/60",
                           isCurrent && "border-primary/40 bg-primary/5",
                         )}
                       >
@@ -285,13 +286,13 @@ export function JobDetailModal({
                             {idx + 1}
                           </span>
                           {done
-                            ? <CheckCircle2 className="size-4 shrink-0 text-blue-600" />
+                            ? <CheckCircle2 className="size-4 shrink-0 text-blue-600 dark:text-blue-300" />
                             : isCurrent
                               ? <LoaderCircle className="size-4 shrink-0 text-primary" />
                               : <Circle className="size-4 shrink-0 text-muted-foreground" />}
                           <span className={cn(
                             "truncate text-sm",
-                            done ? "font-medium text-blue-800"
+                            done ? "font-medium text-blue-800 dark:text-blue-200"
                               : isCurrent ? "font-semibold text-foreground"
                               : "text-foreground",
                           )}>
@@ -301,7 +302,7 @@ export function JobDetailModal({
 
                         <div className="flex shrink-0 items-center gap-2">
                           {done ? (
-                            <span className="text-xs leading-normal text-blue-700">
+                            <span className="text-xs leading-normal text-blue-700 dark:text-blue-300">
                               {it.clearedAt && formatDateTime(it.clearedAt)}
                               {/* 작업 시작 기준 누적 소요시간 (구간이 다르면 함께 표기) */}
                               {(() => {

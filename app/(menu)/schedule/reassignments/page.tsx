@@ -73,7 +73,7 @@ const TYPE_META: Record<HistoryType, { label: string; icon: typeof History; clas
   reassign: {
     label: "담당자 변경",
     icon: UserRoundCheck,
-    className: "border-blue-200 bg-blue-50 text-blue-700",
+    className: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300",
   },
   ingest: {
     label: "자동 적재",
@@ -244,7 +244,7 @@ export default function ReassignmentsPage() {
   if (!isAdmin) {
     return (
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4 md:p-6">
-        <p className="flex shrink-0 items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm break-keep text-amber-700">
+        <p className="flex shrink-0 items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm break-keep text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
           <ShieldAlert size={16} className="shrink-0" /> 관리자만 접근할 수 있는 화면입니다.
         </p>
       </div>

@@ -94,7 +94,7 @@ function ReadinessModal({
         <span className="flex items-center gap-2">
           <span className={cn(
             "flex size-8 items-center justify-center rounded-md",
-            isBlocked ? "bg-destructive/10 text-destructive" : "bg-amber-50 text-amber-600",
+            isBlocked ? "bg-destructive/10 text-destructive" : "bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-300",
           )}>
             {isBlocked ? <XCircle className="size-4" /> : <ShieldAlert className="size-4" />}
           </span>
@@ -120,12 +120,12 @@ function ReadinessModal({
           {blocked.length > 0 && (
             <ul className="flex flex-col gap-2">
               {blocked.map(c => (
-                <li key={c.code} className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs">
+                <li key={c.code} className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs dark:border-red-800 dark:bg-red-950">
                   <XCircle size={14} className="mt-0.5 shrink-0 text-red-500" />
                   <div>
                     {/* 마스터 미등록 장비는 name이 없으므로 코드로 대체 */}
-                    <span className="font-semibold text-red-800">{c.name ?? c.code}</span>
-                    {c.reason && <p className="text-red-700">{c.reason}</p>}
+                    <span className="font-semibold text-red-800 dark:text-red-200">{c.name ?? c.code}</span>
+                    {c.reason && <p className="text-red-700 dark:text-red-300">{c.reason}</p>}
                   </div>
                 </li>
               ))}
@@ -139,13 +139,13 @@ function ReadinessModal({
               </p>
               <ul className="flex flex-col gap-2">
                 {warnings.map(c => (
-                  <li key={c.code} className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs">
+                  <li key={c.code} className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs dark:border-amber-800 dark:bg-amber-950">
                     <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-500" />
                     <div>
                       {/* 마스터 미등록 장비는 name이 없으므로 코드로 대체 */}
-                      <span className="font-semibold text-amber-800">{c.name ?? c.code}</span>
+                      <span className="font-semibold text-amber-800 dark:text-amber-200">{c.name ?? c.code}</span>
                       {/* 경고 사유는 warning 필드에 담긴다(reason은 blocked 전용) */}
-                      {c.warning && <p className="text-amber-700">{c.warning}</p>}
+                      {c.warning && <p className="text-amber-700 dark:text-amber-300">{c.warning}</p>}
                     </div>
                   </li>
                 ))}
@@ -159,11 +159,11 @@ function ReadinessModal({
               </p>
               <ul className="flex flex-col gap-2">
                 {notes.map(n => (
-                  <li key={n.id} className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs">
-                    <p className="font-semibold text-blue-900">{n.content}</p>
-                    {n.remark && <p className="mt-0.5 text-blue-700">특이사항: {n.remark}</p>}
+                  <li key={n.id} className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs dark:border-blue-800 dark:bg-blue-950">
+                    <p className="font-semibold text-blue-900 dark:text-blue-200">{n.content}</p>
+                    {n.remark && <p className="mt-0.5 text-blue-700 dark:text-blue-300">특이사항: {n.remark}</p>}
                     {(n.issueLot || n.createdByName) && (
-                      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs leading-normal text-blue-600">
+                      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs leading-normal text-blue-600 dark:text-blue-300">
                         {n.issueLot && <span>이슈 로트 {n.issueLot}</span>}
                         {n.createdByName && <span>작성 {n.createdByName}</span>}
                       </div>
@@ -490,11 +490,11 @@ export default function MyTasksPage() {
   if (!linked) {
     return (
       <div className="p-4 md:p-6">
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-6 text-center">
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-6 text-center dark:border-amber-800 dark:bg-amber-950">
           <AlertTriangle className="mx-auto mb-2 text-amber-500" size={24} />
           {/* break-keep: 좁은 폭에서 한글이 단어 중간에서 끊기지 않게 */}
-          <p className="text-sm font-semibold break-keep text-amber-800">계정에 시험자(담당자)가 연결되어 있지 않습니다.</p>
-          <p className="mt-1 text-xs leading-normal break-keep text-amber-700">관리자에게 계정-시험자 연결을 요청하세요.</p>
+          <p className="text-sm font-semibold break-keep text-amber-800 dark:text-amber-200">계정에 시험자(담당자)가 연결되어 있지 않습니다.</p>
+          <p className="mt-1 text-xs leading-normal break-keep text-amber-700 dark:text-amber-300">관리자에게 계정-시험자 연결을 요청하세요.</p>
         </div>
       </div>
     )
@@ -688,7 +688,7 @@ export default function MyTasksPage() {
     const dd = dDay(job.dueDate)
     const isDone = job.status === CLOSED_STAGE
     return (
-      <Card key={job.id} className={cn("gap-0 overflow-hidden py-0", isDone && "border-blue-300")}>
+      <Card key={job.id} className={cn("gap-0 overflow-hidden py-0", isDone && "border-blue-300 dark:border-blue-700")}>
         <div className="flex flex-col gap-3 border-b px-4 py-3 md:flex-row md:items-center md:justify-between">
           <div className="flex min-w-0 items-start gap-2">
             {selectable && (
@@ -793,14 +793,14 @@ export default function MyTasksPage() {
                   >
                     <div className="flex min-w-0 items-center gap-2">
                       {done
-                        ? <CheckCircle2 size={16} className="shrink-0 text-blue-600" />
+                        ? <CheckCircle2 size={16} className="shrink-0 text-blue-600 dark:text-blue-300" />
                         : <Circle size={16} className="shrink-0 text-muted-foreground" />}
-                      <span className={cn("min-w-0 truncate text-sm", done ? "font-medium text-blue-800" : "text-foreground")}>
+                      <span className={cn("min-w-0 truncate text-sm", done ? "font-medium text-blue-800 dark:text-blue-200" : "text-foreground")}>
                         {it.testItemName}
                       </span>
                     </div>
                     {done ? (
-                      <span className="shrink-0 text-xs leading-normal tabular-nums text-blue-700">
+                      <span className="shrink-0 text-xs leading-normal tabular-nums text-blue-700 dark:text-blue-300">
                         {it.clearedAt && new Date(it.clearedAt).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
                         {/* 작업 시작 기준 누적 소요시간 (구간이 다르면 함께 표기) */}
                         {(() => {
