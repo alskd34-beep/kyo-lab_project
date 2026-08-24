@@ -233,10 +233,12 @@ function compareProducts(a: ProductRow, b: ProductRow, field: SortField, dir: So
   return KO_COLLATOR.compare(sa, sb) * mul
 }
 
+// 난이도는 위로 갈수록 무거워지는 한 줄 눈금이다 — 낮음은 '괜찮다(초록)'가 아니라
+// 눈금의 아래쪽일 뿐이라 브랜드 파랑으로 두고, 경고·위험만 앰버·빨강으로 남긴다.
 const DIFF_DOT: Record<string, string> = {
   High: "bg-red-500",
   Medium: "bg-amber-500",
-  Low: "bg-emerald-500",
+  Low: "bg-blue-500",
 }
 
 const DifficultyBadge = memo(function DifficultyBadge({ difficulty }: { difficulty: string | null }) {
@@ -249,8 +251,10 @@ const DifficultyBadge = memo(function DifficultyBadge({ difficulty }: { difficul
   )
 })
 
-const ROW_HEIGHT = 52
-const CARD_HEIGHT = 156
+/* 첫 페인트에서 아직 실측값이 없을 때만 쓰는 대략치.
+   실제 높이는 useVirtualWindow 가 렌더된 행/카드를 재서 쓴다. */
+const ROW_FALLBACK = 52
+const CARD_FALLBACK = 156
 
 function StatusLine({
   color,
@@ -273,12 +277,15 @@ function StatusLine({
 const ProductTableRow = memo(function ProductTableRow({
   row,
   onEdit,
+  rowRef,
 }: {
   row: ProductRow
   onEdit: (row: ProductRow) => void
+  /** 가상 스크롤이 행 높이를 실측할 수 있게 첫 행에만 달린다. */
+  rowRef?: (node: HTMLElement | null) => void
 }) {
   return (
-    <TableRow className="cursor-pointer hover:bg-muted/40" onClick={() => onEdit(row)}>
+    <TableRow ref={rowRef} className="cursor-pointer hover:bg-muted/40" onClick={() => onEdit(row)}>
       <TableCell className="px-3 py-2">
         <CellStack
           primary={row.productCode}
@@ -324,7 +331,7 @@ const ProductTableRow = memo(function ProductTableRow({
         />
       </TableCell>
       <TableCell className="px-3 py-2">
-        <Tag color={row.isActive ? "green" : "mono"}>{row.isActive ? "활성" : "비활성"}</Tag>
+        <Tag color={row.isActive ? "blue" : "mono"}>{row.isActive ? "활성" : "비활성"}</Tag>
       </TableCell>
 
     </TableRow>
@@ -355,12 +362,16 @@ function EmptyRow({ children }: { children: ReactNode }) {
 const ProductCard = memo(function ProductCard({
   row,
   onEdit,
+  rowRef,
 }: {
   row: ProductRow
   onEdit: (row: ProductRow) => void
+  /** 가상 스크롤이 카드 높이를 실측할 수 있게 첫 카드에만 달린다. */
+  rowRef?: (node: HTMLElement | null) => void
 }) {
   return (
     <Card
+      ref={rowRef}
       className="cursor-pointer gap-0 px-3 py-3 transition-colors hover:bg-muted/30"
       onClick={() => onEdit(row)}
     >
@@ -368,7 +379,7 @@ const ProductCard = memo(function ProductCard({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="font-mono text-xs leading-normal text-muted-foreground">{row.productCode}</span>
-            <Tag color={row.isActive ? "green" : "mono"} className="text-xs leading-normal">
+            <Tag color={row.isActive ? "blue" : "mono"} className="text-xs leading-normal">
               {row.isActive ? "활성" : "비활성"}
             </Tag>
             <DifficultyBadge difficulty={row.difficulty} />
@@ -577,9 +588,11 @@ const ProductMasterList = memo(function ProductMasterList({
     })
   }, [rows, deferredSearch, sortField, sortDir, statusFilter])
 
-  const { containerRef: virtualRef, start, end, padTop, padBottom } = useVirtualWindow(
+  /* 행 높이는 훅이 렌더된 행을 재서 쓴다. 아래 상수는 첫 페인트용 대략치이고,
+     모바일 카드 ↔ 데스크톱 행이 바뀌면 실측값도 따라 바뀐다. */
+  const { containerRef: virtualRef, itemRef, start, end, padTop, padBottom } = useVirtualWindow(
     sorted.length,
-    isMobile ? CARD_HEIGHT : ROW_HEIGHT,
+    isMobile ? CARD_FALLBACK : ROW_FALLBACK,
   )
   const windowedRows = sorted.slice(start, end)
 
@@ -646,11 +659,12 @@ const ProductMasterList = memo(function ProductMasterList({
               : (
                 <>
                   <VirtualPad height={padTop} />
-                  {windowedRows.map((row) => (
+                  {windowedRows.map((row, i) => (
                     <ProductTableRow
                       key={row.id}
                       row={row}
                       onEdit={onEdit}
+                      rowRef={i === 0 ? itemRef : undefined}
                     />
                   ))}
                   <VirtualPad height={padBottom} />
@@ -685,8 +699,13 @@ const ProductMasterList = memo(function ProductMasterList({
             <>
               {padTop > 0 && <div aria-hidden style={{ height: padTop }} />}
               <div className="flex flex-col gap-2">
-                {windowedRows.map((row) => (
-                  <ProductCard key={row.id} row={row} onEdit={onEdit} />
+                {windowedRows.map((row, i) => (
+                  <ProductCard
+                    key={row.id}
+                    row={row}
+                    onEdit={onEdit}
+                    rowRef={i === 0 ? itemRef : undefined}
+                  />
                 ))}
               </div>
               {padBottom > 0 && <div aria-hidden style={{ height: padBottom }} />}
@@ -901,8 +920,8 @@ export function ProductTestWorkspace() {
           ))
         ) : (
           <>
-            <Card className="gap-0.5 border-l-4 border-l-primary px-3 py-2">
-              <span className="text-xs leading-normal font-medium tracking-wide text-muted-foreground uppercase">전체 품목</span>
+            <Card className="gap-0.5 px-3 py-2">
+              <span className="text-xs leading-normal font-medium text-muted-foreground">전체 품목</span>
               <span className="text-lg font-semibold tabular-nums text-foreground">
                 {summary.total}
                 <span className="ml-2 text-xs leading-normal font-normal text-muted-foreground">
@@ -914,7 +933,7 @@ export function ProductTestWorkspace() {
             </Card>
 
             <Card className="gap-0.5 px-3 py-2">
-              <span className="text-xs leading-normal font-medium tracking-wide text-muted-foreground uppercase">품목구분</span>
+              <span className="text-xs leading-normal font-medium text-muted-foreground">품목구분</span>
               <div className="flex flex-wrap gap-x-2 gap-y-0.5">
                 {Object.entries(summary.byCat).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([name, cnt]) => (
                   <span key={name} className="text-xs leading-normal text-muted-foreground">
@@ -925,7 +944,7 @@ export function ProductTestWorkspace() {
             </Card>
 
             <Card className="gap-0.5 px-3 py-2">
-              <span className="text-xs leading-normal font-medium tracking-wide text-muted-foreground uppercase">전문분류</span>
+              <span className="text-xs leading-normal font-medium text-muted-foreground">전문분류</span>
               <div className="flex flex-wrap gap-x-2 gap-y-0.5">
                 {Object.entries(summary.byCls).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([name, cnt]) => (
                   <span key={name} className="text-xs leading-normal text-muted-foreground">
@@ -936,12 +955,12 @@ export function ProductTestWorkspace() {
             </Card>
 
             <Card className="gap-0.5 px-3 py-2">
-              <span className="text-xs leading-normal font-medium tracking-wide text-muted-foreground uppercase">난이도</span>
+              <span className="text-xs leading-normal font-medium text-muted-foreground">난이도</span>
               <div className="flex flex-wrap gap-x-2 gap-y-0.5">
                 {[
                   { key: "High", dot: "bg-red-500" },
                   { key: "Medium", dot: "bg-amber-500" },
-                  { key: "Low", dot: "bg-emerald-500" },
+                  { key: "Low", dot: "bg-blue-500" },
                   { key: "미설정", dot: "bg-muted-foreground" },
                 ].map(({ key, dot }) => {
                   const cnt = summary.byDiff[key] ?? 0

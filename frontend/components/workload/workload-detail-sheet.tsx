@@ -34,9 +34,11 @@ import { StepDialog } from "@frontend/components/workload/step-dialog"
 import { TestItemDialog } from "@frontend/components/workload/test-item-dialog"
 import { VersionHistoryDialog } from "@frontend/components/workload/version-history-dialog"
 
+// 난이도는 한 줄 눈금이라 무지개가 아니라 농도로 오른다 — 보통까지는 브랜드 파랑,
+// 경고·위험만 앰버·빨강. (초록은 '정상'을 뜻해 눈금의 중간값과 어긋났다)
 const DIFFICULTY_DOT: Record<Difficulty, string> = {
   LOW: "bg-slate-400",
-  NORMAL: "bg-emerald-500",
+  NORMAL: "bg-blue-500",
   HIGH: "bg-amber-500",
   VERY_HIGH: "bg-red-500",
 }
@@ -142,8 +144,8 @@ export function WorkloadDetailSheet({
               <div className="min-w-0">
                 <SheetTitle className="flex items-center gap-2 text-base font-semibold">
                   {product.productName}
-                  <Badge variant="secondary" className="font-mono text-[11px]">{product.productCode}</Badge>
-                  <Badge variant="outline" className="text-[11px]">v{product.version}</Badge>
+                  <Badge variant="secondary" className="font-mono text-xs leading-normal">{product.productCode}</Badge>
+                  <Badge variant="outline" className="text-xs leading-normal">v{product.version}</Badge>
                 </SheetTitle>
                 <SheetDescription className="text-xs text-muted-foreground">
                   제형 {product.dosageForm ?? "—"} · 상태 {WORKLOAD_STATUS_LABEL[product.status]}
@@ -166,17 +168,17 @@ export function WorkloadDetailSheet({
           <div className="flex-1 overflow-y-auto bg-muted/30 px-5 py-4">
             <div className="grid gap-4">
               {/* 요약 */}
-              <section className="rounded-lg border bg-card p-4 shadow-sm">
+              <section className="rounded-md border bg-card p-4 shadow-sm">
                 <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-                  <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2.5">
-                    <p className="text-[11px] font-medium text-muted-foreground">표준 소요일</p>
+                  <div className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2.5">
+                    <p className="text-xs leading-normal font-medium text-muted-foreground">표준 소요일</p>
                     <p className="mt-0.5 text-xl font-semibold tabular-nums text-foreground">
                       {formatLeadDays(product.standardLeadTimeDays)}
                     </p>
                   </div>
                   {summary.map(s => (
-                    <div key={s.label} className="rounded-lg border bg-background px-3 py-2.5">
-                      <p className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                    <div key={s.label} className="rounded-md border bg-background px-3 py-2.5">
+                      <p className="flex items-center gap-1.5 text-xs leading-normal font-medium text-muted-foreground">
                         <span className={`size-1.5 rounded-full ${s.dot}`} />
                         {s.label}
                       </p>
@@ -186,13 +188,13 @@ export function WorkloadDetailSheet({
                     </div>
                   ))}
                 </div>
-                <p className="mt-3 text-[11px] text-muted-foreground">
+                <p className="mt-3 text-xs leading-normal text-muted-foreground">
                   공수 4종은 각각 독립적으로 관리합니다. 표준 소요일은 공수 합계로 계산하지 않습니다.
                 </p>
               </section>
 
               {/* 시험항목 */}
-              <section className="overflow-hidden rounded-lg border bg-card shadow-sm">
+              <section className="overflow-hidden rounded-md border bg-card shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2.5">
                   <span className="text-sm font-semibold text-foreground">
                     시험항목 <span className="text-muted-foreground">({product.testItems.length})</span>
@@ -212,7 +214,36 @@ export function WorkloadDetailSheet({
                     등록된 시험항목이 없습니다. 시험항목을 추가한 뒤 작업단계에 공수를 입력하세요.
                   </div>
                 ) : (
-                  <Table>
+                  <>
+                  {/* 모바일 — 9칸 표를 720px 가로 스크롤로 미는 대신 카드로 세운다.
+                      펼침(작업단계)은 데스크톱과 같은 StepList 를 쓴다. */}
+                  <ul className="divide-y md:hidden">
+                    {product.testItems.map(item => (
+                      <TestItemCard
+                        key={item.id}
+                        item={item}
+                        isOpen={expanded.has(item.id)}
+                        equipments={[
+                          ...new Set(
+                            item.steps
+                              .filter(s => s.workloadType === "EQUIPMENT")
+                              .map(s => s.equipmentTypeName)
+                              .filter((v): v is string => !!v),
+                          ),
+                        ]}
+                        canEdit={canEdit}
+                        busyId={busyId}
+                        onToggle={() => toggle(item.id)}
+                        onEditItem={() => setItemDialog({ initial: item })}
+                        onDeleteItem={() => void deleteTestItem(item)}
+                        onAddStep={() => setStepDialog({ item, initial: null })}
+                        onEditStep={step => setStepDialog({ item, initial: step })}
+                        onDeleteStep={step => void deleteStep(step)}
+                      />
+                    ))}
+                  </ul>
+
+                  <Table className="hidden md:flex">
                     <colgroup>
                       <col className="w-[7%]" />
                       <col className="w-[19%]" />
@@ -272,6 +303,7 @@ export function WorkloadDetailSheet({
                       })}
                     </TableBody>
                   </Table>
+                  </>
                 )}
               </section>
             </div>
@@ -339,8 +371,6 @@ function TestItemRows({
   onEditStep: (step: TestWorkStep) => void
   onDeleteStep: (step: TestWorkStep) => void
 }) {
-  const stepById = new Map(item.steps.map(s => [s.id, s]))
-
   return (
     <>
       <TableRow className="cursor-pointer hover:bg-muted/40" onClick={onToggle}>
@@ -354,7 +384,7 @@ function TestItemRows({
           <span className="block truncate font-medium text-foreground" title={item.testName}>
             {item.testName}
           </span>
-          <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span className="flex items-center gap-1.5 text-xs leading-normal text-muted-foreground">
             {item.testCode && <span className="font-mono">{item.testCode}</span>}
             <span>단계 {item.steps.length}</span>
             {item.simultaneousAnalysisAllowed && <span className="text-primary">동시분석</span>}
@@ -372,7 +402,7 @@ function TestItemRows({
             <span className={`size-1.5 rounded-full ${DIFFICULTY_DOT[item.difficulty]}`} />
             {DIFFICULTY_LABEL[item.difficulty]}
           </Badge>
-          <span className="mt-0.5 block text-[11px] text-muted-foreground">
+          <span className="mt-0.5 block text-xs leading-normal text-muted-foreground">
             {item.parallelAllowed ? "병렬 가능" : "병렬 불가"}
           </span>
         </TableCell>
@@ -402,71 +432,206 @@ function TestItemRows({
       {isOpen && (
         <TableRow className="hover:bg-transparent">
           <TableCell colSpan={colSpan} className="bg-muted/40 px-3 py-3">
-            <div className="rounded-lg border bg-card p-3">
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <span className="text-xs font-semibold text-foreground">작업단계</span>
-                {canEdit && (
-                  <Button variant="outline" size="sm" onClick={onAddStep}>
-                    <Plus /> 작업단계 추가
-                  </Button>
-                )}
-              </div>
-
-              {item.steps.length === 0 ? (
-                <p className="py-6 text-center text-xs text-muted-foreground">
-                  등록된 작업단계가 없습니다. 공수는 작업단계에 입력합니다.
-                </p>
-              ) : (
-                <div className="flex flex-col gap-1">
-                  {item.steps.map(step => (
-                    <div
-                      key={step.id}
-                      className="flex flex-wrap items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm"
-                    >
-                      <span className="w-5 shrink-0 text-xs tabular-nums text-muted-foreground">{step.sequence}</span>
-                      <span className="min-w-32 flex-1 truncate font-medium text-foreground" title={step.stepName}>
-                        {step.stepName}
-                      </span>
-                      <WorkloadTypeBadge type={step.workloadType} short />
-                      <span className="w-20 text-xs text-muted-foreground">
-                        {step.workloadType === "EQUIPMENT" ? (step.equipmentTypeName ?? "—") : ""}
-                      </span>
-                      <span className="w-24 text-right font-medium tabular-nums text-foreground">
-                        {formatMinutes(step.durationMinutes)}
-                      </span>
-                      <span className="w-40 truncate text-[11px] text-muted-foreground">
-                        {step.predecessorStepId
-                          ? `선행: ${stepById.get(step.predecessorStepId)?.stepName ?? "—"}`
-                          : ""}
-                        {step.requiredSkill ? ` · 역량 ${step.requiredSkill}` : ""}
-                      </span>
-                      {canEdit && (
-                        <span className="ml-auto flex items-center gap-0.5">
-                          <Button
-                            variant="ghost" size="icon-sm" title="작업단계 수정"
-                            className="text-muted-foreground"
-                            onClick={() => onEditStep(step)}
-                          >
-                            <Pencil />
-                          </Button>
-                          <Button
-                            variant="ghost" size="icon-sm" title="작업단계 삭제"
-                            className="text-muted-foreground hover:text-destructive"
-                            disabled={busyId === step.id}
-                            onClick={() => onDeleteStep(step)}
-                          >
-                            {busyId === step.id ? <Loader2 className="animate-spin" /> : <Trash2 />}
-                          </Button>
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            <StepList
+              item={item}
+              canEdit={canEdit}
+              busyId={busyId}
+              onAddStep={onAddStep}
+              onEditStep={onEditStep}
+              onDeleteStep={onDeleteStep}
+            />
           </TableCell>
         </TableRow>
       )}
     </>
+  )
+}
+
+/**
+ * 펼쳤을 때 나오는 작업단계 목록.
+ * 데스크톱 표(colSpan 행)와 모바일 카드가 **같은 마크업**을 쓰도록 뽑아 뒀다 —
+ * 따로 만들면 한쪽만 고쳐져 두 화면이 어긋난다.
+ */
+function StepList({
+  item, canEdit, busyId, onAddStep, onEditStep, onDeleteStep,
+}: {
+  item: ProductTestItem
+  canEdit: boolean
+  busyId: string | null
+  onAddStep: () => void
+  onEditStep: (step: TestWorkStep) => void
+  onDeleteStep: (step: TestWorkStep) => void
+}) {
+  const stepById = new Map(item.steps.map(s => [s.id, s]))
+
+  return (
+    <div className="rounded-md border bg-card p-3">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <span className="text-xs font-semibold text-foreground">작업단계</span>
+          {canEdit && (
+            <Button variant="outline" size="sm" onClick={onAddStep}>
+        <Plus /> 작업단계 추가
+            </Button>
+          )}
+        </div>
+
+        {item.steps.length === 0 ? (
+          <p className="py-6 text-center text-xs text-muted-foreground">
+            등록된 작업단계가 없습니다. 공수는 작업단계에 입력합니다.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-1">
+            {item.steps.map(step => (
+        <div
+          key={step.id}
+          className="flex flex-wrap items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm"
+        >
+          <span className="w-5 shrink-0 text-xs tabular-nums text-muted-foreground">{step.sequence}</span>
+          <span className="min-w-32 flex-1 truncate font-medium text-foreground" title={step.stepName}>
+            {step.stepName}
+          </span>
+          <WorkloadTypeBadge type={step.workloadType} short />
+          <span className="w-20 text-xs text-muted-foreground">
+            {step.workloadType === "EQUIPMENT" ? (step.equipmentTypeName ?? "—") : ""}
+          </span>
+          <span className="w-24 text-right font-medium tabular-nums text-foreground">
+            {formatMinutes(step.durationMinutes)}
+          </span>
+          <span className="w-40 truncate text-xs leading-normal text-muted-foreground">
+            {step.predecessorStepId
+              ? `선행: ${stepById.get(step.predecessorStepId)?.stepName ?? "—"}`
+              : ""}
+            {step.requiredSkill ? ` · 역량 ${step.requiredSkill}` : ""}
+          </span>
+          {canEdit && (
+            <span className="ml-auto flex items-center gap-0.5">
+              <Button
+                variant="ghost" size="icon-sm" title="작업단계 수정"
+                className="text-muted-foreground"
+                onClick={() => onEditStep(step)}
+              >
+                <Pencil />
+              </Button>
+              <Button
+                variant="ghost" size="icon-sm" title="작업단계 삭제"
+                className="text-muted-foreground hover:text-destructive"
+                disabled={busyId === step.id}
+                onClick={() => onDeleteStep(step)}
+              >
+                {busyId === step.id ? <Loader2 className="animate-spin" /> : <Trash2 />}
+              </Button>
+            </span>
+          )}
+        </div>
+            ))}
+          </div>
+        )}
+      </div>
+  )
+}
+
+/**
+ * 모바일 카드. 9칸 표를 720px 가로 스크롤로 미는 대신 세로로 세운다.
+ * 펼쳤을 때 나오는 작업단계는 데스크톱과 **같은 StepList** 를 쓴다.
+ */
+function TestItemCard({
+  item, isOpen, equipments, canEdit, busyId,
+  onToggle, onEditItem, onDeleteItem, onAddStep, onEditStep, onDeleteStep,
+}: {
+  item: ProductTestItem
+  isOpen: boolean
+  equipments: string[]
+  canEdit: boolean
+  busyId: string | null
+  onToggle: () => void
+  onEditItem: () => void
+  onDeleteItem: () => void
+  onAddStep: () => void
+  onEditStep: (step: TestWorkStep) => void
+  onDeleteStep: (step: TestWorkStep) => void
+}) {
+  const minutes = [
+    { label: "인적", value: item.humanMinutes },
+    { label: "장비", value: item.equipmentMinutes },
+    { label: "대기", value: item.waitingMinutes },
+    { label: "검토", value: item.reviewMinutes },
+  ]
+
+  return (
+    <li className="py-3">
+      <div className="flex min-w-0 items-start gap-2">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={isOpen}
+          className="flex min-h-8 min-w-0 flex-1 items-start gap-1.5 text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        >
+          {isOpen
+            ? <ChevronDown className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+            : <ChevronRight className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />}
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium text-foreground">
+              <span className="mr-1.5 tabular-nums text-muted-foreground">{item.sequence}</span>
+              {item.testName}
+            </span>
+            <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs leading-normal text-muted-foreground">
+              {item.testCode && <span className="font-mono">{item.testCode}</span>}
+              <span>단계 {item.steps.length}</span>
+              {item.simultaneousAnalysisAllowed && <span className="text-primary">동시분석</span>}
+            </span>
+          </span>
+        </button>
+        {canEdit && (
+          <span className="flex shrink-0 items-center gap-0.5">
+            <Button variant="ghost" size="icon" title="시험항목 수정" className="text-muted-foreground" onClick={onEditItem}>
+              <Pencil />
+            </Button>
+            <Button
+              variant="ghost" size="icon" title="시험항목 삭제"
+              className="text-muted-foreground hover:text-destructive"
+              disabled={busyId === item.id}
+              onClick={onDeleteItem}
+            >
+              {busyId === item.id ? <Loader2 className="animate-spin" /> : <Trash2 />}
+            </Button>
+          </span>
+        )}
+      </div>
+
+      <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1">
+        {minutes.map(m => (
+          <div key={m.label} className="flex min-w-0 items-baseline justify-between gap-2">
+            <dt className="text-xs leading-normal text-muted-foreground">{m.label}</dt>
+            <dd className="text-xs leading-normal tabular-nums text-foreground">{formatMinutes(m.value)}</dd>
+          </div>
+        ))}
+      </dl>
+
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+        <Badge variant="outline" className="gap-1.5 font-normal">
+          <span className={`size-1.5 rounded-full ${DIFFICULTY_DOT[item.difficulty]}`} />
+          {DIFFICULTY_LABEL[item.difficulty]}
+        </Badge>
+        <span className="text-xs leading-normal text-muted-foreground">
+          {item.parallelAllowed ? "병렬 가능" : "병렬 불가"}
+        </span>
+        <span className="min-w-0 truncate text-xs leading-normal break-keep text-muted-foreground">
+          장비 {equipments.length > 0 ? equipments.join(", ") : "—"}
+        </span>
+      </div>
+
+      {isOpen && (
+        <div className="mt-2">
+          <StepList
+            item={item}
+            canEdit={canEdit}
+            busyId={busyId}
+            onAddStep={onAddStep}
+            onEditStep={onEditStep}
+            onDeleteStep={onDeleteStep}
+          />
+        </div>
+      )}
+    </li>
   )
 }

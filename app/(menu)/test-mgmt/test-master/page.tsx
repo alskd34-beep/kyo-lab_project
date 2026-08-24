@@ -329,15 +329,16 @@ export default function TestMasterPage() {
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden p-4 md:p-6">
+      {/* 부제로 화면 이름을 되풀이하지 않는다 — 아래 요약 수치가 이 화면의 사실을 대신 말한다.
+          단위도 셋 다 맞춰(건·건·h) 눈이 한 줄로 읽히게 한다. */}
       <PageHeader
         icon={ClipboardList}
         title="시험항목 마스터"
         count={rows.length}
-        description="시험항목 분류와 예상시간, 2인시험 여부를 관리합니다."
         stats={[
-          { label: "활성", value: summary.active, tone: "blue" },
+          { label: "활성", value: `${summary.active}건`, tone: "blue" },
           { label: "2인시험", value: `${summary.duo}건` },
-          { label: "평균 예상시간", value: `${summary.avgHours.toFixed(1)}h`, tone: "amber" },
+          { label: "평균 예상시간", value: `${summary.avgHours.toFixed(1)}h` },
         ]}
         actions={(
           <Button onClick={openAddDialog} size="lg">
@@ -373,8 +374,9 @@ export default function TestMasterPage() {
         >
           <SelectTrigger
             aria-label="대분류 필터"
+            /* 모바일에서는 한 줄을 통째로 쓰고, sm 부터 내용 폭에 맞춘다 */
             className={cn(
-              "min-w-40",
+              "w-full sm:w-auto sm:min-w-40",
               categoryFilter !== "all" && "border-blue-500 bg-blue-50 text-blue-700",
             )}
           >
@@ -398,7 +400,7 @@ export default function TestMasterPage() {
           <SelectTrigger
             aria-label="상태 필터"
             className={cn(
-              "min-w-32",
+              "w-full sm:w-auto sm:min-w-32",
               statusFilter !== "all" && "border-blue-500 bg-blue-50 text-blue-700",
             )}
           >
@@ -421,16 +423,18 @@ export default function TestMasterPage() {
       </FilterBar>
 
       {error && !dialogOpen && !deleteOpen && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+        <div className="shrink-0 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm break-keep text-destructive">
           {error}
         </div>
       )}
 
-      {/* 모바일 카드 */}
-      <div className="flex flex-col gap-2 md:hidden">
+      {/* 모바일 카드 — 바깥이 overflow-hidden 이라 여기서 직접 스크롤을 받아야
+          목록이 화면 아래에서 잘리지 않는다. */}
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto md:hidden">
         {loading ? (
           Array.from({ length: 4 }).map((_, i) => (
-            <Card key={i} className="gap-2 px-3 py-3">
+            /* shrink-0: Card 는 overflow-hidden 이라 세로 스크롤 열 안에서 눌리면 선 하나로 찌부러진다 */
+            <Card key={i} className="shrink-0 gap-2 px-3 py-3">
               <div className="flex items-center justify-between">
                 <Skeleton className="h-4 w-24" />
                 <Skeleton className="h-5 w-14 rounded-md" />
@@ -440,39 +444,36 @@ export default function TestMasterPage() {
             </Card>
           ))
         ) : sortedData.length === 0 ? (
-          <Card className="items-center py-6 text-center text-sm text-muted-foreground">
+          <Card className="shrink-0 items-center py-6 text-center text-sm break-keep text-muted-foreground">
             {filterActive ? "조건에 맞는 시험항목이 없습니다." : "데이터가 없습니다."}
           </Card>
         ) : (
           sortedData.map((row) => (
             <Card
               key={row.id}
-              className="cursor-pointer gap-0 px-3 py-3"
+              className="shrink-0 cursor-pointer gap-0 px-3 py-3"
               onClick={() => openEditDialog(row)}
             >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <CategoryBadge category={row.category} />
-                    <Tag color={row.isActive ? "green" : "mono"}>
-                      {row.isActive ? "활성" : "비활성"}
-                    </Tag>
-                  </div>
-                  <div className="mt-1 text-sm font-semibold break-words text-foreground">
-                    {row.name}
-                  </div>
-                </div>
+              {/* 항목명이 행의 주 값이다 — 표와 같은 font-medium 으로 맞추고 분류·상태는 그 아래 보조로 내린다 */}
+              <div className="min-w-0 text-sm font-medium break-keep text-foreground">
+                {row.name}
+              </div>
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <CategoryBadge category={row.category} />
+                <Tag color={row.isActive ? "blue" : "mono"}>
+                  {row.isActive ? "활성" : "비활성"}
+                </Tag>
               </div>
 
-              <div className="mt-2 grid grid-cols-1 gap-x-2 gap-y-1 border-t pt-2 text-xs leading-normal text-muted-foreground min-[420px]:grid-cols-2">
-                <div>
-                  <span className="font-medium text-foreground">예상시간:</span>{" "}
+              {/* 모바일 카드는 값 네 개(항목명·분류·상태·수치)까지만 — 2열 그리드로 나누는 대신
+                  한 줄에 이어 붙여 320px 에서도 접히지 않게 한다 */}
+              <div className="mt-2 border-t pt-2 text-xs leading-normal break-keep text-muted-foreground">
+                예상시간{" "}
+                <span className="tabular-nums text-foreground">
                   {row.estimatedHours != null ? `${row.estimatedHours}h` : "—"}
-                </div>
-                <div>
-                  <span className="font-medium text-foreground">2인시험:</span>{" "}
-                  {row.requiresDuo ? "필요" : "미사용"}
-                </div>
+                </span>
+                <span className="px-1 text-border">·</span>
+                2인시험 <span className="text-foreground">{row.requiresDuo ? "필요" : "미사용"}</span>
               </div>
             </Card>
           ))
@@ -533,7 +534,7 @@ export default function TestMasterPage() {
                         </Tag>
                       )}
                       secondary={(
-                        <Tag color={row.isActive ? "green" : "mono"}>
+                        <Tag color={row.isActive ? "blue" : "mono"}>
                           {row.isActive ? "활성" : "비활성"}
                         </Tag>
                       )}
@@ -582,7 +583,7 @@ export default function TestMasterPage() {
                   <div className="flex flex-col gap-1.5 sm:col-span-2">
                     <label htmlFor={`${uid}-name`} className="text-xs font-medium text-muted-foreground">
                       시험항목명 <span className="text-destructive">*</span>
-                  </label>
+                    </label>
                     <Input
                       id={`${uid}-name`}
                       value={form.name}
@@ -615,16 +616,7 @@ export default function TestMasterPage() {
                   <div className="flex flex-col gap-1.5">
                     <label htmlFor={`${uid}-hours`} className="text-xs font-medium text-muted-foreground">
                       예상시간 (h)
-                  </label>
-                  <label className="mt-2 flex items-center gap-2 rounded-md border px-3 py-2.5 text-sm font-medium text-foreground">
-                    <input
-                      type="checkbox"
-                      checked={form.isActive}
-                      onChange={(e) => setForm((prev) => ({ ...prev, isActive: e.target.checked }))}
-                      className="cb-custom"
-                    />
-                    활성 상태
-                  </label>
+                    </label>
                     <Input
                       id={`${uid}-hours`}
                       type="number"
@@ -642,28 +634,41 @@ export default function TestMasterPage() {
                 </div>
               </section>
 
+              {/* 체크박스 두 개는 나란히 둔다 — '활성 상태'가 예상시간 입력 사이에 끼어
+                  라벨과 입력이 갈라져 있었다. 테두리 칸을 하나씩 두르는 대신 실선으로 나눈다. */}
               <section className="rounded-md border bg-card p-3 sm:p-4">
                 <div className="mb-3 border-b pb-3">
                   <h3 className="text-sm font-semibold text-foreground">시험 설정</h3>
                 </div>
-                <label className="flex items-center gap-2 rounded-md border px-3 py-2.5 text-sm font-medium text-foreground">
-                  <input
-                    type="checkbox"
-                    checked={form.requiresDuo}
-                    onChange={(e) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        requiresDuo: e.target.checked,
-                      }))
-                    }
-                    className="cb-custom"
-                  />
-                  2인시험 여부
-                </label>
+                <div className="divide-y">
+                  <label className="flex cursor-pointer items-center gap-2 py-2.5 text-sm font-medium text-foreground">
+                    <input
+                      type="checkbox"
+                      checked={form.requiresDuo}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          requiresDuo: e.target.checked,
+                        }))
+                      }
+                      className="cb-custom"
+                    />
+                    2인시험 여부
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-2 py-2.5 text-sm font-medium text-foreground">
+                    <input
+                      type="checkbox"
+                      checked={form.isActive}
+                      onChange={(e) => setForm((prev) => ({ ...prev, isActive: e.target.checked }))}
+                      className="cb-custom"
+                    />
+                    활성 상태
+                  </label>
+                </div>
               </section>
 
               {error && (
-                <div className="rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+                <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm break-keep text-destructive">
                   {error}
                 </div>
               )}
@@ -675,7 +680,7 @@ export default function TestMasterPage() {
         <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>시험항목 삭제</DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="break-keep">
               삭제 후에는 목록에서 즉시 제거됩니다. 연결된 품목 시험 기준이 있으면 영향이 있을 수 있습니다.
             </DialogDescription>
           </DialogHeader>

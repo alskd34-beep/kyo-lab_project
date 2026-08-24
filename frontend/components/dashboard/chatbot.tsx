@@ -398,9 +398,11 @@ export default function Chatbot() {
       {/* ── Floating Button ───────────────────────────────────────────────── */}
       <button
         onClick={() => (open ? handleClose() : setOpen(true))}
-        className={`fixed right-6 z-30 flex h-14 w-14 items-center justify-center rounded-full shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 ${open ? 'bottom-6' : 'bottom-24'}`}
+        className={`fixed right-6 z-30 flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-[opacity,transform] duration-300 hover:scale-105 active:scale-95 ${open ? 'bottom-6' : 'bottom-24'}`}
         style={{
-          background: 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)',
+          /* 브랜드 파랑 한 계열. 예전에는 blue-600 -> violet-600 이라
+             앱에서 유일하게 보라가 남아 있는 자리였다(인라인 hex 라 클래스 검색에 안 걸렸다). */
+          background: 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)',
           boxShadow: '0 0 0 0 rgba(37, 99, 235, 0.4)',
           animation: open ? 'none' : 'chatbotPulse 2.5s ease-in-out infinite',
         }}
@@ -422,9 +424,9 @@ export default function Chatbot() {
       */}
       <div
         className={`
-          fixed z-30 flex flex-col overflow-hidden bg-white shadow-2xl transition-all duration-300
+          fixed z-30 flex flex-col overflow-hidden bg-card shadow-lg transition-[opacity,transform] duration-300
           inset-0 rounded-none border-0
-          md:inset-auto md:bottom-24 md:right-6 md:rounded-md md:border md:border-slate-200
+          md:inset-auto md:bottom-24 md:right-6 md:rounded-md md:border md:border-border
           md:w-[520px] md:h-[70vh] md:max-h-[600px]
           lg:w-[520px] lg:h-auto lg:max-h-[560px]
           ${isResizing ? 'select-none' : ''}
@@ -460,13 +462,13 @@ export default function Chatbot() {
               isResizing ? 'bg-blue-500/40' : 'bg-transparent'
             }`}
           />
-          <span className="pointer-events-none absolute top-1/2 left-[3px] h-10 w-0.5 -translate-y-1/2 rounded-md bg-slate-400/70 opacity-0 transition-opacity group-hover:opacity-100" />
+          <span className="pointer-events-none absolute top-1/2 left-[3px] h-10 w-0.5 -translate-y-1/2 rounded-md bg-muted-foreground/60 opacity-0 transition-opacity group-hover:opacity-100" />
         </div>
 
-        {/* Header */}
+        {/* Header — 그라데이션은 브랜드 파랑 램프 안에서만 움직인다(blue-600 → blue-800). */}
         <div
           className="flex items-center justify-between px-4 py-3.5 shrink-0"
-        style={{ background: 'linear-gradient(135deg, #2563eb 0%, #059669 100%)' }}
+          style={{ background: 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)' }}
         >
           <div className="flex items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20">
@@ -477,7 +479,8 @@ export default function Chatbot() {
               <p className="text-xs text-blue-200 leading-none mt-0.5">
                 {isStreaming ? (
                   <span className="flex items-center gap-1">
-                    <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
+                    {/* 파랑 헤더 위라 초록 점은 브랜드색 밖으로 튄다 — 흰 점의 깜빡임만으로 '응답 중'이 읽힌다 */}
+                    <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
                     응답 중...
                   </span>
                 ) : (
@@ -513,7 +516,7 @@ export default function Chatbot() {
 
         {/* Date label */}
         <div className="flex items-center justify-center py-2 shrink-0">
-          <span className="rounded-md bg-slate-100 px-3 py-1 text-xs leading-normal text-slate-500">
+          <span className="rounded-md bg-muted px-3 py-1 text-xs leading-normal text-muted-foreground">
             {todayLabel()}
           </span>
         </div>
@@ -545,7 +548,7 @@ export default function Chatbot() {
                         width={80}
                         height={80}
                         unoptimized
-                        className="h-20 w-20 rounded-md border border-slate-200 object-cover"
+                        className="h-20 w-20 rounded-md border object-cover"
                       />
                     ))}
                   </div>
@@ -554,7 +557,7 @@ export default function Chatbot() {
                   className={`rounded-md px-3.5 py-2.5 text-sm leading-relaxed ${
                     msg.role === 'user'
                       ? 'bg-blue-600 text-white rounded-tr-md whitespace-pre-wrap'
-                      : 'bg-slate-100 text-slate-800 rounded-tl-md'
+                      : 'bg-muted text-foreground rounded-tl-md'
                   } ${msg.role === 'bot' && msg.streaming ? 'whitespace-pre-wrap' : ''}`}
                 >
                   {msg.role === 'bot' && !msg.streaming
@@ -562,16 +565,16 @@ export default function Chatbot() {
                     : msg.content}
                   {msg.streaming && !msg.content && (
                     <span className="inline-flex gap-1">
-                      <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:0ms]" />
-                      <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:150ms]" />
-                      <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:300ms]" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:0ms]" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:150ms]" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:300ms]" />
                     </span>
                   )}
                   {msg.streaming && msg.content && (
-                    <span className="ml-1 inline-block h-3 w-0.5 bg-slate-500 animate-pulse align-text-bottom" />
+                    <span className="ml-1 inline-block h-3 w-0.5 bg-muted-foreground animate-pulse align-text-bottom" />
                   )}
                 </div>
-                <span className="text-xs leading-normal text-slate-400 px-1">{msg.time}</span>
+                <span className="text-xs leading-normal text-muted-foreground px-1">{msg.time}</span>
               </div>
             </div>
           ))}
@@ -579,7 +582,7 @@ export default function Chatbot() {
         </div>
 
         {/* Input */}
-        <div className="shrink-0 border-t border-slate-100 px-3 py-2.5">
+        <div className="shrink-0 border-t px-3 py-2.5">
           {/* 첨부 이미지 미리보기 (시험자) */}
           {attachments.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-2">
@@ -591,12 +594,12 @@ export default function Chatbot() {
                     width={56}
                     height={56}
                     unoptimized
-                    className="h-14 w-14 rounded-md border border-slate-200 object-cover"
+                    className="h-14 w-14 rounded-md border object-cover"
                   />
                   <button
                     onClick={() => removeAttachment(a.id)}
                     title="첨부 제거"
-                    className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-slate-700 text-white hover:bg-slate-900"
+                    className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-foreground text-background hover:bg-foreground/85"
                   >
                     <X size={10} />
                   </button>
@@ -604,7 +607,7 @@ export default function Chatbot() {
               ))}
             </div>
           )}
-          <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+          <div className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-colors">
             {canAttach && (
               <>
                 <input
@@ -620,7 +623,7 @@ export default function Chatbot() {
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isStreaming || uploading}
                   title="이미지 첨부 (시험일지 등)"
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-600 disabled:opacity-40"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
                 >
                   {uploading ? <Loader2 size={15} className="animate-spin" /> : <ImagePlus size={15} />}
                 </button>
@@ -635,19 +638,19 @@ export default function Chatbot() {
               onKeyDown={handleKeyDown}
               placeholder={isStreaming ? '응답 중...' : canAttach ? '질문 또는 이미지 첨부...' : '질문을 입력하세요...'}
               disabled={isStreaming}
-              className="flex-1 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400 disabled:opacity-50"
+              className="flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-50"
             />
             <button
               type="button"
               onClick={sendMessage}
               disabled={(!input.trim() && attachments.length === 0) || isStreaming || uploading}
               aria-label="전송"
-              className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-600 text-white transition-all hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
+              className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-600 text-white transition-colors hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
             >
               <Send size={13} />
             </button>
           </div>
-          <p className="mt-1.5 text-center text-xs leading-normal text-slate-400">
+          <p className="mt-1.5 text-center text-xs leading-normal text-muted-foreground">
             QCink의 답변은 중요한 업무 판단 전에 확인해 주세요
           </p>
         </div>

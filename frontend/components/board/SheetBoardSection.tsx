@@ -43,7 +43,9 @@ function parseShortDate(s: string, defaultYear: number): { iso: string; weekKey:
   return { iso, weekKey: wk, weekLabel: `${fmtKor(monday)} ~ ${fmtKor(sunday)}` }
 }
 
-const GROUP_COLORS = ['bg-blue-500', 'bg-emerald-500', 'bg-violet-500', 'bg-amber-500', 'bg-rose-500', 'bg-teal-500', 'bg-fuchsia-500']
+/* 인접한 그룹을 눈으로 가르는 순환색. 뜻이 있는 색이 아니므로 무지개를 돌지 않고
+   브랜드 파랑의 농도만 바꾼다 — 주차 그룹이라 농도가 곧 순서로 읽힌다. */
+const GROUP_COLORS = ['bg-blue-600', 'bg-blue-500', 'bg-blue-400', 'bg-blue-300']
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function SheetBoardSection() {
@@ -123,13 +125,13 @@ export default function SheetBoardSection() {
   const groups = data ? buildGroups(data) : []
 
   return (
-    <Card className="border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden">
+    <Card className="overflow-hidden">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base text-slate-900 dark:text-slate-50">
-          <FileSpreadsheet size={16} className="text-emerald-600 dark:text-emerald-400" />
+        <CardTitle className="flex items-center gap-2 text-base text-foreground">
+          <FileSpreadsheet size={16} className="text-muted-foreground" />
           구글 시트 → 주간 보드
           {data && (
-            <span className="text-xs font-normal text-slate-500 dark:text-slate-400">
+            <span className="text-xs font-normal text-muted-foreground">
               ({data.rows.length}건)
             </span>
           )}
@@ -139,7 +141,7 @@ export default function SheetBoardSection() {
         {/* 시트 ID 입력 + 불러오기 */}
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex flex-1 min-w-[280px] flex-col gap-1.5">
-            <label htmlFor={sheetIdInputId} className="text-xs font-medium text-slate-600 dark:text-slate-300">
+            <label htmlFor={sheetIdInputId} className="text-xs font-medium text-muted-foreground">
               구글 시트 ID
             </label>
             <input
@@ -148,14 +150,14 @@ export default function SheetBoardSection() {
               value={fileId}
               onChange={e => setFileId(e.target.value)}
               disabled={loading}
-              className="h-9 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-xs font-mono outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 dark:focus:ring-emerald-900/40 text-slate-900 dark:text-slate-50 disabled:opacity-60"
+              className="h-9 rounded-md border border-input bg-background px-3 text-xs font-mono text-foreground outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-60"
               placeholder="시트 URL의 /d/ 다음 ID"
             />
           </div>
           <Button
             onClick={loadSheet}
             disabled={loading || !fileId.trim()}
-            className="h-9 gap-1.5 bg-emerald-600 px-4 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
+            className="h-9 gap-1.5 px-4 text-sm font-medium disabled:opacity-60"
           >
             {loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
             {loading ? '불러오는 중...' : data ? '새로고침' : '시트 불러오기'}
@@ -178,7 +180,7 @@ export default function SheetBoardSection() {
         )}
 
         {data && (
-          <p className="text-xs leading-normal italic text-slate-500 dark:text-slate-400">
+          <p className="text-xs leading-normal italic text-muted-foreground">
             * 포장일 기준 주차별 그룹입니다. 상태/담당자는 표시 전용이며, 다음 단계에서 변경 가능해질 예정입니다.
           </p>
         )}

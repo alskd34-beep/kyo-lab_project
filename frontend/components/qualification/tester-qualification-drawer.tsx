@@ -99,7 +99,58 @@ export function TesterQualificationDrawer({
             보유한 자격이 없습니다. &lsquo;미보유 포함&rsquo;을 눌러 부여할 항목을 고르세요.
           </div>
         ) : (
-          <div className="overflow-hidden rounded-md border bg-card">
+          <>
+          {/* 모바일 — 카드 목록
+              7열짜리 양식표를 폭 300px 도 안 되는 패널에 그대로 두면 가로로 계속 밀어야 읽힌다.
+              카테고리 머리행은 그대로 두고, 행은 항목명 · 상태 · 부여/만료일만 남겨 세로로 쌓는다.
+              인증구분·인증방법은 행을 눌러 여는 편집 패널에서 본다. */}
+          <div className="divide-y overflow-hidden rounded-md border bg-card md:hidden">
+            {groups.map(group => (
+              <Fragment key={group.category.id}>
+                <p className="bg-muted/60 px-3 py-1.5 text-xs leading-normal font-semibold break-keep text-foreground">
+                  {group.category.name}
+                </p>
+                {group.rows.map(({ item, qual }) => {
+                  const status = statusOf(qual)
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => onPickItem(item, qual)}
+                      className="flex w-full min-w-0 flex-col gap-1 px-3 py-2.5 text-left transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    >
+                      <span className="flex min-w-0 items-start justify-between gap-2">
+                        <span className="min-w-0 text-sm font-medium break-keep text-foreground">
+                          {item.name}
+                        </span>
+                        <span className="flex shrink-0 items-center gap-1.5 text-xs leading-normal">
+                          <span className={cn("size-1.5 shrink-0 rounded-full", STATUS_DOT_STYLE[status])} />
+                          <span className="text-foreground">
+                            {QUALIFICATION_STATUS_LABEL[status]}
+                            {status === "expiring" && qual?.expiresOn
+                              ? ` (D-${daysUntilExpiry(qual.expiresOn)})`
+                              : ""}
+                          </span>
+                        </span>
+                      </span>
+                      <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-xs leading-normal tabular-nums text-muted-foreground">
+                        <span>부여 {qual?.grantedOn ?? "–"}</span>
+                        <span className="text-border">·</span>
+                        <span>만료 {qual ? formatExpiry(qual.expiresOn) : "–"}</span>
+                      </span>
+                      {qual && (
+                        <span className="min-w-0 truncate text-xs leading-normal text-muted-foreground">
+                          {qual.certType} / {qual.certMethod}
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </Fragment>
+            ))}
+          </div>
+
+          <div className="hidden overflow-hidden rounded-md border bg-card md:block">
             {/* layout="wide" — 카테고리 머리행이 colSpan 으로 전체를 덮으므로 열 자동 합침을 끈다. */}
             <Table layout="wide" className="text-xs">
               <TableHeader>
@@ -173,6 +224,7 @@ export function TesterQualificationDrawer({
               </TableBody>
             </Table>
           </div>
+          </>
         )}
 
         {/* 비고 — 양식 하단 각주와 같은 자리 */}

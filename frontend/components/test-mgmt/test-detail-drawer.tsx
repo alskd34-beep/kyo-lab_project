@@ -205,7 +205,7 @@ export function TestDetailDrawer({
                   <span className="h-1.5 flex-1 overflow-hidden rounded-md bg-muted">
                     <span
                       className={cn(
-                        "block h-full rounded-md transition-all",
+                        "block h-full rounded-md transition-[width]",
                         cleared === total ? "bg-blue-700" : "bg-blue-400",
                       )}
                       style={{ width: `${pct}%` }}

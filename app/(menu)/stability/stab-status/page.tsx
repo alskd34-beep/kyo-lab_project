@@ -12,13 +12,13 @@ import {
   RefreshCw,
   Search,
   Sheet,
-  Sparkles,
 } from 'lucide-react'
 import { Skeleton } from '@frontend/components/ui/skeleton'
 import { Badge } from '@frontend/components/ui/badge'
 import { Button } from '@frontend/components/ui/button'
-import { Card, CardContent } from '@frontend/components/ui/card'
+import { Card } from '@frontend/components/ui/card'
 import { Input } from '@frontend/components/ui/input'
+import { cn } from '@frontend/lib/utils'
 import { CellStack } from '@frontend/components/ui/table-cell-stack'
 import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from '@frontend/components/ui/table-sort'
 import {
@@ -122,11 +122,13 @@ function makeSignature(rows: StabilitySheetRow[]): string {
 
 function getStatusClass(status: string): string {
   const value = status.replace(/\s/g, '')
-  if (/(완료|종료|승인)/.test(value)) return 'border-emerald-200 bg-emerald-50 text-emerald-700'
+  // 완료·승인은 파랑 램프의 끝(짙은 파랑)이다 — 진행(연한 파랑)에서 색이 진해지며 끝난다.
+  if (/(완료|종료|승인)/.test(value)) return 'border-blue-400 bg-blue-100 text-blue-900'
   if (/(진행|시험중|분석중|의뢰)/.test(value)) return 'border-blue-200 bg-blue-50 text-blue-700'
   if (/(대기|예정|준비)/.test(value)) return 'border-amber-200 bg-amber-50 text-amber-700'
   if (/(보류|지연|중단|취소)/.test(value)) return 'border-red-200 bg-red-50 text-red-700'
-  return 'border-slate-200 bg-slate-50 text-slate-600'
+  // 분류되지 않은 상태는 색을 주지 않고 중립 토큰으로 둔다.
+  return 'border bg-muted/50 text-muted-foreground'
 }
 
 function isScheduleCandidate(row: StabilitySheetRow): boolean {
@@ -265,33 +267,32 @@ export default function StabStatusPage() {
   }, [rows])
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3 md:p-5">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-xl font-bold text-slate-900">안정성 현황</h1>
-            <Badge className="border-blue-200 bg-blue-50 text-blue-700" variant="outline">
-              Google Sheet 기준
-            </Badge>
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4 md:p-6">
+      {/* 머리말 — 제목 옆의 'Google Sheet 기준' 배지는 옆의 '원본 시트' 버튼이 이미
+          말하고 있어 뺐다. 배지는 상태(변경 감지·최초 동기화)에만 남긴다. */}
+      <header className="flex min-w-0 shrink-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <h1 className="text-lg font-semibold text-foreground">안정성 현황</h1>
             {changeState === 'changed' && (
               <Badge className="border-blue-200 bg-blue-50 text-blue-700" variant="outline">
-                <DatabaseZap size={12} /> 변경 감지
+                변경 감지
               </Badge>
             )}
             {changeState === 'new' && (
               <Badge className="border-amber-200 bg-amber-50 text-amber-700" variant="outline">
-                <Sparkles size={12} /> 최초 동기화
+                최초 동기화
               </Badge>
             )}
           </div>
-          <p className="mt-1 text-sm text-slate-500">
-            시트의 안정성 품목을 기준으로 품목코드 매칭 시 스케줄 동시분석 후보로 표시합니다.
-          </p>
-          <p className="mt-1 flex items-center gap-1 text-xs leading-normal text-slate-400">
-            <Clock3 size={12} /> 최종 확인 {formatSyncTime(syncedAt)}
+          <p className="mt-1 flex flex-wrap items-center gap-x-1 text-xs leading-normal break-keep text-muted-foreground">
+            <Clock3 size={12} className="shrink-0" />
+            <span className="tabular-nums">최종 확인 {formatSyncTime(syncedAt)}</span>
+            <span className="px-0.5 text-border">·</span>
+            품목코드가 맞는 건은 스케줄 동시분석 후보로 표시합니다
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           <Button
             variant="outline"
             className="h-9 gap-2"
@@ -301,64 +302,59 @@ export default function StabStatusPage() {
             원본 시트
             <ArrowUpRight size={13} />
           </Button>
-          <Button className="h-9 gap-2 bg-slate-900 hover:bg-slate-800" onClick={loadSheet} disabled={loading}>
+          {/* 검정 버튼은 브랜드색이 아니다 — 기본(파랑) 버튼으로 되돌린다 */}
+          <Button className="h-9 gap-2" onClick={loadSheet} disabled={loading}>
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
             새로고침
           </Button>
         </div>
+      </header>
+
+      {/* 지표 칸 — 칸마다 파랑·초록 배경을 깔던 것을 걷어냈다. 여기엔 경보가 없고,
+          다섯 칸이 서로 다른 색을 두르면 색이 의미를 잃는다. 위계는 숫자 크기가 만든다. */}
+      <div className="grid shrink-0 grid-cols-2 gap-2.5 lg:grid-cols-5">
+        {[
+          { label: '전체 건수', value: rows.length, icon: null },
+          { label: '스케줄 후보', value: stats.active, icon: <CalendarClock size={13} /> },
+          { label: '완료', value: stats.completed, icon: <CheckCircle2 size={13} /> },
+          { label: '품목코드', value: stats.uniqueProducts, icon: <FlaskConical size={13} /> },
+          { label: '의뢰 정보', value: stats.requestCount, icon: <DatabaseZap size={13} /> },
+        ].map((tile, i, all) => (
+          <Card
+            key={tile.label}
+            className={cn(
+              'min-w-0 gap-0 px-4 py-3 shadow-none',
+              i === all.length - 1 && 'col-span-2 lg:col-span-1',
+            )}
+          >
+            <p className="flex min-w-0 items-center gap-1 text-xs leading-normal font-medium text-muted-foreground">
+              {tile.icon}
+              <span className="min-w-0 truncate">{tile.label}</span>
+            </p>
+            {loading ? (
+              <Skeleton className="mt-1.5 h-7 w-12" />
+            ) : (
+              <p className="mt-1 min-w-0 truncate text-xl font-semibold tabular-nums text-foreground sm:text-2xl">{tile.value}</p>
+            )}
+          </Card>
+        ))}
       </div>
 
-      <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-5">
-        <Card className="rounded-md border-slate-200 py-0 shadow-none">
-          <CardContent className="px-4 py-3">
-            <p className="text-xs leading-normal font-medium text-slate-500">전체 건수</p>
-            <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900">{rows.length}</p>
-          </CardContent>
-        </Card>
-        <Card className="rounded-md border-blue-100 bg-blue-50/50 py-0 shadow-none">
-          <CardContent className="px-4 py-3">
-            <p className="flex items-center gap-1 text-xs leading-normal font-medium text-blue-700">
-              <CalendarClock size={13} /> 스케줄 후보
-            </p>
-            <p className="mt-1 text-2xl font-bold tabular-nums text-blue-700">{stats.active}</p>
-          </CardContent>
-        </Card>
-        <Card className="rounded-md border-emerald-100 bg-emerald-50/50 py-0 shadow-none">
-          <CardContent className="px-4 py-3">
-            <p className="flex items-center gap-1 text-xs leading-normal font-medium text-emerald-700">
-              <CheckCircle2 size={13} /> 완료
-            </p>
-            <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-700">{stats.completed}</p>
-          </CardContent>
-        </Card>
-        <Card className="rounded-md border-blue-100 bg-blue-50/50 py-0 shadow-none">
-          <CardContent className="px-4 py-3">
-            <p className="flex items-center gap-1 text-xs leading-normal font-medium text-blue-700">
-              <FlaskConical size={13} /> 품목코드
-            </p>
-            <p className="mt-1 text-2xl font-bold tabular-nums text-blue-700">{stats.uniqueProducts}</p>
-          </CardContent>
-        </Card>
-        <Card className="col-span-2 rounded-md border-slate-200 py-0 shadow-none lg:col-span-1">
-          <CardContent className="px-4 py-3">
-            <p className="flex items-center gap-1 text-xs leading-normal font-medium text-slate-600">
-              <DatabaseZap size={13} /> 의뢰 정보
-            </p>
-            <p className="mt-1 text-2xl font-bold tabular-nums text-slate-800">{stats.requestCount}</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card className="min-h-0 gap-0 overflow-hidden rounded-md border-slate-200 bg-white py-0 shadow-none">
-        <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-slate-800">시트 반영 목록</span>
-            <Badge className="border-slate-200 bg-slate-50 text-slate-600" variant="outline">
-              {filteredRows.length}건 표시
-            </Badge>
-          </div>
+      {/* shrink-0: Card 는 overflow-hidden 이라 세로 스크롤 컨테이너 안에서
+          min-height 가 0 이 되고, 행이 늘어나는 순간 선 하나로 찌부러진다. */}
+      <Card className="shrink-0 gap-0 overflow-hidden py-0 shadow-none">
+        <div className="flex flex-col gap-3 border-b px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+          {/* 건수 배지는 제목이 이미 하는 말을 되풀이한다 — 배지를 빼고 잔글씨로 내린다 */}
+          <h2 className="text-sm font-semibold text-foreground">
+            시트 반영 목록
+            {!loading && (
+              <span className="ml-1.5 text-xs font-normal tabular-nums text-muted-foreground">
+                {filteredRows.length}건{filteredRows.length !== rows.length ? ` / 전체 ${rows.length}건` : ''}
+              </span>
+            )}
+          </h2>
           <div className="relative w-full lg:w-80">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={query}
               onChange={e => setQuery(e.target.value)}
@@ -369,11 +365,50 @@ export default function StabStatusPage() {
         </div>
 
         {error ? (
-          <div className="flex items-center gap-2 px-4 py-8 text-sm text-red-600">
-            <AlertCircle size={18} />
+          <div className="flex items-center gap-2 px-4 py-8 text-sm break-keep text-destructive">
+            <AlertCircle size={18} className="shrink-0" />
             {error}
           </div>
         ) : (
+          <>
+          {/* ── 모바일: 표 대신 카드 목록 ────────────────────────────────────
+              6칸짜리 표는 320px 에 못 들어간다. 품목·상태·시험종류·후보 여부만 남긴다. */}
+          <div className="divide-y md:hidden">
+            {loading
+              ? Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="flex flex-col gap-2 px-4 py-3">
+                    <Skeleton className="h-4 w-2/3" />
+                    <div className="flex items-center justify-between">
+                      <Skeleton className="h-3 w-28" />
+                      <Skeleton className="h-3 w-20" />
+                    </div>
+                  </div>
+                ))
+              : filteredRows.length === 0
+                ? <p className="px-4 py-10 text-center text-sm break-keep text-muted-foreground">표시할 안정성 품목이 없습니다.</p>
+                : sortedRows.map(row => (
+                    <div key={row.id} className="px-4 py-3">
+                      <div className="flex min-w-0 items-start justify-between gap-2">
+                        <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                          {row.productName || '—'}
+                        </p>
+                        <Badge className={getStatusClass(row.status)} variant="outline">{row.status}</Badge>
+                      </div>
+                      <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs leading-normal text-muted-foreground">
+                        {row.productCode && <span className="shrink-0 font-mono">{row.productCode}</span>}
+                        <span className="min-w-0 truncate">{row.testType || '미분류'}</span>
+                        <span className="ml-auto shrink-0">
+                          {isScheduleCandidate(row)
+                            ? <span className="font-medium text-blue-700">동시분석 후보</span>
+                            : '후보 제외'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+          </div>
+
+          {/* ── 데스크톱: 표 ─────────────────────────────────────────────── */}
+          <div className="hidden md:block">
           <Table>
             {/* 논리 열 4개(품목·시험·일자·상태) + 다필드 묶음 3개 → 최대 7칸.
                 칸 순서(펼침 / 합침):
@@ -438,7 +473,7 @@ export default function StabStatusPage() {
                       />
                     </TableCell>
                     <TableCell className="px-3 py-2.5">
-                      <div className="min-w-0 text-xs leading-4 text-muted-foreground" title={`제조 ${row.manufacturedAt || '—'} / 기한 ${row.expiryDate || '—'} / 의뢰 ${row.requestedAt || '—'}`}>
+                      <div className="min-w-0 text-xs leading-4 tabular-nums text-muted-foreground" title={`제조 ${row.manufacturedAt || '—'} / 기한 ${row.expiryDate || '—'} / 의뢰 ${row.requestedAt || '—'}`}>
                         <div className="truncate">제조 {row.manufacturedAt || '—'}</div>
                         <div className="truncate">기한 {row.expiryDate || '—'}</div>
                         <div className="truncate">의뢰 {row.requestedAt || '—'}</div>
@@ -449,15 +484,15 @@ export default function StabStatusPage() {
                         <Badge className={getStatusClass(row.status)} variant="outline">
                           {row.status}
                         </Badge>
+                        {/* 배지를 두 개 겹치면 무엇이 상태인지 흐려진다.
+                            해당될 때만 배지를 달고, 아닐 때는 잔글씨로 남긴다. */}
                         <div className="mt-1">
                           {isScheduleCandidate(row) ? (
                             <Badge className="border-blue-200 bg-blue-50 text-blue-700" variant="outline">
                               동시분석 후보
                             </Badge>
                           ) : (
-                            <Badge className="border-slate-200 bg-slate-50 text-slate-500" variant="outline">
-                              제외
-                            </Badge>
+                            <span className="text-xs leading-normal text-muted-foreground">후보 제외</span>
                           )}
                         </div>
                       </div>
@@ -467,6 +502,8 @@ export default function StabStatusPage() {
               )}
             </TableBody>
           </Table>
+          </div>
+          </>
         )}
       </Card>
     </div>

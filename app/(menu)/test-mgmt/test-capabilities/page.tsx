@@ -176,11 +176,13 @@ export default function TestCapabilitiesPage() {
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden p-4 md:p-6">
       {/* 헤더 */}
       <div className="flex shrink-0 flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        {/* 제목 text-lg · 부가정보 text-xs — 다른 화면과 같은 위계로 맞춘다.
+            break-keep: 한글은 단어 중간에서 끊으면 안 읽힌다 */}
         <div className="min-w-0">
-          <h1 className="flex items-center gap-2 text-xl font-semibold text-foreground">
-            <Grid2x2 className="size-5" />시험 역량 마스터
+          <h1 className="flex items-center gap-2 text-lg font-semibold text-foreground">
+            <Grid2x2 className="size-5 text-muted-foreground" />시험 역량 마스터
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 text-xs leading-normal break-keep text-muted-foreground">
             여기 등록한 항목이 <span className="font-medium text-foreground">시험자 역량</span> 매트릭스의 컬럼이 됩니다.
             표시 순서대로 왼쪽부터 열이 놓입니다.
           </p>
@@ -195,7 +197,7 @@ export default function TestCapabilitiesPage() {
       {/* 자동배정이 이 값을 키로 쓴다 — 이름만 바꾸는 화면이 아니라는 걸 먼저 알린다 */}
       <Card className="shrink-0 flex-row items-start gap-2 border-amber-200 bg-amber-50 px-4 py-3">
         <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-500" />
-        <p className="text-xs leading-5 text-amber-800">
+        <p className="text-xs leading-5 break-keep text-amber-800">
           코드와 역량명은 <span className="font-medium">AI 자동배정</span>이 오더의 필요장비(required_equipment)를
           역량에 연결할 때 쓰는 키입니다. 이름을 바꾸면 매칭 결과가 달라질 수 있으니
           기존 항목의 이름은 신중히 수정하세요. 코드는 등록 후 변경할 수 없습니다.
@@ -225,17 +227,19 @@ export default function TestCapabilitiesPage() {
         </div>
       </div>
 
-      {/* 모바일 카드 */}
-      <div className="flex min-h-0 flex-col gap-2 overflow-y-auto md:hidden">
+      {/* 모바일 카드
+          flex-1 + 자식 shrink-0: Card 는 overflow-hidden 이라 세로 스크롤 열 안에서
+          min-height 가 0 이 된다. 목록이 길어지면 flex 가 카드를 선 하나로 눌러 버린다. */}
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto md:hidden">
         {loading
           ? Array.from({ length: 4 }).map((_, i) => (
-              <Card key={i} className="gap-2 px-3 py-3">
+              <Card key={i} className="shrink-0 gap-2 px-3 py-3">
                 <Skeleton className="h-4 w-24" />
                 <Skeleton className="h-4 w-full" />
               </Card>
             ))
           : filtered.length === 0
-            ? <Card className="items-center py-10 text-center text-sm text-muted-foreground">
+            ? <Card className="shrink-0 items-center py-10 text-center text-sm text-muted-foreground">
                 {rows.length === 0 ? "등록된 역량이 없습니다." : "조건에 맞는 역량이 없습니다."}
               </Card>
             : filtered.map((row) => (
@@ -245,10 +249,10 @@ export default function TestCapabilitiesPage() {
                   tabIndex={0}
                   onClick={() => openEdit(row)}
                   onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openEdit(row) } }}
-                  className="cursor-pointer gap-1 px-3 py-3 hover:bg-muted/40"
+                  className="shrink-0 cursor-pointer gap-1 px-3 py-3 hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-sm font-medium text-foreground">{row.name}</span>
+                  <div className="flex min-w-0 items-center justify-between gap-2">
+                    <span className="min-w-0 truncate text-sm font-medium text-foreground">{row.name}</span>
                     <Badge variant="secondary" className="shrink-0 tabular-nums">{row.ratedCount}명</Badge>
                   </div>
                   <p className="font-mono text-xs text-muted-foreground">{row.code}</p>

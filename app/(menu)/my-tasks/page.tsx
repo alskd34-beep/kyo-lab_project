@@ -5,6 +5,7 @@ import {
   Play, CheckCircle2, Circle, Loader2, AlertTriangle, Clock, XCircle, ShieldAlert, ClipboardList,
 } from "lucide-react"
 import { ACTIVE_JOB_STATUSES, CLOSED_STAGE, stageStyle } from "@shared/qc-status"
+import { useAuth } from "@frontend/lib/auth-context"
 import { cn } from "@frontend/lib/utils"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import { DateField } from "@frontend/components/ui/date-field"
@@ -132,8 +133,9 @@ function ReadinessModal({
           )}
           {warnings.length > 0 && (
             <div className={blocked.length > 0 ? "mt-3" : ""}>
-              <p className="mb-1.5 flex items-center gap-1.5 text-xs leading-normal font-semibold uppercase tracking-wide text-slate-400">
-                <AlertTriangle size={12} /> 장비 경고 ({warnings.length})
+              {/* 한글에는 대문자가 없다 — uppercase·tracking-wide 를 걷어내고 자간을 원래대로 둔다 */}
+              <p className="mb-1.5 flex items-center gap-1.5 text-xs leading-normal font-semibold text-muted-foreground">
+                <AlertTriangle size={12} /> 장비 경고 <span className="tabular-nums">{warnings.length}</span>건
               </p>
               <ul className="flex flex-col gap-2">
                 {warnings.map(c => (
@@ -152,8 +154,8 @@ function ReadinessModal({
           )}
           {notes.length > 0 && (
             <div className={blocked.length > 0 || warnings.length > 0 ? "mt-3" : ""}>
-              <p className="mb-1.5 flex items-center gap-1.5 text-xs leading-normal font-semibold uppercase tracking-wide text-slate-400">
-                <ClipboardList size={12} /> 시험 전 확인사항 ({notes.length})
+              <p className="mb-1.5 flex items-center gap-1.5 text-xs leading-normal font-semibold text-muted-foreground">
+                <ClipboardList size={12} /> 시험 전 확인사항 <span className="tabular-nums">{notes.length}</span>건
               </p>
               <ul className="flex flex-col gap-2">
                 {notes.map(n => (
@@ -177,6 +179,9 @@ function ReadinessModal({
 }
 
 export default function MyTasksPage() {
+  // 화면 이름은 역할에 따라 다르다 — 시험자 메뉴는 「할 일」, 관리자 메뉴는 「내 작업」.
+  const { user } = useAuth()
+  const pageTitle = user?.role === "admin" ? "내 작업" : "할 일"
   const [linked, setLinked] = useState(true)
   const [pending, setPending] = useState<PendingOrder[]>([])
   const [jobs, setJobs] = useState<Job[]>([])
@@ -419,18 +424,18 @@ export default function MyTasksPage() {
   }
 
   if (loading) return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 md:p-6">
-      {/* 헤더 */}
-      <div className="rounded-md border border-slate-200 bg-white px-4 py-3 shadow-sm">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4 md:p-6">
+      {/* 뼈대는 실제 화면과 같은 자리에 놓는다 — 머리말은 카드가 아니라 한 줄이다 */}
+      <div className="flex shrink-0 items-baseline justify-between gap-3">
         <Skeleton className="h-5 w-24" />
-        <Skeleton className="mt-1.5 h-3 w-72" />
+        <Skeleton className="h-3 w-40" />
       </div>
       {/* ① 배정완료 · 시작 대기 */}
-      <section>
-        <Skeleton className="mb-2 h-3 w-36" />
+      <section className="shrink-0">
+        <Skeleton className="mb-3 h-4 w-36" />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="rounded-md border border-slate-200 bg-white p-3 shadow-sm">
+            <div key={i} className="min-w-0 rounded-md border bg-card p-3">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <Skeleton className="h-4 w-3/4" />
@@ -447,12 +452,12 @@ export default function MyTasksPage() {
         </div>
       </section>
       {/* ② 진행 중 */}
-      <section>
-        <Skeleton className="mb-2 h-3 w-24" />
+      <section className="shrink-0">
+        <Skeleton className="mb-3 h-4 w-24" />
         <div className="flex flex-col gap-3">
           {Array.from({ length: 2 }).map((_, i) => (
-            <div key={i} className="rounded-md border border-slate-200 bg-white shadow-sm">
-              <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3">
+            <div key={i} className="rounded-md border bg-card">
+              <div className="flex flex-col gap-3 border-b px-4 py-3">
                 <Skeleton className="h-4 w-32" />
                 <Skeleton className="h-4 w-56" />
                 <div className="flex gap-2">
@@ -463,9 +468,9 @@ export default function MyTasksPage() {
               </div>
               <div className="px-4 py-3">
                 <Skeleton className="mb-2 h-3 w-32" />
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col divide-y">
                   {Array.from({ length: 3 }).map((_, j) => (
-                    <div key={j} className="flex items-center justify-between rounded-md border border-slate-200 px-3 py-2">
+                    <div key={j} className="flex items-center justify-between py-1.5">
                       <div className="flex items-center gap-2">
                         <Skeleton className="h-4 w-4 rounded-full" />
                         <Skeleton className="h-4 w-32" />
@@ -487,8 +492,9 @@ export default function MyTasksPage() {
       <div className="p-4 md:p-6">
         <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-6 text-center">
           <AlertTriangle className="mx-auto mb-2 text-amber-500" size={24} />
-          <p className="text-sm font-semibold text-amber-800">계정에 시험자(담당자)가 연결되어 있지 않습니다.</p>
-          <p className="mt-1 text-xs text-amber-700">관리자에게 계정-시험자 연결을 요청하세요.</p>
+          {/* break-keep: 좁은 폭에서 한글이 단어 중간에서 끊기지 않게 */}
+          <p className="text-sm font-semibold break-keep text-amber-800">계정에 시험자(담당자)가 연결되어 있지 않습니다.</p>
+          <p className="mt-1 text-xs leading-normal break-keep text-amber-700">관리자에게 계정-시험자 연결을 요청하세요.</p>
         </div>
       </div>
     )
@@ -506,14 +512,19 @@ export default function MyTasksPage() {
       )}
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4 md:p-6">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <h1 className="text-xl font-semibold text-foreground">내 작업</h1>
-          <p className="text-sm text-muted-foreground">배정된 오더를 시작하고 시험항목별로 진행 상황을 기록합니다.</p>
-        </div>
+        {/* 화면 이름을 되풀이하는 부제 대신, 지금 무엇이 몇 건인지를 적는다 */}
+        <header className="flex min-w-0 shrink-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <h1 className="text-lg font-semibold text-foreground">{pageTitle}</h1>
+          <p className="text-xs leading-normal break-keep text-muted-foreground">
+            시작 대기 <span className="font-semibold tabular-nums text-foreground">{pending.length}</span>건
+            <span className="px-1 text-border">·</span>
+            진행 중 <span className="font-semibold tabular-nums text-foreground">{activeJobs.length}</span>건
+          </p>
+        </header>
 
         {msg && (
           <div className={cn(
-            "rounded-md border px-3 py-2 text-sm font-medium",
+            "shrink-0 rounded-md border px-3 py-2 text-sm font-medium",
             msgType === "error"
               ? "border-destructive/20 bg-destructive/10 text-destructive"
               : "border-primary/20 bg-primary/5 text-foreground",
@@ -521,14 +532,16 @@ export default function MyTasksPage() {
         )}
 
         {/* ① 배정완료 · 시작 대기 */}
-        <section>
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-1">
-            <h2 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-              ① 배정완료 · 시작 대기 ({pending.length})
+        <section className="flex min-w-0 shrink-0 flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b pb-2">
+            <h2 className="text-sm font-semibold text-foreground">
+              ① 배정완료 · 시작 대기
+              <span className="ml-1.5 text-xs font-normal tabular-nums text-muted-foreground">{pending.length}건</span>
             </h2>
             {pending.length > 0 && (
-              <div className="flex items-center gap-2">
-                <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              /* flex-wrap: 320px 에서 「전체 선택 + 선택 실행」이 한 줄에 안 들어간다 */
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <label className="inline-flex min-h-8 cursor-pointer items-center gap-1.5 text-xs font-medium text-muted-foreground">
                   <input
                     type="checkbox"
                     checked={allSelected}
@@ -550,7 +563,7 @@ export default function MyTasksPage() {
             )}
           </div>
           {pending.length === 0 ? (
-            <Card className="items-center py-6 text-center text-sm text-muted-foreground">대기 중인 오더가 없습니다.</Card>
+            <p className="py-10 text-center text-sm text-muted-foreground">대기 중인 오더가 없습니다.</p>
           ) : (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {pending.map(o => {
@@ -558,7 +571,8 @@ export default function MyTasksPage() {
                 const isBusy = busy === o.id
                 const isChecked = selected.has(o.id)
                 return (
-                  <Card key={o.id} className={cn("gap-0 px-3 py-3", isChecked && "ring-2 ring-primary/30")}>
+                  /* min-w-0: 그리드 칸의 기본 최소폭은 내용 크기라, 긴 품목명이 칸을 화면 밖으로 밀어낸다 */
+                  <Card key={o.id} className={cn("min-w-0 gap-0 px-3 py-3", isChecked && "ring-2 ring-primary/30")}>
                     <div className="flex items-start gap-2">
                       <input
                         type="checkbox"
@@ -574,10 +588,10 @@ export default function MyTasksPage() {
                       </div>
                       {o.isUrgent && <Badge variant="destructive">긴급</Badge>}
                     </div>
-                    <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>{o.method}</span>
+                    <div className="mt-2 flex min-w-0 items-center gap-2 text-xs leading-normal text-muted-foreground">
+                      <span className="min-w-0 truncate">{o.method}</span>
                       {o.dueDate && (
-                        <span>
+                        <span className="shrink-0 tabular-nums">
                           · 완료예정 {o.dueDate}
                           {dd != null && dd <= 7 && (
                             <span className="ml-1 font-semibold text-destructive">
@@ -603,14 +617,16 @@ export default function MyTasksPage() {
         </section>
 
         {/* ② 진행 중 */}
-        <section>
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-1">
-            <h2 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-              ② 진행 중 ({activeJobs.length})
+        <section className="flex min-w-0 shrink-0 flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b pb-2">
+            <h2 className="text-sm font-semibold text-foreground">
+              ② 진행 중
+              <span className="ml-1.5 text-xs font-normal tabular-nums text-muted-foreground">{activeJobs.length}건</span>
             </h2>
             {activeJobs.length > 0 && (
-              <div className="flex items-center gap-2">
-                <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              /* flex-wrap: 320px 에서 「전체 선택 + 상태 + 선택 적용」이 한 줄에 안 들어간다 */
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <label className="inline-flex min-h-8 cursor-pointer items-center gap-1.5 text-xs font-medium text-muted-foreground">
                   <input
                     type="checkbox"
                     checked={allJobsSelected}
@@ -621,7 +637,7 @@ export default function MyTasksPage() {
                   전체 선택
                 </label>
                 <Select value={bulkStatus} onValueChange={setBulkStatus}>
-                  <SelectTrigger className="h-8 w-[88px] rounded-md border-slate-200 text-xs">
+                  <SelectTrigger className="h-8 w-20 rounded-md text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -640,7 +656,7 @@ export default function MyTasksPage() {
             )}
           </div>
           {activeJobs.length === 0 ? (
-            <Card className="items-center py-6 text-center text-sm text-muted-foreground">진행 중인 작업이 없습니다.</Card>
+            <p className="py-10 text-center text-sm text-muted-foreground">진행 중인 작업이 없습니다.</p>
           ) : (
             <div className="flex flex-col gap-3">
               {activeJobs.map(job => renderJobCard(job, true))}
@@ -649,12 +665,14 @@ export default function MyTasksPage() {
         </section>
 
         {/* ③ 종료 (완료) */}
-        <section>
-          <h2 className="mb-2 px-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-            ③ 종료 · 완료 ({doneJobs.length})
+        {/* 끝난 작업은 위계가 한 단 아래다 — 실선 없이 조용한 제목만 둔다(섹션마다 리듬을 다르게) */}
+        <section className="flex min-w-0 shrink-0 flex-col gap-3">
+          <h2 className="text-sm font-semibold text-muted-foreground">
+            ③ 종료 · 완료
+            <span className="ml-1.5 text-xs font-normal tabular-nums">{doneJobs.length}건</span>
           </h2>
           {doneJobs.length === 0 ? (
-            <Card className="items-center py-6 text-center text-sm text-muted-foreground">완료된 작업이 없습니다.</Card>
+            <p className="py-10 text-center text-sm text-muted-foreground">완료된 작업이 없습니다.</p>
           ) : (
             <div className="flex flex-col gap-3">
               {doneJobs.map(job => renderJobCard(job))}
@@ -684,11 +702,11 @@ export default function MyTasksPage() {
               />
             )}
             <div className="min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <span className="font-mono text-sm font-semibold text-primary">QC {job.qcNo}</span>
               {job.isUrgent && <Badge variant="destructive">긴급</Badge>}
               {dd != null && dd <= 7 && !isDone && (
-                <Badge variant="outline" className="gap-1 border-destructive/30 text-destructive">
+                <Badge variant="outline" className="gap-1 border-destructive/30 tabular-nums text-destructive">
                   <Clock size={10} />D{dd >= 0 ? `-${dd}` : `+${-dd}`}
                 </Badge>
               )}
@@ -698,10 +716,12 @@ export default function MyTasksPage() {
             </p>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 md:justify-end">
-            <div className="flex shrink-0 items-center gap-1.5">
-              <span className="text-xs text-muted-foreground">시작</span>
-              <div className="w-32">
+          {/* 모바일에서는 날짜 두 칸을 각각 한 줄 꽉 채워 손가락으로 누르기 쉽게 하고,
+              sm 이상에서만 고정 폭으로 나란히 세운다. */}
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 md:justify-end">
+            <div className="flex w-full min-w-0 items-center gap-1.5 sm:w-auto sm:shrink-0">
+              <span className="w-8 shrink-0 text-xs text-muted-foreground">시작</span>
+              <div className="min-w-0 flex-1 sm:w-32 sm:flex-none">
                 <DateField
                   size="sm"
                   noLabel
@@ -711,9 +731,9 @@ export default function MyTasksPage() {
                 />
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-1.5">
-              <span className="text-xs text-muted-foreground">종료</span>
-              <div className="w-32">
+            <div className="flex w-full min-w-0 items-center gap-1.5 sm:w-auto sm:shrink-0">
+              <span className="w-8 shrink-0 text-xs text-muted-foreground">종료</span>
+              <div className="min-w-0 flex-1 sm:w-32 sm:flex-none">
                 <DateField
                   size="sm"
                   noLabel
@@ -755,33 +775,32 @@ export default function MyTasksPage() {
 
         {/* 항목 체크리스트 */}
         <div className="px-4 py-3">
-          <div className="mb-2 flex items-center justify-between text-xs">
-            <span className="font-semibold text-muted-foreground">시험항목 진행 {cleared}/{job.items.length}</span>
-          </div>
+          {/* 카드 안에 또 카드를 넣지 않는다 — 항목마다 두르던 테두리를 걷고 실선 한 겹으로 나눈다 */}
+          <p className="mb-1 text-xs leading-normal font-semibold text-muted-foreground">
+            시험항목 진행 <span className="tabular-nums text-foreground">{cleared}/{job.items.length}</span>
+          </p>
           {job.items.length === 0 ? (
-            <p className="py-2 text-xs text-muted-foreground">등록된 시험항목이 없습니다. (품목-시험항목 매핑 확인 필요)</p>
+            <p className="py-2 text-xs leading-normal text-muted-foreground">등록된 시험항목이 없습니다. (품목-시험항목 매핑 확인 필요)</p>
           ) : (
-            <ul className="flex flex-col gap-1">
+            <ul className="flex flex-col divide-y">
               {job.items.map(it => {
                 const done = it.status === "cleared"
                 return (
                   <li
                     key={it.id}
-                    className={cn(
-                      "flex items-center justify-between rounded-md border px-3 py-2",
-                      done && "border-blue-200 bg-blue-50/60",
-                    )}
+                    /* flex-wrap: 좁은 폭에서 완료 시각·소요시간이 항목명을 짓누르지 않고 아랫줄로 내려간다 */
+                    className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-0.5 py-1.5"
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
                       {done
-                        ? <CheckCircle2 size={16} className="text-blue-600" />
-                        : <Circle size={16} className="text-muted-foreground" />}
-                      <span className={cn("text-sm", done ? "font-medium text-blue-800" : "text-foreground")}>
+                        ? <CheckCircle2 size={16} className="shrink-0 text-blue-600" />
+                        : <Circle size={16} className="shrink-0 text-muted-foreground" />}
+                      <span className={cn("min-w-0 truncate text-sm", done ? "font-medium text-blue-800" : "text-foreground")}>
                         {it.testItemName}
                       </span>
                     </div>
                     {done ? (
-                      <span className="text-xs leading-normal text-blue-700">
+                      <span className="shrink-0 text-xs leading-normal tabular-nums text-blue-700">
                         {it.clearedAt && new Date(it.clearedAt).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
                         {/* 작업 시작 기준 누적 소요시간 (구간이 다르면 함께 표기) */}
                         {(() => {

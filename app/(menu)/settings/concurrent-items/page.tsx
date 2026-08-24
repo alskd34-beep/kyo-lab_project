@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useMemo, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
 import {
-  Plus, Trash2, X, Loader2, Search, Sparkles, Layers, AlertCircle,
+  Plus, Trash2, X, Loader2, Search, Sparkles, AlertCircle,
 } from "lucide-react"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import { cn } from "@frontend/lib/utils"
@@ -104,48 +104,61 @@ export default function ConcurrentItemsPage() {
   }, [rows, search])
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 md:p-6">
-      {/* 헤더 */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">동시분석 품목</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            동시에 시험할 품목을 묶어 관리합니다. 묶인 품목은 오더 적재·자동배정 시 한 명의 담당자에게 함께 배정됩니다.
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4 md:p-6">
+      {/* ── 페이지 머리 ────────────────────────────────────────────────────
+          "동시에 시험할 품목을 묶어 관리합니다"는 제목을 되풀이하는 문장이라 지웠다.
+          남긴 한 줄은 이 화면 밖에서 벌어지는 일(적재·자동배정)이라 실제 정보다. */}
+      <header className="flex min-w-0 shrink-0 flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-lg font-semibold text-foreground">동시분석 품목</h1>
+          <p className="mt-0.5 text-xs leading-normal break-keep text-muted-foreground">
+            묶인 품목은 오더 적재·자동배정 시 한 명의 담당자에게 함께 배정됩니다.
           </p>
         </div>
         {isAdmin && (
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" size="lg" onClick={runSeedLLM} disabled={busy !== null}>
+          /* 좁은 폭에선 두 버튼이 폭을 반씩 나눠 갖게 해 라벨이 두 줄로 접히지 않게 한다 */
+          <div className="flex w-full items-center gap-2 sm:w-auto">
+            <Button variant="outline" size="lg" onClick={runSeedLLM} disabled={busy !== null} className="min-w-0 flex-1 sm:flex-none">
               {busy === "seed-llm" ? <Loader2 className="animate-spin" /> : <Sparkles />}
               AI로 그룹핑
             </Button>
-            <Button size="lg" onClick={() => setEditTarget("new")} disabled={busy !== null}>
+            <Button size="lg" onClick={() => setEditTarget("new")} disabled={busy !== null} className="min-w-0 flex-1 sm:flex-none">
               <Plus />새 품목군
             </Button>
           </div>
         )}
-      </div>
+      </header>
 
       {msg && (
-        <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">{msg}</div>
+        <p className="shrink-0 rounded-md border border-primary/20 bg-primary/10 px-3 py-2 text-xs break-keep text-primary">{msg}</p>
       )}
 
       {/* 검색 */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm text-muted-foreground tabular-nums">
-          {search.trim() ? `검색 ${filtered.length}개` : `총 ${rows.length}개 품목군`}
+      <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-2">
+        <span className="text-xs text-muted-foreground">
+          {search.trim() ? "검색" : "총"}{" "}
+          <span className="font-semibold tabular-nums text-foreground">
+            {search.trim() ? filtered.length : rows.length}
+          </span>
+          개 품목군
         </span>
-        <div className="relative ml-auto">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <input
+        {/* 좁은 폭에선 검색창이 한 줄을 통째로 쓴다 — w-56 고정이면 건수 옆에서 넘친다 */}
+        <div className="relative w-full min-w-0 sm:ml-auto sm:w-56">
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="품목군·품목명·코드 검색"
-            className="h-9 w-56 rounded-md border border-input bg-background pl-8 pr-7 text-sm text-foreground shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+            className="w-full pr-7 pl-8"
           />
           {search && (
-            <button onClick={() => setSearch("")} title="검색어 지우기"
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground">
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              title="검색어 지우기"
+              /* 모바일 터치 타깃 — 아이콘 크기가 아니라 눌리는 영역을 36px 로 잡는다 */
+              className="absolute inset-y-0 right-0 flex w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            >
               <X className="size-3.5" />
             </button>
           )}
@@ -154,11 +167,10 @@ export default function ConcurrentItemsPage() {
 
       {/* 목록 */}
       {loading ? (
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <div className="grid min-w-0 shrink-0 grid-cols-1 gap-3 lg:grid-cols-2">
           {Array.from({ length: 4 }).map((_, i) => (
             <Card key={i} className="gap-0 py-0">
               <div className="flex items-start gap-3 px-4 py-3">
-                <Skeleton className="mt-0.5 size-8 shrink-0 rounded-md" />
                 <div className="min-w-0 flex-1 space-y-2">
                   <div className="flex items-center gap-2">
                     <Skeleton className="h-4 w-32" />
@@ -167,57 +179,63 @@ export default function ConcurrentItemsPage() {
                   <Skeleton className="h-3 w-48" />
                 </div>
               </div>
-              <div className="flex flex-wrap gap-1.5 border-t px-4 py-3">
-                <Skeleton className="h-6 w-20 rounded-md" />
-                <Skeleton className="h-6 w-24 rounded-md" />
-                <Skeleton className="h-6 w-16 rounded-md" />
+              <div className="flex flex-col gap-1.5 border-t px-4 py-3">
+                <Skeleton className="h-3 w-4/5" />
+                <Skeleton className="h-3 w-3/5" />
               </div>
             </Card>
           ))}
         </div>
       ) : rows.length === 0 ? (
-        <Card className="items-center gap-3 py-12 text-center">
-          <Layers className="size-8 text-muted-foreground" />
+        <div className="shrink-0 py-10 text-center">
           <p className="text-sm text-muted-foreground">등록된 동시분석 품목군이 없습니다.</p>
           {isAdmin && (
-            <p className="text-xs text-muted-foreground">
-              &quot;현재 데이터로 자동 생성&quot;으로 유사 품목을 한 번에 묶거나, &quot;새 품목군&quot;으로 직접 추가하세요.
+            /* 안내가 실제 버튼 이름과 달랐다("현재 데이터로 자동 생성"이라는 버튼은 없다). */
+            <p className="mt-1 text-xs break-keep text-muted-foreground">
+              &quot;AI로 그룹핑&quot;으로 유사 품목을 한 번에 묶거나, &quot;새 품목군&quot;으로 직접 추가하세요.
             </p>
           )}
-        </Card>
+        </div>
       ) : filtered.length === 0 ? (
-        <Card className="items-center py-10 text-center text-sm text-muted-foreground">
+        <p className="shrink-0 py-10 text-center text-sm break-keep text-muted-foreground">
           &quot;{search.trim()}&quot; 검색 결과가 없습니다.
-        </Card>
+        </p>
       ) : (
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <div className="grid min-w-0 shrink-0 grid-cols-1 gap-3 lg:grid-cols-2">
           {filtered.map(f => (
+            /* 관리자만 눌러서 수정할 수 있다 — 눌리는 카드에는 키보드 조작과 포커스 링도 함께 준다. */
             <Card
               key={f.id}
-              className={cn("gap-0 py-0", isAdmin && "cursor-pointer transition-colors hover:border-primary/40 hover:bg-muted/20")}
+              className={cn(
+                "min-w-0 gap-0 py-0",
+                isAdmin && "cursor-pointer transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+              )}
+              role={isAdmin ? "button" : undefined}
+              tabIndex={isAdmin ? 0 : undefined}
               onClick={isAdmin ? () => setEditTarget(f) : undefined}
+              onKeyDown={isAdmin ? (e => {
+                if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setEditTarget(f) }
+              }) : undefined}
             >
-              <div className="flex items-start gap-3 px-4 py-3">
-                <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-                  <Layers className="size-4" />
-                </span>
+              <div className="flex min-w-0 items-start gap-3 px-4 py-3">
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="truncate text-sm font-semibold text-foreground">{f.name}</span>
-                    <Badge variant="secondary" className="shrink-0">{f.members.length}개 품목</Badge>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="min-w-0 truncate text-sm font-semibold text-foreground">{f.name}</span>
+                    <Badge variant="secondary" className="shrink-0 tabular-nums">{f.members.length}개 품목</Badge>
                   </div>
                   {f.note && <p className="mt-0.5 truncate text-xs text-muted-foreground">{f.note}</p>}
                 </div>
               </div>
-              <div className="flex flex-wrap gap-1.5 border-t px-4 py-3">
+              {/* 카드 안에 미니 카드를 또 깔지 않는다 — 테두리·배경을 뺀 행으로 나열한다. */}
+              <ul className="flex min-w-0 flex-col gap-1 border-t px-4 py-3">
                 {f.members.map(m => (
-                  <span key={m.productCode} className="inline-flex items-center gap-1.5 rounded-md border bg-muted/40 px-2 py-1 text-xs">
-                    <span className="font-mono text-xs leading-normal text-muted-foreground">{m.productCode}</span>
-                    <span className="text-foreground">{m.productName ?? "-"}</span>
-                  </span>
+                  <li key={m.productCode} className="flex min-w-0 items-center gap-2 text-xs leading-normal">
+                    <span className="shrink-0 font-mono text-xs leading-normal text-muted-foreground">{m.productCode}</span>
+                    <span className="min-w-0 flex-1 truncate text-foreground">{m.productName ?? "-"}</span>
+                  </li>
                 ))}
-                {f.members.length === 0 && <span className="text-xs text-muted-foreground">멤버 없음</span>}
-              </div>
+                {f.members.length === 0 && <li className="text-xs leading-normal text-muted-foreground">멤버 없음</li>}
+              </ul>
             </Card>
           ))}
         </div>
@@ -344,14 +362,22 @@ function FamilyModal({ open, family, onClose, onDelete, onSaved }: {
           {/* 품목 검색 추가 */}
           <div>
             <div className="relative">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-              <input value={pq} onChange={e => setPq(e.target.value)} placeholder="품목명·코드로 검색해 추가"
-                className="h-9 w-full rounded-md border border-input bg-background pl-8 pr-3 text-sm text-foreground shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none" />
+              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={pq}
+                onChange={e => setPq(e.target.value)}
+                placeholder="품목명·코드로 검색해 추가"
+                className="pl-8"
+              />
             </div>
             {pq.trim() && (
               <div className="mt-1 max-h-44 overflow-y-auto rounded-md border">
                 {searching ? (
-                  <p className="px-3 py-2 text-xs text-muted-foreground">검색 중…</p>
+                  /* "검색 중…" 글자 대신 결과 행 모양 그대로의 스켈레톤 — 화면이 튀지 않는다. */
+                  <div className="flex flex-col gap-2 px-3 py-2">
+                    <Skeleton className="h-3.5 w-3/4" />
+                    <Skeleton className="h-3.5 w-1/2" />
+                  </div>
                 ) : results.length === 0 ? (
                   <p className="px-3 py-2 text-xs text-muted-foreground">검색 결과가 없습니다.</p>
                 ) : results.map(p => (

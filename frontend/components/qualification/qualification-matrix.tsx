@@ -94,18 +94,20 @@ export function QualificationMatrix({
 
   return (
     <>
-      {/* 모바일 — 시험자별 카드 */}
-      <div className="flex flex-col gap-2 md:hidden">
+      {/* 모바일 — 시험자별 카드
+          스크롤 열(min-h-0 flex-1 overflow-y-auto) + 자식 shrink-0. Card 는 overflow-hidden 이라
+          세로 스크롤 열 안에서 min-height 가 0 이 되고, 목록이 길어지면 선 하나로 찌부러진다. */}
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto md:hidden">
         {testers.length === 0 ? (
-          <Card className="py-16 text-center text-sm text-muted-foreground">
+          <Card className="shrink-0 py-16 text-center text-sm text-muted-foreground">
             표시할 시험자가 없습니다.
           </Card>
         ) : (
           testers.map(tester => (
-            <Card key={tester.id} className="gap-2 px-3 py-3">
+            <Card key={tester.id} className="shrink-0 gap-2 px-3 py-3">
               <button
                 type="button"
-                className="flex min-w-0 items-center gap-2 text-left"
+                className="flex min-w-0 items-center gap-2 rounded-md text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                 onClick={() => onPickTester(tester)}
               >
                 <TesterAvatar testerId={tester.id} name={tester.name} size="xs" />
@@ -114,7 +116,9 @@ export function QualificationMatrix({
               </button>
               {groups.map(group => (
                 <div key={group.category.id} className="grid gap-1">
-                  <span className="text-[10px] font-semibold tracking-wide text-muted-foreground">
+                  {/* tracking-wide 를 뺐다 — 한글에는 대문자가 없고 자간만 벌어져 리듬이 깨진다.
+                      크기도 프로젝트 최소값(text-xs = 13.5px)으로 올렸다. */}
+                  <span className="text-xs font-semibold text-muted-foreground">
                     {group.category.name}
                   </span>
                   <div className="grid grid-cols-1 gap-1.5 min-[420px]:grid-cols-2">
@@ -126,13 +130,15 @@ export function QualificationMatrix({
                           key={item.id}
                           type="button"
                           onClick={() => onPickCell(tester, item, qual)}
-                          className="flex items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-left transition-colors hover:border-ring hover:bg-muted/50"
+                          /* min-w-0: 그리드 칸의 최소폭은 내용 크기라, 긴 항목명이 칸을 화면 밖까지
+                             밀어낸다. 0 으로 낮춰야 안쪽 truncate 가 동작한다. */
+                          className="flex min-w-0 items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-left transition-colors hover:border-ring hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                         >
-                          <span className="flex-1 truncate text-[11px] font-medium text-foreground">
+                          <span className="min-w-0 flex-1 truncate text-xs leading-normal font-medium text-foreground">
                             {item.name}
                           </span>
                           <span className={cn(
-                            "inline-flex h-6 min-w-11 shrink-0 items-center justify-center rounded-md border px-1 text-[10px] font-bold",
+                            "inline-flex h-6 min-w-11 shrink-0 items-center justify-center rounded-md border px-1 text-xs leading-normal font-bold tabular-nums",
                             STATUS_CELL_STYLE[status],
                           )}>
                             {statusCellLabel(status, qual ? daysUntilExpiry(qual.expiresOn) : null)}
@@ -180,7 +186,7 @@ export function QualificationMatrix({
                 <TableHead
                   key={group.category.id}
                   colSpan={group.items.length}
-                  className="sticky top-0 z-10 border-r border-l bg-muted/40 px-2 text-center text-[11px] font-semibold text-foreground"
+                  className="sticky top-0 z-10 border-r border-l bg-muted/40 px-2 text-center text-xs leading-normal font-semibold text-foreground"
                 >
                   {group.category.name}
                 </TableHead>
@@ -194,7 +200,9 @@ export function QualificationMatrix({
                     className={cn(
                       // 상단 카테고리 행이 h-10(40px)이라 두 번째 행은 top-10 에 붙는다.
                       // 항목명이 길어 whitespace-normal 로 줄바꿈을 허용해야 열 폭이 유지된다.
-                      "sticky top-10 z-10 w-[64px] min-w-[64px] border-r px-1.5 text-center text-[10px] leading-tight whitespace-normal text-muted-foreground",
+                      // 64px 열에서는 break-keep 을 쓰지 않는다 — 띄어쓰기 없는 긴 항목명이
+                      // 통째로 칸을 넘어간다. 여기서는 글자 단위 줄바꿈이 맞다.
+                      "sticky top-10 z-10 w-[64px] min-w-[64px] border-r px-1.5 text-center text-xs leading-tight whitespace-normal text-muted-foreground",
                       idx === 0 && "border-l",
                     )}
                     title={[
@@ -205,7 +213,7 @@ export function QualificationMatrix({
                   >
                     {item.name}
                     {!item.isActive && (
-                      <span className="mt-0.5 block text-[9px] font-normal text-muted-foreground">미사용</span>
+                      <span className="mt-0.5 block text-xs leading-normal font-normal text-muted-foreground">미사용</span>
                     )}
                   </TableHead>
                 )),
@@ -220,7 +228,7 @@ export function QualificationMatrix({
                   <TableCell className="sticky left-0 z-10 w-[100px] min-w-[100px] border-r bg-card px-3 py-2.5 font-medium text-foreground">
                     <button
                       type="button"
-                      className="flex min-w-0 items-center gap-2 text-left hover:underline"
+                      className="flex min-w-0 items-center gap-2 rounded-md text-left hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                       onClick={() => onPickTester(tester)}
                       title={`${tester.name} 자격 인증 상세`}
                     >
@@ -250,8 +258,10 @@ export function QualificationMatrix({
                             <button
                               type="button"
                               onClick={() => onPickCell(tester, item, qual)}
+                              /* hover:scale-105 를 뺐다 — 촘촘한 격자에서 칸이 커지면 옆 칸을 덮고,
+                                 '커짐'은 눌렀다는 뜻도 아니다. 테두리 색만 바꿔 대상만 짚어 준다. */
                               className={cn(
-                                "inline-flex h-7 w-full min-w-[52px] items-center justify-center rounded-md border px-1 text-[10px] font-bold transition-transform hover:scale-105",
+                                "inline-flex h-7 w-full min-w-[52px] items-center justify-center rounded-md border px-1 text-xs leading-normal font-bold tabular-nums transition-colors hover:border-foreground/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
                                 STATUS_CELL_STYLE[status],
                               )}
                               title={[

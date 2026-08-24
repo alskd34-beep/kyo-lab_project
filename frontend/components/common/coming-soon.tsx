@@ -18,9 +18,9 @@ export function ComingSoon({
         <div className="flex size-11 items-center justify-center rounded-md bg-primary text-primary-foreground">
           <Icon size={20} />
         </div>
-        <h1 className="mt-4 break-keep text-xl font-semibold text-slate-700">{title}</h1>
+        <h1 className="mt-4 break-keep text-xl font-semibold text-foreground">{title}</h1>
         <Tag color="slate" size="md" className="mt-3">예정 기능</Tag>
-        <p className="mt-2 break-keep text-sm text-slate-500">{description}</p>
+        <p className="mt-2 break-keep text-sm text-muted-foreground">{description}</p>
       </div>
     </div>
   )

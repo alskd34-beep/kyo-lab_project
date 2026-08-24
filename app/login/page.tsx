@@ -8,7 +8,7 @@ import { Button } from '@frontend/components/ui/button'
 import { Card } from '@frontend/components/ui/card'
 import { Input } from '@frontend/components/ui/input'
 
-const HOME_PATH      = '/home'
+const HOME_PATH      = '/'
 const LS_SAVED_ID    = 'kd-saved-id'
 const LS_AUTO_LOGIN  = 'kd-auto-login'
 const AUTO_LOGIN_COOKIE = 'kd_auto_login'
@@ -140,13 +140,15 @@ function LoginForm() {
 
   return (
     <div className="flex min-h-[100dvh] items-center justify-center bg-muted/40 p-4">
-      <Card className="w-full max-w-sm gap-0 p-6 shadow-sm">
-        <div className="mb-6 flex flex-col items-center gap-2">
-          <div className="flex size-11 items-center justify-center rounded-md bg-primary text-primary-foreground">
+      {/* 320px(폴드 접힘·구형 SE)에서 p-6 은 내용 폭을 54px 이나 먹는다 — 좁은 폭에선 한 단계 줄인다 */}
+      <Card className="w-full max-w-sm gap-0 p-5 shadow-sm sm:p-6">
+        <div className="mb-6 flex min-w-0 flex-col items-center gap-2 text-center">
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
             <FlaskConical size={20} />
           </div>
-          <p className="text-xs leading-normal font-medium tracking-widest text-muted-foreground uppercase">광동제약</p>
-          <h1 className="text-base font-semibold text-foreground">QC 시험 관리 시스템</h1>
+          {/* 한글에는 대문자가 없다 — uppercase·자간 확장은 자간만 벌려 리듬을 깬다. */}
+          <p className="text-xs leading-normal font-medium text-muted-foreground">광동제약</p>
+          <h1 className="text-base font-semibold break-keep text-foreground">QC 시험 관리 시스템</h1>
         </div>
 
         <form onSubmit={submit} className="grid gap-3">
@@ -195,8 +197,10 @@ function LoginForm() {
             </div>
           </label>
 
-          <div className="flex items-center gap-4 pt-1">
-            <label className="flex cursor-pointer items-center gap-1.5 select-none">
+          {/* 두 항목이 320px 한 줄에 아슬아슬하게 들어간다 — 넘치면 줄을 접게 flex-wrap.
+              터치 타깃 확보를 위해 라벨 높이를 8(=36px)로 잡는다. */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1">
+            <label className="flex h-8 cursor-pointer items-center gap-1.5 select-none">
               <input
                 type="checkbox"
                 checked={rememberId}
@@ -205,7 +209,7 @@ function LoginForm() {
               />
               <span className="text-xs text-muted-foreground">아이디 저장</span>
             </label>
-            <label className="flex cursor-pointer items-center gap-1.5 select-none">
+            <label className="flex h-8 cursor-pointer items-center gap-1.5 select-none">
               <input
                 type="checkbox"
                 checked={autoLogin}
@@ -217,7 +221,7 @@ function LoginForm() {
           </div>
 
           {error && (
-            <p className="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">{error}</p>
+            <p className="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs break-keep text-destructive">{error}</p>
           )}
 
           <Button type="submit" disabled={busy} className="w-full">

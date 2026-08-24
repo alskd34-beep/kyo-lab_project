@@ -4,7 +4,7 @@
  * Monday.com 스타일 그룹 보드 컴포넌트 (Phase 1)
  *
  * - 행들을 group 단위로 묶어 표시
- * - 컬러 상태 칩, 컬러 left-border, 펼치기/접기
+ * - 상태 칩(파랑 램프), 그룹 색 좌측 실선, 펼치기/접기
  * - 컬럼 정의(ColumnDef)에 따라 셀 렌더링 (텍스트, 칩, 날짜, 사람 등)
  *
  * Phase 1은 표시 전용. 상태/배정 변경은 Phase 2에서 추가 예정.
@@ -14,6 +14,7 @@ import { useState, useRef, useEffect } from 'react'
 import { DateField } from '@frontend/components/ui/date-field'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@frontend/components/ui/select'
+import { TesterAvatar } from '@frontend/lib/tester-profiles'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface BoardRow {
@@ -35,7 +36,7 @@ export interface ColumnDef {
   label: string
   kind?: CellKind
   width?: number  // px
-  /** chip 색상 매핑. value -> tailwind 색 fragment ('emerald'/'amber'/'red'/'blue'/'violet' 등) */
+  /** chip 색상 매핑. value -> CHIP_FILL 의 키('blue300'~'blue700'/'amber'/'red'/'slate' 등) */
   chipColor?: Record<string, string>
   /** 셀 편집 가능 여부 */
   editable?: boolean
@@ -101,7 +102,7 @@ export default function MondayBoard({ groups, columns, emptyMessage, onCellChang
 
   if (groups.every(g => g.rows.length === 0)) {
     return (
-      <p className="px-6 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+      <p className="px-6 py-10 text-center text-sm text-muted-foreground">
         {emptyMessage ?? '표시할 데이터가 없습니다.'}
       </p>
     )
@@ -117,7 +118,7 @@ export default function MondayBoard({ groups, columns, emptyMessage, onCellChang
           <div className="mb-2 flex items-center justify-end">
             <button
               onClick={allClosed ? expandAll : collapseAll}
-              className="inline-flex items-center gap-1 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-xs leading-normal font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-colors"
+              className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1 text-xs leading-normal font-medium text-muted-foreground hover:bg-muted/60 transition-colors"
             >
               {allClosed
                 ? <><ChevronDown size={13} /> 전체 펼치기</>
@@ -137,26 +138,26 @@ export default function MondayBoard({ groups, columns, emptyMessage, onCellChang
                 className="group/header flex w-full items-center gap-2 py-1.5 hover:opacity-90"
               >
                 {isClosed
-                  ? <ChevronRight size={16} className="text-slate-500 dark:text-slate-400" />
-                  : <ChevronDown  size={16} className="text-slate-500 dark:text-slate-400" />}
+                  ? <ChevronRight size={16} className="text-muted-foreground" />
+                  : <ChevronDown  size={16} className="text-muted-foreground" />}
                 <span className={`inline-block h-4 w-1.5 rounded-md ${group.color}`} />
                 <span className={`text-xs leading-normal font-bold ${textColorFromBg(group.color)}`}>
                   {group.label}
                 </span>
-                <span className="rounded-md bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-xs leading-normal font-semibold text-slate-600 dark:text-slate-300">
+                <span className="rounded-md bg-muted px-2 py-0.5 text-xs leading-normal font-semibold text-muted-foreground">
                   {group.rows.length}
                 </span>
               </button>
 
               {!isClosed && (
-                <div className={`overflow-x-auto rounded-r-md border-l-[6px] ${borderLeftFromBg(group.color)} bg-white dark:bg-slate-900 shadow-[0_1px_3px_rgba(0,0,0,0.06)]`}>
+                <div className={`overflow-x-auto rounded-r-md border-l ${borderLeftFromBg(group.color)} bg-card shadow-sm`}>
                   <table className="w-full border-collapse">
                     <thead>
-                      <tr className="border-b border-slate-200 dark:border-slate-700">
+                      <tr className="border-b border-border">
                         {columns.map(c => (
                           <th
                             key={c.key}
-                            className="px-3 py-2.5 text-left text-xs leading-normal font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50"
+                            className="px-3 py-2.5 text-left text-xs leading-normal font-semibold text-muted-foreground bg-muted/50"
                             style={c.width ? { width: c.width, minWidth: c.width } : undefined}
                           >
                             {c.label}
@@ -168,7 +169,7 @@ export default function MondayBoard({ groups, columns, emptyMessage, onCellChang
                       {group.rows.map(row => (
                         <tr
                           key={row.id}
-                          className="group/row border-b border-slate-100 dark:border-slate-800 last:border-0 hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors"
+                          className="group/row border-b border-border last:border-0 hover:bg-muted/40 transition-colors"
                         >
                           {columns.map(c => (
                             <td
@@ -202,27 +203,12 @@ const CHIP_FILL: Record<string, string> = {
   blue500: 'bg-blue-500   text-white hover:bg-blue-600',
   blue600: 'bg-blue-600   text-white hover:bg-blue-700',
   blue700: 'bg-blue-700   text-white hover:bg-blue-800',
-  emerald: 'bg-emerald-500 text-white hover:bg-emerald-600',
+  // 뜻이 있는 나머지 — 경고는 앰버, 오류·긴급은 빨강, 중립은 슬레이트.
+  // emerald/rose/teal 은 어느 chipColor 도 부르지 않는 무지개 잔재라 걷어냈다.
   amber:   'bg-amber-400   text-white hover:bg-amber-500',
   red:     'bg-red-500     text-white hover:bg-red-600',
   blue:    'bg-blue-500    text-white hover:bg-blue-600',
-  violet:  'bg-violet-500  text-white hover:bg-violet-600',
   slate:   'bg-slate-300   text-slate-700 hover:bg-slate-400 dark:bg-slate-600 dark:text-slate-100 dark:hover:bg-slate-500',
-  sky:     'bg-sky-500     text-white hover:bg-sky-600',
-  rose:    'bg-rose-500    text-white hover:bg-rose-600',
-  teal:    'bg-teal-500    text-white hover:bg-teal-600',
-}
-
-// 사람 이름 → 일관된 아바타 컬러 (해시 기반)
-const AVATAR_COLORS = [
-  'bg-blue-500',  'bg-emerald-500', 'bg-violet-500', 'bg-amber-500',
-  'bg-rose-500',  'bg-sky-500',     'bg-teal-500',   'bg-fuchsia-500',
-  'bg-blue-500','bg-lime-500',    'bg-orange-500', 'bg-pink-500',
-]
-function avatarColor(name: string): string {
-  let h = 0
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0
-  return AVATAR_COLORS[h % AVATAR_COLORS.length]
 }
 
 // ─── Editable cell ────────────────────────────────────────────────────────────
@@ -257,7 +243,7 @@ function EditableCell({ col, value, onChange }: EditableCellProps) {
       const colorKey = col.chipColor?.[value] ?? 'slate'
       const fillCls = value
         ? (CHIP_FILL[colorKey] ?? CHIP_FILL.slate)
-        : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700'
+        : 'bg-muted text-muted-foreground hover:bg-muted-foreground/20'
       return (
         <button
           type="button"
@@ -309,7 +295,7 @@ function EditableCell({ col, value, onChange }: EditableCellProps) {
         }}
         onOpenChange={open => { if (!open) setEditing(false) }}
       >
-        <SelectTrigger className="h-7 w-full px-2 text-xs border-blue-300 dark:border-blue-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900/40">
+        <SelectTrigger className="h-7 w-full px-2 text-xs border-blue-300 dark:border-blue-700 bg-card text-foreground focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900/40">
           <SelectValue placeholder="—" />
         </SelectTrigger>
         <SelectContent>
@@ -328,7 +314,7 @@ function EditableCell({ col, value, onChange }: EditableCellProps) {
       onChange={e => setDraft(e.target.value)}
       onBlur={commit}
       onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') cancel() }}
-      className="w-full rounded-md border border-blue-300 dark:border-blue-700 bg-white dark:bg-slate-800 px-1.5 py-0.5 text-xs text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900/40"
+      className="w-full rounded-md border border-blue-300 dark:border-blue-700 bg-card px-1.5 py-0.5 text-xs text-foreground outline-none focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900/40"
     />
   )
 }
@@ -340,21 +326,21 @@ function renderCellStatic(col: ColumnDef, val: unknown) {
     // chip 셀이지만 비어있을 때도 셀 전체를 회색으로 (monday 스타일)
     if (col.kind === 'chip') {
       return (
-        <div className="-mx-3 -my-2 flex h-full items-center justify-center px-3 py-2 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 text-xs">
+        <div className="-mx-3 -my-2 flex h-full items-center justify-center px-3 py-2 bg-muted text-muted-foreground text-xs">
           —
         </div>
       )
     }
-    return <span className="text-slate-300 dark:text-slate-600">—</span>
+    return <span className="text-muted-foreground/60">—</span>
   }
 
   switch (col.kind) {
     case 'mono':
-      return <span className="font-mono text-xs text-slate-600 dark:text-slate-300">{s}</span>
+      return <span className="font-mono text-xs text-muted-foreground">{s}</span>
     case 'number':
-      return <span className="tabular-nums text-slate-800 dark:text-slate-100">{s}</span>
+      return <span className="tabular-nums text-foreground">{s}</span>
     case 'date':
-      return <span className="font-mono text-xs leading-normal text-slate-600 dark:text-slate-300">{s}</span>
+      return <span className="font-mono text-xs leading-normal text-muted-foreground">{s}</span>
     case 'chip': {
       // Monday 스타일: 셀 전체 컬러로 채움 (td padding 무효화)
       const colorKey = col.chipColor?.[s] ?? 'slate'
@@ -366,46 +352,45 @@ function renderCellStatic(col: ColumnDef, val: unknown) {
       )
     }
     case 'person': {
-      const initial = s.charAt(0)
-      const color = avatarColor(s)
+      /* 사람 표시는 앱 공통 <TesterAvatar> 하나로 통일한다. 예전에는 여기서만
+         이름 해시로 12색 원형 배지를 그려, 같은 사람이 홈에서는 이모지 · 보드에서는
+         색 원으로 보였다. 무지개 팔레트(violet·sky·fuchsia…)도 여기서 사라진다. */
       return (
-        <div className="flex items-center gap-1.5">
-          <div className={`flex h-6 w-6 items-center justify-center rounded-full text-xs leading-normal font-bold text-white shadow-sm ${color}`}>
-            {initial}
-          </div>
-          <span className="text-xs text-slate-700 dark:text-slate-200">{s}</span>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <TesterAvatar name={s} size="xs" />
+          <span className="min-w-0 truncate text-xs text-foreground">{s}</span>
         </div>
       )
     }
     default:
-      return <span className="text-sm text-slate-700 dark:text-slate-200">{s}</span>
+      return <span className="text-sm text-foreground">{s}</span>
   }
 }
 
 // ─── helpers: 그룹 헤더 매칭 톤 (Tailwind 정적 클래스 보존) ─────────────────────
+// 그룹 색은 뜻이 아니라 "옆 그룹과 구분"일 뿐이라 무지개 대신 파랑 램프를 돈다
+// (STAGE_STYLE 과 같은 흐름 — 주차처럼 순서가 있는 그룹에서는 농도가 곧 순서가 된다).
 const TEXT_BY_BG: Record<string, string> = {
+  'bg-blue-700':    'text-blue-800 dark:text-blue-200',
+  'bg-blue-600':    'text-blue-700 dark:text-blue-300',
   'bg-blue-500':    'text-blue-700 dark:text-blue-300',
-  'bg-emerald-500': 'text-emerald-700 dark:text-emerald-300',
+  'bg-blue-400':    'text-blue-600 dark:text-blue-300',
+  'bg-blue-300':    'text-blue-600 dark:text-blue-300',
+  'bg-blue-200':    'text-blue-600 dark:text-blue-300',
   'bg-amber-500':   'text-amber-700 dark:text-amber-300',
   'bg-red-500':     'text-red-700 dark:text-red-300',
-  'bg-violet-500':  'text-violet-700 dark:text-violet-300',
-  'bg-sky-500':     'text-sky-700 dark:text-sky-300',
-  'bg-rose-500':    'text-rose-700 dark:text-rose-300',
-  'bg-teal-500':    'text-teal-700 dark:text-teal-300',
-  'bg-fuchsia-500': 'text-fuchsia-700 dark:text-fuchsia-300',
   'bg-slate-500':   'text-slate-700 dark:text-slate-300',
 }
 const BORDER_BY_BG: Record<string, string> = {
+  'bg-blue-700':    'border-blue-600',
+  'bg-blue-600':    'border-blue-500',
   'bg-blue-500':    'border-blue-400',
-  'bg-emerald-500': 'border-emerald-400',
+  'bg-blue-400':    'border-blue-300',
+  'bg-blue-300':    'border-blue-300',
+  'bg-blue-200':    'border-blue-200',
   'bg-amber-500':   'border-amber-400',
   'bg-red-500':     'border-red-400',
-  'bg-violet-500':  'border-violet-400',
-  'bg-sky-500':     'border-sky-400',
-  'bg-rose-500':    'border-rose-400',
-  'bg-teal-500':    'border-teal-400',
-  'bg-fuchsia-500': 'border-fuchsia-400',
   'bg-slate-500':   'border-slate-400',
 }
-const textColorFromBg = (bg: string) => TEXT_BY_BG[bg] ?? 'text-slate-700 dark:text-slate-200'
+const textColorFromBg = (bg: string) => TEXT_BY_BG[bg] ?? 'text-foreground'
 const borderLeftFromBg = (bg: string) => BORDER_BY_BG[bg] ?? 'border-slate-300'

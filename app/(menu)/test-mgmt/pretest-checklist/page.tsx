@@ -123,7 +123,12 @@ function isSimilarName(a: string, b: string): boolean {
 }
 
 /** 품목 사이드바 한 줄의 고정 높이(px). 가상 스크롤 계산의 기준이라 마크업과 반드시 일치해야 한다. */
-const PRODUCT_ITEM_HEIGHT = 56
+/**
+ * 첫 페인트에서 아직 실측값이 없을 때만 쓰는 대략치.
+ * 실제 높이는 useVirtualWindow 가 렌더된 행(itemRef)을 재서 쓴다.
+ * 루트 폰트가 18px 이라 목록 행의 `h-14` 는 56px 이 아니라 63px 이다.
+ */
+const PRODUCT_ITEM_FALLBACK = 63
 
 export default function PretestChecklistPage() {
   const uid = useId()
@@ -218,7 +223,8 @@ export default function PretestChecklistPage() {
     end: productEnd,
     padTop: productPadTop,
     padBottom: productPadBottom,
-  } = useVirtualWindow(filtered.length, PRODUCT_ITEM_HEIGHT)
+    itemRef: productItemRef,
+  } = useVirtualWindow(filtered.length, PRODUCT_ITEM_FALLBACK)
   const windowedProducts = filtered.slice(productStart, productEnd)
 
   const sortedNotes = useMemo(() => {
@@ -336,25 +342,29 @@ export default function PretestChecklistPage() {
 
   return (
     <div className="flex min-h-0 flex-col gap-4 p-4 md:p-6 lg:h-[calc(100svh-4rem)]">
-      {/* 헤더 */}
-      <div className="flex min-w-0 flex-wrap items-center gap-3">
-        <ClipboardCheck className="size-5 shrink-0 text-foreground" />
+      {/* 헤더
+          제목 text-lg · 부가정보 text-xs 로 다른 화면과 위계를 맞춘다.
+          부제는 화면 이름을 되풀이하던 문장을 줄이고 **자동으로 무엇이 남는지**만 남겼다.
+          shrink-0: lg 에서 화면 높이에 못 박힌 열이라, 아래가 길어지면 머리말이 눌린다. */}
+      <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-3">
+        <ClipboardCheck className="size-5 shrink-0 text-muted-foreground" />
         <div className="min-w-0">
-          <h1 className="text-xl font-semibold text-foreground">시험 전 확인사항</h1>
-          <p className="text-sm text-muted-foreground">
-            품목코드·품목명별 시험 전 점검/주의사항·이슈를 일시·작성자와 함께 적재합니다.
+          <h1 className="text-lg font-semibold text-foreground">시험 전 확인사항</h1>
+          <p className="text-xs leading-normal break-keep text-muted-foreground">
+            품목별로 쌓이며, 발생 일시와 작성자는 자동으로 함께 기록됩니다.
           </p>
         </div>
       </div>
 
       {error && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive">
+        <div className="shrink-0 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm font-medium break-keep text-destructive">
           {error}
         </div>
       )}
 
+      {/* 성공 알림 초록은 CLAUDE.md 가 명시한 브랜드색 예외다(성공 토스트와 같은 색을 쓴다) */}
       {okMsg && (
-        <div className="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700">
+        <div className="shrink-0 rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium break-keep text-emerald-700">
           {okMsg}
         </div>
       )}
@@ -392,20 +402,27 @@ export default function PretestChecklistPage() {
             ) : (
               <ul>
                 {productPadTop > 0 && <li aria-hidden style={{ height: productPadTop }} />}
-                {windowedProducts.map((p) => (
-                  <li key={p.id}>
+                {windowedProducts.map((p, i) => (
+                  /* 첫 행에 itemRef 를 달면 훅이 실제 높이를 재서 창을 계산한다 —
+                     클래스(h-14)와 상수가 어긋날 일이 없어진다. */
+                  <li key={p.id} ref={i === 0 ? productItemRef : undefined}>
                     <button
                       type="button"
                       onClick={() => setSelected(p)}
                       className={cn(
-                        "flex h-14 w-full flex-col items-start justify-center gap-0.5 overflow-hidden border-b px-4 text-left transition-colors hover:bg-muted/50",
-                        selected?.id === p.id && "bg-primary/5"
+                        "flex h-14 w-full flex-col items-start justify-center gap-0.5 overflow-hidden border-b px-4 text-left transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                        // 선택 표시가 bg-primary/5 로는 거의 보이지 않았다 — 배경을 한 단계 올리고
+                        // 품목명 잉크도 브랜드색으로 바꿔 '지금 보고 있는 품목'이 바로 읽히게 한다.
+                        selected?.id === p.id && "bg-primary/10"
                       )}
                     >
                       <span className="font-mono text-xs leading-normal font-semibold text-muted-foreground">
                         {p.productCode}
                       </span>
-                      <span className="w-full truncate text-sm font-medium text-foreground">
+                      <span className={cn(
+                        "w-full truncate text-sm font-medium text-foreground",
+                        selected?.id === p.id && "font-semibold text-primary",
+                      )}>
                         {p.name}
                       </span>
                     </button>
@@ -416,7 +433,7 @@ export default function PretestChecklistPage() {
             )}
           </div>
           <div className="border-t px-4 py-2 text-xs text-muted-foreground">
-            총 <span className="font-semibold text-foreground">{filtered.length}</span>개 품목
+            총 <span className="font-semibold tabular-nums text-foreground">{filtered.length}</span>개 품목
           </div>
         </Card>
 
@@ -424,15 +441,17 @@ export default function PretestChecklistPage() {
         <Card className="min-h-0 gap-0 overflow-hidden py-0">
           {!selected ? (
             <div className="flex min-h-[420px] items-center justify-center p-6 text-center">
+              {/* 아이콘 칩은 rounded-md — 원형은 아바타·점·원형 아이콘 버튼처럼
+                  원이 꼭 필요한 자리에만 쓴다(프로젝트 모서리 규칙). */}
               <div className="max-w-sm">
-                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+                <div className="mx-auto flex size-12 items-center justify-center rounded-md bg-muted">
                   <PackageOpen className="size-5 text-muted-foreground" />
                 </div>
                 <h2 className="mt-4 text-base font-semibold text-foreground">
                   품목을 선택하세요
                 </h2>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  좌측에서 품목을 선택하면 시험 전 확인사항을 등록·관리할 수 있습니다.
+                <p className="mt-2 text-xs leading-normal break-keep text-muted-foreground">
+                  왼쪽에서 품목을 선택하면 시험 전 확인사항을 등록·관리할 수 있습니다.
                 </p>
               </div>
             </div>
@@ -442,21 +461,22 @@ export default function PretestChecklistPage() {
                 <p className="font-mono text-xs leading-normal font-semibold text-muted-foreground">
                   {selected.productCode}
                 </p>
-                <div className="flex items-center gap-2">
-                  <h2 className="truncate text-base font-semibold text-foreground">
+                <div className="flex min-w-0 items-center gap-2">
+                  <h2 className="min-w-0 truncate text-base font-semibold text-foreground">
                     {selected.name}
                   </h2>
-                  <Badge variant="secondary">{notes.length}건</Badge>
+                  <Badge variant="secondary" className="shrink-0 tabular-nums">{notes.length}건</Badge>
                 </div>
               </div>
 
               <div className="min-h-0 flex-1 overflow-auto p-3 md:p-4">
                 {/* 입력 폼 */}
                 <div className="mb-4 rounded-md border bg-muted/30 p-3 md:p-4">
-                  <div className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <UserIcon className="size-3" /> 작성자
-                    <span className="font-medium text-foreground">{myName}</span>
-                    <span>· 발생 일시·작성시각은 자동 기록</span>
+                  {/* flex-wrap: 320px 에서 한 줄에 다 못 들어간다 — 줄여 넣지 말고 접는다 */}
+                  <div className="mb-2 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-xs leading-normal text-muted-foreground">
+                    <UserIcon className="size-3 shrink-0" /> 작성자
+                    <span className="min-w-0 truncate font-medium text-foreground">{myName}</span>
+                    <span className="break-keep">· 발생 일시·작성시각은 자동 기록</span>
                   </div>
                   <div className="grid gap-2.5 md:grid-cols-2">
                     <div>
@@ -493,8 +513,10 @@ export default function PretestChecklistPage() {
                       className="w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
                     />
                   </div>
-                  {/* 유사 품목 동시 적용 */}
-                  <div className="mt-3 rounded-md border border-dashed border-input bg-background/60 p-2.5">
+                  {/* 유사 품목 동시 적용
+                      테두리 상자를 걷어냈다 — 패널 Card > 입력 상자 > 이 상자로 테두리가 세 겹이었다.
+                      테두리를 가진 층은 하나만 두고, 안쪽은 실선 하나(border-t)로 나눈다. */}
+                  <div className="mt-3 border-t border-dashed pt-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <Button
                         type="button"
@@ -505,25 +527,28 @@ export default function PretestChecklistPage() {
                         <Copy className="size-3.5" />
                         유사 품목에도 적용
                       </Button>
-                      <span className="text-xs leading-normal text-muted-foreground">
+                      <span className="min-w-0 text-xs leading-normal break-keep text-muted-foreground">
                         {extraIds.size > 0
-                          ? <>이 품목 포함 <span className="font-semibold text-foreground">{extraIds.size + 1}개</span> 품목에 동일하게 등록됩니다.</>
+                          ? <>이 품목 포함 <span className="font-semibold tabular-nums text-foreground">{extraIds.size + 1}개</span> 품목에 동일하게 등록됩니다.</>
                           : "동일한 확인사항을 여러 유사 품목에 한 번에 등록할 수 있습니다."}
                       </span>
                     </div>
                     {extraProducts.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         {extraProducts.map(p => (
+                          /* max-w-full + truncate: 긴 품목명 하나가 칩을 화면 밖까지 밀어낸다.
+                             X 버튼은 size-6(27px)로 키웠다 — p-0.5 짜리 18px 은 손가락으로 못 누른다. */
                           <span
                             key={p.id}
-                            className="inline-flex items-center gap-1 rounded-md border bg-muted/60 py-0.5 pr-1 pl-2 text-xs leading-normal text-foreground"
+                            className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-md border bg-muted/60 py-0.5 pr-1 pl-2 text-xs leading-normal text-foreground"
                           >
-                            {p.name}
+                            <span className="min-w-0 truncate">{p.name}</span>
                             <button
                               type="button"
                               onClick={() => toggleExtra(p.id)}
                               title="제외"
-                              className="rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                              aria-label={`${p.name} 제외`}
+                              className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                             >
                               <X className="size-3" />
                             </button>
@@ -539,13 +564,68 @@ export default function PretestChecklistPage() {
                       disabled={busy || !content.trim()}
                     >
                       <Plus />
-                      {extraIds.size > 0 ? `${extraIds.size + 1}개 품목에 등록` : "등록"}
+                      <span className="tabular-nums">
+                        {extraIds.size > 0 ? `${extraIds.size + 1}개 품목에 등록` : "등록"}
+                      </span>
                     </Button>
                   </div>
                 </div>
 
-                {/* 목록 테이블 */}
-                <Card className="gap-0 overflow-hidden py-0">
+                {/* 목록 — 모바일 카드 / 데스크톱 표
+                    4열짜리 표를 320px 화면에 그대로 두면 글자가 세로로 한 자씩 쌓이거나
+                    화면이 옆으로 밀린다. `/home` 의 「기한 임박 오더」와 같은 구조로,
+                    모바일에서는 칸막이 대신 실선 하나로 나눈 요약 목록을 그린다.
+                    카드에는 꼭 필요한 값만 남긴다 — 확인사항 · 특이사항 · 발생일시 · 작성자.
+                    (이슈 로트는 있을 때만, 나머지 상세는 행을 눌러 여는 패널에서 본다) */}
+                <div className="divide-y overflow-hidden rounded-md border md:hidden">
+                  {notesLoading ? (
+                    Array.from({ length: 4 }, (_, index) => (
+                      <div key={index} className="flex flex-col gap-2 px-3 py-3">
+                        <Skeleton className="h-4 w-3/4" />
+                        <div className="flex items-center justify-between gap-2">
+                          <Skeleton className="h-3 w-24" />
+                          <Skeleton className="h-3 w-16" />
+                        </div>
+                      </div>
+                    ))
+                  ) : notes.length === 0 ? (
+                    <p className="px-4 py-10 text-center text-sm break-keep text-muted-foreground">
+                      등록된 시험 전 확인사항이 없습니다. 위 입력란에서 등록하세요.
+                    </p>
+                  ) : (
+                    sortedNotes.map((n) => (
+                      <button
+                        key={n.id}
+                        type="button"
+                        onClick={() => setNoteTarget(n)}
+                        className="flex w-full min-w-0 flex-col gap-1 px-3 py-3 text-left transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                      >
+                        <span className="min-w-0 text-sm font-medium break-keep text-foreground">
+                          {n.content}
+                        </span>
+                        {n.remark && (
+                          <span className="min-w-0 text-xs leading-normal break-keep text-muted-foreground">
+                            {n.remark}
+                          </span>
+                        )}
+                        <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs leading-normal text-muted-foreground">
+                          <span className="font-mono tabular-nums">{fmtDT(n.occurredAt)}</span>
+                          <span className="text-border">·</span>
+                          <span className="min-w-0 truncate">{n.createdByName || "—"}</span>
+                          {n.issueLot && (
+                            <>
+                              <span className="text-border">·</span>
+                              <span className="font-mono">로트 {n.issueLot}</span>
+                            </>
+                          )}
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+
+                {/* md:flex — Card 기본이 flex flex-col 이라야 안쪽 Table 컨테이너가 제 높이를 잡는다 */}
+                <Card className="hidden gap-0 overflow-hidden py-0 md:flex">
                   <Table>
                     {/* 논리 열 4개(일시·확인사항·이슈로트·작성) + 2필드 묶음 2개 → 최대 6칸.
                         칸 순서(펼침 / 합침):
@@ -594,7 +674,7 @@ export default function PretestChecklistPage() {
                         ))
                       ) : notes.length === 0 ? (
                         <TableRow className="hover:bg-transparent">
-                          <TableCell colSpan={4} className="py-12 text-center text-sm text-muted-foreground">
+                          <TableCell colSpan={4} className="px-4 py-12 text-center text-sm break-keep text-muted-foreground">
                             등록된 시험 전 확인사항이 없습니다. 위 입력란에서 등록하세요.
                           </TableCell>
                         </TableRow>
@@ -729,24 +809,24 @@ export default function PretestChecklistPage() {
 
           <div className="max-h-[45vh] min-h-[120px] overflow-y-auto rounded-md border">
             {pickerCandidates.length === 0 ? (
-              <p className="py-10 text-center text-sm text-muted-foreground">
+              <p className="px-4 py-10 text-center text-sm break-keep text-muted-foreground">
                 {similarOnly ? "이름이 비슷한 품목이 없습니다. 위 체크를 해제하면 전체 품목에서 선택할 수 있습니다." : "품목이 없습니다."}
               </p>
             ) : (
               <ul className="divide-y">
                 {pickerCandidates.map(p => (
                   <li key={p.id}>
-                    <label className="flex cursor-pointer items-center gap-2.5 px-3 py-2 hover:bg-muted/50">
+                    <label className="flex min-w-0 cursor-pointer items-center gap-2.5 px-3 py-2 hover:bg-muted/50">
                       <input
                         type="checkbox"
                         className="cb-custom"
                         checked={extraIds.has(p.id)}
                         onChange={() => toggleExtra(p.id)}
                       />
-                      <span className="font-mono text-xs leading-normal font-semibold text-muted-foreground">
+                      <span className="shrink-0 font-mono text-xs leading-normal font-semibold text-muted-foreground">
                         {p.productCode}
                       </span>
-                      <span className="truncate text-sm font-medium text-foreground">
+                      <span className="min-w-0 truncate text-sm font-medium text-foreground">
                         {p.name}
                       </span>
                     </label>
@@ -759,7 +839,7 @@ export default function PretestChecklistPage() {
 
           <DialogFooter className="sm:items-center sm:justify-between">
             <span className="text-xs text-muted-foreground sm:mr-auto">
-              <span className="font-semibold text-foreground">{extraIds.size}</span>개 추가 선택됨
+              <span className="font-semibold tabular-nums text-foreground">{extraIds.size}</span>개 추가 선택됨
             </span>
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setExtraIds(new Set())} disabled={extraIds.size === 0}>

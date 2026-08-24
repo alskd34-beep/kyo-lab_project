@@ -39,8 +39,9 @@ export default function TestItemGroupsPage() {
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden p-4 md:p-6">
+      {/* 오류색은 시맨틱 토큰(destructive)으로 — 화면마다 red-50/red-700 을 직접 고르면 톤이 갈린다 */}
       {error && (
-        <div className="shrink-0 rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+        <div className="shrink-0 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm break-keep text-destructive">
           {error}
         </div>
       )}

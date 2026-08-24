@@ -30,6 +30,8 @@ import {
   DialogTitle,
 } from "@frontend/components/ui/dialog"
 import { ManagementDrawer } from "@frontend/components/common/management-drawer"
+import { PageHeader } from "@frontend/components/common/page-header"
+import { CATEGORIES, CategoryBadge, type Category } from "@frontend/components/test-mgmt/test-category"
 import { Input } from "@frontend/components/ui/input"
 import { SortColumnHeader, sortCol, type SortDir } from "@frontend/components/ui/table-sort"
 import { StatusFilterTabs, type StatusFilterValue } from "@frontend/components/ui/status-filter-tabs"
@@ -42,27 +44,8 @@ import {
   TableRow,
 } from "@frontend/components/ui/table"
 
-const CATEGORIES = [
-  "성상·포장",
-  "이화학",
-  "함량시험",
-  "확인시험",
-  "기기분석",
-  "안전성",
-  "기타",
-] as const
-
-type Category = (typeof CATEGORIES)[number]
-
-const CATEGORY_COLORS: Record<string, string> = {
-  "성상·포장": "border-fuchsia-300 bg-fuchsia-100 text-fuchsia-800",
-  이화학: "border-blue-300 bg-blue-100 text-blue-800",
-  함량시험: "border-blue-300 bg-blue-100 text-blue-800",
-  확인시험: "border-cyan-300 bg-cyan-100 text-cyan-800",
-  기기분석: "border-amber-300 bg-amber-100 text-amber-800",
-  안전성: "border-rose-300 bg-rose-100 text-rose-800",
-  기타: "border-slate-300 bg-slate-100 text-slate-700",
-}
+/* 대분류 목록·색은 `test-mgmt/test-category` 하나만 쓴다.
+   여기에 같은 분류를 다른 색으로 복사해 두면 마스터 화면과 이 화면의 같은 분류가 다른 색으로 보인다. */
 
 interface ProductRow {
   id: string
@@ -110,7 +93,12 @@ interface TestItemGroupItemRow {
 }
 
 /** 품목 사이드바 한 줄의 고정 높이(px). 가상 스크롤 계산의 기준이라 마크업과 반드시 일치해야 한다. */
-const PRODUCT_ITEM_HEIGHT = 64
+/**
+ * 첫 페인트에서 아직 실측값이 없을 때만 쓰는 대략치.
+ * 실제 높이는 useVirtualWindow 가 렌더된 행(itemRef)을 재서 쓴다.
+ * 루트 폰트가 18px 이라 목록 행의 `h-16` 은 64px 이 아니라 72px 이다.
+ */
+const PRODUCT_ITEM_FALLBACK = 72
 
 export default function TestItemsPage() {
   const [products, setProducts] = useState<ProductRow[]>([])
@@ -119,6 +107,8 @@ export default function TestItemsPage() {
     null
   )
   const [linkedItems, setLinkedItems] = useState<ProductTestItemRow[]>([])
+  /** 품목을 바꿀 때 연결 목록을 다시 받는 동안 — 빈 목록 문구가 먼저 번쩍이지 않게 Skeleton 을 세운다. */
+  const [linkedLoading, setLinkedLoading] = useState(false)
   const [productSearch, setProductSearch] = useState("")
   const [productStatusFilter, setProductStatusFilter] = useState<StatusFilterValue>("all")
   const [addDialogOpen, setAddDialogOpen] = useState(false)
@@ -183,29 +173,28 @@ export default function TestItemsPage() {
       })
       return
     }
-    void loadLinkedItems(selectedProduct.id)
+    setLinkedLoading(true)
+    void loadLinkedItems(selectedProduct.id).finally(() => setLinkedLoading(false))
   }, [selectedProduct])
 
+  /* 읽기 호출은 공용 `api` 클라이언트를 쓴다 — 서버의 `{ error }` 를 한국어 문장으로 뽑아
+     주므로 배너에 `Error: {...}` 같은 원시 문자열이 뜨지 않는다(이 파일의 그룹 관련 함수와 동일). */
   async function loadProducts() {
     try {
-      const res = await fetch("/api/products")
-      if (!res.ok) throw new Error(await res.text())
-      const data = (await res.json()) as { rows: ProductRow[] }
+      const data = await api.get<{ rows: ProductRow[] }>("/api/products")
       setProducts(data.rows)
     } catch (e) {
-      setError(String(e))
+      setError(errorMessage(e, "품목 목록을 불러오지 못했습니다."))
     }
   }
 
   async function loadAllTestItems() {
     setItemsLoading(true)
     try {
-      const res = await fetch("/api/test-items")
-      if (!res.ok) throw new Error(await res.text())
-      const data = (await res.json()) as { rows: TestItemRow[] }
+      const data = await api.get<{ rows: TestItemRow[] }>("/api/test-items")
       setAllTestItems(data.rows)
     } catch (e) {
-      setError(String(e))
+      setError(errorMessage(e, "시험항목 목록을 불러오지 못했습니다."))
     } finally {
       setItemsLoading(false)
     }
@@ -213,13 +202,13 @@ export default function TestItemsPage() {
 
   async function loadLinkedItems(productId: string): Promise<ProductTestItemRow[]> {
     try {
-      const res = await fetch(`/api/product-test-items?productId=${productId}`)
-      if (!res.ok) throw new Error(await res.text())
-      const data = (await res.json()) as { rows: ProductTestItemRow[] }
+      const data = await api.get<{ rows: ProductTestItemRow[] }>(
+        `/api/product-test-items?productId=${productId}`
+      )
       setLinkedItems(data.rows)
       return data.rows
     } catch (e) {
-      setError(String(e))
+      setError(errorMessage(e, "연결된 시험항목을 불러오지 못했습니다."))
       return []
     }
   }
@@ -264,14 +253,15 @@ export default function TestItemsPage() {
     return [...list].sort((a, b) => Number(b.isActive) - Number(a.isActive))
   }, [products, deferredProductSearch, productStatusFilter])
 
-  /** 품목이 2,000건까지 오므로 보이는 구간만 그린다. 항목 높이는 PRODUCT_ITEM_HEIGHT 로 고정돼 있다. */
+  /** 품목이 2,000건까지 오므로 보이는 구간만 그린다. 행 높이는 훅이 실제로 재서 쓴다(itemRef). */
   const {
     containerRef: productListRef,
     start: productStart,
     end: productEnd,
     padTop: productPadTop,
     padBottom: productPadBottom,
-  } = useVirtualWindow(filteredProducts.length, PRODUCT_ITEM_HEIGHT)
+    itemRef: productItemRef,
+  } = useVirtualWindow(filteredProducts.length, PRODUCT_ITEM_FALLBACK)
   const windowedProducts = filteredProducts.slice(productStart, productEnd)
 
   const productStatusCounts = useMemo(() => {
@@ -444,7 +434,7 @@ export default function TestItemsPage() {
       setSelectedToAdd(new Set())
       setAddDialogOpen(false)
     } catch (e) {
-      setError(String(e))
+      setError(errorMessage(e, "시험항목을 추가하지 못했습니다."))
     } finally {
       setAddLoading(false)
     }
@@ -491,7 +481,7 @@ export default function TestItemsPage() {
       setSelectedLinked(new Set())
       setBulkDeleteOpen(false)
     } catch (e) {
-      setError(String(e))
+      setError(errorMessage(e, "선택한 시험항목을 삭제하지 못했습니다."))
       await loadLinkedItems(selectedProduct.id)
     } finally {
       setBulkDeleteLoading(false)
@@ -512,9 +502,9 @@ export default function TestItemsPage() {
     setCopySourceItems([])
     setCopySelected(new Set())
     try {
-      const res = await fetch(`/api/product-test-items?productId=${product.id}`)
-      if (!res.ok) throw new Error(await res.text())
-      const data = (await res.json()) as { rows: ProductTestItemRow[] }
+      const data = await api.get<{ rows: ProductTestItemRow[] }>(
+        `/api/product-test-items?productId=${product.id}`
+      )
       setCopySourceItems(data.rows)
       // 현재 품목에 아직 없는 항목만 기본 선택(중복 제외)
       setCopySelected(
@@ -525,7 +515,7 @@ export default function TestItemsPage() {
         )
       )
     } catch (e) {
-      setError(String(e))
+      setError(errorMessage(e, "원본 품목의 시험항목을 불러오지 못했습니다."))
     }
   }
   function toggleCopySelect(testItemId: string) {
@@ -562,7 +552,7 @@ export default function TestItemsPage() {
       if (refreshed.length > 0) await reorderLinked(refreshed)
       setCopyDialogOpen(false)
     } catch (e) {
-      setError(String(e))
+      setError(errorMessage(e, "시험항목을 복사하지 못했습니다."))
     } finally {
       setCopyLoading(false)
     }
@@ -645,40 +635,39 @@ export default function TestItemsPage() {
   const hasSelection = !!selectedProduct
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto p-4 md:p-6">
-      {/* 페이지 헤더 */}
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <Link2 className="size-5 shrink-0 text-muted-foreground" />
-          <div className="min-w-0">
-            <h1 className="text-xl font-semibold text-foreground">
-              품목별 시험항목 관리
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              품목 마스터와 시험항목 마스터를 연결하고 순서를 관리합니다.
-            </p>
-          </div>
-        </div>
-        <div className="hidden flex-1 md:block" />
-        {hasSelection && (
+    /* md 이상: 페이지는 고정 높이고 좌(목록)·우(연결 항목) 두 판이 각자 스크롤한다 —
+       그래야 가상 스크롤이 실제로 보이는 높이를 잰다(예전에는 바깥이 통째로 늘어나
+       사이드바가 품목 수만큼 세로로 자라 가상화가 무력해졌다).
+       md 미만: 두 판을 각각 반쪽 높이로 눌러 놓으면 툴바만으로 화면이 차 버린다.
+       모바일에서는 페이지 자체가 스크롤하고 두 판은 내용만큼 자란다. */
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto p-4 md:overflow-hidden md:p-6">
+      {/* 화면 이름을 되풀이하는 부제 대신 지금 다루는 품목 수를 적는다 */}
+      <PageHeader
+        icon={Link2}
+        title="품목별 시험항목 관리"
+        count={products.length}
+        countSuffix="개"
+        actions={hasSelection ? (
           <Button onClick={openAddDialog} size="lg">
             <Plus />
             시험항목 추가
           </Button>
-        )}
-      </div>
+        ) : undefined}
+      />
 
       {error && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive">
+        <div className="shrink-0 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm break-keep text-destructive">
           {error}
         </div>
       )}
 
-      <div className="grid min-h-0 grid-cols-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+      {/* 모바일은 세로로 쌓고(1단) 페이지가 스크롤, md 부터 판을 나눠 각자 스크롤,
+          lg 부터 좌우 2단. 사이드바 폭 320px 은 lg(1024px) 이상에서만 쓴다. */}
+      <div className="grid min-h-0 shrink-0 grid-cols-1 gap-4 md:flex-1 md:grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[320px_minmax(0,1fr)] lg:grid-rows-1">
         {/* 품목 사이드바 */}
         <Card className="flex min-h-0 flex-col gap-0 overflow-hidden py-0 max-h-[40vh] lg:max-h-none">
-          <div className="border-b px-4 py-3">
-            <p className="mb-2 text-sm font-medium text-foreground">품목 선택</p>
+          <div className="shrink-0 border-b px-4 py-3">
+            <p className="mb-2 text-sm font-semibold text-foreground">품목 선택</p>
             <div className="relative">
               <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -688,13 +677,15 @@ export default function TestItemsPage() {
                 className="h-9 pl-9"
               />
             </div>
+            {/* 320px 폭에서는 세그먼트 3칸의 기본 좌우 여백(px-3)만으로 사이드바를 넘어
+                '비활성' 칸이 잘렸다. 글자를 줄이는 대신 칸 여백을 좁히고 폭을 3등분한다. */}
             <StatusFilterTabs
               value={productStatusFilter}
               onChange={setProductStatusFilter}
               counts={productStatusCounts}
               activeLabel="활성"
               inactiveLabel="비활성"
-              className="mt-2 w-full"
+              className="mt-2 flex w-full [&>button]:min-w-0 [&>button]:flex-1 [&>button]:justify-center [&>button]:px-1.5 [&>button]:whitespace-nowrap sm:[&>button]:px-3"
             />
           </div>
 
@@ -708,36 +699,40 @@ export default function TestItemsPage() {
             ) : (
               <ul>
                 {productPadTop > 0 && <li aria-hidden style={{ height: productPadTop }} />}
-                {windowedProducts.map((product) => {
+                {windowedProducts.map((product, i) => {
                   const isSelected = selectedProduct?.id === product.id
                   return (
-                    <li key={product.id}>
+                    /* 첫 행에 itemRef 를 달면 훅이 실제 높이를 재서 창을 계산한다 —
+                       클래스(h-16)와 상수가 어긋날 일이 없어진다. */
+                    <li key={product.id} ref={i === 0 ? productItemRef : undefined}>
                       <button
                         type="button"
                         onClick={() => setSelectedProduct(product)}
+                        aria-current={isSelected ? "true" : undefined}
                         className={cn(
                           "h-16 w-full overflow-hidden border-b border-l-2 px-4 py-3 text-left transition-colors",
+                          "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none",
                           isSelected
                             ? "border-l-primary bg-primary/5"
                             : "border-l-transparent hover:bg-muted/50"
                         )}
                       >
-                        <div className="flex items-center gap-2">
+                        <div className="flex min-w-0 items-center gap-2">
                           <span
                             className={cn(
-                              "font-mono text-xs leading-normal font-medium",
+                              "shrink-0 font-mono text-xs leading-normal font-medium",
                               isSelected ? "text-primary" : "text-muted-foreground"
                             )}
                           >
                             {product.productCode}
                           </span>
                           {product.isActive ? (
-                            <Tag color="green" className="text-xs leading-normal">활성</Tag>
+                            <Tag color="blue" className="text-xs leading-normal">활성</Tag>
                           ) : (
                             <Tag color="mono" className="text-xs leading-normal">비활성</Tag>
                           )}
                         </div>
-                        <p className="mt-0.5 truncate text-sm leading-snug font-medium text-foreground">
+                        <p className="mt-0.5 min-w-0 truncate text-sm leading-snug font-medium text-foreground">
                           {product.name}
                         </p>
                       </button>
@@ -749,37 +744,34 @@ export default function TestItemsPage() {
             )}
           </div>
 
-          <div className="border-t bg-muted/30 px-4 py-2.5">
-            <p className="text-xs text-muted-foreground">
-              총{" "}
-              <span className="font-semibold text-foreground">
-                {filteredProducts.length}
-              </span>
-              개 품목
+          {/* 머리말이 이미 전체 품목 수를 말하므로 여기는 '지금 몇 개가 걸러져 보이는가'를 적는다.
+              다른 마스터 화면 필터 줄과 같은 표기(N / M)로 맞췄다. */}
+          <div className="shrink-0 border-t bg-muted/30 px-4 py-2.5">
+            <p className="text-xs tabular-nums text-muted-foreground">
+              <span className="font-semibold text-foreground">{filteredProducts.length}</span>
+              {" / "}
+              {products.length}개 표시
             </p>
           </div>
         </Card>
 
         {/* 시험항목 패널 */}
-        <Card className="gap-0 overflow-hidden py-0">
+        <Card className="flex min-h-0 flex-col gap-0 overflow-hidden py-0">
           {!selectedProduct ? (
-            <div className="flex min-h-[420px] items-center justify-center p-6 text-center">
-              <div className="max-w-sm">
-                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                  <PackagePlus className="size-6" />
-                </div>
-                <h2 className="mt-4 text-base font-semibold text-foreground">
-                  품목을 선택하세요
-                </h2>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  좌측에서 품목을 선택하면 연결된 시험항목을 확인하고 추가하거나
-                  정리할 수 있습니다.
+            /* 빈 상태 — 아이콘을 원형 칩에 담지 않는다(원형은 아바타·점·원형 버튼만).
+               문구도 화면 사용법 설명을 늘어놓는 대신 한 줄로 줄였다. */
+            <div className="flex min-h-40 flex-1 items-center justify-center p-6 text-center">
+              <div className="max-w-xs">
+                <PackagePlus className="mx-auto size-6 text-muted-foreground" />
+                <p className="mt-3 text-sm font-medium text-foreground">품목을 선택하세요</p>
+                <p className="mt-1 text-xs leading-normal break-keep text-muted-foreground">
+                  왼쪽 목록에서 품목을 고르면 연결된 시험항목이 여기에 나옵니다.
                 </p>
               </div>
             </div>
           ) : (
             <div className="flex min-h-0 flex-1 flex-col">
-              <div className="border-b px-4 py-4">
+              <div className="shrink-0 border-b px-4 py-4">
                 <div className="flex flex-col gap-3 md:flex-row md:items-center">
                   <div className="min-w-0 flex-1">
                     <p className="font-mono text-xs leading-normal font-medium text-muted-foreground">
@@ -788,21 +780,22 @@ export default function TestItemsPage() {
                     <h2 className="truncate text-base font-semibold text-foreground">
                       {selectedProduct.name}
                     </h2>
-                    <p className="mt-1 text-xs text-muted-foreground">
+                    {/* 배지로 되풀이하던 연결·필수·선택 건수를 한 줄 사실로 내렸다.
+                        같은 '필수'를 헤더는 초록, 표는 빨강 점으로 칠하던 어긋남도 함께 사라진다. */}
+                    <p className="mt-1 text-xs leading-normal break-keep text-muted-foreground">
                       {selectedProduct.packageSpec ?? "포장규격 미지정"}
                       {selectedProduct.unit ? ` · ${selectedProduct.unit}` : ""}
+                      <span className="px-1 text-border">·</span>
+                      연결 <span className="font-semibold tabular-nums text-foreground">{summary.linked}</span>건
+                      <span className="px-1 text-border">·</span>
+                      필수 <span className="tabular-nums">{summary.mandatory}</span>
+                      <span className="px-1 text-border">·</span>
+                      선택 <span className="tabular-nums">{summary.optional}</span>
                     </p>
                   </div>
+                  {/* '시험항목 추가'는 페이지 머리(다른 마스터 화면과 같은 자리)에만 둔다.
+                      같은 동작을 여기에 한 번 더 두면 좁은 폭에서 툴바만 두 줄로 늘어난다. */}
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="secondary">{summary.linked}건 연결</Badge>
-                    <Badge variant="outline" className="gap-1">
-                      <span className="size-1.5 rounded-full bg-emerald-500" />
-                      필수 {summary.mandatory}
-                    </Badge>
-                    <Badge variant="outline" className="gap-1">
-                      <span className="size-1.5 rounded-full bg-muted-foreground" />
-                      선택 {summary.optional}
-                    </Badge>
                     {selectedLinked.size > 0 && (
                       <Button
                         onClick={() => setBulkDeleteOpen(true)}
@@ -829,69 +822,67 @@ export default function TestItemsPage() {
                       <Copy />
                       다른 품목에서 복사
                     </Button>
-                    <Button
-                      onClick={openAddDialog}
-                      size="sm"
-                    >
-                      <Plus />
-                      항목 추가
-                    </Button>
                   </div>
                 </div>
               </div>
 
-              <div className="min-h-0 flex-1 overflow-auto p-3 md:p-4">
-                {/* 모바일 카드 목록 */}
-                <div className="flex flex-col gap-2 md:hidden">
-                  {linkedItems.length === 0 ? (
-                    <Card className="items-center py-6 text-center text-sm text-muted-foreground">
-                      연결된 시험항목이 없습니다.
-                    </Card>
-                  ) : (
-                    sortedLinkedItems
-                      .map((item, idx) => (
-                        <Card
-                          key={item.testItemId}
-                          className="cursor-pointer gap-0 px-3 py-3 transition-colors hover:bg-muted/30"
-                          onClick={() => setLinkedDetailTarget(item)}
+              {/* 모바일 — 칸마다 카드를 두르면 패널 Card 안에 카드가 또 생긴다.
+                  실선 하나로 나누고, 항목명을 주 값으로 세운다.
+                  md 미만에서는 페이지가 스크롤하므로 여기에 flex-1/자체 스크롤을 걸지 않는다
+                  (높이 auto 인 flex 열에서 flex-1 은 0 으로 접힌다). */}
+              <div className="shrink-0 md:hidden">
+                {linkedLoading ? (
+                  <div className="divide-y">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <div key={i} className="flex flex-col gap-2 px-4 py-3">
+                        <Skeleton className="h-4 w-2/3" />
+                        <Skeleton className="h-3 w-24" />
+                      </div>
+                    ))}
+                  </div>
+                ) : sortedLinkedItems.length === 0 ? (
+                  <p className="px-4 py-10 text-center text-sm break-keep text-muted-foreground">
+                    연결된 시험항목이 없습니다.
+                  </p>
+                ) : (
+                  <ul className="divide-y">
+                    {sortedLinkedItems.map((item, idx) => (
+                      <li
+                        key={item.testItemId}
+                        className="flex cursor-pointer items-start gap-3 px-4 py-3 transition-colors hover:bg-muted/40"
+                        onClick={() => setLinkedDetailTarget(item)}
+                      >
+                        {/* 체크박스 자체는 14px 이라 손가락으로 못 누른다 —
+                            라벨로 감싸 여백까지 탭 영역으로 넓힌다(약 32px). */}
+                        <label
+                          className="-m-2 flex shrink-0 cursor-pointer p-2"
+                          onClick={(event) => event.stopPropagation()}
                         >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="checkbox"
-                                  className="cb-custom"
-                                  checked={selectedLinked.has(item.testItemId)}
-                                  onClick={(event) => event.stopPropagation()}
-                                  onChange={() => toggleSelectLinked(item.testItemId)}
-                                />
-                                <span className="text-xs leading-normal text-muted-foreground">
-                                  {idx + 1}
-                                </span>
-                                {item.isMandatory ? (
-                                  <Badge variant="outline" className="gap-1 text-xs leading-normal">
-                                    <span className="size-1.5 rounded-full bg-red-500" />
-                                    필수
-                                  </Badge>
-                                ) : (
-                                  <Badge variant="outline" className="gap-1 text-xs leading-normal">
-                                    <span className="size-1.5 rounded-full bg-muted-foreground" />
-                                    선택
-                                  </Badge>
-                                )}
-                              </div>
-                              <p className="mt-1 text-sm font-medium text-foreground">
-                                {item.testItemName}
-                              </p>
-                            </div>
-                          </div>
-                        </Card>
-                      ))
-                  )}
-                </div>
+                          <input
+                            type="checkbox"
+                            className="cb-custom mt-0.5"
+                            checked={selectedLinked.has(item.testItemId)}
+                            onChange={() => toggleSelectLinked(item.testItemId)}
+                          />
+                        </label>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-foreground">
+                            {item.testItemName}
+                          </p>
+                          <p className="mt-0.5 text-xs leading-normal text-muted-foreground">
+                            <span className="tabular-nums">{idx + 1}</span>번
+                            <span className="px-1 text-border">·</span>
+                            {item.isMandatory ? "필수" : "선택"}
+                          </p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
 
-                {/* 데스크톱 테이블 */}
-                <Card className="hidden gap-0 overflow-hidden py-0 md:block">
+              {/* 데스크톱 표 — 바깥 패널 Card 가 이미 테두리를 가지므로 표를 한 겹 더 감싸지 않는다 */}
+              <div className="hidden min-h-0 flex-1 flex-col md:flex">
                   <Table>
                     <colgroup>
                       <col className="w-[8%]" />
@@ -934,11 +925,20 @@ export default function TestItemsPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {linkedItems.length === 0 ? (
+                      {linkedLoading ? (
+                        Array.from({ length: 6 }).map((_, i) => (
+                          <TableRow key={i} className="hover:bg-transparent">
+                            <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-4 rounded-md" /></TableCell>
+                            <TableCell className="px-3 py-2.5"><Skeleton className="mx-auto h-4 w-5" /></TableCell>
+                            <TableCell className="px-3 py-2.5"><Skeleton className="h-4 w-48" /></TableCell>
+                            <TableCell className="px-3 py-2.5"><Skeleton className="mx-auto h-5 w-12 rounded-md" /></TableCell>
+                          </TableRow>
+                        ))
+                      ) : sortedLinkedItems.length === 0 ? (
                         <TableRow className="hover:bg-transparent">
                           <TableCell
                             colSpan={4}
-                            className="py-16 text-center text-sm text-muted-foreground"
+                            className="py-16 text-center text-sm break-keep text-muted-foreground"
                           >
                             연결된 시험항목이 없습니다. 우측 상단에서
                             추가하세요.
@@ -963,7 +963,7 @@ export default function TestItemsPage() {
                                     onChange={() => toggleSelectLinked(item.testItemId)}
                                   />
                                 </TableCell>
-                                <TableCell className="px-3 py-2.5 text-center text-xs text-muted-foreground">
+                                <TableCell className="px-3 py-2.5 text-center text-xs tabular-nums text-muted-foreground">
                                   {idx + 1}
                                 </TableCell>
                                 <TableCell className="px-3 py-2.5 font-medium text-foreground">
@@ -971,17 +971,13 @@ export default function TestItemsPage() {
                                     {item.testItemName}
                                   </span>
                                 </TableCell>
+                                {/* 배지는 눈에 띄어야 할 '필수'에만 쓴다 — 기본값인 '선택'까지 배지로 두르면
+                                    둘 다 안 읽힌다. 임의로 고른 빨강·초록 점도 함께 걷어냈다. */}
                                 <TableCell className="px-3 py-2.5 text-center">
                                   {item.isMandatory ? (
-                                    <Badge variant="outline" className="gap-1">
-                                      <span className="size-1.5 rounded-full bg-red-500" />
-                                      필수
-                                    </Badge>
+                                    <Badge variant="outline">필수</Badge>
                                   ) : (
-                                    <Badge variant="outline" className="gap-1">
-                                      <span className="size-1.5 rounded-full bg-muted-foreground" />
-                                      선택
-                                    </Badge>
+                                    <span className="text-xs text-muted-foreground">선택</span>
                                   )}
                                 </TableCell>
                               </TableRow>
@@ -990,7 +986,6 @@ export default function TestItemsPage() {
                       )}
                     </TableBody>
                   </Table>
-                </Card>
               </div>
             </div>
           )}
@@ -1020,19 +1015,24 @@ export default function TestItemsPage() {
             </>
           )}
         >
-          <dl className="grid gap-3 rounded-md border p-4 text-sm">
-            <div className="flex items-center justify-between gap-4">
-              <dt className="text-muted-foreground">시험항목</dt>
-              <dd className="font-medium text-foreground">{linkedDetailTarget.testItemName}</dd>
+          {/* 값마다 칸을 두르지 않고 실선으로만 나눈다 */}
+          <dl className="divide-y rounded-md border px-4 text-sm">
+            <div className="flex items-center justify-between gap-4 py-2.5">
+              <dt className="shrink-0 text-xs text-muted-foreground">시험항목</dt>
+              <dd className="min-w-0 truncate font-medium text-foreground">{linkedDetailTarget.testItemName}</dd>
             </div>
-            <div className="flex items-center justify-between gap-4">
-              <dt className="text-muted-foreground">순서</dt>
-              <dd className="font-semibold tabular-nums text-foreground">{linkedDetailTarget.sequenceOrder}</dd>
+            <div className="flex items-center justify-between gap-4 py-2.5">
+              <dt className="shrink-0 text-xs text-muted-foreground">순서</dt>
+              <dd className="font-medium tabular-nums text-foreground">{linkedDetailTarget.sequenceOrder}</dd>
             </div>
-            <div className="flex items-center justify-between gap-4">
-              <dt className="text-muted-foreground">필수 여부</dt>
+            <div className="flex items-center justify-between gap-4 py-2.5">
+              <dt className="shrink-0 text-xs text-muted-foreground">필수 여부</dt>
               <dd>
-                <Badge variant="outline">{linkedDetailTarget.isMandatory ? "필수" : "선택"}</Badge>
+                {linkedDetailTarget.isMandatory ? (
+                  <Badge variant="outline">필수</Badge>
+                ) : (
+                  <span className="text-xs text-muted-foreground">선택</span>
+                )}
               </dd>
             </div>
           </dl>
@@ -1069,13 +1069,17 @@ export default function TestItemsPage() {
                 />
               </div>
 
+              {/* 칩 안에 칩을 또 넣지 않는다 — 건수는 배경 없는 숫자로 붙인다 */}
               <div className="flex flex-wrap gap-1">
                 {dialogTabs.map((tab) => (
                   <button
                     key={tab}
+                    type="button"
+                    aria-pressed={dialogTab === tab}
                     onClick={() => setDialogTab(tab as typeof dialogTab)}
                     className={cn(
                       "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                      "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
                       dialogTab === tab
                         ? "bg-primary text-primary-foreground"
                         : "border bg-background text-foreground hover:bg-muted/50"
@@ -1084,10 +1088,8 @@ export default function TestItemsPage() {
                     {tab}
                     <span
                       className={cn(
-                        "ml-1.5 rounded-md px-1.5 py-0.5 text-xs leading-normal",
-                        dialogTab === tab
-                          ? "bg-primary-foreground/20 text-primary-foreground"
-                          : "bg-muted text-muted-foreground"
+                        "ml-1.5 tabular-nums",
+                        dialogTab === tab ? "text-primary-foreground/70" : "text-muted-foreground",
                       )}
                     >
                       {dialogTabCounts[tab] ?? 0}
@@ -1099,23 +1101,25 @@ export default function TestItemsPage() {
               {dialogFiltered.length > 0 && (
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span>
-                    {dialogFiltered.length}개 항목
+                    <span className="tabular-nums">{dialogFiltered.length}</span>개 항목
                     {selectedToAdd.size > 0 && (
                       <span className="ml-1 font-medium text-primary">
-                        ({selectedToAdd.size}개 선택)
+                        (<span className="tabular-nums">{selectedToAdd.size}</span>개 선택)
                       </span>
                     )}
                   </span>
                   <div className="flex gap-2">
                     <button
+                      type="button"
                       onClick={selectAll}
-                      className="font-medium text-primary hover:underline"
+                      className="rounded-md font-medium text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                     >
                       전체선택
                     </button>
                     <button
+                      type="button"
                       onClick={deselectAll}
-                      className="font-medium text-muted-foreground hover:underline"
+                      className="rounded-md font-medium text-muted-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                     >
                       전체해제
                     </button>
@@ -1145,30 +1149,28 @@ export default function TestItemsPage() {
                     <ul className="divide-y">
                       {dialogFiltered.map((item) => (
                         <li key={item.id}>
-                          <label className="flex cursor-pointer items-center gap-3 px-4 py-2.5 hover:bg-muted/50">
+                          {/* 좁은 화면에서는 이름·분류·시간을 한 줄에 세우면 이름이 서너 글자로 잘린다.
+                              분류와 예상시간은 이름 아래로 내려 접히게 둔다. */}
+                          <label className="flex cursor-pointer items-start gap-3 px-4 py-2.5 hover:bg-muted/50">
                             <input
                               type="checkbox"
                               checked={selectedToAdd.has(item.id)}
                               onChange={() => toggleSelectAdd(item.id)}
-                              className="cb-custom"
+                              className="cb-custom mt-1 shrink-0"
                             />
-                            <span className="flex-1 text-sm font-medium text-foreground">
-                              {item.name}
-                            </span>
-                            <span
-                              className={cn(
-                                "rounded-md border px-2 py-0.5 text-xs leading-normal font-medium",
-                                CATEGORY_COLORS[item.category] ??
-                                  CATEGORY_COLORS["기타"]
-                              )}
-                            >
-                              {item.category || "기타"}
-                            </span>
-                            {item.estimatedHours != null && (
-                              <span className="text-xs text-muted-foreground">
-                                {item.estimatedHours}h
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-medium text-foreground">
+                                {item.name}
                               </span>
-                            )}
+                              <span className="mt-1 flex flex-wrap items-center gap-1.5">
+                                <CategoryBadge category={item.category} />
+                                {item.estimatedHours != null && (
+                                  <span className="text-xs tabular-nums text-muted-foreground">
+                                    {item.estimatedHours}h
+                                  </span>
+                                )}
+                              </span>
+                            </span>
                           </label>
                         </li>
                       ))}
@@ -1189,16 +1191,16 @@ export default function TestItemsPage() {
         <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>연결 해제</DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="break-keep">
               이 품목에서 시험항목 연결을 제거합니다.
             </DialogDescription>
           </DialogHeader>
 
           <div className="rounded-md border bg-muted/50 p-3">
-            <p className="text-sm font-medium">
+            <p className="text-sm font-medium break-keep">
               {unlinkTarget?.testItemName}
             </p>
-            <p className="mt-1.5 text-sm text-muted-foreground">
+            <p className="mt-1.5 text-sm break-keep text-muted-foreground">
               {selectedProduct?.name}에서 이 시험항목 연결을 해제하시겠습니까?
             </p>
           </div>
@@ -1233,7 +1235,7 @@ export default function TestItemsPage() {
         <DialogContent size="xl">
           <DialogHeader>
             <DialogTitle>다른 품목에서 시험항목 복사</DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="break-keep">
               비슷한 품목을 선택하면 그 품목의 시험항목을{" "}
               <span className="font-medium text-foreground">
                 {selectedProduct?.name}
@@ -1268,16 +1270,19 @@ export default function TestItemsPage() {
                         {copyFilteredProducts.slice(0, 100).map((p) => (
                           <li key={p.id}>
                             <button
+                              type="button"
+                              aria-pressed={copySource?.id === p.id}
                               onClick={() => void selectCopySource(p)}
                               className={cn(
-                                "flex w-full items-center gap-2 px-4 py-2.5 text-left hover:bg-muted/50",
+                                "flex w-full items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-muted/50",
+                                "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none",
                                 copySource?.id === p.id && "bg-primary/5"
                               )}
                             >
-                              <span className="font-mono text-xs leading-normal font-medium text-muted-foreground">
+                              <span className="shrink-0 font-mono text-xs leading-normal font-medium text-muted-foreground">
                                 {p.productCode}
                               </span>
-                              <span className="flex-1 truncate text-sm font-medium text-foreground">
+                              <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
                                 {p.name}
                               </span>
                               {copySource?.id === p.id && (
@@ -1301,12 +1306,13 @@ export default function TestItemsPage() {
                       2. 복사할 시험항목
                       {copySelected.size > 0 && (
                         <span className="ml-1 font-medium text-primary">
-                          ({copySelected.size}개 선택)
+                          (<span className="tabular-nums">{copySelected.size}</span>개 선택)
                         </span>
                       )}
                     </p>
                     <div className="flex gap-2 text-xs">
                       <button
+                        type="button"
                         onClick={() =>
                           setCopySelected(
                             new Set(
@@ -1316,13 +1322,14 @@ export default function TestItemsPage() {
                             )
                           )
                         }
-                        className="font-medium text-primary hover:underline"
+                        className="rounded-md font-medium text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                       >
                         미연결 전체
                       </button>
                       <button
+                        type="button"
                         onClick={() => setCopySelected(new Set())}
-                        className="font-medium text-muted-foreground hover:underline"
+                        className="rounded-md font-medium text-muted-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                       >
                         전체해제
                       </button>
@@ -1360,11 +1367,11 @@ export default function TestItemsPage() {
                                         toggleCopySelect(r.testItemId)
                                       }
                                     />
-                                    <span className="flex-1 text-sm font-medium text-foreground">
+                                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
                                       {r.testItemName}
                                     </span>
                                     {already && (
-                                      <span className="text-xs leading-normal text-muted-foreground">
+                                      <span className="shrink-0 text-xs leading-normal text-muted-foreground">
                                         이미 연결됨
                                       </span>
                                     )}
@@ -1409,7 +1416,7 @@ export default function TestItemsPage() {
         <DialogContent size="xl">
           <DialogHeader>
             <DialogTitle>그룹 넣기</DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="break-keep">
               시험항목 그룹을{" "}
               <span className="font-medium text-foreground">
                 {selectedProduct?.name}
@@ -1454,12 +1461,15 @@ export default function TestItemsPage() {
                         <li key={g.id}>
                           <button
                             type="button"
+                            aria-pressed={selectedGroup?.id === g.id}
                             onClick={() => void selectGroup(g)}
                             className={cn(
-                              "flex w-full items-center gap-2 px-4 py-2.5 text-left hover:bg-muted/50",
+                              "flex w-full items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-muted/50",
+                              "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none",
                               selectedGroup?.id === g.id && "bg-primary/5"
                             )}
                           >
+                            {/* 좁은 화면에서 그룹명이 잘리지 않게 항목 수·선택 표시는 아래 줄로 내린다 */}
                             <span className="min-w-0 flex-1">
                               <span className="block truncate text-sm font-medium text-foreground">
                                 {g.name}
@@ -1469,13 +1479,13 @@ export default function TestItemsPage() {
                                   {g.description}
                                 </span>
                               )}
-                            </span>
-                            <Badge variant="secondary">{g.itemCount}개 항목</Badge>
-                            {selectedGroup?.id === g.id && (
-                              <span className="text-xs font-medium text-primary">
-                                선택됨
+                              <span className="mt-1 flex flex-wrap items-center gap-1.5">
+                                <Badge variant="secondary" className="tabular-nums">{g.itemCount}개 항목</Badge>
+                                {selectedGroup?.id === g.id && (
+                                  <span className="text-xs font-medium text-primary">선택됨</span>
+                                )}
                               </span>
-                            )}
+                            </span>
                           </button>
                         </li>
                       ))}
@@ -1491,17 +1501,15 @@ export default function TestItemsPage() {
                   <p className="text-sm font-medium text-foreground">
                     2. 넣을 항목 미리보기
                   </p>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="secondary">전체 {groupPreview.total}</Badge>
-                    <Badge variant="outline" className="gap-1">
-                      <span className="size-1.5 rounded-full bg-blue-500" />
-                      추가 {groupPreview.toAdd}
-                    </Badge>
-                    <Badge variant="outline" className="gap-1">
-                      <span className="size-1.5 rounded-full bg-muted-foreground" />
-                      이미 있음 {groupPreview.already}
-                    </Badge>
-                  </div>
+                  {/* 세 배지가 나란히 서면 무엇이 결과인지 안 보인다 —
+                      실제로 추가될 수만 강조하고 나머지는 부가정보로 내린다. */}
+                  <p className="text-xs leading-normal break-keep text-muted-foreground">
+                    추가 <span className="font-semibold tabular-nums text-foreground">{groupPreview.toAdd}</span>건
+                    <span className="px-1 text-border">·</span>
+                    이미 있음 <span className="tabular-nums">{groupPreview.already}</span>
+                    <span className="px-1 text-border">·</span>
+                    전체 <span className="tabular-nums">{groupPreview.total}</span>
+                  </p>
                 </div>
                 <Card className="gap-0 overflow-hidden py-0">
                   <div className="max-h-56 overflow-y-auto">
@@ -1520,37 +1528,35 @@ export default function TestItemsPage() {
                         {groupItems.map((item, idx) => {
                           const already = linkedIds.has(item.testItemId)
                           return (
+                            /* 순번·이름·분류·상태 넷을 한 줄에 세우면 320px 에서 이름이 서너 글자만 남는다.
+                               분류와 '추가 예정/이미 있음'은 이름 아래로 내린다. */
                             <li
                               key={item.testItemId}
                               className={cn(
-                                "flex items-center gap-3 px-4 py-2.5",
+                                "flex items-start gap-3 px-4 py-2.5",
                                 already && "opacity-50"
                               )}
                             >
-                              <span className="w-5 shrink-0 text-right text-xs leading-normal text-muted-foreground tabular-nums">
+                              <span className="w-5 shrink-0 pt-0.5 text-right text-xs leading-normal text-muted-foreground tabular-nums">
                                 {idx + 1}
                               </span>
-                              <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-                                {item.testItemName}
-                              </span>
-                              <span
-                                className={cn(
-                                  "rounded-md border px-2 py-0.5 text-xs leading-normal font-medium",
-                                  CATEGORY_COLORS[item.category] ??
-                                    CATEGORY_COLORS["기타"]
-                                )}
-                              >
-                                {item.category || "기타"}
-                              </span>
-                              {already ? (
-                                <span className="w-14 shrink-0 text-right text-xs leading-normal text-muted-foreground">
-                                  이미 있음
-                                </span>
-                              ) : (
-                                <span className="w-14 shrink-0 text-right text-xs leading-normal font-medium text-primary">
-                                  추가 예정
-                                </span>
-                              )}
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-medium text-foreground">
+                                  {item.testItemName}
+                                </p>
+                                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                  <CategoryBadge category={item.category} />
+                                  {already ? (
+                                    <span className="text-xs leading-normal text-muted-foreground">
+                                      이미 있음
+                                    </span>
+                                  ) : (
+                                    <span className="text-xs leading-normal font-medium text-primary">
+                                      추가 예정
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
                             </li>
                           )
                         })}
@@ -1595,17 +1601,17 @@ export default function TestItemsPage() {
         <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>선택 항목 일괄 삭제</DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="break-keep">
               선택한 시험항목 연결을 한 번에 제거합니다.
             </DialogDescription>
           </DialogHeader>
 
           <div className="rounded-md border bg-muted/50 p-3">
             <p className="text-sm font-medium">
-              {selectedLinked.size}개 시험항목
+              <span className="tabular-nums">{selectedLinked.size}</span>개 시험항목
             </p>
-            <p className="mt-1.5 text-sm text-muted-foreground">
-              {selectedProduct?.name}에서 선택한 {selectedLinked.size}개
+            <p className="mt-1.5 text-sm break-keep text-muted-foreground">
+              {selectedProduct?.name}에서 선택한 <span className="tabular-nums">{selectedLinked.size}</span>개
               시험항목 연결을 해제하시겠습니까?
             </p>
           </div>

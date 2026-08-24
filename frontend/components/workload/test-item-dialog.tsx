@@ -120,7 +120,7 @@ export function TestItemDialog({
         </DialogHeader>
 
         <DialogBody className="grid gap-4">
-          <section className="rounded-lg border bg-card p-3 shadow-sm sm:p-4">
+          <section className="rounded-md border bg-card p-3 shadow-sm sm:p-4">
             <div className="mb-3 border-b pb-3">
               <h3 className="text-sm font-semibold text-foreground">기본 정보</h3>
             </div>
@@ -188,7 +188,7 @@ export function TestItemDialog({
             </div>
           </section>
 
-          <section className="rounded-lg border bg-card p-3 shadow-sm sm:p-4">
+          <section className="rounded-md border bg-card p-3 shadow-sm sm:p-4">
             <div className="mb-3 border-b pb-3">
               <h3 className="text-sm font-semibold text-foreground">수행 조건</h3>
             </div>
@@ -213,8 +213,8 @@ export function TestItemDialog({
               </label>
 
               {simultaneousAllowed && (
-                <div className="rounded-lg border border-dashed bg-muted/40 p-3">
-                  <p className="mb-2.5 text-[11px] text-muted-foreground">
+                <div className="rounded-md border border-dashed bg-muted/40 p-3">
+                  <p className="mb-2.5 text-xs leading-normal text-muted-foreground">
                     동시분석은 건수만큼 공수가 그대로 곱해지지 않습니다. 추가되는 증분만 입력하세요.
                     (예: 1건 HPLC 10시간 → 2건 동시분석 12시간이면 증분 기기공수 120분)
                   </p>

@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
@@ -7,6 +8,7 @@ import {
   Settings, Calendar, ClipboardList, SlidersHorizontal, ChevronRight, ChevronsUpDown, LogOut,
 } from "lucide-react"
 
+import { isAdminOnlyPath } from "@shared/route-access"
 import { cn } from "@frontend/lib/utils"
 import { useAuth } from "@frontend/lib/auth-context"
 import { TesterAvatar } from "@frontend/lib/tester-profiles"
@@ -59,7 +61,7 @@ const NAV_SECTIONS: NavSection[] = [
         id: "test-mgmt", icon: FlaskConical, label: "시험관리",
         subItems: [
           { id: "prod-status", label: "작업 현황", live: true },
-          { id: "test-status", label: "시험현황", live: true },
+          { id: "test-status", label: "시험현황", adminOnly: true, live: true },
           { id: "test-result", label: "결과입력", adminOnly: true },
           { id: "test-cert", label: "성적서관리", adminOnly: true },
           { id: "testers", label: "시험자 관리", adminOnly: true, live: true },
@@ -192,6 +194,35 @@ const PATH_MAP: Record<string, string> = {
   "sys-settings": "/settings/sys-settings",
 }
 
+/**
+ * 시험자 화면의 「메뉴」 배치 — 관리자는 위 순서를 그대로 쓴다.
+ *
+ * 시험자는 하루를 "내 상황 → 오늘 처리할 일 → 시험 → 안정성 → 계획" 순으로 움직인다.
+ * 스케줄은 관리자가 짜 주는 계획이라 시험자에게는 마지막이 맞다.
+ * 「내 작업」도 시험자에게는 업무 명칭보다 「할 일」이 곧바로 읽힌다.
+ */
+const TESTER_MENU_ORDER = ["home", "my-tasks", "test-mgmt", "stability", "schedule"]
+const TESTER_LABEL_OVERRIDE: Record<string, string> = { "my-tasks": "할 일" }
+
+function menuSectionsFor(isAdmin: boolean): NavSection[] {
+  if (isAdmin) return NAV_SECTIONS
+  const rank = (id: string) => {
+    const i = TESTER_MENU_ORDER.indexOf(id)
+    return i === -1 ? TESTER_MENU_ORDER.length : i
+  }
+  return NAV_SECTIONS.map(section =>
+    section.title !== "메뉴" ? section : {
+      ...section,
+      items: [...section.items]
+        .sort((a, b) => rank(a.id) - rank(b.id))
+        .map(item => {
+          const label = TESTER_LABEL_OVERRIDE[item.id]
+          return label ? { ...item, label } : item
+        }),
+    },
+  )
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname() ?? ""
@@ -219,11 +250,44 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
       ? item.subItems.some(s => subActive(s.id))
       : !!PATH_MAP[item.id] && pathname.startsWith(PATH_MAP[item.id])
 
-  const sections = NAV_SECTIONS.map(section => ({
+  // 현재 경로가 속한 상위 메뉴 (하위 메뉴가 있는 항목만)
+  const activeMenuId =
+    NAV_SECTIONS.flatMap(section => section.items)
+      .find(item => item.subItems?.some(sub => subActive(sub.id)))?.id ?? null
+
+  /**
+   * 하위 메뉴는 한 번에 하나만 펼친다(아코디언).
+   * 다른 메뉴를 펼치면 이미 열려 있던 메뉴는 닫힌다.
+   */
+  const [openMenuId, setOpenMenuId] = useState<string | null>(activeMenuId)
+
+  // 다른 상위 메뉴의 화면으로 이동하면 그 메뉴만 펼친다.
+  // (effect 대신 렌더 중 상태 보정 — 여분의 렌더 없이 즉시 반영된다)
+  const [syncedMenuId, setSyncedMenuId] = useState<string | null>(activeMenuId)
+  if (activeMenuId && activeMenuId !== syncedMenuId) {
+    setSyncedMenuId(activeMenuId)
+    setOpenMenuId(activeMenuId)
+  }
+
+  /**
+   * 메뉴에서 감추는 기준은 `@shared/route-access` 의 관리자 전용 경로와 같다.
+   * 목록에 경로를 추가하면 미들웨어가 막는 화면이 메뉴에서도 자동으로 사라진다
+   * (막혀 있는데 메뉴에는 남아 눌러도 되돌려보내지는 링크를 없앤다).
+   */
+  const adminOnlyId = (id: string, flagged?: boolean) =>
+    Boolean(flagged) || isAdminOnlyPath(PATH_MAP[id] ?? "")
+
+  const sections = menuSectionsFor(isAdmin).map(section => ({
     ...section,
     items: section.items
-      .filter(item => !item.hidden && (!item.adminOnly || isAdmin))
-      .map(item => ({ ...item, subItems: item.subItems?.filter(s => !s.adminOnly || isAdmin) })),
+      .filter(item => !item.hidden && (isAdmin || !adminOnlyId(item.id, item.adminOnly)))
+      .map(item => ({
+        ...item,
+        subItems: item.subItems?.filter(s => isAdmin || !adminOnlyId(s.id, s.adminOnly)),
+      }))
+      // 하위가 전부 관리자 전용이면 상위 메뉴도 감춘다.
+      // (남겨 두면 「인사이트」처럼 펼칠 것도, 갈 곳도 없는 메뉴가 된다)
+      .filter(item => !item.subItems || item.subItems.length > 0),
   })).filter(section => section.items.length > 0)
 
   return (
@@ -267,7 +331,13 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                     )
                   }
                   return (
-                    <Collapsible key={item.id} asChild defaultOpen={active} className="group/collapsible">
+                    <Collapsible
+                      key={item.id}
+                      asChild
+                      open={openMenuId === item.id}
+                      onOpenChange={open => setOpenMenuId(open ? item.id : null)}
+                      className="group/collapsible"
+                    >
                       <SidebarMenuItem>
                         <CollapsibleTrigger asChild>
                           <SidebarMenuButton tooltip={item.label} isActive={active}>
@@ -285,12 +355,14 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                                 <SidebarMenuSubItem key={sub.id}>
                                   <SidebarMenuSubButton asChild isActive={subIsActive}>
                                     <Link href={subHref(sub.id)} onClick={closeOnMobile}>
-                                      {/* 개발 완료 표시: 완료(live)=초록 점, 미완료=회색 점 */}
+                                      {/* 개발 완료 표시 — 초록을 쓰면 '선택됨(브랜드 파랑)'과
+                                          색이 둘로 갈려 메뉴가 신호등이 된다. 세 상태를 색이 아니라
+                                          농도로 가른다: 선택됨=파랑 · 완료=진한 회색 · 예정=옅은 회색 */}
                                       <span
                                         title={sub.live ? "개발 완료" : "개발 예정"}
                                         className={cn(
                                           "size-1.5 shrink-0 rounded-full",
-                                          subIsActive ? "bg-sidebar-primary" : sub.live ? "bg-emerald-500" : "bg-muted-foreground/30",
+                                          subIsActive ? "bg-sidebar-primary" : sub.live ? "bg-muted-foreground" : "bg-muted-foreground/30",
                                         )}
                                       />
                                       <span>{sub.label}</span>

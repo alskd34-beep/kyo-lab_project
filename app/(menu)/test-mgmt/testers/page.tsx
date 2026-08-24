@@ -87,10 +87,13 @@ interface MatrixRow {
 
 const LEVEL_CYCLE: ProficiencyLevel[] = ["X", "Y", "O", "N"]
 
+/* 우수 > 가능 은 같은 눈금의 위아래라 색을 바꾸지 않고 파랑의 농도만 바꾼다
+   (STAGE_STYLE 과 같은 흐름 — 농도가 곧 숙련도). 불가는 앱의 빨강으로 맞추고,
+   미평가는 색 없는 중립으로 둔다. */
 const LEVEL_STYLE: Record<ProficiencyLevel, string> = {
-  O: "border-blue-300 bg-blue-700 text-white",
-  Y: "border-emerald-300 bg-emerald-700 text-white",
-  N: "border-rose-300 bg-rose-700 text-white",
+  O: "border-blue-400 bg-blue-800 text-white",
+  Y: "border-blue-300 bg-blue-500 text-white",
+  N: "border-red-300 bg-red-700 text-white",
   X: "border bg-muted text-muted-foreground",
 }
 
@@ -105,27 +108,32 @@ type TabId = "testers" | "capability" | "qualification" | "qual-items"
 
 const TAB_ORDER: TabId[] = ["testers", "capability", "qualification", "qual-items"]
 
-/** 탭별 머리말 — 아이콘·제목·설명을 한 곳에서 정의해 탭이 늘어도 분기문이 늘지 않게 한다. */
+/**
+ * 탭별 머리말 — 아이콘·제목·설명을 한 곳에서 정의해 탭이 늘어도 분기문이 늘지 않게 한다.
+ *
+ * description 은 화면 이름을 되풀이하는 "…을 관리합니다"가 아니라 **그 탭에서만 참인 사실**을 적는다.
+ * 어떤 행이 보이고 어떤 행이 빠지는가(적용 범위)가 이 화면에서 가장 자주 나오는 질문이다.
+ */
 const TAB_META: Record<TabId, { icon: React.ReactNode; label: string; description: string }> = {
   testers: {
     icon: <Users className="size-5 text-muted-foreground" />,
     label: "시험자 관리",
-    description: "시험자 정보와 활성 상태를 관리합니다.",
+    description: "사용자 관리에서 역할을 '시험자'로 지정하면 자동 등록됩니다.",
   },
   capability: {
     icon: <Grid2x2 className="size-5 text-muted-foreground" />,
     label: "시험자 역량",
-    description: "활성 시험자의 역량 매트릭스를 관리합니다.",
+    description: "활성 시험자만 행으로 나옵니다.",
   },
   qualification: {
     icon: <ShieldCheck className="size-5 text-muted-foreground" />,
     label: "시험자 자격",
-    description: "시험자별 OJT 자격 보유·만료 현황을 관리합니다.",
+    description: "비활성 시험자도 보유 자격이 있으면 행에 남습니다.",
   },
   "qual-items": {
     icon: <SlidersHorizontal className="size-5 text-muted-foreground" />,
     label: "자격 항목",
-    description: "Qualification List 의 카테고리와 OJT 항목을 관리합니다.",
+    description: "여기서 항목을 바꾸면 자격 매트릭스의 열이 함께 바뀝니다.",
   },
 }
 
@@ -438,6 +446,13 @@ export default function TestersPage() {
     setSortDir(dir)
   }, [])
 
+  /** 상단 요약 3종. 모바일(한 장 안 세 줄)과 데스크톱(카드 3장)이 같은 값을 그린다. */
+  const summaryCards = [
+    { label: "활성 시험자", value: summary.active, suffix: `/ ${testers.length}명`, tone: "text-foreground" },
+    { label: "단독 가능", value: summary.solo, suffix: "명", tone: "text-blue-600" },
+    { label: "2인 가능", value: summary.duo, suffix: "명", tone: "text-amber-600" },
+  ]
+
   // ─── 자격 탭 파생값 ─────────────────────────────────────────────────────────
 
   /**
@@ -498,26 +513,33 @@ export default function TestersPage() {
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden p-4 md:p-6">
       {/* Header */}
       <div className="flex shrink-0 flex-col gap-3">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
           <div className="flex items-center gap-2">
             {TAB_META[activeTab].icon}
-            <h1 className="text-xl font-semibold text-foreground">
+            <h1 className="text-lg font-semibold text-foreground">
               {TAB_META[activeTab].label}
             </h1>
           </div>
-          <p className="text-sm text-muted-foreground">{TAB_META[activeTab].description}</p>
+          {/* break-keep: 한글은 단어 중간에서 끊으면 안 읽힌다 */}
+          <p className="min-w-0 text-xs leading-normal break-keep text-muted-foreground">
+            {TAB_META[activeTab].description}
+          </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Tab switcher */}
-          <div className="inline-flex h-9 w-fit items-center gap-0.5 rounded-md bg-muted p-0.5 text-muted-foreground">
+        {/* Tab switcher
+            탭 4개는 라벨만 합쳐 400px 이 넘어 320px 화면에 늘어놓을 수 없다.
+            글자를 줄여 우겨넣는 대신 **이 띠 안에서만** 옆으로 밀어 보게 한다
+            (overscroll-x-contain — 띠 끝에서 페이지가 따라 밀리지 않는다).
+            whitespace-nowrap: 탭 라벨이 두 줄로 접히면 안 된다. */}
+        <div className="min-w-0 overflow-x-auto overscroll-x-contain scrollbar-none">
+          <div className="inline-flex h-9 w-max items-center gap-0.5 rounded-md bg-muted p-0.5 text-muted-foreground">
             {TAB_ORDER.map((id) => ({ id, label: TAB_META[id].label })).map((tab) => (
               <button
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id as TabId)}
                 className={cn(
-                  "h-8 rounded-md px-3 text-sm font-medium transition-colors",
+                  "h-8 shrink-0 rounded-md px-3 text-sm font-medium whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
                   activeTab === tab.id
                     ? "bg-card text-foreground shadow-sm"
                     : "hover:text-foreground"
@@ -527,64 +549,74 @@ export default function TestersPage() {
               </button>
             ))}
           </div>
-
-          {activeTab === "testers" && (
-            <p className="ml-auto text-xs text-muted-foreground">
-              시험자는 <span className="font-medium text-foreground">사용자 관리</span>에서 역할을 &apos;시험자&apos;로 설정하면 자동 등록됩니다.
-            </p>
-          )}
         </div>
       </div>
 
-      {/* KPI cards */}
-      <div className="grid shrink-0 grid-cols-3 gap-2">
-        <Card className="gap-0.5 border-l-4 border-l-primary px-3 py-2">
-          <span className="text-xs leading-normal font-medium tracking-wide text-muted-foreground uppercase">
-            활성 시험자
-          </span>
-          <span className="text-lg font-semibold tabular-nums text-foreground">
-            {summary.active}
-            <span className="ml-1.5 text-xs leading-normal font-normal text-muted-foreground">
-              / {testers.length}명
+      {/* 요약 3종
+          카드 옆구리에 두르던 굵은 색 띠(border-l-4)를 걷어냈다 — 색 띠가 세 장 나란히 서면
+          그것부터 눈에 들어와 정작 숫자가 뒤로 밀린다. 강조는 **숫자 크기와 잉크 색**이 맡고,
+          잉크 색은 표의 점 색(단독=파랑 · 2인=앰버)과 같은 규격을 그대로 쓴다.
+          라벨의 uppercase·tracking-wide 도 뺐다 — 한글에는 대문자가 없고 자간만 벌어진다.
+
+          반응형: 320px 에서 3칸 그리드는 칸당 66px 라 '활성 시험자' 라벨조차 안 들어간다.
+          글자를 줄여 우겨넣는 대신 **모바일은 카드 한 장 안에 실선으로 나눈 세 줄**로 세우고,
+          sm(640px) 부터 원래의 카드 3장 그리드로 돌아간다. */}
+      <Card className="shrink-0 gap-0 divide-y py-0 sm:hidden">
+        {summaryCards.map((card) => (
+          <div key={card.label} className="flex min-w-0 items-baseline justify-between gap-3 px-3 py-2">
+            <span className="min-w-0 truncate text-xs leading-normal font-medium text-muted-foreground">
+              {card.label}
             </span>
-          </span>
-        </Card>
-        <Card className="gap-0.5 border-l-4 border-l-blue-500 px-3 py-2">
-          <span className="text-xs leading-normal font-medium tracking-wide text-muted-foreground uppercase">
-            단독 가능
-          </span>
-          <span className="text-lg font-semibold tabular-nums text-blue-600">
-            {summary.solo}
-          </span>
-        </Card>
-        <Card className="gap-0.5 border-l-4 border-l-amber-500 px-3 py-2">
-          <span className="text-xs leading-normal font-medium tracking-wide text-muted-foreground uppercase">
-            2인 가능
-          </span>
-          <span className="text-lg font-semibold tabular-nums text-amber-600">
-            {summary.duo}
-          </span>
-        </Card>
+            <span className={cn("shrink-0 text-lg font-semibold tabular-nums", card.tone)}>
+              {card.value}
+              <span className="ml-1 text-xs leading-normal font-normal text-muted-foreground">
+                {card.suffix}
+              </span>
+            </span>
+          </div>
+        ))}
+      </Card>
+      <div className="hidden shrink-0 grid-cols-3 gap-2 sm:grid">
+        {summaryCards.map((card) => (
+          <Card key={card.label} className="min-w-0 gap-0.5 px-3 py-2">
+            <span className="truncate text-xs leading-normal font-medium text-muted-foreground">
+              {card.label}
+            </span>
+            <span className={cn("text-2xl font-semibold tabular-nums", card.tone)}>
+              {card.value}
+              <span className="ml-1.5 text-xs leading-normal font-normal text-muted-foreground">
+                {card.suffix}
+              </span>
+            </span>
+          </Card>
+        ))}
       </div>
 
+      {/* 상태 필터 — 라벨 셋을 합치면 380px 이 넘어 320px 화면에서 마지막 탭이 잘린다.
+          StatusFilterTabs 는 ui/** 프리미티브라 손대지 않고, 호출부에서 띠 자체를
+          가로 스크롤 상자에 넣어 잘리지 않게 한다(페이지는 밀리지 않는다). */}
       {activeTab === "testers" && (
-        <StatusFilterTabs
-          value={statusFilter}
-          onChange={setStatusFilter}
-          counts={{ all: testers.length, active: summary.active, inactive: testers.length - summary.active }}
-          activeLabel="활성 시험자"
-          inactiveLabel="비활성 시험자"
-          className="shrink-0"
-        />
+        <div className="min-w-0 shrink-0 overflow-x-auto overscroll-x-contain scrollbar-none">
+          <StatusFilterTabs
+            value={statusFilter}
+            onChange={setStatusFilter}
+            counts={{ all: testers.length, active: summary.active, inactive: testers.length - summary.active }}
+            activeLabel="활성 시험자"
+            inactiveLabel="비활성 시험자"
+            className="w-max"
+          />
+        </div>
       )}
 
       {activeTab === "testers" && (
         <div className="flex min-h-0 flex-1 flex-col">
-          {/* Mobile cards */}
+          {/* Mobile cards
+              shrink-0: Card 는 overflow-hidden 이라 세로 스크롤 열 안에서 min-height 가 0 이 된다.
+              목록이 화면보다 길어지는 순간 flex 가 카드를 선 하나로 눌러 버린다. */}
           <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto md:hidden">
             {loading ? (
               Array.from({ length: 4 }).map((_, i) => (
-                <Card key={i} className="gap-2 px-3 py-3">
+                <Card key={i} className="shrink-0 gap-2 px-3 py-3">
                   <div className="flex items-center justify-between">
                     <Skeleton className="h-4 w-24" />
                     <Skeleton className="h-5 w-14 rounded-md" />
@@ -594,26 +626,26 @@ export default function TestersPage() {
                 </Card>
               ))
             ) : filteredTesters.length === 0 ? (
-              <Card className="items-center py-6 text-center text-sm text-muted-foreground">
+              <Card className="shrink-0 items-center py-6 text-center text-sm text-muted-foreground">
                 {statusFilter === "all" ? "등록된 시험자가 없습니다." : "조건에 맞는 시험자가 없습니다."}
               </Card>
             ) : (
               filteredTesters.map((tester, idx) => (
                 <Card
                   key={tester.id}
-                  className="cursor-pointer gap-0 px-3 py-3 transition-colors hover:bg-muted/30"
+                  className="shrink-0 cursor-pointer gap-0 px-3 py-3 transition-colors hover:bg-muted/30"
                   onClick={() => openEdit(tester)}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="text-xs leading-normal font-medium text-muted-foreground">
+                        <span className="text-xs leading-normal font-medium tabular-nums text-muted-foreground">
                           #{idx + 1}
                         </span>
                         <span className="font-mono text-xs leading-normal font-semibold text-foreground">
                           {tester.employeeNo}
                         </span>
-                        <Tag color={tester.isActive ? "green" : "mono"} className="text-xs leading-normal">
+                        <Tag color={tester.isActive ? "blue" : "mono"} className="text-xs leading-normal">
                           {tester.isActive ? "활성" : "비활성"}
                         </Tag>
                       </div>
@@ -697,7 +729,7 @@ export default function TestersPage() {
                       className="cursor-pointer hover:bg-muted/40"
                       onClick={() => openEdit(tester)}
                     >
-                      <TableCell className="px-3 py-2 text-xs text-muted-foreground">
+                      <TableCell className="px-3 py-2 text-xs tabular-nums text-muted-foreground">
                         {idx + 1}
                       </TableCell>
                       <TableCell className="px-3 py-2">
@@ -726,7 +758,7 @@ export default function TestersPage() {
                           헤더 6칸 / 본문 5칸으로 어긋났고, 남는 칸이 폭 0으로 접혀
                           '2인'과 '상태'가 화면에서 사라졌다. (2026-08-22) */}
                       <TableCell className="px-3 py-2">
-                        <Tag color={tester.isActive ? "green" : "mono"} className="text-xs leading-normal">
+                        <Tag color={tester.isActive ? "blue" : "mono"} className="text-xs leading-normal">
                           {tester.isActive ? "활성" : "비활성"}
                         </Tag>
                       </TableCell>
@@ -792,7 +824,7 @@ export default function TestersPage() {
             <Card className="items-center gap-1 py-16 text-center">
               <Grid2x2 className="mb-1 size-6 text-muted-foreground/60" />
               <p className="text-sm font-medium text-foreground">등록된 역량 항목이 없습니다.</p>
-              <p className="max-w-md text-xs text-muted-foreground">
+              <p className="max-w-md text-xs leading-normal break-keep text-muted-foreground">
                 역량 매트릭스의 열은 시험 역량 마스터(성상 · HPLC · GC 등)를 그대로 그립니다.
                 마스터가 비어 있어 표시할 열이 없습니다.
               </p>
@@ -804,15 +836,17 @@ export default function TestersPage() {
             </Card>
           ) : (
             <>
-              {/* Mobile capability cards */}
-              <div className="flex flex-col gap-3 md:hidden">
+              {/* Mobile capability cards
+                  시험자 탭의 모바일 목록과 같은 규격으로 맞춘다 — 스크롤 열(min-h-0 flex-1 overflow-y-auto)
+                  + 자식 shrink-0. 스크롤이 없으면 시험자가 늘어난 순간 아래쪽 카드가 잘려 못 본다. */}
+              <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto md:hidden">
                 {activeTesters.length === 0 ? (
-                  <Card className="items-center py-6 text-center text-sm text-muted-foreground">
+                  <Card className="shrink-0 items-center py-6 text-center text-sm text-muted-foreground">
                     활성 시험자가 없습니다.
                   </Card>
                 ) : (
                   activeTesters.map((tester) => (
-                    <Card key={tester.id} className="gap-0 px-3 py-3">
+                    <Card key={tester.id} className="shrink-0 gap-0 px-3 py-3">
                       <div className="mb-2 flex items-center gap-2 border-b pb-2">
                         <TesterAvatar testerId={tester.id} name={tester.name} avatarUrl={tester.avatarUrl} size="sm" />
                         <div className="min-w-0">
@@ -835,7 +869,9 @@ export default function TestersPage() {
                               onClick={() => void cycleLevel(tester, capability)}
                               disabled={isSaving}
                               className={cn(
-                                "flex items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-left transition-colors",
+                                // min-w-0: 그리드 칸의 기본 최소폭은 내용 크기라, 긴 역량명이 칸을
+                                // 화면 밖까지 밀어낸다. 0 으로 낮춰야 안쪽 truncate 가 동작한다.
+                                "flex min-w-0 items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-left transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
                                 isSaving
                                   ? "cursor-wait opacity-50"
                                   : "hover:border-ring hover:bg-muted/50"
@@ -903,12 +939,14 @@ export default function TestersPage() {
                               key={capability.id}
                               className="border-r p-1.5 text-center"
                             >
+                              {/* hover:scale-105 를 뺐다 — 촘촘한 격자에서 칸이 커지면 옆 칸을 덮고,
+                                  '커짐'은 눌렀다는 뜻도 아니다. 테두리 색만 바꿔 대상만 짚어 준다. */}
                               <button
                                 onClick={() => void cycleLevel(tester, capability)}
                                 disabled={isSaving}
                                 className={cn(
-                                  "inline-flex h-7 w-11 items-center justify-center rounded-md border text-xs leading-normal font-bold transition-transform",
-                                  isSaving ? "cursor-wait opacity-50" : "hover:scale-105",
+                                  "inline-flex h-7 w-11 items-center justify-center rounded-md border text-xs leading-normal font-bold transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                                  isSaving ? "cursor-wait opacity-50" : "hover:border-foreground/60",
                                   LEVEL_STYLE[level]
                                 )}
                                 title={`${tester.name} / ${capability.name}: ${LEVEL_LABEL[level]}`}
@@ -951,8 +989,8 @@ export default function TestersPage() {
                 <span className="tabular-nums text-foreground">{qualSummary[status]}</span>
               </span>
             ))}
-            <span className="text-muted-foreground">
-              만료 임박 = {EXPIRING_SOON_DAYS}일 이내 · 셀 클릭으로 부여·수정, 이름 클릭으로 상세
+            <span className="break-keep text-muted-foreground">
+              만료 임박 = <span className="tabular-nums">{EXPIRING_SOON_DAYS}</span>일 이내 · 셀 클릭으로 부여·수정, 이름 클릭으로 상세
             </span>
 
             <div className="ml-auto flex items-center gap-2">
@@ -1037,7 +1075,7 @@ export default function TestersPage() {
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="flex flex-col gap-1.5">
-                    <label htmlFor={`${uid}-employeeNo`} className="text-xs font-medium tracking-wide text-foreground">
+                    <label htmlFor={`${uid}-employeeNo`} className="text-xs font-medium text-foreground">
                       사번 <span className="text-destructive">*</span>
                     </label>
                     <Input
@@ -1056,7 +1094,7 @@ export default function TestersPage() {
                     </p>
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <label htmlFor={`${uid}-name`} className="text-xs font-medium tracking-wide text-foreground">
+                    <label htmlFor={`${uid}-name`} className="text-xs font-medium text-foreground">
                       이름 <span className="text-destructive">*</span>
                     </label>
                     <Input
@@ -1076,7 +1114,7 @@ export default function TestersPage() {
                   <h3 className="text-sm font-semibold text-foreground">시험 가능 범위</h3>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <label className="flex items-center gap-2 rounded-md border px-3 py-2.5 text-sm font-medium text-foreground">
+                  <label className="flex items-center gap-2 rounded-md border px-3 py-2.5 text-sm font-medium text-foreground cursor-pointer hover:bg-muted/30">
                     <input
                       type="checkbox"
                       checked={form.canSolo}
@@ -1090,7 +1128,7 @@ export default function TestersPage() {
                     />
                     단독 시험 가능
                   </label>
-                  <label className="flex items-center gap-2 rounded-md border px-3 py-2.5 text-sm font-medium text-foreground">
+                  <label className="flex items-center gap-2 rounded-md border px-3 py-2.5 text-sm font-medium text-foreground cursor-pointer hover:bg-muted/30">
                     <input
                       type="checkbox"
                       checked={form.canDuo}

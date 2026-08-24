@@ -250,7 +250,7 @@ export function JobDetailModal({
                 <div className="h-1.5 flex-1 overflow-hidden rounded-md bg-muted">
                   <div
                     className={cn(
-                      "h-full rounded-md transition-all",
+                      "h-full rounded-md transition-[width]",
                       total > 0 && cleared === total ? "bg-blue-700" : IN_PROGRESS_STYLE.dot,
                     )}
                     style={{ width: `${pct}%` }}

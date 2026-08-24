@@ -105,16 +105,21 @@ const METHOD_OPTIONS = ["전항목", "개별항목"]
 // 상태 점 색 (템플릿 스타일의 outline 뱃지 + 컬러 도트)
 const statusDot = (s: string) => stageStyle(s).dot
 
+/**
+ * 그룹 머리의 점 색.
+ *
+ * 주차·담당자마다 무지개색을 돌려 쓰면 색이 아무 뜻도 없어 눈만 시끄럽다.
+ * 색은 상태 탭(statusDot)에서만 뜻을 갖고, 나머지는 "지금 주간인가"만 말한다.
+ */
+const DOT_CURRENT = "bg-primary"
+const DOT_NEUTRAL = "bg-muted-foreground/40"
+const DOT_NONE = "bg-slate-400"
+
 const FIELD_LABEL: Record<string, string> = {
   productCode: "품목코드", productName: "품목명", batchNo: "제조번호", dosageForm: "제형",
   packagingDate: "포장일", dueDate: "완료예정일", isUrgent: "긴급",
   method: "진행방법", status: "상태", note: "비고", assigneeTesterId: "담당자",
 }
-
-const GROUP_COLORS = [
-  "bg-blue-500", "bg-emerald-500", "bg-blue-500",
-  "bg-amber-500", "bg-rose-500", "bg-teal-500", "bg-fuchsia-500",
-]
 
 const AUTO_UNASSIGNED_NOTE_PREFIX = "자동배정 미배정 사유:"
 
@@ -361,7 +366,7 @@ export default function OrdersPage() {
             <span className="block">
               {testerName} 담당자의 휴가·출장 일정과 겹치는 오더가 {conflicted.length}건 있습니다.
               그대로 배정하면 관리자 알림이 남습니다.
-              <span className="mt-2 block whitespace-pre-line rounded-md border bg-muted/50 p-2 font-mono text-[11px]">
+              <span className="mt-2 block whitespace-pre-line rounded-md border bg-muted/50 p-2 font-mono text-xs leading-normal">
                 {bulkConflictSummary(conflicted)}
               </span>
             </span>
@@ -459,14 +464,10 @@ export default function OrdersPage() {
 
   // ─── 주차별 그룹 (정렬: 이번주 최상단 → 최신순) ────────────────────────────
   const weekGroups = useMemo(() => {
-    const buckets = new Map<string, { label: string; color: string; rows: OrderRow[] }>()
-    let colorIdx = 0
+    const buckets = new Map<string, { label: string; rows: OrderRow[] }>()
     for (const r of filteredRows) {
       const { weekKey, weekLabel } = isoToWeek(r.packagingDate)
-      if (!buckets.has(weekKey)) {
-        const color = weekKey === "no-date" ? "bg-slate-400" : GROUP_COLORS[colorIdx++ % GROUP_COLORS.length]
-        buckets.set(weekKey, { label: weekLabel, color, rows: [] })
-      }
+      if (!buckets.has(weekKey)) buckets.set(weekKey, { label: weekLabel, rows: [] })
       buckets.get(weekKey)!.rows.push(r)
     }
     const tw = thisWeekKey()
@@ -477,7 +478,13 @@ export default function OrdersPage() {
       if (b === tw) return 1
       return b.localeCompare(a) // 최신부터
     })
-    return sorted.map(([key, val]) => ({ key, ...val, isThisWeek: key === tw }))
+    return sorted.map(([key, val]) => ({
+      key,
+      ...val,
+      // 점 색은 주차 번호가 아니라 "이번 주인가"만 말한다
+      color: key === tw ? DOT_CURRENT : key === "no-date" ? DOT_NONE : DOT_NEUTRAL,
+      isThisWeek: key === tw,
+    }))
   }, [filteredRows])
 
   // 최초 1회: 이번주만 펼치고 나머지 주차는 접어 둔다.
@@ -522,14 +529,14 @@ export default function OrdersPage() {
     if (tab === "assignee") {
       const m = new Map<string, OrderRow[]>()
       for (const r of scopedRows) pushTo(m, r.assigneeTesterId ?? "__none", r)
-      let ci = 0
       return Array.from(m.entries())
         .map(([key, rs]) => {
           const assigneeName = rs.find(r => r.assigneeName)?.assigneeName ?? null
           return {
           key: `as:${key}`,
           label: key === "__none" ? "미배정" : assigneeName ?? "이름없음",
-          color: key === "__none" ? "bg-slate-400" : GROUP_COLORS[ci++ % GROUP_COLORS.length],
+          // 배정된 사람 자리는 아바타가 차지한다 — 점 색은 미배정일 때만 보인다
+          color: key === "__none" ? DOT_NONE : DOT_NEUTRAL,
           rows: rs,
           meta: `${rs.length}건`,
           assigneeTesterId: key === "__none" ? null : key,
@@ -637,16 +644,34 @@ export default function OrdersPage() {
     return (
       <article
         key={r.id}
+        /* 카드 전체가 수정 패널을 여는 버튼이다. 안에 체크박스·아이콘 버튼이 들어 있어
+           <button> 으로 감쌀 수 없으므로(중첩 금지) role/tabIndex 로 같은 조작을 만든다.
+           마우스로만 열리고 키보드로는 못 열던 문제를 여기서 없앤다. */
+        role={isAdmin ? "button" : undefined}
+        tabIndex={isAdmin ? 0 : undefined}
+        aria-label={isAdmin ? `${r.productName} 오더 수정` : undefined}
         onClick={isAdmin ? () => setEditTarget(r) : undefined}
+        onKeyDown={isAdmin ? (e) => {
+          // 안쪽 체크박스·버튼에서 올라온 키는 무시한다 — 스페이스로 체크하다 수정 패널이 열리지 않게.
+          if (e.target !== e.currentTarget) return
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setEditTarget(r) }
+        } : undefined}
+        /* min-w-0: 그리드 칸의 기본 최소폭은 내용 크기라, 긴 품목명 한 줄이
+           칸을 화면 밖까지 밀어낸다. 0 으로 낮춰야 안쪽 truncate 가 동작한다. */
         className={cn(
-          "rounded-md border bg-card p-3 shadow-xs transition-colors",
-          isAdmin && "cursor-pointer active:bg-muted/50",
-          dueSoon && "border-orange-200 bg-orange-50/60",
-          r.locked && "border-amber-200 bg-amber-50/40",
+          "min-w-0 rounded-md border bg-card p-3 transition-colors",
+          isAdmin && "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+          /* 기한임박은 이 앱의 경고색인 앰버다. 오렌지는 앰버와 눈으로 구분도 안 되면서
+             베이스 밖의 색을 하나 더 늘리기만 했다. 확정(아래)보다 테두리를 한 단 진하게 둔다. */
+          dueSoon && "border-amber-300 bg-amber-50/60",
+          /* 확정(LOCK)은 승인 성격이라 파랑 램프를 쓴다.
+             앰버로 두면 기한임박(앰버)과 겹쳐 급한 건과 확정 건을 못 가른다. */
+          r.locked && "border-blue-200 bg-blue-50/40",
           selected.has(r.id) && "border-primary/40 bg-primary/5 ring-1 ring-primary/20",
         )}
       >
-        <div className="flex items-start gap-2.5">
+        {/* 1번째 구역(체크박스·제목)은 클릭을 흘리지 않는다 — 체크박스를 누르다 수정 패널이 열리는 오작동 방지 */}
+        <div className="flex cursor-default items-start gap-2.5" onClick={e => e.stopPropagation()}>
           <div className="pt-0.5" onClick={e => e.stopPropagation()}>
             <input
               type="checkbox"
@@ -667,62 +692,69 @@ export default function OrdersPage() {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-1.5">
               {indented && <span aria-hidden="true" className="text-muted-foreground/60">↳</span>}
-              <p className="min-w-0 flex-1 text-sm font-semibold text-foreground">{r.productName}</p>
+              <p className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground" title={r.productName}>
+                {r.productName}
+              </p>
               <SourceBadge source={r.source} />
               {r.source === "auto" && !r.productSynced && (
                 <Badge variant="outline" className="border-amber-200 text-amber-700">미동기화</Badge>
               )}
               {r.isUrgent && <Badge variant="outline" className="border-red-200 text-red-700">긴급</Badge>}
             </div>
-            <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-              <span className="font-mono font-semibold">품목코드 {r.productCode}</span>
+            {/* 코드·제조번호는 부가정보다 — 품목명과 같은 굵기로 두면 위계가 없어진다 */}
+            <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-xs leading-normal text-muted-foreground">
+              <span className="font-mono tabular-nums">품목코드 {r.productCode}</span>
               <span aria-hidden="true" className="text-border">·</span>
-              <span className="font-mono font-semibold">제조번호 {r.batchNo}</span>
+              <span className="font-mono tabular-nums">제조번호 {r.batchNo}</span>
             </div>
           </div>
 
+          {/* icon-sm(31.5px)은 손가락으로 누르기엔 작다 — 터치 타깃을 36px 로 올린다 */}
           <Button
-            variant="ghost" size="icon-sm"
+            variant="ghost" size="icon"
             onClick={(e) => { e.stopPropagation(); setHistoryTarget(r) }}
             title="수정이력"
+            aria-label={`${r.productName} 수정이력`}
             className="-mr-1 -mt-1 shrink-0 text-muted-foreground"
           >
             <History />
           </Button>
         </div>
 
-        <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 border-t pt-3 text-xs">
+        {/* 값은 medium, 라벨은 xs muted — 품목명(semibold)까지 세 단계로 위계를 만든다.
+            여섯 칸이 전부 semibold 면 어느 것이 그 카드의 제목인지 읽히지 않는다. */}
+        <dl className={cn("mt-3 grid grid-cols-2 gap-x-3 gap-y-2 border-t pt-3 text-xs leading-normal", isAdmin && "cursor-pointer active:bg-muted/50")}>
           <div className="min-w-0">
             <dt className="text-muted-foreground">제형</dt>
-            <dd className="mt-0.5 truncate text-sm font-semibold text-foreground">{r.dosageForm ?? "-"}</dd>
+            <dd className="mt-0.5 truncate text-sm font-medium text-foreground">{r.dosageForm ?? "-"}</dd>
           </div>
           <div className="min-w-0">
             {/* 진행방법은 시트 원본값 — 실제 배정 항목은 수정 패널의 「시험항목」이 정한다 */}
             <dt className="text-muted-foreground">진행방법 (시트)</dt>
-            <dd className="mt-0.5 truncate text-sm font-semibold text-foreground">{r.method}</dd>
+            <dd className="mt-0.5 truncate text-sm font-medium text-foreground">{r.method}</dd>
           </div>
-          <div>
+          <div className="min-w-0">
             <dt className="text-muted-foreground">포장일</dt>
-            <dd className="mt-0.5 text-sm font-semibold text-foreground">{r.packagingDate ?? "-"}</dd>
+            <dd className="mt-0.5 text-sm font-medium tabular-nums text-foreground">{r.packagingDate ?? "-"}</dd>
           </div>
-          <div>
+          <div className="min-w-0">
             <dt className="text-muted-foreground">완료예정</dt>
-            <dd className={cn("mt-0.5 text-sm font-semibold text-foreground", dueSoon && "text-orange-700")}>
+            <dd className={cn("mt-0.5 text-sm font-medium tabular-nums text-foreground", dueSoon && "font-semibold text-amber-700")}>
               {r.dueDate ?? "-"}
             </dd>
           </div>
-          <div>
+          <div className="min-w-0">
             <dt className="text-muted-foreground">공수</dt>
-            <dd className="mt-0.5 text-sm font-semibold text-foreground">{r.workdays != null ? `${r.workdays}일` : "-"}</dd>
+            <dd className="mt-0.5 text-sm font-medium tabular-nums text-foreground">{r.workdays != null ? `${r.workdays}일` : "-"}</dd>
           </div>
           <div className="min-w-0">
             <dt className="text-muted-foreground">담당자</dt>
-            <dd className="mt-0.5 truncate text-sm font-semibold text-foreground">
+            <dd className="mt-0.5 truncate text-sm font-medium text-foreground">
               {r.assigneeName && r.assigneeTesterId
                 ? <button
                     onClick={(e) => { e.stopPropagation(); setAssigneeTarget({ id: r.assigneeTesterId!, name: r.assigneeName! }) }}
                     title={`${r.assigneeName} 담당 오더 보기`}
-                    className="inline-flex max-w-full items-center gap-1.5 hover:text-primary"
+                    className="inline-flex max-w-full items-center gap-1.5 rounded-md transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                   >
                     <TesterAvatar testerId={r.assigneeTesterId} name={r.assigneeName} size="sm" />
                     <span className="truncate underline-offset-2 hover:underline">{r.assigneeName}</span>
@@ -732,14 +764,15 @@ export default function OrdersPage() {
           </div>
         </dl>
 
+        {/* 미배정 사유 — 카드 안에 또 카드를 두지 않는다. 실선 하나로 나누고 잉크 색으로만 구분한다 */}
         {unassignedReason && (
-          <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-800">
-            <p className="font-semibold">미배정 사유</p>
-            <p className="mt-0.5 break-words">{unassignedReason}</p>
+          <div className="mt-3 border-t border-amber-200 pt-2.5 text-xs leading-normal text-amber-800">
+            <p className="font-medium">미배정 사유</p>
+            <p className="mt-0.5 break-keep break-words">{unassignedReason}</p>
           </div>
         )}
 
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-2.5">
+        <div className={cn("mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-2.5", isAdmin && "cursor-pointer active:bg-muted/50")}>
           <div className="flex items-center gap-1">
             <StatusBadge status={r.status} />
             {r.locked && (
@@ -762,19 +795,34 @@ export default function OrdersPage() {
       : `${renderGroups.length}개 상태`
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-4 md:p-6">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden p-4 md:p-6">
       {/* 헤더 · 조회조건 — 스크롤하지 않음 */}
       <div className="flex shrink-0 flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">AI 스케줄 · 관리</h1>
-          <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-            제조부서 PCT 적재 오더의 담당자 배정과 수정을 관리합니다.
-            {unsyncedCount > 0 && (
-              <Badge variant="outline" className="gap-1 border-amber-200 text-amber-700">
-                <AlertCircle className="size-3" /> 미동기화 {unsyncedCount}
-              </Badge>
+        <div className="min-w-0">
+          <h1 className="text-lg font-semibold text-foreground">AI 스케줄 · 관리</h1>
+          {/* 화면 이름을 되풀이하는 부제 대신, 지금 무엇이 얼마나 있는지를 적는다 */}
+          {/* <p> 안에는 <div>(Skeleton)를 넣을 수 없다 — HTML 규격 위반이라
+              하이드레이션이 깨진다. 문단이 아니라 값 묶음이므로 div 로 둔다. */}
+          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-normal break-keep text-muted-foreground">
+            {loading ? (
+              <Skeleton className="h-3 w-56" />
+            ) : (
+              <>
+                <span className="tabular-nums">
+                  오더 {rows.length}건
+                  <span className="px-1 text-border">·</span>
+                  배정 {rows.filter(r => r.assigneeTesterId).length}건
+                  <span className="px-1 text-border">·</span>
+                  확정 {rows.filter(r => r.locked).length}건
+                </span>
+                {unsyncedCount > 0 && (
+                  <Badge variant="outline" className="gap-1 border-amber-200 text-amber-700">
+                    <AlertCircle className="size-3" /> 미동기화 {unsyncedCount}
+                  </Badge>
+                )}
+              </>
             )}
-          </p>
+          </div>
         </div>
         {isAdmin && (
           <div className="flex flex-wrap items-center gap-2">
@@ -794,7 +842,7 @@ export default function OrdersPage() {
       </div>
 
       {msg && (
-        <div className="shrink-0 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">{msg}</div>
+        <div className="shrink-0 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium break-keep text-blue-700">{msg}</div>
       )}
 
       {/* 반차 겹침 배정 확인 — 연차·출장은 자동배정에서 제외되지만 반차는 근무일이라 배정된다 */}
@@ -806,14 +854,15 @@ export default function OrdersPage() {
                 <AlertCircle className="size-3.5" />
                 반차 기간과 겹치는 배정 {halfDayNotices.length}건
               </p>
-              <p className="mt-0.5 text-[11px]">
+              {/* text-xs(13.5px)가 이 프로젝트의 최소 글자 크기다 — 그보다 작게 줄이지 않는다 */}
+              <p className="mt-0.5 text-xs leading-normal break-keep">
                 반차는 근무일이라 배정에서 제외하지 않고 가용 공수만 차감했습니다. 그대로 둘지 확인해 주세요.
               </p>
-              <ul className="mt-1.5 flex flex-col gap-0.5 text-xs">
+              <ul className="mt-1.5 flex flex-col gap-0.5 text-xs leading-normal">
                 {halfDayNotices.map(n => (
                   <li key={`${n.orderId}-${n.testerId}`} className="truncate">
                     · {n.productName} ({n.batchNo}) → <strong>{n.testerName}</strong>
-                    <span className="ml-1 font-mono text-[11px]">{n.dates.join(", ")}</span>
+                    <span className="ml-1 font-mono tabular-nums">{n.dates.join(", ")}</span>
                   </li>
                 ))}
               </ul>
@@ -821,7 +870,7 @@ export default function OrdersPage() {
             <button
               type="button"
               onClick={() => setHalfDayNotices([])}
-              className="shrink-0 rounded-md p-1 text-amber-700 hover:bg-amber-100"
+              className="shrink-0 rounded-md p-1 text-amber-700 transition-colors hover:bg-amber-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
               title="닫기"
             >
               <X className="size-3.5" />
@@ -830,24 +879,31 @@ export default function OrdersPage() {
         </div>
       )}
 
-      {/* 탭 (주차별 / 담당자별 / 상태별) */}
-      <div className="inline-flex h-9 w-fit shrink-0 items-center gap-0.5 rounded-md bg-muted p-0.5 text-muted-foreground">
+      {/* 탭 (주차별 / 담당자별 / 상태별)
+          세 탭을 합치면 300px 남짓이라 320px 폭에서 한 줄에 안 들어간다.
+          글자를 줄이지 않고 줄을 바꾼다 — 좁으면 두 줄, sm 부터 한 줄. */}
+      <div className="flex w-full shrink-0 flex-wrap items-center gap-0.5 rounded-md bg-muted p-0.5 text-muted-foreground sm:inline-flex sm:h-9 sm:w-fit sm:flex-nowrap">
         {TABS.map(t => (
           <button
             key={t.id}
+            type="button"
+            aria-pressed={tab === t.id}
             onClick={() => setTab(t.id)}
             className={cn(
-              "inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors",
+              "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-3 text-sm font-medium whitespace-nowrap transition-colors",
+              "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
               tab === t.id ? "bg-card text-foreground shadow-sm" : "hover:text-foreground",
             )}
           >
-            <t.icon className="size-3.5" />{t.label}
+            <t.icon className="size-3.5 shrink-0" />{t.label}
           </button>
         ))}
       </div>
 
-      {/* 상태 요약 — 숫자를 누르면 해당 상태만 즉시 필터링 */}
-      <div className="grid shrink-0 grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8">
+      {/* 상태 요약 — 숫자를 누르면 해당 상태만 즉시 필터링.
+          모바일은 3칸(320px 기준 한 칸 ~85px)까지가 한계다. 글자를 줄이는 대신
+          타일 높이·여백을 줄여 9칸이 세로로 덜 잡아먹게 한다. */}
+      <div className="grid shrink-0 grid-cols-3 gap-1.5 sm:grid-cols-5 sm:gap-2 xl:grid-cols-9">
         {STATUS_SUMMARY_OPTIONS.map(status => {
           const active = statusFilter === status
           const count = status ? (statusCounts.get(status) ?? 0) : searchRows.length
@@ -859,15 +915,17 @@ export default function OrdersPage() {
               aria-pressed={active}
               onClick={() => setStatusFilter(status)}
               className={cn(
-                "flex min-h-16 items-center justify-between gap-2 rounded-md border bg-card px-3 py-2 text-left transition-colors",
+                "flex min-h-14 min-w-0 flex-col justify-center gap-0.5 rounded-md border bg-card px-2 py-1.5 text-left transition-colors",
+                "sm:min-h-16 sm:gap-1 sm:px-2.5 sm:py-2",
+                "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
                 active
                   ? "border-primary bg-primary/5 ring-1 ring-primary/20"
                   : "border-border hover:border-primary/40 hover:bg-muted/30",
               )}
             >
-              <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <span className="flex min-w-0 items-center gap-1.5 text-xs leading-normal font-medium text-muted-foreground">
                 <span className={cn("size-2 shrink-0 rounded-full", dot)} />
-                <span className="truncate">{status || "전체"}</span>
+                <span className="min-w-0 truncate">{status || "전체"}</span>
               </span>
               <span className="text-lg font-semibold tabular-nums text-foreground">{count}</span>
             </button>
@@ -881,15 +939,21 @@ export default function OrdersPage() {
         {/* 보기 모드: 최근 5주 / 연단위 (기간 범위) */}
         <div className="inline-flex h-9 items-center gap-0.5 rounded-md bg-muted p-0.5 text-muted-foreground">
           <button
+            type="button"
+            aria-pressed={viewMode === "recent"}
             onClick={() => setViewMode("recent")}
             className={cn("h-8 rounded-md px-3 text-sm font-medium transition-colors",
+              "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
               viewMode === "recent" ? "bg-card text-foreground shadow-sm" : "hover:text-foreground")}
           >
             최근 5주
           </button>
           <button
+            type="button"
+            aria-pressed={viewMode === "year"}
             onClick={() => setViewMode("year")}
             className={cn("h-8 rounded-md px-3 text-sm font-medium transition-colors",
+              "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
               viewMode === "year" ? "bg-card text-foreground shadow-sm" : "hover:text-foreground")}
           >
             연단위
@@ -899,7 +963,7 @@ export default function OrdersPage() {
           <YearPicker year={year} years={years} onChange={setYear} />
         )}
 
-        <span className="text-sm text-muted-foreground tabular-nums">
+        <span className="text-xs leading-normal break-keep text-muted-foreground tabular-nums">
           {search.trim() ? `검색 ${scopedRows.length}건` : `${scopedRows.length}건`} · {groupUnit}
         </span>
 
@@ -910,20 +974,22 @@ export default function OrdersPage() {
           </Button>
         )}
 
-        {/* 이름 검색 */}
-        <div className="relative ml-auto">
+        {/* 이름 검색 — 모바일에선 한 줄을 다 쓴다(w-56=252px 를 320px 폭에 끼워 넣지 않는다) */}
+        <div className="relative w-full min-w-0 sm:ml-auto sm:w-auto">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="품목명·담당자·코드·제조번호"
-            className="h-9 w-56 rounded-md border border-input bg-background pl-8 pr-7 text-sm text-foreground shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+            aria-label="오더 검색"
+            className="h-9 w-full rounded-md border border-input bg-background pl-8 pr-7 text-sm text-foreground shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none sm:w-56"
           />
           {search && (
             <button
+              type="button"
               onClick={() => setSearch("")}
               title="검색어 지우기"
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             >
               <X className="size-3.5" />
             </button>
@@ -972,11 +1038,11 @@ export default function OrdersPage() {
         </div>
         </div>
       ) : rows.length === 0 ? (
-        <Card className="min-h-0 flex-1 items-center py-10 text-center text-sm text-muted-foreground">
+        <Card className="min-h-0 flex-1 items-center px-4 py-10 text-center text-sm break-keep text-muted-foreground">
           적재된 오더가 없습니다. &quot;지금 적재&quot;로 시트를 불러오세요.
         </Card>
       ) : renderGroups.length === 0 ? (
-        <Card className="min-h-0 flex-1 items-center py-10 text-center text-sm text-muted-foreground">
+        <Card className="min-h-0 flex-1 items-center px-4 py-10 text-center text-sm break-keep text-muted-foreground">
           {search.trim() ? `"${search.trim()}" 검색 결과가 없습니다.` : "해당 기간에 표시할 오더가 없습니다."}
         </Card>
       ) : (
@@ -986,12 +1052,11 @@ export default function OrdersPage() {
           {renderGroups.map(g => {
             const isCollapsed = collapsed.has(g.key)
             return (
-              <section
-                key={g.key}
-                className={cn("space-y-2", g.isThisWeek && "rounded-md bg-primary/[0.03] p-1.5")}
-              >
+              /* 3% 배경 틴트는 보이지도 않으면서 그룹마다 안쪽 여백만 어긋나게 한다.
+                 "이번주"는 배지와 점 색(bg-primary)이 이미 말하고 있다. */
+              <section key={g.key} className="min-w-0 space-y-2">
                 {/* 날짜 기간 구분선 */}
-                <div className="flex items-center gap-2 px-1">
+                <div className="flex min-w-0 items-center gap-2 px-1">
                   {tab === "assignee" && g.label !== "미배정"
                     ? <TesterAvatar testerId={g.assigneeTesterId} name={g.label} size="md" />
                     : <span className={cn("size-2 shrink-0 rounded-full", g.color)} />}
@@ -999,19 +1064,21 @@ export default function OrdersPage() {
                     type="button"
                     aria-expanded={!isCollapsed}
                     onClick={() => toggleGroup(g.key)}
-                    className="min-w-0 text-left text-sm font-semibold text-foreground hover:text-primary"
+                    /* inline-flex + min-w-0: 좁은 폭에서 안쪽 truncate 가 실제로 동작하려면
+                       버튼 자체가 줄어들 수 있어야 한다(기본 inline-block 은 안 줄어든다). */
+                    className="inline-flex min-w-0 items-center rounded-md text-left text-sm font-semibold text-foreground transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                   >
-                    <span className="truncate">{g.label}</span>
-                    {g.isThisWeek && <Badge className="ml-2 align-middle">이번주</Badge>}
+                    <span className="min-w-0 truncate tabular-nums">{g.label}</span>
+                    {g.isThisWeek && <Badge className="ml-2 shrink-0">이번주</Badge>}
                   </button>
                   <span className="h-px flex-1 bg-border" />
-                  <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{g.meta}</span>
+                  <span className="shrink-0 text-xs leading-normal text-muted-foreground tabular-nums">{g.meta}</span>
                   <button
                     type="button"
                     aria-label={`${g.label} ${isCollapsed ? "펼치기" : "접기"}`}
                     aria-expanded={!isCollapsed}
                     onClick={() => toggleGroup(g.key)}
-                    className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                   >
                     {isCollapsed ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}
                   </button>
@@ -1023,19 +1090,24 @@ export default function OrdersPage() {
                       if (item.type === "single") return renderOrderCard(item.row)
                       const fc = famCollapsed.has(item.familyId)
                       return (
-                        <div key={item.familyId} className="rounded-md border border-primary/20 bg-primary/5 p-2.5 xl:col-span-2">
+                        /* 테두리를 가진 층은 안쪽 오더 카드 하나뿐이어야 한다 —
+                           묶음은 옅은 바탕과 머리줄로만 구분한다(카드 안 카드 방지). */
+                        <div key={item.familyId} className="min-w-0 rounded-md bg-primary/5 p-2.5 xl:col-span-2">
                           <button
                             type="button"
                             aria-expanded={!fc}
                             onClick={() => toggleFamily(item.familyId)}
-                            className="flex w-full items-center gap-2 text-left"
+                            className="flex w-full items-center gap-2 rounded-md text-left transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                           >
                             {fc
-                              ? <ChevronRight className="size-4 text-muted-foreground" />
-                              : <ChevronDown className="size-4 text-muted-foreground" />}
-                            <Layers className="size-3.5 text-primary" />
+                              ? <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                              : <ChevronDown className="size-4 shrink-0 text-muted-foreground" />}
+                            <Layers className="size-3.5 shrink-0 text-primary" />
                             <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">{item.familyName}</span>
-                            <Badge variant="secondary">동시분석 {item.rows.length}건</Badge>
+                            {/* 제목 옆 배지로 되풀이하지 않는다 — 건수는 부가정보다 */}
+                            <span className="shrink-0 text-xs leading-normal text-muted-foreground tabular-nums">
+                              동시분석 {item.rows.length}건
+                            </span>
                           </button>
                           {!fc && (
                             <div className="mt-2 grid w-full justify-start grid-cols-[repeat(auto-fit,minmax(min(100%,300px),400px))] gap-2 border-t border-primary/15 pt-2">
@@ -1089,60 +1161,89 @@ export default function OrdersPage() {
         // 배정 해제 대상 = 미확정이면서 담당자가 있는 건
         const unassignableCount = selectedRows.filter(r => !r.locked && !!r.assigneeTesterId).length
         return (
-          <div className="pointer-events-none fixed inset-x-0 bottom-5 z-40 flex justify-center px-4">
-            <div className="pointer-events-auto flex w-full max-w-3xl flex-wrap items-center gap-3 rounded-md border bg-card px-4 py-2.5 shadow-lg">
-              <div className="flex flex-col leading-tight">
-                <span className="text-sm font-semibold text-foreground tabular-nums">{selected.size}건 선택됨</span>
-                <span className="text-xs leading-normal text-muted-foreground tabular-nums">확정 {lockedCount} · 미확정 {unlockedCount}</span>
+          /* 모바일: 요약 → 배정 → 확정 순으로 세로로 쌓는다.
+             한 줄에 Select 1개 + 버튼 4개 + 구분선 2개를 밀어 넣으면 320px 에서는
+             바가 화면 밖으로 나가 아무 버튼도 누를 수 없다. 구분선은 가로 배치일 때만 쓴다. */
+          <div className="pointer-events-none fixed inset-x-0 bottom-3 z-40 flex justify-center px-3 sm:bottom-5 sm:px-4">
+            <div className="pointer-events-auto relative flex w-full max-w-3xl flex-col gap-2 rounded-md border border-background/10 bg-foreground px-3 py-2.5 text-background shadow-lg sm:flex-row sm:items-center sm:gap-3 sm:px-4">
+              {/* 왼쪽 — 선택 요약. pr-9: 모바일에선 닫기 버튼이 오른쪽 위에 겹쳐 앉는다 */}
+              <div className="flex min-w-0 flex-col pr-9 leading-tight sm:flex-1 sm:pr-0">
+                <span className="text-sm font-semibold text-background tabular-nums">{selected.size}건 선택됨</span>
+                <span className="text-xs leading-normal text-background/60 tabular-nums">확정 {lockedCount} · 미확정 {unlockedCount}</span>
               </div>
 
-              <span className="h-8 w-px bg-border" />
+              <span className="hidden h-8 w-px shrink-0 bg-background/15 sm:block" />
 
-              {/* 담당자 일괄 배정 — 확정 해제된(미확정) 건만 */}
-              {unlockedCount === 0 ? (
-                <span className="text-sm font-medium text-amber-700">확정된 대상은 배정불가합니다.</span>
-              ) : (
-                <div className="flex items-center gap-1.5">
-                  <Select value={bulkTester} onValueChange={setBulkTester}>
-                    <SelectTrigger className="h-9 w-40"><SelectValue placeholder="담당자 선택" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">미배정</SelectItem>
-                      {assignableTesters(testers).map(t => (
-                        <SelectItem key={t.id} value={t.id}>
-                          <TesterOptionLabel testerId={t.id} name={t.name} />
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    size="default"
-                    onClick={applyAssign}
-                    disabled={busy !== null || !bulkTester}
-                  >
-                    {busy === "assign-bulk" ? <Loader2 className="animate-spin" /> : <Users />}배정
-                  </Button>
-                  <Button
-                    size="default"
-                    variant="outline"
-                    onClick={applyUnassign}
-                    disabled={busy !== null || unassignableCount === 0}
-                    title="선택한 오더의 담당자 배정만 지웁니다 (오더는 그대로 유지)"
-                  >
-                    {busy === "unassign-bulk" ? <Loader2 className="animate-spin" /> : <UserMinus />}
-                    배정 해제{unassignableCount > 0 ? ` ${unassignableCount}` : ""}
-                  </Button>
-                </div>
-              )}
+              {/* 가운데 — 담당자 일괄 배정 (확정 해제된 미확정 건만) */}
+              <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:flex-1 sm:flex-nowrap sm:justify-center">
+                {unlockedCount === 0 ? (
+                  <span className="text-sm font-medium break-keep text-amber-300">확정된 대상은 배정불가합니다.</span>
+                ) : (
+                  <>
+                    <Select value={bulkTester} onValueChange={setBulkTester}>
+                      <SelectTrigger className="h-9 w-full border-background/20 bg-background/10 text-background data-placeholder:text-background/60 sm:w-40 [&_svg]:text-background/60"><SelectValue placeholder="담당자 선택" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">미배정</SelectItem>
+                        {assignableTesters(testers).map(t => (
+                          <SelectItem key={t.id} value={t.id}>
+                            <TesterOptionLabel testerId={t.id} name={t.name} />
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      size="default"
+                      onClick={applyAssign}
+                      disabled={busy !== null || !bulkTester}
+                      className="flex-1 sm:flex-none"
+                    >
+                      {busy === "assign-bulk" ? <Loader2 className="animate-spin" /> : <Users />}배정
+                    </Button>
+                    <Button
+                      size="default"
+                      variant="outline"
+                      onClick={applyUnassign}
+                      disabled={busy !== null || unassignableCount === 0}
+                      title="선택한 오더의 담당자 배정만 지웁니다 (오더는 그대로 유지)"
+                      className="flex-1 border-background/20 bg-transparent text-background hover:bg-background/10 hover:text-background sm:flex-none"
+                    >
+                      {busy === "unassign-bulk" ? <Loader2 className="animate-spin" /> : <UserMinus />}
+                      배정 해제{unassignableCount > 0 ? ` ${unassignableCount}` : ""}
+                    </Button>
+                  </>
+                )}
+              </div>
 
-              <span className="h-8 w-px bg-border" />
+              <span className="hidden h-8 w-px shrink-0 bg-background/15 sm:block" />
 
-              <Button size="default" onClick={() => applyLock(true)} disabled={busy !== null}>
-                {busy === "lock" ? <Loader2 className="animate-spin" /> : <Lock />}확정
-              </Button>
-              <Button size="default" variant="outline" onClick={() => applyLock(false)} disabled={busy !== null}>
-                <LockOpen />확정 해제
-              </Button>
-              <Button size="icon" variant="ghost" onClick={() => { setSelected(new Set()); setBulkTester("") }} title="선택 해제" className="ml-auto">
+              {/* 오른쪽 — 확정 / 확정 해제 */}
+              <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:flex-1 sm:flex-nowrap sm:justify-end">
+                <Button
+                  size="default"
+                  onClick={() => applyLock(true)}
+                  disabled={busy !== null}
+                  className="flex-1 sm:flex-none"
+                >
+                  {busy === "lock" ? <Loader2 className="animate-spin" /> : <Lock />}확정
+                </Button>
+                <Button
+                  size="default"
+                  variant="outline"
+                  onClick={() => applyLock(false)}
+                  disabled={busy !== null}
+                  className="flex-1 border-background/20 bg-transparent text-background hover:bg-background/10 hover:text-background sm:flex-none"
+                >
+                  <LockOpen />확정 해제
+                </Button>
+              </div>
+
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => { setSelected(new Set()); setBulkTester("") }}
+                title="선택 해제"
+                className="absolute top-1.5 right-1.5 shrink-0 text-background/70 hover:bg-background/10 hover:text-background sm:static sm:top-auto sm:right-auto"
+              >
                 <X />
               </Button>
             </div>
@@ -1163,11 +1264,13 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
+/* 자동/수동은 좋고 나쁨이 아니라 출처다. 대부분이 자동이므로 자동을 중립색으로 두고,
+   드문 쪽인 수동에만 잉크(브랜드 파랑)를 남긴다 — 초록은 여기서 뜻이 없었다. */
 function SourceBadge({ source }: { source: OrderRow["source"] }) {
   return source === "manual" ? (
     <Badge variant="outline" className="border-blue-200 text-blue-700">수동</Badge>
   ) : (
-    <Badge variant="outline" className="border-emerald-200 text-emerald-700">자동</Badge>
+    <Badge variant="outline" className="text-muted-foreground">자동</Badge>
   )
 }
 
@@ -1253,23 +1356,25 @@ function TestItemPickerDialog({
               시험항목을 불러오지 못했습니다. {error}
             </p>
           ) : rows.length === 0 ? (
-            <p className="rounded-md border border-dashed py-10 text-center text-sm text-muted-foreground">
+            <p className="rounded-md border border-dashed px-4 py-10 text-center text-sm break-keep text-muted-foreground">
               이 품목에 등록된 시험항목이 없습니다.
               <br />
-              <span className="text-xs">기준 설정 › 품목별 시험항목 관리에서 먼저 등록하세요.</span>
+              기준 설정 › 품목별 시험항목 관리에서 먼저 등록하세요.
             </p>
           ) : (
-            <>
-              <label className="flex cursor-pointer items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs font-medium">
+            /* 항목마다 테두리를 두르면 칩이 줄지어 선 것처럼 보인다 —
+               테두리는 목록 전체에 한 겹만 두고 안쪽은 실선으로 나눈다. */
+            <div className="divide-y rounded-md border">
+              <label className="flex cursor-pointer items-center gap-2 bg-muted/30 px-3 py-2 text-xs leading-normal font-medium">
                 <input type="checkbox" checked={allOn} onChange={toggleAll} className="cb-custom" />
-                전체 선택 ({checked.size}/{rows.length})
+                전체 선택 <span className="tabular-nums">({checked.size}/{rows.length})</span>
               </label>
-              <ul className="flex flex-col gap-1.5">
+              <ul className="divide-y">
                 {rows.map(r => (
                   <li key={r.testItemId}>
                     <label className={cn(
-                      "flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2.5",
-                      checked.has(r.testItemName) && "border-primary/40 bg-primary/5",
+                      "flex cursor-pointer items-center gap-2 px-3 py-2.5 transition-colors hover:bg-muted/40",
+                      checked.has(r.testItemName) && "bg-primary/5",
                     )}>
                       <input
                         type="checkbox"
@@ -1285,7 +1390,7 @@ function TestItemPickerDialog({
                   </li>
                 ))}
               </ul>
-            </>
+            </div>
           )}
         </DialogBody>
 
@@ -1424,7 +1529,7 @@ function CreateModal({ testers, absences, onClose, onCreated }: {
         </>
       }
     >
-      <p className="mb-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-normal text-blue-700">
+      <p className="mb-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-normal break-keep text-blue-700">
         제조 시트 적재가 아닌 수동 등록 오더입니다. 등록 후 담당자를 지정하세요.
       </p>
 
@@ -1496,7 +1601,7 @@ function CreateModal({ testers, absences, onClose, onCreated }: {
         {form.method === "개별항목" && (
           <Field label="배정 시험항목" full>
             {!productId ? (
-              <p className="rounded-md border border-dashed px-3 py-2.5 text-xs text-muted-foreground">
+              <p className="rounded-md border border-dashed px-3 py-2.5 text-xs leading-normal break-keep text-muted-foreground">
                 먼저 위에서 품목을 검색해 선택하세요. 그 품목에 등록된 시험항목 중에서 고릅니다.
               </p>
             ) : (
@@ -1557,7 +1662,11 @@ function CreateModal({ testers, absences, onClose, onCreated }: {
 
       <LeaveConflictNotice conflicts={leaveConflicts} testerName={assigneeName} className="mt-2" />
 
-      {err && <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">{err}</p>}
+      {err && (
+        <p className="mt-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs leading-normal break-keep text-destructive">
+          {err}
+        </p>
+      )}
 
       {pickerOpen && productId && (
         <TestItemPickerDialog
@@ -1671,9 +1780,10 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
       }
     >
       <p className={cn(
-        "mb-3 rounded-md border px-3 py-2 text-xs leading-normal",
+        "mb-3 rounded-md border px-3 py-2 text-xs leading-normal break-keep",
         isAutoOrder
-          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          /* SourceBadge 와 같은 규칙 — 자동은 중립, 수동만 파랑 */
+          ? "bg-muted text-muted-foreground"
           : "border-blue-200 bg-blue-50 text-blue-700",
       )}>
         {isAutoOrder
@@ -1738,7 +1848,7 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
             </SelectContent>
           </Select>
           {order.locked && (
-            <p className="mt-1 text-xs leading-normal text-muted-foreground">
+            <p className="mt-1 text-xs leading-normal break-keep text-muted-foreground">
               확정(LOCK)된 오더입니다. 확정 해제 후 배정을 변경·해제할 수 있습니다.
             </p>
           )}
@@ -1766,7 +1876,11 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
           className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none" />
       </div>
 
-      {err && <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">{err}</p>}
+      {err && (
+        <p className="mt-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs leading-normal break-keep text-destructive">
+          {err}
+        </p>
+      )}
 
     </SlideOver>
   )
@@ -1810,7 +1924,7 @@ function HistoryModal({ order, testers, onClose }: { order: OrderRow; testers: T
       {loading ? (
         <div className="flex flex-col gap-2.5 py-2">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="rounded-md border bg-muted/40 px-3 py-2.5">
+            <div key={i} className="rounded-md border px-3 py-2.5">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5">
                   <Skeleton className="h-5 w-10 rounded-md" />
@@ -1831,15 +1945,16 @@ function HistoryModal({ order, testers, onClose }: { order: OrderRow; testers: T
       ) : (
         <ul className="flex flex-col gap-2.5">
           {sessions.map((s, i) => (
-            <li key={s.key} className="rounded-md border bg-muted/40 px-3 py-2.5">
+            <li key={s.key} className="rounded-md border px-3 py-2.5">
               {/* 헤더: 작성자 · 시각 · 변경 필드 수 */}
               <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5">
-                  <span className="inline-flex items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-xs leading-normal font-semibold text-primary">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <span className="inline-flex shrink-0 items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-xs leading-normal font-semibold text-primary tabular-nums">
                     {sessions.length - i}회차
                   </span>
-                  <span className="text-sm font-semibold text-foreground">{s.editorName ?? "시스템/미상"}</span>
-                  <Badge variant="secondary" className="text-xs leading-normal">{s.edits.length}개 변경</Badge>
+                  <span className="min-w-0 truncate text-sm font-medium text-foreground">{s.editorName ?? "시스템/미상"}</span>
+                  {/* 건수는 배지가 아니라 부가정보로 — 배지는 상태를 말할 때만 쓴다 */}
+                  <span className="shrink-0 text-xs leading-normal text-muted-foreground tabular-nums">{s.edits.length}개 변경</span>
                 </div>
                 <span className="shrink-0 text-xs leading-normal text-muted-foreground tabular-nums">
                   {new Date(s.editedAt).toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" })}
@@ -1880,11 +1995,18 @@ interface IngestLog {
   batchNo: string; productCode: string; productName: string | null
   changeType: string; status: string | null
 }
+/* 적재 상태(ingest_state)는 서버가 주는 값이라 여기 없는 키가 올 수 있다.
+   타입이 Record<string, ...> 이라 컴파일러도 못 잡아 준다 - 조회는 반드시
+   changeMeta() 를 거쳐 기본값을 받는다(값 하나에 화면 전체가 죽지 않도록). */
 const CHANGE_META: Record<string, { label: string; desc: string; cls: string }> = {
   new:     { label: "신규 추가", desc: "생산계획에서 새로 들어온 오더",  cls: "border-blue-200 text-blue-700" },
   updated: { label: "내용 변경", desc: "기존 오더 정보가 갱신됨",        cls: "border-amber-200 text-amber-700" },
   blocked: { label: "변경 차단", desc: "작업 진행·확정 상태라 미반영됨", cls: "border-blue-200 text-blue-700" },
   deleted: { label: "삭제됨",   desc: "생산계획에서 사라져 제외됨",      cls: "border-red-200 text-red-700" },
+}
+
+function changeMeta(key: string): { label: string; desc: string; cls: string } {
+  return CHANGE_META[key] ?? { label: key || '기타', desc: '알 수 없는 변경 유형', cls: 'border-border text-muted-foreground' }
 }
 const CHANGE_ORDER = ["new", "updated", "blocked", "deleted"] as const
 
@@ -1946,9 +2068,9 @@ function IngestLogModal({ onClose }: { onClose: () => void }) {
                 <Skeleton className="h-5 w-16 rounded-md" />
                 <Skeleton className="h-5 w-16 rounded-md" />
               </div>
-              <div className="flex flex-col gap-1.5">
+              <div className="divide-y rounded-md border">
                 {Array.from({ length: 2 }).map((_, j) => (
-                  <div key={j} className="rounded-md border bg-muted/30 px-3 py-2">
+                  <div key={j} className="px-3 py-2">
                     <div className="flex items-center gap-2">
                       <Skeleton className="h-5 w-14 rounded-md" />
                       <Skeleton className="h-4 w-40" />
@@ -1974,31 +2096,32 @@ function IngestLogModal({ onClose }: { onClose: () => void }) {
             return (
               <section key={g.bucket}>
                 <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <span className="text-sm font-bold text-foreground">{dateLabel} {timeLabel}</span>
+                  <span className="text-sm font-semibold text-foreground tabular-nums">{dateLabel} {timeLabel}</span>
                   <span className="text-xs leading-normal text-muted-foreground">{relativeKo(g.runAt)}</span>
                 </div>
                 <div className="mb-2 flex flex-wrap gap-1.5">
                   {CHANGE_ORDER.filter(t => g.counts[t]).map(t => (
-                    <Badge key={t} variant="outline" className={CHANGE_META[t].cls}>
-                      {CHANGE_META[t].label} {g.counts[t]}건
+                    <Badge key={t} variant="outline" className={changeMeta(t).cls}>
+                      {changeMeta(t).label} {g.counts[t]}건
                     </Badge>
                   ))}
                 </div>
-                <ul className="flex flex-col gap-1.5">
+                {/* 같은 모양의 행이 죽 이어지는 목록이다 — 칸마다 테두리를 두르는 대신 실선 하나로 나눈다 */}
+                <ul className="divide-y rounded-md border">
                   {g.items.map(r => {
                     const meta = CHANGE_META[r.changeType] ?? CHANGE_META.new
                     return (
-                      <li key={r.id} className="rounded-md border bg-muted/30 px-3 py-2">
-                        <div className="flex items-center gap-2">
+                      <li key={r.id} className="min-w-0 px-3 py-2">
+                        <div className="flex min-w-0 items-center gap-2">
                           <Badge variant="outline" className={cn("shrink-0", meta.cls)}>{meta.label}</Badge>
-                          <span className="truncate text-sm font-semibold text-foreground">{r.productName ?? "(품목명 미확인)"}</span>
+                          <span className="min-w-0 truncate text-sm font-medium text-foreground">{r.productName ?? "(품목명 미확인)"}</span>
                         </div>
-                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs leading-normal text-muted-foreground">
+                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs leading-normal break-keep text-muted-foreground">
                           <span>{meta.desc}</span>
                           <span className="text-border">·</span>
-                          <span className="font-mono">제조 {r.batchNo || "-"}</span>
+                          <span className="font-mono tabular-nums">제조 {r.batchNo || "-"}</span>
                           <span className="text-border">·</span>
-                          <span className="font-mono">코드 {r.productCode || "-"}</span>
+                          <span className="font-mono tabular-nums">코드 {r.productCode || "-"}</span>
                           {r.status && (
                             <>
                               <span className="text-border">·</span>

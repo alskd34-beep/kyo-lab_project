@@ -179,9 +179,10 @@
   -webkit-appearance: none;
   width: 14px;
   height: 14px;
-  border: 1.5px solid #cbd5e1; /* slate-300 */
-  border-radius: 3px;
-  background-color: #ffffff;
+  border: 1.5px solid var(--input);
+  /* 모서리 기준(rounded-md)을 따른다 — 3px 리터럴은 이 값만 어긋나 있었다. */
+  border-radius: var(--radius-sm);
+  background-color: var(--background);
   cursor: pointer;
   position: relative;
   flex-shrink: 0;
@@ -191,8 +192,10 @@
 }
 
 .cb-custom:checked {
-  background-color: #3b82f6; /* blue-500 */
-  border-color: #3b82f6;
+  /* 브랜드 강조색은 --primary 하나다. 예전에는 여기만 blue-500 리터럴이라
+     같은 화면 안에서 버튼(blue-600)과 체크박스의 파랑이 미묘하게 달랐다. */
+  background-color: var(--primary);
+  border-color: var(--primary);
   background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round' d='M3 8l3.5 3.5 6.5-6.5'/%3e%3c/svg%3e");
   background-size: 14px 14px;
   background-position: center;
@@ -200,10 +203,36 @@
 }
 
 .cb-custom:hover:not(:checked) {
-  border-color: #93c5fd; /* blue-300 */
+  border-color: var(--ring);
 }
 
 .cb-custom:focus-visible {
-  outline: 2px solid #93c5fd;
+  outline: 2px solid var(--ring);
   outline-offset: 1px;
+}
+
+/*
+ * 터치 기기에서만 탭 영역을 넓힌다.
+ * 보이는 상자는 14px 그대로 두고 **투명한 히트 영역만** 32px 로 키운다
+ * (14 + 9*2 = 32px). 마우스 환경은 영향을 받지 않는다.
+ */
+@media (pointer: coarse) {
+  .cb-custom::after {
+    content: "";
+    position: absolute;
+    inset: -9px;
+  }
+}
+
+/*
+ * 가로 스크롤 띠처럼 스크롤은 되되 스크롤바는 보이지 않아야 하는 곳에 쓴다.
+ * (탭 줄을 화면 밖으로 밀지 않고 그 줄 안에서만 밀리게 가둘 때 필요하다)
+ */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }

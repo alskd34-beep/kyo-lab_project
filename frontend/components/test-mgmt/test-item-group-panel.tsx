@@ -409,8 +409,9 @@ export function TestItemGroupPanel({
         >
           <SelectTrigger
             aria-label="상태 필터"
+            /* 모바일에서는 한 줄을 통째로 쓰고, sm 부터 내용 폭에 맞춘다 */
             className={cn(
-              "min-w-32",
+              "w-full sm:w-auto sm:min-w-32",
               statusFilter !== "all" && "border-blue-500 bg-blue-50 text-blue-700",
             )}
           >
@@ -433,40 +434,41 @@ export function TestItemGroupPanel({
       </FilterBar>
 
       {error && !drawerOpen && !deleteOpen && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+        <div className="shrink-0 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm break-keep text-destructive">
           {error}
         </div>
       )}
 
-      {/* 모바일 카드 */}
-      <div className="flex flex-col gap-2 md:hidden">
+      {/* 모바일 카드 — 바깥이 overflow-hidden 이라 여기서 직접 스크롤을 받는다.
+          shrink-0: Card 는 overflow-hidden 이라 세로 스크롤 열 안에서 눌리면 찌부러진다. */}
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto md:hidden">
         {loading ? (
           Array.from({ length: 4 }).map((_, i) => (
-            <Card key={i} className="gap-2 px-3 py-3">
+            <Card key={i} className="shrink-0 gap-2 px-3 py-3">
               <Skeleton className="h-4 w-24" />
               <Skeleton className="h-4 w-full" />
             </Card>
           ))
         ) : sortedGroups.length === 0 ? (
-          <Card className="items-center py-6 text-center text-sm text-muted-foreground">
+          <Card className="shrink-0 items-center py-6 text-center text-sm break-keep text-muted-foreground">
             데이터가 없습니다.
           </Card>
         ) : (
           sortedGroups.map((row) => (
             <Card
               key={row.id}
-              className="cursor-pointer gap-0 px-3 py-3"
+              className="shrink-0 cursor-pointer gap-0 px-3 py-3"
               onClick={() => void openEditDrawer(row)}
             >
               <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 flex-1 text-sm font-semibold break-words text-foreground">
+                <div className="min-w-0 flex-1 text-sm font-medium break-keep text-foreground">
                   {row.name}
                 </div>
-                <Tag color={row.isActive ? "green" : "mono"}>
+                <Tag color={row.isActive ? "blue" : "mono"}>
                   {row.isActive ? "활성" : "비활성"}
                 </Tag>
               </div>
-              <div className="mt-1 text-xs leading-normal text-muted-foreground">
+              <div className="mt-1 text-xs leading-normal break-keep text-muted-foreground">
                 {row.description || "설명 없음"}
               </div>
               <div className="mt-2 border-t pt-2 text-xs leading-normal text-muted-foreground">
@@ -542,7 +544,7 @@ export function TestItemGroupPanel({
                     {row.itemCount}
                   </TableCell>
                   <TableCell className="px-3 py-2">
-                    <Tag color={row.isActive ? "green" : "mono"}>
+                    <Tag color={row.isActive ? "blue" : "mono"}>
                       {row.isActive ? "활성" : "비활성"}
                     </Tag>
                   </TableCell>
@@ -638,7 +640,7 @@ export function TestItemGroupPanel({
             <div className="mb-3 flex flex-wrap items-center gap-2 border-b pb-3">
               <h3 className="text-sm font-semibold text-foreground">그룹 시험항목</h3>
               <Badge variant="secondary" className="tabular-nums">{memberIds.length}개</Badge>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-xs leading-normal break-keep text-muted-foreground">
                 위/아래 버튼으로 순서를 바꿉니다. 저장 시 이 순서가 그대로 순번이 됩니다.
               </span>
             </div>
@@ -649,24 +651,31 @@ export function TestItemGroupPanel({
                 <div className="text-xs font-medium text-muted-foreground">
                   담긴 항목 <span className="tabular-nums">({memberIds.length})</span>
                 </div>
-                <div className="flex max-h-72 flex-col gap-1.5 overflow-y-auto rounded-md border p-2">
+                {/* 테두리를 가진 층은 바깥 상자 하나뿐 — 행마다 테두리를 두르면
+                    섹션 > 목록 > 행으로 테두리가 세 겹 쌓인다. 행은 실선으로 나눈다. */}
+                <div className="max-h-72 overflow-y-auto rounded-md border">
                   {membersLoading ? (
-                    Array.from({ length: 3 }).map((_, i) => (
-                      <Skeleton key={i} className="h-9 w-full" />
-                    ))
+                    <div className="flex flex-col gap-1.5 p-2">
+                      {Array.from({ length: 3 }).map((_, i) => (
+                        <Skeleton key={i} className="h-9 w-full" />
+                      ))}
+                    </div>
                   ) : memberIds.length === 0 ? (
-                    <p className="py-8 text-center text-xs text-muted-foreground">
+                    <p className="px-3 py-8 text-center text-xs break-keep text-muted-foreground">
                       오른쪽 목록에서 시험항목을 골라 담아 주세요.
                     </p>
                   ) : (
-                    memberIds.map((itemId, index) => {
+                    <ul className="divide-y">
+                    {memberIds.map((itemId, index) => {
                       const item = candidateById.get(itemId)
                       return (
-                        <div
+                        /* 순번 + 이름 + 상태 + 분류 + 버튼 3개를 한 줄에 세우면 좁은 화면에서
+                           이름 자리가 사라진다. 상태·분류 뱃지는 이름 아래로 내려 접히게 둔다. */
+                        <li
                           key={itemId}
-                          className="flex items-center gap-2 rounded-md border bg-background px-2 py-1.5"
+                          className="flex items-start gap-2 px-2 py-1.5"
                         >
-                          <span className="w-5 shrink-0 text-center text-xs leading-normal tabular-nums text-muted-foreground">
+                          <span className="w-5 shrink-0 pt-1 text-center text-xs leading-normal tabular-nums text-muted-foreground">
                             {index + 1}
                           </span>
                           <div className="min-w-0 flex-1">
@@ -676,9 +685,13 @@ export function TestItemGroupPanel({
                             >
                               {item?.name ?? "삭제된 시험항목"}
                             </div>
+                            {item && (
+                              <div className="mt-1 flex flex-wrap items-center gap-1">
+                                {!item.isActive && <Tag color="mono">비활성</Tag>}
+                                <CategoryBadge category={item.category} />
+                              </div>
+                            )}
                           </div>
-                          {item && !item.isActive && <Tag color="mono">비활성</Tag>}
-                          {item && <CategoryBadge category={item.category} />}
                           <div className="flex shrink-0 items-center gap-0.5">
                             <Button
                               variant="ghost"
@@ -708,9 +721,10 @@ export function TestItemGroupPanel({
                               <X className="size-3.5" />
                             </Button>
                           </div>
-                        </div>
+                        </li>
                       )
-                    })
+                    })}
+                    </ul>
                   )}
                 </div>
               </div>
@@ -729,36 +743,42 @@ export function TestItemGroupPanel({
                     className="h-9 pl-9"
                   />
                 </div>
-                <div className="flex max-h-72 flex-col gap-1.5 overflow-y-auto rounded-md border p-2">
+                <div className="max-h-72 overflow-y-auto rounded-md border">
                   {candidatesLoading ? (
-                    Array.from({ length: 3 }).map((_, i) => (
-                      <Skeleton key={i} className="h-9 w-full" />
-                    ))
+                    <div className="flex flex-col gap-1.5 p-2">
+                      {Array.from({ length: 3 }).map((_, i) => (
+                        <Skeleton key={i} className="h-9 w-full" />
+                      ))}
+                    </div>
                   ) : pickerItems.length === 0 ? (
-                    <p className="py-8 text-center text-xs text-muted-foreground">
+                    <p className="px-3 py-8 text-center text-xs break-keep text-muted-foreground">
                       담을 수 있는 시험항목이 없습니다.
                     </p>
                   ) : (
-                    pickerItems.map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => addMember(item.id)}
-                        className={cn(
-                          "flex items-center gap-2 rounded-md border bg-background px-2 py-1.5 text-left transition-colors",
-                          "hover:border-primary hover:bg-primary/5",
-                        )}
-                      >
-                        <Plus className="size-3.5 shrink-0 text-muted-foreground" />
-                        <span
-                          className="min-w-0 flex-1 truncate text-xs font-medium text-foreground"
-                          title={item.name}
-                        >
-                          {item.name}
-                        </span>
-                        <CategoryBadge category={item.category} />
-                      </button>
-                    ))
+                    <ul className="divide-y">
+                      {pickerItems.map((item) => (
+                        <li key={item.id}>
+                          <button
+                            type="button"
+                            onClick={() => addMember(item.id)}
+                            className="flex w-full items-start gap-2 px-2 py-1.5 text-left transition-colors hover:bg-primary/5 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none"
+                          >
+                            <Plus className="mt-1 size-3.5 shrink-0 text-muted-foreground" />
+                            <span className="min-w-0 flex-1">
+                              <span
+                                className="block truncate text-xs font-medium text-foreground"
+                                title={item.name}
+                              >
+                                {item.name}
+                              </span>
+                              <span className="mt-1 flex flex-wrap items-center gap-1">
+                                <CategoryBadge category={item.category} />
+                              </span>
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
                   )}
                 </div>
               </div>
@@ -766,7 +786,7 @@ export function TestItemGroupPanel({
           </section>
 
           {error && (
-            <div className="rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm break-keep text-destructive">
               {error}
             </div>
           )}
@@ -778,7 +798,7 @@ export function TestItemGroupPanel({
         <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>시험항목 그룹 삭제</DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="break-keep">
               그룹과 그룹에 담긴 항목 목록이 함께 삭제됩니다. 이미 품목에 넣은 시험항목은 영향받지 않습니다.
             </DialogDescription>
           </DialogHeader>

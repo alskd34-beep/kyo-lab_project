@@ -1,8 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { useAuth } from '@frontend/lib/auth-context'
 import { Lock, Save } from 'lucide-react'
+import { Button } from '@frontend/components/ui/button'
+import { Card } from '@frontend/components/ui/card'
+import { Input } from '@frontend/components/ui/input'
+import { cn } from '@frontend/lib/utils'
 
 export default function SysSettingsPage() {
   const { user, logout } = useAuth()
@@ -36,37 +40,49 @@ export default function SysSettingsPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-xl p-3 md:p-5">
-      <h1 className="mb-1 text-lg font-semibold text-slate-800">시스템 설정</h1>
-      <p className="mb-6 text-xs text-slate-500">로그인 사용자: {user?.username}</p>
+    /* min-h-0 · flex-1 · overflow-y-auto: 본문 영역이 overflow-hidden 이라 화면 스스로 스크롤을 가져야 한다. */
+    <div className="mx-auto flex min-h-0 w-full max-w-xl min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4 md:p-6">
+      {/* 부제 자리에 화면 이름을 되풀이하지 않는다 — 지금 누구 계정을 고치는지가 실제 정보다. */}
+      <header className="flex min-w-0 shrink-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <h1 className="text-lg font-semibold text-foreground">시스템 설정</h1>
+        <p className="text-xs leading-normal text-muted-foreground">
+          로그인 사용자 <span className="font-medium text-foreground">{user?.username ?? '-'}</span>
+        </p>
+      </header>
 
-      <section className="rounded-md border border-slate-200 bg-white p-4 md:p-6">
-        <div className="mb-4 flex items-center gap-2">
-          <Lock size={16} className="text-slate-500" />
-          <h2 className="text-sm font-semibold text-slate-800">비밀번호 변경</h2>
+      {/* shrink-0: Card 는 overflow-hidden 이라 flex 열 안에서 높이가 0 으로 눌린다. */}
+      <Card className="shrink-0 gap-0 py-0">
+        <div className="flex items-center gap-1.5 border-b px-4 py-3">
+          <Lock size={15} className="text-muted-foreground" />
+          <h2 className="text-sm font-semibold text-foreground">비밀번호 변경</h2>
         </div>
 
-        <form onSubmit={submit} className="space-y-3">
+        <form onSubmit={submit} className="flex flex-col gap-3 px-4 py-4">
           <Field label="현재 비밀번호" value={current} onChange={setCurrent} type="password" />
           <Field label="새 비밀번호"   value={next1}   onChange={setNext1}   type="password" />
           <Field label="새 비밀번호 확인" value={next2} onChange={setNext2} type="password" />
 
+          {/* 성공 알림 초록은 CLAUDE.md 가 명시한 브랜드색 예외다(성공 토스트와 같은 색을 쓴다) */}
           {msg && (
-            <p className={`rounded-md border px-3 py-2 text-xs ${
-              msg.type === 'ok' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-600'
-            }`}>{msg.text}</p>
+            <p className={cn(
+              'rounded-md border px-3 py-2 text-xs break-keep',
+              msg.type === 'ok'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                : 'border-destructive/20 bg-destructive/10 text-destructive',
+            )}>{msg.text}</p>
           )}
 
-          <button
+          <Button
             type="submit"
+            size="lg"
             disabled={busy || !current || !next1 || !next2}
-            className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            className="self-start"
           >
-            <Save size={13} />
+            <Save />
             {busy ? '변경 중…' : '비밀번호 변경'}
-          </button>
+          </Button>
         </form>
-      </section>
+      </Card>
     </div>
   )
 }
@@ -74,15 +90,11 @@ export default function SysSettingsPage() {
 function Field({ label, value, onChange, type = 'text' }: {
   label: string; value: string; onChange: (v: string) => void; type?: string
 }) {
+  const id = useId()
   return (
-    <label className="block">
-      <span className="mb-1 block text-xs font-medium text-slate-600">{label}</span>
-      <input
-        type={type}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        className="w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-      />
-    </label>
+    <div>
+      <label htmlFor={id} className="mb-1 block text-xs font-medium text-muted-foreground">{label}</label>
+      <Input id={id} type={type} value={value} onChange={e => onChange(e.target.value)} />
+    </div>
   )
 }

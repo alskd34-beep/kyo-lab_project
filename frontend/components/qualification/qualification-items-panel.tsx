@@ -67,20 +67,23 @@ export function QualificationItemsPanel({ loading, categories, items, quals, onC
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      {/* 툴바 */}
-      <div className="flex flex-wrap items-center gap-2">
+      {/* 툴바
+          반응형: 조회 입력은 320px 에서 w-56(224px) 두 개가 나란히 설 수 없다.
+          모바일은 한 줄에 하나씩 꽉 채우고(w-full), sm 부터 원래의 가로 배치로 돌아간다.
+          shrink-0: 아래 목록이 길어져도 툴바가 눌리지 않게 못 박는다. */}
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
         <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-          <SelectTrigger className="!h-9 w-56 px-3"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="!h-9 w-full px-3 sm:w-56"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL}>전체 카테고리</SelectItem>
             {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
           </SelectContent>
         </Select>
 
-        <div className="relative">
+        <div className="relative w-full sm:w-56">
           <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
-            className="h-9 w-56 pl-9"
+            className="h-9 w-full pl-9"
             placeholder="항목·카테고리 검색..."
             value={keyword}
             onChange={e => setKeyword(e.target.value)}
@@ -89,17 +92,77 @@ export function QualificationItemsPanel({ loading, categories, items, quals, onC
 
         <Badge variant="secondary" className="tabular-nums">{rows.length}개 항목</Badge>
 
-        <div className="ml-auto flex items-center gap-2">
-          <Button variant="outline" onClick={() => setCategoryOpen(true)}>
+        <div className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
+          <Button variant="outline" className="flex-1 sm:flex-none" onClick={() => setCategoryOpen(true)}>
             <FolderTree />카테고리 관리
           </Button>
-          <Button onClick={() => setAddOpen(true)} disabled={categories.length === 0}>
+          <Button className="flex-1 sm:flex-none" onClick={() => setAddOpen(true)} disabled={categories.length === 0}>
             <Plus />OJT 항목 추가
           </Button>
         </div>
       </div>
 
-      <Card className="gap-0 overflow-hidden py-0">
+      {/* 모바일 — 카드 목록
+          7열짜리 표는 320px 에서 어떤 수를 써도 읽히지 않는다. `/home` 의 「기한 임박 오더」와
+          같은 구조로, 칸막이 대신 실선 하나로 나눈 요약 목록을 그린다.
+          카드에는 꼭 필요한 값만 남긴다 — 카테고리 · 항목명 · 유효기간 · 보유 인원 · 사용 여부.
+          (비고는 행을 눌러 여는 수정 패널에서 본다) */}
+      <div className="min-h-0 flex-1 divide-y overflow-y-auto overflow-x-hidden rounded-md border md:hidden">
+        {loading
+          ? Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="flex flex-col gap-2 px-3 py-3">
+                <Skeleton className="h-3 w-20" />
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-3 w-32" />
+              </div>
+            ))
+          : rows.length === 0
+            ? (
+                <p className="px-4 py-10 text-center text-sm break-keep text-muted-foreground">
+                  등록된 OJT 항목이 없습니다.
+                </p>
+              )
+            : rows.map(item => {
+                const holders = holderCount.get(item.id) ?? 0
+                return (
+                  <div key={item.id} className="flex min-w-0 items-start gap-2 px-3 py-3">
+                    <button
+                      type="button"
+                      onClick={() => setEditing(item)}
+                      className="flex min-w-0 flex-1 flex-col gap-1 rounded-md text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    >
+                      <span className="min-w-0 truncate text-xs leading-normal text-muted-foreground">
+                        {item.categoryName}
+                      </span>
+                      <span className="min-w-0 text-sm font-medium break-keep text-foreground">
+                        {item.name}
+                      </span>
+                      <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-normal text-muted-foreground">
+                        <span className="tabular-nums">유효 {item.validMonths}개월</span>
+                        <span className="text-border">·</span>
+                        <span className="tabular-nums">보유 {holders}명</span>
+                        {item.isActive
+                          ? <Tag color="blue">사용</Tag>
+                          : <Tag color="mono">미사용</Tag>}
+                      </span>
+                    </button>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="shrink-0 text-destructive hover:text-destructive"
+                      aria-label={`${item.name} 삭제`}
+                      onClick={() => setDeleting(item)}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </div>
+                )
+              })}
+      </div>
+
+      {/* md:flex — Card 기본이 flex flex-col 이라야 안쪽 Table 컨테이너의 min-h-0 flex-1 이 살아난다.
+          md:block 으로 두면 표가 높이 제한 없이 자라 페이지 밖으로 잘린다. */}
+      <Card className="hidden min-h-0 flex-1 flex-col gap-0 overflow-hidden py-0 md:flex">
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
@@ -150,7 +213,7 @@ export function QualificationItemsPanel({ loading, categories, items, quals, onC
                       </TableCell>
                       <TableCell className="px-3 py-2.5 text-center">
                         {item.isActive
-                          ? <Tag color="green">사용</Tag>
+                          ? <Tag color="blue">사용</Tag>
                           : <Tag color="mono">미사용</Tag>}
                       </TableCell>
                       <TableCell className="px-3 py-2.5 text-center">
@@ -387,7 +450,7 @@ function ItemEditDrawer({ item, categories, holders, onClose, onSaved }: {
               <Input value={note} onChange={e => setNote(e.target.value)} />
             </LabeledField>
           </div>
-          <p className="mt-2 text-[11px] text-muted-foreground">
+          <p className="mt-2 text-xs leading-normal break-keep text-muted-foreground">
             유효기간은 <span className="font-medium text-foreground">앞으로 부여할 자격</span>의 만료일 계산에만 쓰입니다.
             이미 부여된 자격의 만료일은 바뀌지 않습니다.
           </p>
@@ -412,7 +475,7 @@ function ItemEditDrawer({ item, categories, holders, onClose, onSaved }: {
               </button>
             ))}
           </div>
-          <p className="mt-2 text-[11px] text-muted-foreground">
+          <p className="mt-2 text-xs leading-normal break-keep text-muted-foreground">
             미사용으로 두면 새 자격 부여 대상에서 제외되지만, 이미 부여된 자격과 매트릭스 열은 유지됩니다.
           </p>
         </section>
@@ -529,7 +592,8 @@ function CategoryDrawer({ categories, items, onClose, onChanged }: {
       <div className="grid gap-4">
         <section className="rounded-md border bg-card p-4 shadow-sm">
           <h3 className="mb-3 border-b pb-2 text-sm font-semibold text-foreground">카테고리 추가</h3>
-          <div className="flex items-center gap-2">
+          {/* 모바일 패널 폭은 300px 이 안 된다 — 입력과 버튼을 한 줄에 두지 않고 세로로 쌓는다 */}
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <Input
               value={newName}
               onChange={e => setNewName(e.target.value)}
@@ -558,14 +622,16 @@ function CategoryDrawer({ categories, items, onClose, onChanged }: {
             {categories.map(cat => {
               const count = itemCount.get(cat.id) ?? 0
               return (
+                /* flex-wrap + basis-full: 좁은 패널에서 이름·건수·버튼 둘을 한 줄에 못 넣는다.
+                   이름을 윗줄로 올리고 나머지를 아랫줄에 세운다(글자를 줄이지 않는다). */
                 <li
                   key={cat.id}
-                  className="flex items-center gap-2 rounded-md border px-3 py-2"
+                  className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2"
                 >
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                  <span className="min-w-0 basis-full truncate text-sm font-medium text-foreground sm:flex-1 sm:basis-auto">
                     {cat.name}
                   </span>
-                  <span className="shrink-0 text-xs text-muted-foreground">{count}개 항목</span>
+                  <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{count}개 항목</span>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -589,7 +655,7 @@ function CategoryDrawer({ categories, items, onClose, onChanged }: {
               )
             })}
           </ul>
-          <p className="mt-2 text-[11px] text-muted-foreground">
+          <p className="mt-2 text-xs leading-normal break-keep text-muted-foreground">
             부여된 자격이 있는 카테고리는 삭제되지 않습니다. 사용/미사용으로 노출만 조절하세요.
           </p>
         </section>

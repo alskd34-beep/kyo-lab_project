@@ -1,17 +1,20 @@
 /**
  * [BACKEND] Tests API Route
  * GET /api/tests?from=YYYY-MM-DD&to=YYYY-MM-DD&search=...&status=completed&deviationOnly=1
+ *
+ * 전사 시험현황(`/test-mgmt/test-status`)만 쓰는 목록이고 그 화면이 관리자 전용이라
+ * 라우트도 관리자로 막는다(화면만 감추면 API 로는 그대로 열린다).
  */
 
 import { NextRequest } from 'next/server'
-import { requireAuth } from '@backend/lib/guard'
+import { requireAdmin } from '@backend/lib/guard'
 import { listTests } from '@backend/services/tests'
 import type { StatusKey } from '@shared/qc'
 
 export const runtime = 'nodejs'
 
 export async function GET(req: NextRequest) {
-  const g = await requireAuth(req)
+  const g = await requireAdmin(req)
   if (!g.ok) return g.response
   try {
     const sp = req.nextUrl.searchParams

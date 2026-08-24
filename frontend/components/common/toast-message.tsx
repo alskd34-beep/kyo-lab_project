@@ -41,23 +41,25 @@ const TOAST_STYLE: Record<
   { ring: string; accent: string; icon: ReactElement }
 > = {
   info: {
-    ring: "border-blue-200 bg-blue-50 text-blue-700 shadow-blue-100/40",
+    ring: "border-blue-200 bg-blue-50 text-blue-700",
     accent: "bg-blue-600",
     icon: <Info size={16} />,
   },
+  // 성공 초록은 CLAUDE.md 가 명시한 브랜드색 예외라 그대로 둔다.
   success: {
-    ring: "border-emerald-200 bg-emerald-50 text-emerald-700 shadow-emerald-100/40",
+    ring: "border-emerald-200 bg-emerald-50 text-emerald-700",
     accent: "bg-emerald-600",
     icon: <CheckCircle2 size={16} />,
   },
   warning: {
-    ring: "border-amber-200 bg-amber-50 text-amber-700 shadow-amber-100/40",
+    ring: "border-amber-200 bg-amber-50 text-amber-700",
     accent: "bg-amber-500",
     icon: <TriangleAlert size={16} />,
   },
+  // 오류는 앱 전체가 쓰는 빨강으로 맞춘다 — rose 는 같은 뜻을 다른 빨강으로 말하던 자리다.
   error: {
-    ring: "border-rose-200 bg-rose-50 text-rose-700 shadow-rose-100/40",
-    accent: "bg-rose-600",
+    ring: "border-red-200 bg-red-50 text-red-700",
+    accent: "bg-red-600",
     icon: <AlertCircle size={16} />,
   },
 }
@@ -132,7 +134,7 @@ export function ToastMessageProvider({ children }: { children: React.ReactNode }
               key={toast.id}
               role="status"
               className={cn(
-                "pointer-events-auto overflow-hidden rounded-md border bg-white shadow-lg shadow-slate-200/60 backdrop-blur",
+                "pointer-events-auto overflow-hidden rounded-md border bg-card shadow-md backdrop-blur",
                 style.ring
               )}
             >
@@ -142,9 +144,9 @@ export function ToastMessageProvider({ children }: { children: React.ReactNode }
                   {style.icon}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-slate-900">{toast.title}</p>
+                  <p className="text-sm font-semibold text-foreground">{toast.title}</p>
                   {toast.description && (
-                    <p className="mt-1 text-xs leading-5 text-slate-600">
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
                       {toast.description}
                     </p>
                   )}
@@ -152,7 +154,7 @@ export function ToastMessageProvider({ children }: { children: React.ReactNode }
                 <button
                   type="button"
                   onClick={() => dismissToast(toast.id)}
-                  className="rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                  className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                   aria-label="알림 닫기"
                 >
                   <X size={14} />

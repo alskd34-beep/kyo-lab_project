@@ -56,7 +56,7 @@ export function PageHeader({
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
           {Icon && <Icon className="size-5 shrink-0 text-muted-foreground" />}
-          <h1 className="truncate text-xl font-semibold text-foreground">{title}</h1>
+          <h1 className="truncate text-lg font-semibold text-foreground">{title}</h1>
           {count != null && (
             <span className="text-sm font-medium tabular-nums text-muted-foreground">
               {count.toLocaleString("ko-KR")}

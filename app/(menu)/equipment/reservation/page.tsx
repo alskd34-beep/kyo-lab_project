@@ -2,10 +2,9 @@
 
 import { useCallback, useEffect, useId, useMemo, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
-import { Wrench, Plus, Trash2, Loader2, CheckCircle2, Ban } from "lucide-react"
+import { Plus, Trash2, Loader2, CheckCircle2, Ban } from "lucide-react"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import { DateField } from "@frontend/components/ui/date-field"
-import { Badge } from "@frontend/components/ui/badge"
 import { Tag } from "@frontend/components/ui/tag"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
@@ -36,6 +35,9 @@ interface ReservationRow {
 const STATUS_LABEL: Record<ReservationStatus, string> = {
   RESERVED: "예약", WAITING: "대기", CANCELLED: "취소", COMPLETED: "완료",
 }
+/* COMPLETED 만 초록으로 남긴다 - 여기 초록은 '완료' 라는 뜻이고,
+   파랑으로 바꾸면 같은 팔레트의 RESERVED(파랑)와 겹쳐 예약과 완료를 못 가른다.
+   색이 곧 뜻인 팔레트라 베이스 색 규칙의 예외다. */
 const STATUS_TAG_COLOR: Record<ReservationStatus, "blue" | "yellow" | "red" | "green"> = {
   RESERVED:  "blue",
   WAITING:   "yellow",
@@ -86,7 +88,7 @@ export default function EquipmentReservationPage() {
     return [...rows].sort((a, b) => {
       let cmp = 0
       if (sortField === "status") {
-        cmp = STATUS_LABEL[a.status].localeCompare(STATUS_LABEL[b.status], "ko")
+        cmp = (STATUS_LABEL[a.status] ?? a.status).localeCompare(STATUS_LABEL[b.status], "ko")
       } else if (sortField === "equipmentId") {
         cmp = a.equipmentId.localeCompare(b.equipmentId, "ko")
       } else if (sortField === "startDate" || sortField === "endDate") {
@@ -177,29 +179,31 @@ export default function EquipmentReservationPage() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col gap-3 overflow-hidden p-4 md:p-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <Wrench className="size-4 text-muted-foreground" />
-            <h1 className="text-xl font-semibold text-foreground">장비 예약</h1>
-            <Badge variant="secondary" className="tabular-nums">{rows.length}건</Badge>
-          </div>
-          <p className="mt-0.5 text-sm text-muted-foreground">선착순 예약. 기간이 겹치면 대기열에 등록됩니다.</p>
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden p-4 md:p-6">
+      {/* Header — 제목 옆의 건수 배지는 표 머리에서 다시 세므로 뺐다.
+          그 자리에 이 화면의 규칙(선착순·대기열)을 한 줄로 남긴다. */}
+      <header className="flex min-w-0 shrink-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-2">
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h1 className="text-lg font-semibold text-foreground">장비 예약</h1>
+          <p className="text-xs leading-normal break-keep text-muted-foreground">
+            선착순 예약 · 기간이 겹치면 대기열로 등록됩니다
+          </p>
         </div>
-        <Button size="lg" onClick={() => setShowAdd(true)}>
+        <Button onClick={() => setShowAdd(true)}>
           <Plus /> 예약 등록
         </Button>
-      </div>
+      </header>
 
       {msg && (
-        <div className="rounded-md border px-4 py-2.5 text-sm text-foreground">{msg}</div>
+        <div className="shrink-0 rounded-md border border-primary/20 bg-primary/5 px-4 py-2.5 text-sm font-medium break-keep text-foreground">
+          {msg}
+        </div>
       )}
 
       {/* Filter */}
-      <div className="flex flex-wrap items-end gap-2">
-        <div className="min-w-48">
+      <div className="flex shrink-0 flex-wrap items-end gap-2">
+        {/* 모바일에서는 필터 입력이 한 줄을 꽉 채운다 */}
+        <div className="w-full sm:w-auto sm:min-w-48">
           <label htmlFor={`${uid}-filter`} className="mb-1 block text-xs font-medium text-muted-foreground">장비 필터</label>
           <input
             id={`${uid}-filter`}
@@ -214,21 +218,70 @@ export default function EquipmentReservationPage() {
           </datalist>
         </div>
         {filterEquipment && (
-          <Button
-            variant="outline"
-            size="lg"
-            onClick={() => setFilterEquipment("")}
-          >
+          <Button variant="outline" onClick={() => setFilterEquipment("")}>
             전체
           </Button>
         )}
       </div>
 
       {/* List */}
-      <Card className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden py-0">
-        <div className="border-b px-4 py-2.5 text-sm font-semibold text-foreground">
-          예약 목록
+      <Card className="flex min-h-0 min-w-0 flex-1 flex-col gap-0 overflow-hidden py-0">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b px-4 py-2.5">
+          <h2 className="text-sm font-semibold text-foreground">
+            예약 목록
+            {!loading && (
+              <span className="ml-1.5 text-xs font-normal tabular-nums text-muted-foreground">{sortedData.length}건</span>
+            )}
+          </h2>
+          {filterEquipment.trim() && (
+            <span className="text-xs leading-normal break-keep text-muted-foreground">
+              장비 필터 <span className="font-medium text-foreground">{filterEquipment.trim()}</span>
+            </span>
+          )}
         </div>
+
+        {/* ── 모바일: 표 대신 카드 목록 ──────────────────────────────────────
+            5칸짜리 표는 320px 에 들어가지 않는다. 장비·상태·기간·예약자만 남긴다. */}
+        <div className="min-h-0 flex-1 divide-y overflow-y-auto md:hidden">
+          {loading
+            ? Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="flex flex-col gap-2 px-4 py-3">
+                  <Skeleton className="h-4 w-2/3" />
+                  <div className="flex items-center justify-between">
+                    <Skeleton className="h-3 w-32" />
+                    <Skeleton className="h-3 w-16" />
+                  </div>
+                </div>
+              ))
+            : rows.length === 0
+              ? <p className="px-4 py-10 text-center text-sm break-keep text-muted-foreground">등록된 예약이 없습니다.</p>
+              : sortedData.map(r => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => setDetailTarget(r)}
+                    className="block w-full px-4 py-3 text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  >
+                    <div className="flex min-w-0 items-start justify-between gap-2">
+                      <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{r.equipmentId}</p>
+                      <Tag color={STATUS_TAG_COLOR[r.status]} dot={r.status === "RESERVED" || r.status === "WAITING"}>
+                        {STATUS_LABEL[r.status]}
+                        {r.status === "WAITING" && r.waitOrder != null && ` #${r.waitOrder}`}
+                      </Tag>
+                    </div>
+                    <div className="mt-1 flex min-w-0 items-center gap-2 text-xs leading-normal text-muted-foreground">
+                      <span className="shrink-0 font-mono tabular-nums">{r.startDate} ~ {r.endDate}</span>
+                      <span className="ml-auto inline-flex min-w-0 items-center gap-1.5">
+                        <TesterAvatar name={r.userName} size="sm" />
+                        <span className="min-w-0 truncate">{r.userName ?? "이름없음"}</span>
+                      </span>
+                    </div>
+                  </button>
+                ))}
+        </div>
+
+        {/* ── 데스크톱: 표 ─────────────────────────────────────────────── */}
+        <div className="hidden min-h-0 flex-1 md:flex md:flex-col">
         <Table>
           {/* 논리 열 4개(상태·장비·기간·예약자) + 2필드 묶음 1개(기간) → 최대 5칸.
               table-fixed 에서 <col> 이 모자라면 늘어난 칸이 폭 0으로 접혀 사라진다.
@@ -318,6 +371,7 @@ export default function EquipmentReservationPage() {
             )}
           </TableBody>
         </Table>
+        </div>
       </Card>
 
       {showAdd && (
@@ -347,7 +401,8 @@ export default function EquipmentReservationPage() {
               {((isAdmin || detailTarget.userId === user?.id) && detailTarget.status === "RESERVED") && (
                 <Button
                   variant="outline"
-                  className="text-emerald-700"
+                  /* 완료·승인은 이 프로젝트에서 짙은 파랑이다(승인완료=blue-800) */
+                  className="text-blue-700"
                   onClick={() => { setDetailTarget(null); void complete(detailTarget.id) }}
                   disabled={busy === detailTarget.id}
                 >
@@ -377,34 +432,35 @@ export default function EquipmentReservationPage() {
             </>
           )}
         >
-          <div className="space-y-4">
-            <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-3">
-              <span className="text-xs text-muted-foreground">상태</span>
-              <Tag color={STATUS_TAG_COLOR[detailTarget.status]} dot={detailTarget.status === "RESERVED" || detailTarget.status === "WAITING"}>
-                {STATUS_LABEL[detailTarget.status]}
-              </Tag>
+          {/* 테두리 가진 상자를 둘 겹치지 않는다 — 상태까지 한 표에 넣고 실선으로 나눈다 */}
+          <dl className="divide-y rounded-md border px-4 text-sm">
+            <div className="flex items-center justify-between gap-4 py-2.5">
+              <dt className="text-muted-foreground">상태</dt>
+              <dd>
+                <Tag color={STATUS_TAG_COLOR[detailTarget.status]} dot={detailTarget.status === "RESERVED" || detailTarget.status === "WAITING"}>
+                  {STATUS_LABEL[detailTarget.status]}
+                </Tag>
+              </dd>
             </div>
-            <dl className="grid gap-3 rounded-md border p-4 text-sm">
-              <div className="flex items-center justify-between gap-4">
-                <dt className="text-muted-foreground">장비</dt>
-                <dd className="font-medium text-foreground">{detailTarget.equipmentId}</dd>
+            <div className="flex items-center justify-between gap-4 py-2.5">
+              <dt className="shrink-0 text-muted-foreground">장비</dt>
+              <dd className="min-w-0 truncate font-medium text-foreground">{detailTarget.equipmentId}</dd>
+            </div>
+            <div className="flex items-center justify-between gap-4 py-2.5">
+              <dt className="shrink-0 text-muted-foreground">예약자</dt>
+              <dd className="min-w-0 truncate font-medium text-foreground">{detailTarget.userName ?? "이름없음"}</dd>
+            </div>
+            <div className="flex items-center justify-between gap-4 py-2.5">
+              <dt className="shrink-0 text-muted-foreground">기간</dt>
+              <dd className="font-mono text-xs tabular-nums text-foreground">{detailTarget.startDate} ~ {detailTarget.endDate}</dd>
+            </div>
+            {detailTarget.waitOrder != null && (
+              <div className="flex items-center justify-between gap-4 py-2.5">
+                <dt className="shrink-0 text-muted-foreground">대기 순번</dt>
+                <dd className="font-semibold tabular-nums text-foreground">#{detailTarget.waitOrder}</dd>
               </div>
-              <div className="flex items-center justify-between gap-4">
-                <dt className="text-muted-foreground">예약자</dt>
-                <dd className="font-medium text-foreground">{detailTarget.userName ?? "이름없음"}</dd>
-              </div>
-              <div className="flex items-center justify-between gap-4">
-                <dt className="text-muted-foreground">기간</dt>
-                <dd className="font-mono text-xs text-foreground">{detailTarget.startDate} ~ {detailTarget.endDate}</dd>
-              </div>
-              {detailTarget.waitOrder != null && (
-                <div className="flex items-center justify-between gap-4">
-                  <dt className="text-muted-foreground">대기 순번</dt>
-                  <dd className="font-semibold text-foreground">#{detailTarget.waitOrder}</dd>
-                </div>
-              )}
-            </dl>
-          </div>
+            )}
+          </dl>
         </ManagementDrawer>
       )}
     </div>
@@ -476,7 +532,7 @@ function AddModal({
             </datalist>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <DateField label="시작일" value={startDate} onChange={setStartDate} />
             <DateField label="종료일" value={endDate} onChange={setEndDate} />
           </div>

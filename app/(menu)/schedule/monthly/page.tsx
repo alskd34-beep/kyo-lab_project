@@ -8,18 +8,24 @@ import {
   clearPctMonthlyOnServer,
   type PctMonthlyAssignment,
 } from '@frontend/lib/pct-schedule-bridge'
-import { Card, CardContent, CardHeader, CardTitle } from '@frontend/components/ui/card'
+import { Card } from '@frontend/components/ui/card'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@frontend/components/ui/table'
 import { Button } from '@frontend/components/ui/button'
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@frontend/components/ui/dialog'
 import { Skeleton } from '@frontend/components/ui/skeleton'
 import { TesterAvatar } from '@frontend/lib/tester-profiles'
+import { cn } from '@frontend/lib/utils'
 import {
-  Calendar,
   ChevronLeft,
   ChevronRight,
   AlertCircle,
-  Users,
-  AlertTriangle,
   LayoutGrid,
   CalendarRange,
   UserSquare,
@@ -63,13 +69,15 @@ interface MonthlyResponse {
 }
 
 // ─── 공통 톤 ──────────────────────────────────────────────────────────────────
-const TXT_PRIMARY   = 'text-slate-900 dark:text-slate-50'
-const TXT_SECONDARY = 'text-slate-700 dark:text-slate-200'
-const TXT_TERTIARY  = 'text-slate-600 dark:text-slate-300'
-const TXT_MUTED     = 'text-slate-500 dark:text-slate-400'
-const BORDER        = 'border-slate-200 dark:border-slate-700'
-const CARD_BG       = 'bg-white dark:bg-slate-900'
-const BOARD_COLORS  = ['bg-blue-500', 'bg-emerald-500', 'bg-violet-500', 'bg-amber-500', 'bg-rose-500', 'bg-teal-500', 'bg-fuchsia-500']
+// slate 리터럴 + dark: 분기를 화면마다 다시 쓰면 앱 전체 톤과 어긋난다.
+// 공통 시맨틱 토큰(foreground / muted-foreground / border / card)에 맞춘다.
+const TXT_PRIMARY   = 'text-foreground'
+const TXT_MUTED     = 'text-muted-foreground'
+const BORDER        = 'border-border'
+const CARD_BG       = 'bg-card'
+// 보드 그룹 색 — 옆 그룹과 가르는 용도일 뿐 뜻이 없다. 무지개를 돌지 않고
+// 브랜드 파랑의 농도만 바꾼다(주차 그룹이라 농도가 곧 순서로 읽힌다).
+const BOARD_COLORS  = ['bg-blue-700', 'bg-blue-600', 'bg-blue-500', 'bg-blue-400', 'bg-blue-300', 'bg-blue-200']
 
 // ─── Utils ────────────────────────────────────────────────────────────────────
 function thisMonth(): string {
@@ -95,12 +103,15 @@ function dayOfWeek(dateStr: string): number {
 
 const DOW_KOR = ['일', '월', '화', '수', '목', '금', '토']
 
-// 셀 색상: PCT 출처는 보라 톤, DB는 긴급/듀오/일반 톤
+// 셀 색상 — 여기 색은 장식이 아니라 뜻이다(출처·긴급·듀오). PCT 출처는 점선 테두리 + 앰버 톤.
+// 긴급은 출처와 무관하게 빨강 하나로 둔다 — PCT 여부는 점선 테두리가 이미 말하고 있어
+// rose(다른 빨강)를 하나 더 두면 같은 뜻에 색이 둘이 된다.
+// 아무 표시도 없는 '예정'은 이 화면의 기본값이라 색을 빼고 중립 톤으로 물러앉힌다.
 function cellStyle(row: ScheduleRow): { bg: string; border: string; label: string } {
   if (row.source === 'pct') {
     if (row.is_urgent) return {
-      bg: 'bg-rose-200 dark:bg-rose-900/60 hover:bg-rose-300',
-      border: 'border-rose-400 dark:border-rose-700 border-dashed',
+      bg: 'bg-red-200 dark:bg-red-900/60 hover:bg-red-300',
+      border: 'border-red-400 dark:border-red-700 border-dashed',
       label: 'PCT·긴급',
     }
     return {
@@ -120,11 +131,26 @@ function cellStyle(row: ScheduleRow): { bg: string; border: string; label: strin
     label: '듀오',
   }
   return {
-    bg: 'bg-emerald-100 dark:bg-emerald-900/40 hover:bg-emerald-200',
-    border: 'border-emerald-300 dark:border-emerald-800',
+    bg: 'bg-card hover:bg-muted',
+    border: 'border-border',
     label: '예정',
   }
 }
+
+// 상세 다이얼로그의 구분 칩은 셀과 같은 색을 쓰되 hover 변주는 뺀다 — 누를 수 없는 표시라서.
+function staticBg(bg: string): string {
+  return bg.split(' ').filter(c => !c.startsWith('hover:')).join(' ')
+}
+
+// 공수 표기 — 정본은 DAY(`workdays`). avg_hours(시간)는 레거시라 값이 있을 때만 괄호로 덧붙인다.
+function workloadText(r: ScheduleRow): string {
+  return r.avg_hours != null && r.avg_hours > 0
+    ? `${r.avg_hours.toFixed(1)}h (${r.workdays}일)`
+    : `${r.workdays}일`
+}
+
+/** 탭한 셀 하나 — 시험자·날짜와 그 자리에 놓인 배정 한 건. */
+interface CellDetail { row: ScheduleRow; testerName: string; date: string }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function MonthlySchedulePage() {
@@ -134,6 +160,9 @@ export default function MonthlySchedulePage() {
   const [error, setError] = useState<string | null>(null)
   // 뷰 전환: 월간 그리드 / 주간 보드 / 개인별 보드
   const [view, setView] = useState<'monthly' | 'weekly' | 'personal'>('monthly')
+  // 셀 상세 — 시험항목·공수·비고가 title 툴팁에만 있어서 터치에서는 닿을 수 없었다.
+  // 셀을 누르면 여기에 담기고 아래 다이얼로그가 그 값을 화면에 내놓는다.
+  const [cellDetail, setCellDetail] = useState<CellDetail | null>(null)
 
   // PCT 스냅샷 (localStorage에서 로드)
   const [pctSnapshot, setPctSnapshot] = useState<PctMonthlyAssignment[]>([])
@@ -361,7 +390,8 @@ export default function MonthlySchedulePage() {
     { key: '담당자',   label: '담당자',   kind: 'person', width: 110 },
     { key: '공수',     label: '공수(일)', kind: 'text',   width: 75  },
     { key: '긴급',     label: '긴급',     kind: 'chip',   width: 70, chipColor: { '일반': 'slate', '긴급': 'red' } },
-    { key: '출처',     label: '출처',     kind: 'chip',   width: 70, chipColor: { 'QC': 'blue', 'PCT': 'violet' } },
+    // PCT 칩은 월간 그리드의 PCT 셀(앰버)과 같은 색으로 맞춘다 — 같은 뜻은 같은 색
+    { key: '출처',     label: '출처',     kind: 'chip',   width: 70, chipColor: { 'QC': 'blue', 'PCT': 'amber' } },
     { key: '시험항목', label: '시험항목', kind: 'text',   width: 160 },
   ]
   // 개인별 보드는 그룹 자체가 담당자이므로 담당자 컬럼 제외
@@ -375,187 +405,146 @@ export default function MonthlySchedulePage() {
   }
 
   return (
-    <div className="p-3 md:p-5">
-      <div className="mx-auto max-w-full space-y-5">
+    /* 이 화면은 세로로 길다(시험자 × 날짜 + 범례). 바깥 레이아웃이 overflow-hidden 이라
+       스크롤 컨테이너를 여기서 만들지 않으면 아래쪽 내용에 아예 닿을 수 없다. */
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-4 md:p-6">
+      <div className="min-w-0 shrink-0 space-y-4 md:space-y-5">
 
-        {/* Header */}
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-blue-600 shadow-md shadow-blue-600/30">
-            <Calendar size={20} className="text-white" />
-          </div>
-          <div className="min-w-0">
-            <h1 className={`text-base font-bold sm:text-xl ${TXT_PRIMARY}`}>월간 QC 시험 스케줄</h1>
-            <p className={`text-xs ${TXT_MUTED}`}>
-              생성된 주간 스케줄과 PCT 생산관리에서 전송된 배정이 시험자×날짜 그리드로 통합 표시됩니다.
+        {/* ── 페이지 머리 ──────────────────────────────────────────────────
+            아이콘 칩과 "…통합 표시됩니다" 부제를 걷어내고,
+            지금 보고 있는 것이 언제·얼마인지라는 사실만 남긴다. */}
+        <header className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <h1 className={`text-lg font-semibold ${TXT_PRIMARY}`}>월간 QC 시험 스케줄</h1>
+          {/* 조회에 실패하면 아래 에러 줄이 사정을 말한다 — 여기서 스켈레톤을 붙잡고 있지 않는다 */}
+          {loading ? (
+            <Skeleton className="h-3 w-52" />
+          ) : data ? (
+            <p className={`text-xs leading-normal break-keep tabular-nums ${TXT_MUTED}`}>
+              {month.replace('-', '년 ')}월 기준
+              <span className="px-1 text-border">·</span>
+              배정 {stats.total}건
+              <span className="px-1 text-border">·</span>
+              시험자 {stats.testers}명
             </p>
-          </div>
-        </div>
+          ) : null}
+        </header>
 
-        {/* PCT 데이터 알림 */}
+        {/* PCT 데이터 알림 — 알림 한 줄에 카드를 또 씌우지 않는다 */}
         {pctSnapshot.length > 0 && (
-          <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/70 dark:bg-blue-950/30">
-            <CardContent className="flex flex-wrap items-center justify-between gap-3 py-3 text-xs">
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-600 text-white">
-                  <Calendar size={14} />
-                </div>
-                <span className={`font-semibold ${TXT_PRIMARY}`}>PCT 생산관리 배정 표시 중</span>
-                <span className={TXT_TERTIARY}>
-                  총 <b className={`text-base ${TXT_PRIMARY}`}>{pctSnapshot.length}</b>건 · 이번 달 <b className={`text-base ${TXT_PRIMARY}`}>{pctSchedulesMerged.length}</b>건
-                </span>
-                {pctGeneratedAt && (
-                  <span className={`text-xs leading-normal ${TXT_MUTED}`}>
-                    생성: {new Date(pctGeneratedAt).toLocaleString('ko-KR')}
-                  </span>
-                )}
-              </div>
-              <Button
-                onClick={handleClearPct}
-                variant="outline"
-                size="sm"
-                className="gap-1.5 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40"
-              >
-                PCT 데이터 지우기
-              </Button>
-            </CardContent>
-          </Card>
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-md border border-blue-200 bg-blue-50/70 px-3 py-2.5 dark:border-blue-900 dark:bg-blue-950/30">
+            <p className="min-w-0 text-xs leading-normal break-keep text-blue-900 dark:text-blue-100">
+              <span className="font-semibold">PCT 생산관리 배정 표시 중</span>
+              <span className="px-1 text-blue-300 dark:text-blue-800">·</span>
+              <span className="tabular-nums">전체 {pctSnapshot.length}건 · 이번 달 {pctSchedulesMerged.length}건</span>
+              {pctGeneratedAt && (
+                <>
+                  <span className="px-1 text-blue-300 dark:text-blue-800">·</span>
+                  <span className="tabular-nums">생성 {new Date(pctGeneratedAt).toLocaleString('ko-KR')}</span>
+                </>
+              )}
+            </p>
+            <Button onClick={handleClearPct} variant="outline" size="sm">
+              PCT 데이터 지우기
+            </Button>
+          </div>
         )}
 
-        {/* 월 네비게이션 */}
-        <Card className={`${BORDER} ${CARD_BG}`}>
-          <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setMonth(shiftMonth(month, -1))}
-                className="gap-1.5"
-              >
-                <ChevronLeft size={14} />
-                이전 달
-              </Button>
-              <div className={`min-w-[120px] text-center text-lg font-bold ${TXT_PRIMARY}`}>
-                {month.replace('-', '년 ')}월
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setMonth(shiftMonth(month, 1))}
-                className="gap-1.5"
-              >
-                다음 달
-                <ChevronRight size={14} />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setMonth(thisMonth())}
-              >
-                이번 달
-              </Button>
-            </div>
-            <input
-              type="month"
-              value={month}
-              onChange={e => setMonth(e.target.value)}
-              className={`h-9 w-full rounded-md border sm:w-auto ${BORDER} bg-white dark:bg-slate-800 px-3 text-sm tabular-nums outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/40 ${TXT_PRIMARY} [color-scheme:light] dark:[color-scheme:dark]`}
-            />
-          </CardContent>
-        </Card>
+        {/* 월 이동 — 조회조건 한 줄에 카드를 씌우지 않는다(테두리 겹 줄이기) */}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setMonth(shiftMonth(month, -1))} className="gap-1.5">
+            <ChevronLeft size={14} />
+            이전 달
+          </Button>
+          {/* 320px 에서도 이전/다음 버튼과 한 줄에 들어가야 해서 모바일은 최소폭을 낮춘다 */}
+          <div className={`min-w-0 flex-1 text-center text-base font-semibold tabular-nums sm:min-w-28 sm:flex-none ${TXT_PRIMARY}`}>
+            {month.replace('-', '년 ')}월
+          </div>
+          <Button variant="outline" size="sm" onClick={() => setMonth(shiftMonth(month, 1))} className="gap-1.5">
+            다음 달
+            <ChevronRight size={14} />
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setMonth(thisMonth())}>
+            이번 달
+          </Button>
+          <input
+            type="month"
+            value={month}
+            onChange={e => setMonth(e.target.value)}
+            aria-label="월 선택"
+            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground tabular-nums shadow-xs transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none sm:ml-auto sm:w-auto [color-scheme:light] dark:[color-scheme:dark]"
+          />
+        </div>
 
         {/* 에러 */}
         {error && (
-          <Card className="border-red-300 bg-red-50 dark:border-red-900 dark:bg-red-950/40">
-            <CardContent className="flex items-start gap-2 py-3">
-              <AlertCircle size={16} className="mt-0.5 shrink-0 text-red-600 dark:text-red-400" />
-              <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
-            </CardContent>
-          </Card>
+          <p className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-sm break-keep text-destructive">
+            <AlertCircle size={16} className="mt-0.5 shrink-0" />
+            {error}
+          </p>
         )}
 
-        {/* 로딩 */}
+        {/* 로딩 — 실제로 나올 모양(시험자 한 줄 + 날짜 칸)과 같은 뼈대를 보여준다 */}
         {loading && (
-          <Card className={`${BORDER} ${CARD_BG}`}>
-            <CardContent className="py-4">
-              <div className="grid grid-cols-7 gap-1">
-                {Array.from({ length: 7 }).map((_, i) => (
-                  <Skeleton key={i} className="h-8 rounded-md" />
-                ))}
-                {Array.from({ length: 35 }).map((_, i) => (
-                  <Skeleton key={`cell-${i}`} className="h-20 rounded-md" />
-                ))}
-              </div>
-            </CardContent>
+          <Card className={`gap-0 overflow-hidden py-0 ${BORDER} ${CARD_BG}`}>
+            <div className="flex flex-col gap-2 p-4">
+              {Array.from({ length: 7 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <Skeleton className="h-6 w-28 shrink-0" />
+                  <Skeleton className="h-6 flex-1" />
+                </div>
+              ))}
+            </div>
           </Card>
         )}
 
         {/* 결과 */}
         {!loading && data && (
           <>
-            {/* 요약 */}
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Card className="border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/40">
-                <CardContent className="flex items-center gap-3 py-4">
-                  <Calendar size={20} className="text-blue-600 dark:text-blue-400" />
-                  <div>
-                    <p className={`text-xs leading-normal font-medium ${TXT_MUTED}`}>총 배정</p>
-                    <p className={`text-xl font-bold tabular-nums ${TXT_PRIMARY}`}>{stats.total}건</p>
+            {/* ── 요약 ────────────────────────────────────────────────────
+                파스텔 카드 네 장을 나란히 세우면 무엇이 급한지 화면이 말해 주지 못한다.
+                한 장으로 합쳐 실선으로만 나누고, 강조는 숫자 크기와 잉크 색으로 한다. */}
+            <Card className="gap-0 overflow-hidden py-0">
+              <dl className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
+                {[
+                  { label: '총 배정',     value: `${stats.total}건`,   tone: TXT_PRIMARY },
+                  { label: '활동 시험자', value: `${stats.testers}명`, tone: TXT_PRIMARY },
+                  { label: '긴급',        value: `${stats.urgent}건`,  tone: stats.urgent > 0 ? 'text-destructive' : TXT_MUTED },
+                  { label: '듀오',        value: `${stats.duo}건`,     tone: TXT_PRIMARY },
+                ].map(s => (
+                  <div key={s.label} className="flex min-w-0 flex-col bg-card px-4 py-3.5">
+                    <dt className={`text-xs font-medium ${TXT_MUTED}`}>{s.label}</dt>
+                    <dd className={`mt-0.5 text-2xl font-semibold tabular-nums ${s.tone}`}>{s.value}</dd>
                   </div>
-                </CardContent>
-              </Card>
-              <Card className="border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/40">
-                <CardContent className="flex items-center gap-3 py-4">
-                  <Users size={20} className="text-slate-600 dark:text-slate-300" />
-                  <div>
-                    <p className={`text-xs leading-normal font-medium ${TXT_MUTED}`}>활동 시험자</p>
-                    <p className={`text-xl font-bold tabular-nums ${TXT_PRIMARY}`}>{stats.testers}명</p>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/40">
-                <CardContent className="flex items-center gap-3 py-4">
-                  <AlertTriangle size={20} className="text-red-600 dark:text-red-400" />
-                  <div>
-                    <p className={`text-xs leading-normal font-medium ${TXT_MUTED}`}>긴급</p>
-                    <p className="text-xl font-bold tabular-nums text-red-700 dark:text-red-300">{stats.urgent}건</p>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="border-teal-200 bg-teal-50 dark:border-teal-900 dark:bg-teal-950/40">
-                <CardContent className="flex items-center gap-3 py-4">
-                  <Users size={20} className="text-teal-600 dark:text-teal-400" />
-                  <div>
-                    <p className={`text-xs leading-normal font-medium ${TXT_MUTED}`}>듀오</p>
-                    <p className="text-xl font-bold tabular-nums text-teal-700 dark:text-teal-300">{stats.duo}건</p>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+                ))}
+              </dl>
+            </Card>
 
-            {/* 뷰 전환 탭 */}
-            <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-1.5">
+            {/* 뷰 전환 — 오더 화면과 같은 세그먼트 컨트롤로 맞춘다.
+                탭 옆 힌트("시험자 × 날짜")는 바로 아래 표 머리에서 한 번 더 말하므로 뺀다. */}
+            {/* 탭 3개(각 130px 남짓)는 320~414px 폭에서 한 줄에 못 들어간다.
+                글자를 줄이는 대신 줄을 바꾼다 — 좁으면 두 줄, sm 부터 한 줄. */}
+            <div className="flex w-full flex-wrap items-center gap-0.5 rounded-md bg-muted p-0.5 text-muted-foreground sm:inline-flex sm:h-9 sm:w-fit sm:flex-nowrap">
               {([
-                { key: 'monthly',  label: '월간 그리드', icon: LayoutGrid,    hint: '시험자 × 날짜' },
-                { key: 'weekly',   label: '주간 보드',   icon: CalendarRange, hint: '주차별' },
-                { key: 'personal', label: '개인별 할당', icon: UserSquare,    hint: '시험자별' },
+                { key: 'monthly',  label: '월간 그리드', icon: LayoutGrid },
+                { key: 'weekly',   label: '주간 보드',   icon: CalendarRange },
+                { key: 'personal', label: '개인별 할당', icon: UserSquare },
               ] as const).map(t => {
                 const active = view === t.key
                 const Icon = t.icon
                 return (
                   <button
                     key={t.key}
+                    type="button"
+                    aria-pressed={active}
                     onClick={() => setView(t.key)}
-                    className={`inline-flex items-center gap-1.5 rounded-md px-3.5 py-2 text-sm font-semibold transition-colors ${
-                      active
-                        ? 'bg-blue-600 text-white shadow-sm'
-                        : `${TXT_TERTIARY} hover:bg-slate-100 dark:hover:bg-slate-800`
-                    }`}
+                    className={cn(
+                      'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-3 text-sm font-medium whitespace-nowrap transition-colors',
+                      'focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+                      active ? 'bg-card text-foreground shadow-sm' : 'hover:text-foreground',
+                    )}
                   >
-                    <Icon size={15} />
+                    <Icon size={15} className="shrink-0" />
                     {t.label}
-                    <span className={`hidden text-xs leading-normal font-normal sm:inline ${active ? 'text-blue-100' : TXT_MUTED}`}>
-                      {t.hint}
-                    </span>
                   </button>
                 )
               })}
@@ -563,27 +552,31 @@ export default function MonthlySchedulePage() {
 
             {/* ── 월간 그리드 뷰 ── */}
             {view === 'monthly' && (<>
-            {/* 간트 그리드 */}
-            <Card className={`${BORDER} ${CARD_BG} overflow-hidden`}>
-              <CardHeader>
-                <CardTitle className={`flex items-center gap-2 text-base ${TXT_PRIMARY}`}>
-                  <Calendar size={16} className="text-blue-600 dark:text-blue-400" />
-                  월간 그리드
-                  <span className={`text-xs font-normal ${TXT_MUTED}`}>(시험자 × 날짜)</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-0 pb-0">
+            {/* 간트 그리드 — 머리말은 탭 이름을 되풀이하는 대신 이 표의 크기를 적는다 */}
+            <Card className={`gap-0 overflow-hidden py-0 ${BORDER} ${CARD_BG}`}>
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b px-4 py-3">
+                <h2 className={`text-sm font-semibold ${TXT_PRIMARY}`}>월간 그리드</h2>
+                <p className={`text-xs leading-normal break-keep tabular-nums ${TXT_MUTED}`}>
+                  시험자 {visibleTesters.length}명 × {days.length}일
+                </p>
+              </div>
+              <div className="min-w-0">
                 {visibleTesters.length === 0 ? (
-                  <p className={`px-6 py-10 text-center text-sm ${TXT_MUTED}`}>
+                  <p className={`px-4 py-10 text-center text-sm break-keep ${TXT_MUTED}`}>
                     이 달에 배정된 스케줄이 없습니다.
                   </p>
                 ) : (
-                  <div className="overflow-x-auto">
+                  /* 시험자 × 날짜(최대 31칸)는 의미상 열을 줄일 수 없는 표라
+                     모바일 카드 목록으로 접지 않고 터치 가로 스크롤을 쓴다.
+                     스크롤은 이 컨테이너 안에서만 일어나고 페이지는 밀리지 않는다
+                     (Table 이 data-slot="table-container" 로 min-w-0 w-full 스크롤 박스를 만든다). */
+                  <div className="min-w-0 overflow-x-auto">
                     <Table layout="wide" className="w-full min-w-[640px] border-collapse text-xs">
                       <TableHeader>
-                        <TableRow className="bg-slate-100 dark:bg-slate-800/60">
+                        {/* 한글에는 대문자가 없다 — uppercase·tracking-wide 제거 */}
+                        <TableRow className="bg-muted hover:bg-muted">
                           <TableHead
-                            className={`sticky left-0 z-10 border-b ${BORDER} bg-slate-100 dark:bg-slate-800/60 px-3 py-2 text-left text-xs leading-normal font-semibold uppercase tracking-wide ${TXT_TERTIARY}`}
+                            className={`sticky left-0 z-10 border-b ${BORDER} bg-muted px-3 py-2 text-left text-xs leading-normal font-semibold ${TXT_MUTED}`}
                             style={{ minWidth: 120 }}
                           >
                             시험자
@@ -595,11 +588,11 @@ export default function MonthlySchedulePage() {
                               <TableHead
                                 key={d}
                                 className={`border-b border-l ${BORDER} px-1 py-2 text-center text-xs leading-normal font-semibold ${
-                                  isWeekend ? 'text-red-500 dark:text-red-400' : TXT_TERTIARY
+                                  isWeekend ? 'text-red-500 dark:text-red-400' : TXT_MUTED
                                 }`}
                                 style={{ minWidth: 38 }}
                               >
-                                <div>{Number(d.slice(-2))}</div>
+                                <div className="tabular-nums">{Number(d.slice(-2))}</div>
                                 <div className="text-xs leading-normal font-normal opacity-70">{DOW_KOR[dow]}</div>
                               </TableHead>
                             )
@@ -608,13 +601,13 @@ export default function MonthlySchedulePage() {
                       </TableHeader>
                       <TableBody>
                         {visibleTesters.map(t => (
-                          <TableRow key={t.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
+                          <TableRow key={t.id} className="hover:bg-muted/40">
                             <TableCell
-                              className={`sticky left-0 z-10 border-b ${BORDER} bg-white dark:bg-slate-900 px-3 py-2 text-sm font-semibold ${TXT_PRIMARY}`}
+                              className={`sticky left-0 z-10 border-b ${BORDER} ${CARD_BG} px-3 py-2 text-sm font-medium ${TXT_PRIMARY}`}
                             >
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex min-w-0 items-center gap-1.5">
                                 <TesterAvatar testerId={String(t.id)} name={t.name} size="xs" />
-                                <span className="truncate">{t.name}</span>
+                                <span className="min-w-0 truncate">{t.name}</span>
                               </div>
                             </TableCell>
                             {days.map(d => {
@@ -628,7 +621,7 @@ export default function MonthlySchedulePage() {
                                 <TableCell
                                   key={k}
                                   className={`border-b border-l ${BORDER} p-0.5 align-top ${
-                                    isWeekend ? 'bg-slate-50/60 dark:bg-slate-800/30' : ''
+                                    isWeekend ? 'bg-muted/50' : ''
                                   }`}
                                   style={{ minWidth: 38 }}
                                 >
@@ -636,13 +629,19 @@ export default function MonthlySchedulePage() {
                                     {rows.map(r => {
                                       const style = cellStyle(r)
                                       return (
-                                        <div
+                                        /* 칸에는 품목명 앞 6자밖에 안 들어간다 — 나머지는 눌러서 본다.
+                                           마우스는 title 툴팁 그대로, 터치·키보드는 이 버튼으로 상세에 닿는다.
+                                           min-h-8: 모바일 터치 타깃(36px). sm 부터는 표 밀도를 지킨다. */
+                                        <button
                                           key={`${r.id}-${d}`}
-                                          title={`${r.product_name} (배치 ${r.batch_no ?? r.batch_id})\n시험항목: ${r.test_items?.join(', ') ?? '-'}\n공수: ${r.avg_hours != null && r.avg_hours > 0 ? `${r.avg_hours.toFixed(1)}h (${r.workdays}일)` : `${r.workdays}일`}\n${r.note ?? ''}`}
-                                          className={`truncate rounded-md border px-1 py-0.5 text-xs leading-normal font-medium cursor-help transition-colors ${style.bg} ${style.border} ${TXT_PRIMARY}`}
+                                          type="button"
+                                          onClick={() => setCellDetail({ row: r, testerName: t.name, date: d })}
+                                          title={`${r.product_name} (배치 ${r.batch_no ?? r.batch_id})\n시험항목: ${r.test_items?.join(', ') ?? '-'}\n공수: ${workloadText(r)}\n${r.note ?? ''}`}
+                                          aria-label={`${t.name} ${d} ${r.product_name} 배정 상세 보기`}
+                                          className={`flex min-h-8 w-full min-w-0 items-center rounded-md border px-1 py-0.5 text-xs leading-normal font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:min-h-0 ${style.bg} ${style.border} ${TXT_PRIMARY}`}
                                         >
-                                          {r.product_name.slice(0, 6)}
-                                        </div>
+                                          <span className="min-w-0 truncate">{r.product_name.slice(0, 6)}</span>
+                                        </button>
                                       )
                                     })}
                                   </div>
@@ -655,84 +654,134 @@ export default function MonthlySchedulePage() {
                     </Table>
                   </div>
                 )}
-              </CardContent>
+              </div>
             </Card>
 
-            {/* 범례 */}
-            <Card className={`${BORDER} bg-slate-100/70 dark:bg-slate-800/40`}>
-              <CardContent className="flex flex-wrap items-center gap-4 py-3 text-xs">
-                <span className={`font-semibold ${TXT_MUTED}`}>범례:</span>
-                <div className="flex items-center gap-1.5">
-                  <span className="inline-block h-3 w-3 rounded-md border border-emerald-300 bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-900/40" />
-                  <span className={TXT_TERTIARY}>일반</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="inline-block h-3 w-3 rounded-md border border-red-300 bg-red-200 dark:border-red-800 dark:bg-red-900/60" />
-                  <span className={TXT_TERTIARY}>긴급</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="inline-block h-3 w-3 rounded-md border border-blue-300 bg-blue-200 dark:border-blue-800 dark:bg-blue-900/60" />
-                  <span className={TXT_TERTIARY}>듀오</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="inline-block h-3 w-3 rounded-md border border-dashed border-amber-400 bg-amber-200 dark:border-amber-700 dark:bg-amber-900/60" />
-                  <span className={TXT_TERTIARY}>PCT 생산관리 출처</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="inline-block h-3 w-3 rounded-md bg-slate-200 dark:bg-slate-700" />
-                  <span className={TXT_TERTIARY}>주말</span>
-                </div>
-                <span className={`ml-auto text-xs leading-normal italic ${TXT_MUTED}`}>
-                  셀에 마우스를 올리면 상세 정보가 표시됩니다.
+            {/* 범례 — 표 아래 한 줄이면 충분하다. 카드로 감싸면 표와 같은 무게가 되어 읽는 순서가 흐려진다 */}
+            <div className={`flex flex-wrap items-center gap-x-4 gap-y-2 px-1 text-xs leading-normal ${TXT_MUTED}`}>
+              <span className="font-medium">범례</span>
+              {[
+                { swatch: 'border-border bg-card', label: '일반' },
+                { swatch: 'border-red-300 bg-red-200 dark:border-red-800 dark:bg-red-900/60', label: '긴급' },
+                { swatch: 'border-blue-300 bg-blue-200 dark:border-blue-800 dark:bg-blue-900/60', label: '듀오' },
+                { swatch: 'border-dashed border-amber-400 bg-amber-200 dark:border-amber-700 dark:bg-amber-900/60', label: 'PCT 생산관리 출처' },
+                { swatch: 'border-transparent bg-muted', label: '주말' },
+              ].map(l => (
+                <span key={l.label} className="flex items-center gap-1.5">
+                  <span className={`inline-block size-3 shrink-0 rounded-md border ${l.swatch}`} />
+                  {l.label}
                 </span>
-              </CardContent>
-            </Card>
+              ))}
+              {/* hover 로만 열리던 안내였다 — 터치에서도 같은 정보에 닿으므로 문장을 사실에 맞춘다 */}
+              <span className="ml-auto break-keep">셀을 누르면 시험항목·공수·비고를 볼 수 있습니다.</span>
+            </div>
             </>)}
 
             {/* ── 주간 보드 뷰 (Monday 스타일, 주차별 그룹) ── */}
             {view === 'weekly' && (
-              <Card className={`${BORDER} ${CARD_BG}`}>
-                <CardHeader>
-                  <CardTitle className={`flex items-center gap-2 text-base ${TXT_PRIMARY}`}>
-                    <CalendarRange size={16} className="text-blue-600 dark:text-blue-400" />
-                    주간 보드
-                    <span className={`text-xs font-normal ${TXT_MUTED}`}>(포장/예정일 기준 주차)</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-3 sm:p-4">
+              <Card className={`gap-0 overflow-hidden py-0 ${BORDER} ${CARD_BG}`}>
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b px-4 py-3">
+                  <h2 className={`text-sm font-semibold ${TXT_PRIMARY}`}>주간 보드</h2>
+                  <p className={`text-xs leading-normal break-keep tabular-nums ${TXT_MUTED}`}>
+                    포장/예정일 기준 {weeklyGroups.length}주차 · {allSchedules.length}건
+                  </p>
+                </div>
+                {/* min-w-0: 보드가 자기 안에서 가로 스크롤하도록 두고, 페이지 폭은 밀지 않는다 */}
+                <div className="min-w-0 p-3 sm:p-4">
                   <MondayBoard
                     groups={weeklyGroups}
                     columns={weeklyColumns}
                     showToggleAll
                     emptyMessage="이 달에 배정된 스케줄이 없습니다."
                   />
-                </CardContent>
+                </div>
               </Card>
             )}
 
             {/* ── 개인별 할당 뷰 (Monday 스타일, 시험자별 그룹) ── */}
             {view === 'personal' && (
-              <Card className={`${BORDER} ${CARD_BG}`}>
-                <CardHeader>
-                  <CardTitle className={`flex items-center gap-2 text-base ${TXT_PRIMARY}`}>
-                    <UserSquare size={16} className="text-blue-600 dark:text-blue-400" />
-                    개인별 할당
-                    <span className={`text-xs font-normal ${TXT_MUTED}`}>(시험자별 배정 목록)</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-3 sm:p-4">
+              <Card className={`gap-0 overflow-hidden py-0 ${BORDER} ${CARD_BG}`}>
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b px-4 py-3">
+                  <h2 className={`text-sm font-semibold ${TXT_PRIMARY}`}>개인별 할당</h2>
+                  <p className={`text-xs leading-normal break-keep tabular-nums ${TXT_MUTED}`}>
+                    시험자 {personalGroups.length}명 · {allSchedules.length}건
+                  </p>
+                </div>
+                {/* min-w-0: 보드가 자기 안에서 가로 스크롤하도록 두고, 페이지 폭은 밀지 않는다 */}
+                <div className="min-w-0 p-3 sm:p-4">
                   <MondayBoard
                     groups={personalGroups}
                     columns={personalColumns}
                     showToggleAll
                     emptyMessage="이 달에 배정된 스케줄이 없습니다."
                   />
-                </CardContent>
+                </div>
               </Card>
             )}
           </>
         )}
+
+        {/* ── 셀 상세 ────────────────────────────────────────────────────────
+            그리드 칸은 품목명 6자가 한계라 나머지는 title 툴팁에만 있었다.
+            터치에는 hover 가 없으므로 같은 값을 눌러서 여는 다이얼로그로 내놓는다. */}
+        {cellDetail && (
+          <CellDetailDialog detail={cellDetail} onClose={() => setCellDetail(null)} />
+        )}
       </div>
     </div>
+  )
+}
+
+// ─── 셀 상세 다이얼로그 ────────────────────────────────────────────────────────
+// 칸에 못 담은 값(시험항목·공수·비고)을 그대로 보여 준다. 새 정보를 만들지 않는다.
+function CellDetailDialog({ detail, onClose }: { detail: CellDetail; onClose: () => void }) {
+  const { row, testerName, date } = detail
+  const style = cellStyle(row)
+  const items = row.test_items ?? []
+  const batchNo = row.batch_no ?? (typeof row.batch_id === 'string' ? row.batch_id.replace(/^pct-/, '') : row.batch_id)
+
+  const fields: { label: string; value: React.ReactNode }[] = [
+    {
+      label: '구분',
+      value: (
+        <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-xs leading-normal font-medium ${staticBg(style.bg)} ${style.border} ${TXT_PRIMARY}`}>
+          {style.label}
+        </span>
+      ),
+    },
+    { label: '제조번호', value: <span className="tabular-nums">{batchNo}</span> },
+    ...(row.product_code ? [{ label: '품목코드', value: <span className="tabular-nums">{row.product_code}</span> }] : []),
+    { label: '시험항목', value: items.length > 0 ? items.join(', ') : '—' },
+    { label: '공수', value: <span className="tabular-nums">{workloadText(row)}</span> },
+    // note 는 줄바꿈으로 여러 사실을 담고 있다 — 한 줄로 뭉개지 않는다
+    { label: '비고', value: row.note ? <span className="whitespace-pre-line">{row.note}</span> : '—' },
+  ]
+
+  return (
+    <Dialog open onOpenChange={next => { if (!next) onClose() }}>
+      <DialogContent>
+        <DialogHeader>
+          {/* break-keep 만으로는 띄어쓰기 없는 긴 품목명이 320px 다이얼로그를 넘는다 —
+              break-words 를 함께 걸어 '못 들어갈 때만' 끊기게 한다 */}
+          <DialogTitle className="min-w-0 break-words break-keep">{row.product_name}</DialogTitle>
+          <DialogDescription className="text-xs leading-normal break-keep">
+            <span className="tabular-nums">{date}</span> ({DOW_KOR[dayOfWeek(date)]})
+            <span className="px-1 text-border">·</span>
+            시험자 {testerName}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogBody>
+          {/* 라벨은 좁은 폭에서 값 위로 올라간다 — 320px 에서 값에 줄 폭을 다 준다 */}
+          <dl className="divide-y">
+            {fields.map(f => (
+              <div key={f.label} className="flex flex-col gap-0.5 py-2 first:pt-0 last:pb-0 sm:flex-row sm:gap-3">
+                <dt className={`text-xs leading-normal sm:w-20 sm:shrink-0 ${TXT_MUTED}`}>{f.label}</dt>
+                <dd className={`min-w-0 text-sm break-keep sm:flex-1 ${TXT_PRIMARY}`}>{f.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
   )
 }

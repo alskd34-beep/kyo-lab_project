@@ -111,7 +111,7 @@ export function ProductWorkloadDialog({
         </DialogHeader>
 
         <DialogBody className="grid gap-4">
-          <section className="rounded-lg border bg-card p-3 shadow-sm sm:p-4">
+          <section className="rounded-md border bg-card p-3 shadow-sm sm:p-4">
             <div className="mb-3 border-b pb-3">
               <h3 className="text-sm font-semibold text-foreground">품목 정보</h3>
             </div>
@@ -161,7 +161,7 @@ export function ProductWorkloadDialog({
                     onChange={e => setLeadTimeDays(e.target.value)}
                     className="h-9 tabular-nums"
                   />
-                  <p className="mt-1 text-[11px] text-muted-foreground">
+                  <p className="mt-1 text-xs leading-normal text-muted-foreground">
                     공수 합계로 계산하지 않는 별도 관리값입니다.
                   </p>
                 </div>
@@ -189,10 +189,10 @@ export function ProductWorkloadDialog({
 
           {/* 신규 등록: 다른 품목 공수 복사 */}
           {!isEdit && copySources.length > 0 && (
-            <section className="rounded-lg border bg-card p-3 shadow-sm sm:p-4">
+            <section className="rounded-md border bg-card p-3 shadow-sm sm:p-4">
               <div className="mb-3 border-b pb-3">
                 <h3 className="text-sm font-semibold text-foreground">다른 품목 공수 복사</h3>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                <p className="mt-0.5 text-xs leading-normal text-muted-foreground">
                   기준 품목의 시험항목·작업단계·공수를 그대로 복사합니다. 복사 후 수정할 수 있습니다.
                 </p>
               </div>
@@ -217,10 +217,10 @@ export function ProductWorkloadDialog({
 
           {/* 수정: 버전 관리 */}
           {isEdit && (
-            <section className="rounded-lg border bg-card p-3 shadow-sm sm:p-4">
+            <section className="rounded-md border bg-card p-3 shadow-sm sm:p-4">
               <div className="mb-3 border-b pb-3">
                 <h3 className="text-sm font-semibold text-foreground">버전 관리</h3>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                <p className="mt-0.5 text-xs leading-normal text-muted-foreground">
                   현재 v{initial!.version} · 새 버전으로 저장하면 변경이력에 기록됩니다.
                 </p>
               </div>

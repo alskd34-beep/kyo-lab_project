@@ -54,13 +54,46 @@
 ### 카드 래퍼
 
 ```tsx
-<Card className="hidden gap-0 overflow-hidden py-0 md:block">
+<Card className="hidden gap-0 overflow-hidden py-0 md:flex">
   <Table>...</Table>
 </Card>
 ```
 
 - `gap-0 overflow-hidden py-0` — Card 내부 여백 제거
-- `hidden md:block` — 데스크톱 전용 (모바일은 카드 목록 사용)
+- `hidden md:flex` — 데스크톱 전용 (모바일은 아래 카드 목록 사용)
+- **`md:block` 을 쓰지 않는다.** Card 기본값이 `flex flex-col` 인데 `block` 으로 덮으면
+  안쪽 Table 컨테이너의 `min-h-0 flex-1` 이 무력화돼 표가 세로로 잘린다.
+
+### 모바일 카드 목록 — **`<Table>` 을 쓰면 반드시 짝을 만든다**
+
+표는 모바일에서 표로 두지 않는다. `<Table>` 하나당 `md:hidden` 카드 목록 하나가 짝이다.
+기준 구현은 `app/(menu)/home/page.tsx` 의 「기한 임박 오더」.
+
+```tsx
+{/* 모바일 — 칸마다 테두리를 두르지 않고 실선 하나로 나눈다(카드 안 카드 금지) */}
+<div className="divide-y md:hidden">
+  {rows.map(row => (
+    <div key={row.id} className="px-4 py-3">
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{row.주값}</p>
+        <span className="shrink-0 text-sm tabular-nums">{row.수치}</span>
+      </div>
+      <div className="mt-1 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+        <span className="shrink-0">{row.상태}</span>
+        <span className="min-w-0 truncate">{row.보조값}</span>
+      </div>
+    </div>
+  ))}
+</div>
+
+{/* 데스크톱 */}
+<div className="hidden md:block"><Table>...</Table></div>
+```
+
+- 모바일 카드에는 **핵심 3~4개 값만** 넣는다. 표의 모든 열을 우겨넣지 않는다 — 나머지는 행을 눌러 상세에서 본다.
+- 로딩 Skeleton·빈 상태도 모바일 쪽을 따로 둔다.
+- **예외**: 월간 달력·자격 행렬처럼 **의미상 열을 줄일 수 없는 표**만 터치 가로 스크롤을 쓴다.
+  이때도 `[data-slot="table-container"]` 안에서만 밀리고 **페이지 전체가 밀리면 안 된다**.
 
 ### TableHeader
 
@@ -533,7 +566,7 @@ import { Skeleton } from "@frontend/components/ui/skeleton"
 
 ```tsx
 // 상단 KPI 카드 로딩 (데이터 fetch 전)
-<Card className="gap-1 border-l-4 border-l-primary px-4 py-4">
+<Card className="gap-1 px-4 py-4">
   <Skeleton className="h-3 w-16" />
   <Skeleton className="h-8 w-12" />
   <Skeleton className="h-3 w-24" />
@@ -655,9 +688,9 @@ import { Badge } from "@frontend/components/ui/badge"
 - 건수 표시: `<Badge variant="secondary">`
 
 ```tsx
-// 상태 dot 패턴 (활성/브랜드 강조는 indigo)
+// 상태 dot 패턴 (활성/브랜드 강조는 파랑 — indigo/violet/purple/sky 금지)
 <Badge variant="outline" className="gap-1.5">
-  <span className="size-1.5 rounded-full bg-indigo-500" />
+  <span className="size-1.5 rounded-full bg-blue-500" />
   활성
 </Badge>
 
@@ -676,21 +709,21 @@ import { Card } from "@frontend/components/ui/card"
 **서브 컴포넌트:** `CardHeader`, `CardTitle`, `CardDescription`, `CardAction`, `CardContent`, `CardFooter`
 
 **이 프로젝트 규칙:**
-- 테이블 래퍼: `<Card className="hidden gap-0 overflow-hidden py-0 md:block">`
-- KPI 카드: `<Card className="gap-1 border-l-4 border-l-primary px-4 py-4">`
+- 테이블 래퍼: `<Card className="hidden gap-0 overflow-hidden py-0 md:flex">` — `md:block` 을 쓰면 Card 기본의 `flex flex-col` 이 죽어 안쪽 Table 의 `min-h-0 flex-1` 이 무력화된다
+- KPI 카드: `<Card className="gap-1 px-4 py-4">` — **한쪽에만 굵은 색 띠(`border-l-4`)를 두르지 않는다.** 강조는 숫자 크기와 잉크 색으로 한다
 - 모바일 카드 목록: `<Card className="gap-0 px-3 py-3">`
 - 로딩 시 Skeleton 카드: `<Card className="gap-2 px-3 py-3">`
 
 ```tsx
 // KPI 카드
-<Card className="gap-1 border-l-4 border-l-primary px-4 py-4">
-  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">제목</span>
+<Card className="gap-1 px-4 py-4">
+  <span className="text-xs font-medium text-muted-foreground">제목</span>
   <span className="text-2xl font-semibold tabular-nums text-foreground">{value}</span>
-  <span className="text-[11px] text-muted-foreground">부가 설명</span>
+  <span className="text-xs leading-normal text-muted-foreground">부가 설명</span>
 </Card>
 
 // 테이블 래퍼
-<Card className="hidden gap-0 overflow-hidden py-0 md:block">
+<Card className="hidden gap-0 overflow-hidden py-0 md:flex">
   <Table>...</Table>
 </Card>
 ```

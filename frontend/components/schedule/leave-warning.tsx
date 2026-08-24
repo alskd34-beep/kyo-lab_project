@@ -78,7 +78,7 @@ export function LeaveChip({ conflicts }: { conflicts: readonly TesterAbsence[] }
   return (
     <span
       className={cn(
-        "ml-1 inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium",
+        "ml-1 inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs leading-normal font-medium",
         hard
           ? "border-red-200 bg-red-50 text-red-700"
           : "border-amber-200 bg-amber-50 text-amber-700",

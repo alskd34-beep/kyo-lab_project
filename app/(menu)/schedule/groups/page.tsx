@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
-import { Layers, RefreshCw, Lock, Unlock, Loader2, CalendarClock } from "lucide-react"
+import { RefreshCw, Lock, Unlock, Loader2 } from "lucide-react"
 import { Skeleton } from "@frontend/components/ui/skeleton"
+import { Button } from "@frontend/components/ui/button"
+import { Card } from "@frontend/components/ui/card"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 interface GroupItem {
@@ -21,11 +23,6 @@ interface GroupRow {
   groupLock: boolean
   items: GroupItem[]
 }
-
-const CARD_BARS = [
-  "bg-blue-500", "bg-emerald-500", "bg-blue-500",
-  "bg-amber-500", "bg-rose-500", "bg-teal-500", "bg-fuchsia-500",
-]
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function GroupsPage() {
@@ -84,50 +81,44 @@ export default function GroupsPage() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3 md:p-5">
-      {/* 헤더 */}
-      <div className="flex flex-col gap-3 rounded-md border border-slate-200 bg-white px-4 py-3 shadow-sm md:flex-row md:items-center md:justify-between md:py-4">
-        <div>
-          <h1 className="flex items-center gap-1.5 text-base font-bold text-slate-900 sm:text-lg">
-            <Layers size={18} className="text-blue-600" /> 동시분석 그룹
-          </h1>
-          <p className="mt-1 text-xs font-medium text-slate-600">
-            동시에 시험 가능한 오더를 자동으로 묶어 관리합니다. 잠근 그룹은 재생성 시 보존됩니다.
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4 md:p-6">
+      {/* ── 페이지 머리 ────────────────────────────────────────────────────
+          제목을 카드에 넣고 그 밑에 화면 이름을 되풀이하던 자리다.
+          부제는 지우고, 이 화면에서만 알 수 있는 사실(그룹 수·잠금 규칙)만 남긴다. */}
+      <header className="flex min-w-0 shrink-0 flex-wrap items-end justify-between gap-x-3 gap-y-2">
+        <div className="min-w-0">
+          <h1 className="text-lg font-semibold text-foreground">동시분석 그룹</h1>
+          <p className="mt-0.5 text-xs leading-normal break-keep text-muted-foreground">
+            총 <span className="font-semibold tabular-nums text-foreground">{rows.length}</span>개 그룹
+            <span className="px-1 text-border">·</span>
+            잠근 그룹은 재생성해도 그대로 남습니다
           </p>
         </div>
         {isAdmin && (
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={rebuild} disabled={busy !== null}
-              className="inline-flex h-9 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
-            >
-              {busy === "rebuild" ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
-              그룹 재생성
-            </button>
-          </div>
+          <Button size="lg" onClick={rebuild} disabled={busy !== null}>
+            {busy === "rebuild" ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+            그룹 재생성
+          </Button>
         )}
-      </div>
+      </header>
 
       {msg && (
-        <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">{msg}</div>
+        <p className="shrink-0 rounded-md border border-primary/20 bg-primary/10 px-3 py-2 text-xs break-keep text-primary">{msg}</p>
       )}
-
-      <span className="text-xs font-medium text-slate-500">총 {rows.length}개 그룹</span>
 
       {/* 그룹 카드 목록 */}
       {loading ? (
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <div className="grid min-w-0 shrink-0 grid-cols-1 gap-3 lg:grid-cols-2">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
-              <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-3">
-                <Skeleton className="h-8 w-1.5 shrink-0 rounded-md" />
+            <Card key={i} className="gap-0 py-0">
+              <div className="flex items-center gap-3 px-4 py-3">
                 <div className="flex-1 space-y-2">
                   <Skeleton className="h-4 w-36" />
                   <Skeleton className="h-3 w-24" />
                 </div>
                 <Skeleton className="h-8 w-16 rounded-md" />
               </div>
-              <ul className="divide-y divide-slate-100">
+              <ul className="divide-y border-t">
                 {Array.from({ length: 3 }).map((_, j) => (
                   <li key={j} className="flex items-center gap-3 px-4 py-2.5">
                     <Skeleton className="h-4 flex-1" />
@@ -137,64 +128,72 @@ export default function GroupsPage() {
                   </li>
                 ))}
               </ul>
-            </div>
+            </Card>
           ))}
         </div>
       ) : rows.length === 0 ? (
-        <div className="rounded-md border border-slate-200 bg-white px-3 py-10 text-center text-slate-400 shadow-sm">
-          생성된 그룹이 없습니다. {isAdmin && "\"그룹 재생성\"으로 묶어보세요."}
-        </div>
+        <p className="shrink-0 py-10 text-center text-sm break-keep text-muted-foreground">
+          생성된 그룹이 없습니다.{isAdmin && " \"그룹 재생성\"으로 묶어보세요."}
+        </p>
       ) : (
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-          {rows.map((g, idx) => {
-            const bar = g.groupLock ? "bg-slate-400" : CARD_BARS[idx % CARD_BARS.length]
-            return (
-              <div key={g.id} className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
-                {/* 카드 헤더 */}
-                <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-3">
-                  <span className={`h-8 w-1.5 shrink-0 rounded-md ${bar}`} />
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      {g.groupLock && (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-xs leading-normal font-semibold text-slate-600">
-                          <Lock size={10} /> 잠김
+        <div className="grid min-w-0 shrink-0 grid-cols-1 gap-3 lg:grid-cols-2">
+          {rows.map(g => (
+            /* 카드 왼쪽에 두르던 색 띠(border-l 대용 막대)를 걷어냈다.
+               일곱 색을 돌려 쓰던 터라 색이 아무 뜻도 없었고, 브랜드 색 규칙에도 어긋났다.
+               구분은 시험 시작일(제목)과 잠김 배지가 한다. */
+            <Card key={g.id} className="min-w-0 gap-0 py-0">
+              {/* 카드 헤더 */}
+              <div className="flex min-w-0 items-center gap-3 px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-foreground">
+                    시험 시작일 <span className="tabular-nums">{g.testStartDate ?? "미정"}</span>
+                  </p>
+                  <p className="mt-0.5 flex items-center gap-1.5 text-xs leading-normal text-muted-foreground">
+                    <span className="tabular-nums">{g.items.length}</span>품목
+                    {g.groupLock && (
+                      <>
+                        <span className="text-border">·</span>
+                        <span className="inline-flex items-center gap-1 font-medium text-foreground">
+                          <Lock size={11} /> 잠김
                         </span>
-                      )}
-                    </div>
-                    <div className="mt-0.5 flex items-center gap-1.5 text-sm font-bold text-slate-800">
-                      <CalendarClock size={14} className="text-slate-400" />
-                      시험 시작일 {g.testStartDate ?? "미정"}
-                      <span className="text-xs font-medium text-slate-400">· {g.items.length}품목</span>
-                    </div>
-                  </div>
-                  {isAdmin && (
-                    <button
-                      onClick={() => void toggleLock(g)} disabled={busy !== null}
-                      title={g.groupLock ? "잠금 해제" : "잠금"}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:opacity-50"
-                    >
-                      {busy === g.id
-                        ? <Loader2 size={14} className="animate-spin" />
-                        : g.groupLock ? <Unlock size={14} /> : <Lock size={14} />}
-                      {g.groupLock ? "해제" : "잠금"}
-                    </button>
-                  )}
+                      </>
+                    )}
+                  </p>
                 </div>
-
-                {/* 멤버 품목 리스트 */}
-                <ul className="divide-y divide-slate-100">
-                  {g.items.map(it => (
-                    <li key={it.orderId} className="flex items-center gap-3 px-4 py-2.5 text-sm">
-                      <span className="flex-1 font-medium text-slate-900">{it.productName}</span>
-                      <span className="font-mono text-xs text-slate-500">{it.productCode}</span>
-                      <span className="font-mono text-xs text-slate-400">{it.batchNo}</span>
-                      <span className="w-24 text-right text-xs text-slate-500">{it.packagingDate ?? "-"}</span>
-                    </li>
-                  ))}
-                </ul>
+                {isAdmin && (
+                  <Button
+                    variant="outline"
+                    onClick={() => void toggleLock(g)}
+                    disabled={busy !== null}
+                    title={g.groupLock ? "잠금 해제" : "잠금"}
+                  >
+                    {busy === g.id
+                      ? <Loader2 className="animate-spin" />
+                      : g.groupLock ? <Unlock /> : <Lock />}
+                    {g.groupLock ? "해제" : "잠금"}
+                  </Button>
+                )}
               </div>
-            )
-          })}
+
+              {/* 멤버 품목 리스트 — 안쪽에 테두리를 또 두르지 않고 실선으로만 나눈다.
+                  네 값을 한 줄에 늘어놓으면 320px 에서 품목명이 0폭으로 눌린다 —
+                  좁은 폭에선 품목명 아래로 코드·제조번호·포장일을 한 줄에 접어 쌓는다. */}
+              <ul className="divide-y border-t">
+                {g.items.map(it => (
+                  <li key={it.orderId} className="flex min-w-0 flex-col gap-0.5 px-4 py-2.5 sm:flex-row sm:items-center sm:gap-3">
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground" title={it.productName}>
+                      {it.productName}
+                    </span>
+                    <span className="flex min-w-0 items-center gap-2 text-xs leading-normal text-muted-foreground sm:contents">
+                      <span className="shrink-0 font-mono">{it.productCode}</span>
+                      <span className="shrink-0 font-mono">{it.batchNo}</span>
+                      <span className="ml-auto shrink-0 tabular-nums sm:ml-0 sm:w-24 sm:text-right">{it.packagingDate ?? "-"}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          ))}
         </div>
       )}
     </div>

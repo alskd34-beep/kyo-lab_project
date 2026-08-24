@@ -15,9 +15,10 @@ import {
   Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts"
 import {
-  Beaker, CalendarDays, Cpu, Gauge, Layers, Pencil, Plus, Search, Timer, Trash2, UserRound,
+  Beaker, CalendarDays, Cpu, Layers, Pencil, Plus, Search, Timer, Trash2, UserRound,
 } from "lucide-react"
 import { useAuth } from "@frontend/lib/auth-context"
+import { cn } from "@frontend/lib/utils"
 import { Badge } from "@frontend/components/ui/badge"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
@@ -90,7 +91,7 @@ const SORT_COLUMNS: { col: SortColumnDef<SortField>; numeric: boolean }[] = [
 
 const STATUS_DOT: Record<WorkloadStatus, string> = {
   DRAFT: "bg-slate-400",
-  ACTIVE: "bg-indigo-500",
+  ACTIVE: "bg-blue-600",   // '사용중'은 브랜드 파랑 — indigo 는 쓰지 않는다
   INACTIVE: "bg-red-400",
 }
 
@@ -227,7 +228,7 @@ export default function ProductWorkloadPage() {
     }
   }, [filtered])
 
-  /** 공수 분포 차트 — 기기공수 기준 상위 품목 (Y축 단위: 시간) */
+  /** 공수 분포 차트 — 공수 합계 기준 상위 품목 (Y축 단위: 시간) */
   const chartData = useMemo(
     () =>
       [...filtered]
@@ -240,12 +241,6 @@ export default function ProductWorkloadPage() {
           대기시간: minutesToHours(p.totalWaitingMinutes),
           검토공수: minutesToHours(p.totalReviewMinutes),
         })),
-    [filtered],
-  )
-
-  /** 공수가 높은 품목 TOP */
-  const topProducts = useMemo(
-    () => [...filtered].sort((a, b) => totalWorkload(b) - totalWorkload(a)).slice(0, TOP_N),
     [filtered],
   )
 
@@ -283,21 +278,27 @@ export default function ProductWorkloadPage() {
     // 세로 flex 컨테이너로 두면 각 섹션이 flex-shrink 로 눌려 차트·표가 잘린다.
     // 블록 흐름 + space-y 로 쌓아 각 섹션이 내용 높이를 유지하고 페이지 전체가 스크롤되게 한다.
     <div className="min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto p-4 md:p-6">
-      {/* ── 헤더 ─────────────────────────────────────────────────────────── */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <Gauge size={18} />
-          </div>
-          <div>
-            <h1 className="text-xl font-semibold text-foreground">품목별 시험공수 관리</h1>
-            <p className="text-sm text-muted-foreground">
-              품목별 표준 소요일과 시험항목별 인적·기기·대기·검토 공수를 관리합니다.
+      {/* ── 헤더 ───────────────────────────────────────────────────────────
+          장식용 아이콘 칩과 "…을 관리합니다" 부제를 걷어냈다. 화면 이름을 되풀이하는
+          문장 대신 지금 몇 품목을 보고 있는지(필터가 걸렸으면 전체 대비)를 적는다. */}
+      <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-2">
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h1 className="text-lg font-semibold text-foreground">품목별 시험공수 관리</h1>
+          {loading ? (
+            <Skeleton className="h-3 w-40" />
+          ) : (
+            <p className="text-xs leading-normal break-keep text-muted-foreground">
+              <span className="font-semibold tabular-nums text-foreground">{filtered.length}</span>품목
+              {filtered.length !== rows.length && (
+                <span className="tabular-nums"> / 전체 {rows.length}품목</span>
+              )}
+              <span className="px-1 text-border">·</span>
+              공수와 표준 소요일은 별개 값입니다
             </p>
-          </div>
+          )}
         </div>
         {canEdit && (
-          <Button size="lg" onClick={() => setProductDialog({ initial: null })}>
+          <Button onClick={() => setProductDialog({ initial: null })}>
             <Plus /> 품목 추가
           </Button>
         )}
@@ -305,25 +306,27 @@ export default function ProductWorkloadPage() {
 
       {/* 마이그레이션 미적용 안내 */}
       {!loading && !schemaReady && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm break-keep text-amber-800">
           공수 표준 테이블이 아직 생성되지 않아 <strong>예제 데이터(쌍화탕)</strong>를 보여주고 있습니다.
           저장은 되지 않습니다 — <code className="font-mono text-xs">supabase/migrations/0026_workload_standard.sql</code> 을 적용해 주세요.
         </div>
       )}
 
       {msg && (
-        <div className={`rounded-lg border px-4 py-2.5 text-sm ${
+        <div className={cn(
+          "rounded-md border px-4 py-2.5 text-sm font-medium break-keep",
           msg.type === "error"
-            ? "border-red-200 bg-red-50 text-red-600"
-            : "border-blue-200 bg-blue-50 text-blue-700"
-        }`}>
+            ? "border-destructive/20 bg-destructive/10 text-destructive"
+            : "border-primary/20 bg-primary/5 text-foreground",
+        )}>
           {msg.text}
         </div>
       )}
 
-      {/* ── 검색 · 필터 ──────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-52 flex-1">
+      {/* ── 검색 · 필터 ──────────────────────────────────────────────────
+          필터가 5개다. 모바일에서는 검색이 한 줄을 다 쓰고 나머지 넷은 2열로 접힌다. */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="relative w-full sm:min-w-52 sm:flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={keyword}
@@ -332,31 +335,33 @@ export default function ProductWorkloadPage() {
             className="h-9 pl-9"
           />
         </div>
-        <FilterSelect
-          value={dosageFilter} onChange={setDosageFilter} placeholder="제형"
-          allLabel="제형 전체" options={dosageOptions.map(d => ({ value: d, label: d }))}
-        />
-        <FilterSelect
-          value={statusFilter} onChange={setStatusFilter} placeholder="상태"
-          allLabel="상태 전체"
-          options={WORKLOAD_STATUSES.map(s => ({ value: s, label: WORKLOAD_STATUS_LABEL[s] }))}
-        />
-        <FilterSelect
-          value={leadTimeFilter} onChange={setLeadTimeFilter} placeholder="표준소요일"
-          allLabel="소요일 전체"
-          options={LEAD_TIME_BUCKETS.map(b => ({ value: b.id, label: b.label }))}
-        />
-        <FilterSelect
-          value={equipmentFilter} onChange={setEquipmentFilter} placeholder="기기 종류"
-          allLabel="기기 전체" options={equipmentOptions.map(e => ({ value: e, label: e }))}
-        />
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+          <FilterSelect
+            value={dosageFilter} onChange={setDosageFilter} placeholder="제형"
+            allLabel="제형 전체" options={dosageOptions.map(d => ({ value: d, label: d }))}
+          />
+          <FilterSelect
+            value={statusFilter} onChange={setStatusFilter} placeholder="상태"
+            allLabel="상태 전체"
+            options={WORKLOAD_STATUSES.map(s => ({ value: s, label: WORKLOAD_STATUS_LABEL[s] }))}
+          />
+          <FilterSelect
+            value={leadTimeFilter} onChange={setLeadTimeFilter} placeholder="표준소요일"
+            allLabel="소요일 전체"
+            options={LEAD_TIME_BUCKETS.map(b => ({ value: b.id, label: b.label }))}
+          />
+          <FilterSelect
+            value={equipmentFilter} onChange={setEquipmentFilter} placeholder="기기 종류"
+            allLabel="기기 전체" options={equipmentOptions.map(e => ({ value: e, label: e }))}
+          />
+        </div>
       </div>
 
       {/* ── KPI ──────────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         {loading
           ? Array.from({ length: 5 }).map((_, i) => (
-              <Card key={i} className="gap-1 border-l-4 border-l-primary px-4 py-3.5">
+              <Card key={i} className="min-w-0 gap-1 px-4 py-3.5">
                 <Skeleton className="h-3 w-16" />
                 <Skeleton className="h-8 w-14" />
               </Card>
@@ -372,129 +377,132 @@ export default function ProductWorkloadPage() {
                 icon={<CalendarDays className="size-3.5" />} label="평균 표준 소요일"
                 value={kpi.leadTime != null ? formatLeadDays(kpi.leadTime) : "—"}
                 hint="공수 합계와 무관한 별도 값"
-                accent="border-l-primary"
               />
+              {/* 아이콘 색을 아래 차트의 막대 색과 맞춰 "이 숫자가 저 막대"임을 잇는다.
+                  인적·기기·대기·검토 네 갈래는 색 자체가 구분 의미인 카테고리 팔레트라
+                  브랜드 단일색 규칙의 예외다(workload-ui.tsx 의 WORKLOAD_TYPE_HEX 가 정본). */}
               <KpiCard
                 icon={<UserRound className="size-3.5" />} label="평균 인적공수"
-                value={formatHours(kpi.human)} accent="border-l-indigo-500"
+                value={formatHours(kpi.human)} accent="text-blue-600"
               />
               <KpiCard
                 icon={<Cpu className="size-3.5" />} label="평균 기기공수"
-                value={formatHours(kpi.equipment)} accent="border-l-amber-500"
+                value={formatHours(kpi.equipment)} accent="text-amber-500"
               />
               <KpiCard
                 icon={<Beaker className="size-3.5" />} label="평균 검토공수"
-                value={formatHours(kpi.review)} accent="border-l-emerald-500"
+                value={formatHours(kpi.review)} accent="text-emerald-500"
               />
             </>
           )}
       </div>
 
-      {/* ── 공수 분포 차트 ───────────────────────────────────────────────── */}
-      <SectionCard
-        title="품목별 공수 분포"
-        hint={`공수 합계 상위 ${TOP_N}개 품목 · 단위 시간 · 인적/기기/대기/검토는 각각 독립 값입니다`}
-      >
+      {/* ── 공수 분포 차트 ───────────────────────────────────────────────
+          아래로 테두리 있는 표 카드가 두 번 더 이어진다. 똑같은 헤더 바가 반복되면
+          리듬이 죽으므로, 차트만 카드를 벗기고 제목 + 실선으로 담는다.
+          '공수 합계 상위 N개' 순위는 이 차트가 유일하게 말한다 — 같은 열 개를 숫자표로
+          한 번 더 늘어놓던 「공수가 높은 품목 TOP N」 섹션은 걷어냈다(모바일에서 아래
+          「품목 공수 리스트」와 카드 목록이 두 번 그려지던 원인). */}
+      <section className="flex min-w-0 flex-col gap-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b pb-2">
+          <h2 className="text-sm font-semibold text-foreground">품목별 공수 분포</h2>
+          <p className="text-xs leading-normal break-keep text-muted-foreground">
+            공수 합계 상위 <span className="tabular-nums">{TOP_N}</span>개 품목 · 단위 시간
+            <span className="px-1 text-border">·</span>
+            인적/기기/대기/검토는 각각 독립 값
+          </p>
+        </div>
         {loading ? (
           <Skeleton className="h-64 w-full" />
         ) : chartData.length === 0 ? (
           <p className="py-16 text-center text-sm text-muted-foreground">표시할 품목이 없습니다.</p>
         ) : (
-          <ResponsiveContainer width="100%" height={Math.max(240, chartData.length * 34)}>
-            <BarChart data={chartData} margin={{ left: 4, right: 16, top: 8, bottom: 4 }}>
-              <CartesianGrid vertical={false} stroke="#f1f5f9" />
-              <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#334155" }} interval={0} />
+          /* 세로 막대 + X축에 한글 품목명 10개는 좁은 폭에서 라벨이 서로 겹친다.
+             가로 막대로 눕혀 품목명을 Y축에 세우면 폭과 무관하게 읽히고,
+             축 글자도 최소 크기(13.5px) 이상으로 올릴 수 있다. */
+          <ResponsiveContainer width="100%" height={Math.max(240, chartData.length * 52)}>
+            <BarChart data={chartData} layout="vertical" margin={{ left: 4, right: 16, top: 8, bottom: 4 }}>
+              <CartesianGrid horizontal={false} stroke="#f1f5f9" />
+              <XAxis type="number" tick={{ fontSize: 13.5, fill: "#64748b" }} />
               <YAxis
-                tick={{ fontSize: 11, fill: "#64748b" }}
-                label={{ value: "시간", angle: -90, position: "insideLeft", fontSize: 11, fill: "#94a3b8" }}
+                type="category"
+                dataKey="name"
+                width={88}
+                interval={0}
+                tick={{ fontSize: 13.5, fill: "#334155" }}
+                /* 좁은 축에 긴 품목명이 들어오면 그림 밖으로 넘친다 — 잘라서 세운다(전체 이름은 툴팁) */
+                tickFormatter={(v: string) => (v.length > 6 ? `${v.slice(0, 6)}…` : v)}
               />
               <Tooltip formatter={(v, name) => [`${v}시간`, name]} cursor={{ fill: "#f8fafc" }} />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar dataKey="인적공수" fill={WORKLOAD_TYPE_HEX.HUMAN} radius={[3, 3, 0, 0]} maxBarSize={22} />
-              <Bar dataKey="기기공수" fill={WORKLOAD_TYPE_HEX.EQUIPMENT} radius={[3, 3, 0, 0]} maxBarSize={22} />
-              <Bar dataKey="대기시간" fill={WORKLOAD_TYPE_HEX.WAITING} radius={[3, 3, 0, 0]} maxBarSize={22} />
-              <Bar dataKey="검토공수" fill={WORKLOAD_TYPE_HEX.REVIEW} radius={[3, 3, 0, 0]} maxBarSize={22} />
+              <Legend wrapperStyle={{ fontSize: "0.75rem" }} />
+              <Bar dataKey="인적공수" fill={WORKLOAD_TYPE_HEX.HUMAN} radius={[0, 3, 3, 0]} maxBarSize={10} />
+              <Bar dataKey="기기공수" fill={WORKLOAD_TYPE_HEX.EQUIPMENT} radius={[0, 3, 3, 0]} maxBarSize={10} />
+              <Bar dataKey="대기시간" fill={WORKLOAD_TYPE_HEX.WAITING} radius={[0, 3, 3, 0]} maxBarSize={10} />
+              <Bar dataKey="검토공수" fill={WORKLOAD_TYPE_HEX.REVIEW} radius={[0, 3, 3, 0]} maxBarSize={10} />
             </BarChart>
           </ResponsiveContainer>
         )}
-      </SectionCard>
-
-      {/* ── 공수가 높은 품목 ─────────────────────────────────────────────── */}
-      <SectionCard title={`공수가 높은 품목 TOP ${TOP_N}`} hint="인적·기기·대기·검토 공수를 모두 더한 총 소요시간 기준 (일정 계산용 참고값)">
-        {loading ? (
-          <div className="space-y-2">
-            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}
-          </div>
-        ) : topProducts.length === 0 ? (
-          <p className="py-10 text-center text-sm text-muted-foreground">표시할 품목이 없습니다.</p>
-        ) : (
-          <Table>
-            <colgroup>
-              <col className="w-[26%]" />
-              <col className="w-[13%]" />
-              <col className="w-[15%]" />
-              <col className="w-[15%]" />
-              <col className="w-[15%]" />
-              <col className="w-[16%]" />
-            </colgroup>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="px-3 text-muted-foreground">품목</TableHead>
-                <TableHead className="px-3 text-right text-muted-foreground">표준소요일</TableHead>
-                <TableHead className="px-3 text-right text-muted-foreground">인적공수</TableHead>
-                <TableHead className="px-3 text-right text-muted-foreground">기기공수</TableHead>
-                <TableHead className="px-3 text-right text-muted-foreground">검토공수</TableHead>
-                <TableHead className="px-3 text-right text-muted-foreground">총 시험항목</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {topProducts.map(p => (
-                <TableRow
-                  key={p.id}
-                  className="cursor-pointer hover:bg-muted/40"
-                  onClick={() => setDetailId(p.id)}
-                >
-                  <TableCell className="px-3 py-2.5">
-                    <CellStack
-                      primary={p.productName}
-                      secondary={p.productCode}
-                      secondaryLabel="품목코드"
-                      primaryClass="font-medium text-foreground"
-                      title={`${p.productName} / ${p.productCode}`}
-                    />
-                  </TableCell>
-                  <TableCell className="px-3 py-2.5 text-right text-sm tabular-nums">
-                    {formatLeadDays(p.standardLeadTimeDays)}
-                  </TableCell>
-                  <TableCell className="px-3 py-2.5 text-right text-sm tabular-nums">
-                    {formatMinutes(p.totalHumanMinutes)}
-                  </TableCell>
-                  <TableCell className="px-3 py-2.5 text-right text-sm tabular-nums">
-                    {formatMinutes(p.totalEquipmentMinutes)}
-                  </TableCell>
-                  <TableCell className="px-3 py-2.5 text-right text-sm tabular-nums">
-                    {formatMinutes(p.totalReviewMinutes)}
-                  </TableCell>
-                  <TableCell className="px-3 py-2.5 text-right text-sm tabular-nums">
-                    {p.testItemCount}개
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </SectionCard>
+      </section>
 
       {/* ── 품목 공수 리스트 ─────────────────────────────────────────────── */}
       <Card className="gap-0 overflow-hidden py-0">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2.5">
-          <span className="text-sm font-semibold text-foreground">
-            품목 공수 리스트 ({sorted.length}
-            {sorted.length !== rows.length ? ` / ${rows.length}` : ""})
-          </span>
-          <span className="text-[11px] text-muted-foreground">행을 클릭하면 시험항목·작업단계를 볼 수 있습니다</span>
+          <h2 className="text-sm font-semibold text-foreground">
+            품목 공수 리스트
+            <span className="ml-1.5 text-xs font-normal tabular-nums text-muted-foreground">
+              {sorted.length}{sorted.length !== rows.length ? ` / ${rows.length}` : ""}건
+            </span>
+          </h2>
+          <span className="text-xs leading-normal break-keep text-muted-foreground">행을 클릭하면 시험항목·작업단계를 볼 수 있습니다</span>
         </div>
 
+        {/* ── 모바일: 표 대신 카드 목록 ──────────────────────────────────────
+            9칸짜리 표다. 품목·상태·표준소요일·시험항목 수만 남기고 나머지는
+            행을 눌러 여는 상세 패널에서 본다. */}
+        <div className="divide-y md:hidden">
+          {loading
+            ? Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="flex flex-col gap-2 px-4 py-3">
+                  <Skeleton className="h-4 w-2/3" />
+                  <div className="flex items-center justify-between">
+                    <Skeleton className="h-3 w-28" />
+                    <Skeleton className="h-3 w-16" />
+                  </div>
+                </div>
+              ))
+            : sorted.length === 0
+              ? (
+                  <p className="px-4 py-10 text-center text-sm break-keep text-muted-foreground">
+                    {rows.length === 0 ? "등록된 품목 공수가 없습니다." : "조건에 맞는 품목이 없습니다."}
+                  </p>
+                )
+              : sorted.map(p => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setDetailId(p.id)}
+                    className="block w-full px-4 py-3 text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  >
+                    <div className="flex min-w-0 items-start justify-between gap-2">
+                      <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{p.productName}</p>
+                      <Badge variant="outline" className="shrink-0 gap-1.5 font-normal">
+                        <span className={`size-1.5 rounded-full ${STATUS_DOT[p.status]}`} />
+                        {WORKLOAD_STATUS_LABEL[p.status]}
+                      </Badge>
+                    </div>
+                    <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs leading-normal tabular-nums text-muted-foreground">
+                      <span className="shrink-0 font-mono">{p.productCode}</span>
+                      {p.dosageForm && <><span className="text-border">·</span><span className="min-w-0 truncate">{p.dosageForm}</span></>}
+                      <span className="text-border">·</span>
+                      <span>표준 {formatLeadDays(p.standardLeadTimeDays)}</span>
+                      <span className="ml-auto">항목 {p.testItemCount}개</span>
+                    </div>
+                  </button>
+                ))}
+        </div>
+
+        {/* ── 데스크톱: 표 ───────────────────────────────────────────────── */}
+        <div className="hidden md:block">
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
@@ -607,6 +615,7 @@ export default function ProductWorkloadPage() {
             )}
           </TableBody>
         </Table>
+        </div>
       </Card>
 
       {/* ── 표준공수 vs 실제공수 ─────────────────────────────────────────── */}
@@ -615,7 +624,7 @@ export default function ProductWorkloadPage() {
         hint={`실적 기반으로 표준공수를 개선하기 위한 비교 영역 · 편차율 ±${VARIANCE_THRESHOLD.warn}% 이내 정상 / ${VARIANCE_THRESHOLD.danger}% 초과 위험`}
         action={
           <Select value={period} onValueChange={v => setPeriod(v as ActualPeriodId)}>
-            <SelectTrigger className="!h-9 w-36 px-3">
+            <SelectTrigger className="!h-9 w-full min-w-0 px-3 sm:w-36">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -631,11 +640,50 @@ export default function ProductWorkloadPage() {
             <p className="flex items-center justify-center gap-1.5 text-sm font-medium text-muted-foreground">
               <Timer className="size-4" /> 실적 데이터 없음
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="mt-1 text-xs leading-normal break-keep text-muted-foreground">
               시험 수행 실적이 쌓이면 표준공수 대비 편차를 이곳에서 비교합니다.
             </p>
           </div>
         ) : (
+          <>
+          {/* ── 모바일: 표 대신 카드 목록 ────────────────────────────────
+              시험항목명과 편차율(색)이 핵심이다. 건수·표준·실제는 잔글씨 한 줄로.
+              편차 등급은 위험=빨강 · 주의=앰버 · 정상=브랜드 파랑이다. '정상'을 초록으로
+              두면 브랜드색 밖으로 나가면서 '완료'와도 뜻이 겹친다. */}
+          <div className="-mx-4 -my-4 divide-y md:hidden">
+            {actual.rows.map(r => {
+              const level = varianceLevel(r.varianceRate)
+              return (
+                <div key={r.key} className="px-4 py-3">
+                  <div className="flex min-w-0 items-start justify-between gap-2">
+                    <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{r.label}</p>
+                    <Badge
+                      variant="outline"
+                      className={`shrink-0 gap-1.5 font-normal tabular-nums ${
+                        level === "risk" ? "border-red-200 bg-red-50 text-red-700"
+                          : level === "caution" ? "border-amber-200 bg-amber-50 text-amber-700"
+                          : "border-blue-200 bg-blue-50 text-blue-700"
+                      }`}
+                    >
+                      {formatVarianceRate(r.varianceRate)}
+                      {level && <span>{VARIANCE_LEVEL_LABEL[level]}</span>}
+                    </Badge>
+                  </div>
+                  <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs leading-normal tabular-nums text-muted-foreground">
+                    <span>{r.sampleCount}건</span>
+                    <span className="text-border">·</span>
+                    <span>표준 {formatMinutes(r.standardMinutes)}</span>
+                    <span className="text-border">·</span>
+                    <span>실제 {formatMinutes(r.actualAvgMinutes)}</span>
+                    <span className="ml-auto">{formatVarianceMinutes(r.varianceMinutes)}</span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* ── 데스크톱: 표 ───────────────────────────────────────────── */}
+          <div className="hidden md:block">
           <Table>
             <colgroup>
               <col className="w-[30%]" />
@@ -677,7 +725,7 @@ export default function ProductWorkloadPage() {
                         className={`gap-1.5 font-normal tabular-nums ${
                           level === "risk" ? "border-red-200 bg-red-50 text-red-700"
                             : level === "caution" ? "border-amber-200 bg-amber-50 text-amber-700"
-                            : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                            : "border-blue-200 bg-blue-50 text-blue-700"
                         }`}
                       >
                         {formatVarianceRate(r.varianceRate)}
@@ -689,6 +737,8 @@ export default function ProductWorkloadPage() {
               })}
             </TableBody>
           </Table>
+          </div>
+          </>
         )}
       </SectionCard>
 
@@ -748,7 +798,8 @@ function FilterSelect({
 }) {
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="!h-9 w-36 px-3">
+      {/* 모바일에서는 칸을 꽉 채우고, sm 이상에서만 고정 폭 */}
+      <SelectTrigger className="!h-9 w-full min-w-0 px-3 sm:w-36">
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>

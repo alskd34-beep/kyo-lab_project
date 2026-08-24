@@ -1,8 +1,16 @@
 'use client'
 
+/* Hallmark · macrostructure: Workbench · genre: modern-minimal · tone: utilitarian
+ * theme: project-locked (Pretendard · blue ramp oklch(.. .. 262.88) · rounded-md)
+ * 읽는 순서를 화면 순서로 삼는다 — ①지금 급한 것 ②전체 모양 ③임박 목록 ④사람별 부하.
+ * enrichment: none (typography only) · motion: hover 색 전환만
+ */
+
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { TesterHome } from '@frontend/components/home/tester-home'
+import { useAuth } from '@frontend/lib/auth-context'
 import { Badge } from '@frontend/components/ui/badge'
-import { Card, CardContent } from '@frontend/components/ui/card'
+import { Card } from '@frontend/components/ui/card'
 import { Skeleton } from '@frontend/components/ui/skeleton'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@frontend/components/ui/table'
 import { CellStack } from '@frontend/components/ui/table-cell-stack'
@@ -100,7 +108,9 @@ function dDayColor(dDay: number | null): string {
   if (dDay === 0) return 'font-semibold text-destructive'
   if (dDay <= 3)  return 'font-medium text-destructive'
   if (dDay <= 7)  return 'font-medium text-amber-600'
-  return 'text-emerald-600'
+  /* 여유 있는 건은 색을 빼고 중립으로 둔다. 초록으로 칠하면 화면 대부분이
+     초록이 되어 정작 급한 빨강·앰버가 묻히고, 브랜드 색에서도 벗어난다. */
+  return 'text-muted-foreground'
 }
 
 function dDayLabel(dDay: number | null): string {
@@ -232,7 +242,12 @@ const SORT_COLUMNS: SortColumnDef<SortField>[] = [
   sortCol('status', '상태'),
 ]
 
-export default function HomePage() {
+/**
+ * 관리자 홈 — 팀 전체 지표. 예전 화면 그대로다.
+ * 시험자는 개인 대시보드(TesterHome)를 본다.
+ */
+function AdminHome() {
+
   const [upcoming, setUpcoming] = useState<UpcomingRow[]>([])
   const [stats, setStats] = useState<HomeStats>(EMPTY_STATS)
   const [testers, setTesters] = useState<TesterLoad[]>([])
@@ -241,6 +256,8 @@ export default function HomePage() {
   const [sortField, setSortField] = useState<SortField>('dDay')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [detailTester, setDetailTester] = useState<{ id: string; name: string } | null>(null)
+  /** 마지막으로 데이터를 받은 시각(HH:MM). 화면이 1분마다 조용히 갱신되므로 머리말에 적는다. */
+  const [refreshedAt, setRefreshedAt] = useState<string | null>(null)
 
   const totalActive = useMemo(
     () => testers.reduce((sum, tester) => sum + tester.activeCount, 0),
@@ -283,6 +300,9 @@ export default function HomePage() {
       setUpcoming(orderResult.status === 'fulfilled' ? buildUpcoming(orders) : [])
       setTesters(buildTesterLoads(orders, testerRows))
       setLoadError(orderResult.status === 'rejected' ? '홈 데이터를 불러오지 못했습니다.' : null)
+      if (orderResult.status === 'fulfilled') {
+        setRefreshedAt(new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }))
+      }
     } catch {
       if (signal?.aborted) return
       setStats(EMPTY_STATS)
@@ -317,117 +337,220 @@ export default function HomePage() {
     }
   }, [loadHomeData])
 
-  const KPI_CARDS = [
-    { label: '전체',     value: stats.total,        unit: '건', sub: '총 QC 오더',         accent: 'text-foreground',  bar: 'border-l-primary' },
-    { label: '대기중',   value: stats.pending,      unit: '건', sub: '시험 대기',          accent: 'text-foreground',  bar: 'border-l-muted-foreground' },
-    { label: '진행중',   value: stats.inProgress,   unit: '건', sub: 'QC 시험 진행',       accent: 'text-blue-600',  bar: 'border-l-blue-500' },
-    { label: 'QC완료',   value: stats.completed,    unit: '건', sub: '승인 완료',          accent: 'text-emerald-600', bar: 'border-l-emerald-500' },
-    { label: 'D-7 임박', value: stats.dueSoon7,     unit: '건', sub: '기한 임박 오더',     accent: 'text-amber-600',   bar: 'border-l-amber-500' },
-    { label: '기한초과', value: stats.overdueCount, unit: '건', sub: 'QC완료예정일 초과', accent: 'text-destructive', bar: 'border-l-destructive' },
+  /** 이 화면이 가장 먼저 답해야 할 질문 — 지금 손대야 할 오더가 몇 건인가. */
+  const alerts = [
+    {
+      label: '기한초과',
+      value: stats.overdueCount,
+      hint: 'QC완료예정일이 지났습니다',
+      tone: stats.overdueCount > 0 ? 'text-destructive' : 'text-muted-foreground',
+    },
+    {
+      label: 'D-7 임박',
+      value: stats.dueSoon7,
+      hint: '7일 안에 완료해야 합니다',
+      tone: stats.dueSoon7 > 0 ? 'text-amber-600' : 'text-muted-foreground',
+    },
   ]
 
-  const statRows = [
-    { label: '대기중', key: 'pending' as const,    color: 'bg-muted-foreground' },
-    { label: '진행중', key: 'inProgress' as const, color: 'bg-blue-500' },
-    { label: '완료',   key: 'completed' as const,  color: 'bg-emerald-500' },
+  /**
+   * 전체 오더 구성.
+   *
+   * 상태별 막대를 따로 그리면 각 막대가 전체 대비 비율이라 합이 100% 가 되지 않고,
+   * 남은 빈 칸이 무엇인지 알 수 없어 비율을 오독시킨다. 세 상태로 나뉘지 않는
+   * 나머지(삭제 등)를 '기타'로 남겨 **막대 하나가 전체를 정확히 채우게** 한다.
+   * 색은 상태 배지와 같은 파랑 램프(농도 = 진척도)를 그대로 쓴다.
+   */
+  const etcCount = Math.max(0, stats.total - stats.pending - stats.inProgress - stats.completed)
+  const composition = [
+    { label: '대기중', value: stats.pending,    bar: 'bg-slate-400' },
+    { label: '진행중', value: stats.inProgress, bar: 'bg-blue-500' },
+    { label: 'QC완료', value: stats.completed,  bar: 'bg-blue-800' },
+    ...(etcCount > 0 ? [{ label: '기타', value: etcCount, bar: 'bg-slate-200' }] : []),
   ]
+  const share = (value: number) => (stats.total > 0 ? (value / stats.total) * 100 : 0)
+
+  /**
+   * 범례에 적을 백분율. 조각마다 따로 반올림하면 합이 101% 가 되기도 한다 —
+   * 내림한 뒤 남는 몫을 소수부가 큰 조각부터 하나씩 나눠 줘 **합이 정확히 100** 이 되게 한다.
+   */
+  const sharePcts = (() => {
+    if (stats.total === 0) return composition.map(() => 0)
+    const raw = composition.map(seg => share(seg.value))
+    const out = raw.map(Math.floor)
+    const rest = 100 - out.reduce((sum, n) => sum + n, 0)
+    const byFraction = raw
+      .map((value, i) => ({ frac: value - Math.floor(value), i }))
+      .sort((a, b) => b.frac - a.frac)
+    for (let k = 0; k < rest; k += 1) out[byFraction[k % byFraction.length].i] += 1
+    return out
+  })()
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4 md:p-6">
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <h1 className="text-xl font-semibold text-foreground">홈</h1>
-        <p className="text-sm text-muted-foreground">기한 임박 오더와 시험 배정을 한눈에 봅니다.</p>
-        {loadError && (
-          <Badge variant="outline" className="border-amber-200 text-amber-700">조회 실패</Badge>
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4 md:gap-5 md:p-6">
+      {/* ── 페이지 머리 ─────────────────────────────────────────────────────
+          부제 대신 "언제 기준 데이터인가"를 적는다. 1분마다 조용히 다시 불러오는
+          화면이라 갱신 시각이야말로 머리말이 실어야 할 사실이다. */}
+      <header className="flex min-w-0 shrink-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <h1 className="text-lg font-semibold text-foreground">홈</h1>
+        {isLoading && !refreshedAt ? (
+          <Skeleton className="h-3 w-44" />
+        ) : (
+          <p
+            className={cn(
+              'text-xs leading-normal tabular-nums',
+              loadError ? 'font-medium text-destructive' : 'text-muted-foreground',
+            )}
+          >
+            {loadError ?? `${refreshedAt} 기준 · 1분마다 자동 갱신`}
+          </p>
         )}
-      </div>
+      </header>
 
-      <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
-        {isLoading
-          ? Array.from({ length: 6 }).map((_, i) => (
-              <Card key={i} className="gap-1 border-l-4 border-l-muted px-4 py-4">
-                <Skeleton className="h-3 w-16" />
-                <Skeleton className="h-8 w-12" />
-                <Skeleton className="h-3 w-24" />
-              </Card>
-            ))
-          : KPI_CARDS.map(kpi => (
-              <Card key={kpi.label} className={cn('gap-1 border-l-4 px-4 py-4', kpi.bar)}>
-                <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                  {kpi.label}
-                </span>
-                <span className={cn('text-2xl font-semibold tabular-nums', kpi.accent)}>
-                  {kpi.value}
-                  <span className="ml-1 text-xs font-medium text-muted-foreground">{kpi.unit}</span>
-                </span>
-                <span className="text-xs leading-normal text-muted-foreground">{kpi.sub}</span>
-              </Card>
-            ))}
-      </div>
-
-      <div className="flex flex-col lg:flex-row gap-4 min-h-0">
-
-        <Card className="flex-[3] gap-0 overflow-hidden py-0">
-          <div className="flex items-center justify-between border-b px-4 py-3">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-foreground">기한 임박 오더</span>
-              <Badge variant="outline" className="border-amber-200 text-amber-700">D-7 이내</Badge>
-            </div>
-          </div>
-          <div className="flex flex-col gap-2 p-3 md:hidden">
+      {/* ── 조치가 필요한 수 + 전체 구성 ────────────────────────────────────
+          왼쪽은 "지금 손대야 할 것"(기한초과·임박), 오른쪽은 "전체가 어떤 모양인가".
+          여섯 칸을 똑같은 크기로 늘어놓으면 무엇이 급한지 화면이 말해 주지 못한다. */}
+      {/* shrink-0: Card 는 overflow-hidden 이라 flex 열 안에서 min-height 가 0 이 된다.
+          내용이 세로로 넘치는 순간 카드가 선 하나로 찌부러지므로 줄어들지 않게 못 박는다. */}
+      <Card className="shrink-0 gap-0 py-0">
+        <div className="flex flex-col divide-y lg:flex-row lg:divide-x lg:divide-y-0">
+          <div className="grid grid-cols-2 gap-5 px-4 py-4 md:px-5 lg:w-[38%] lg:shrink-0">
             {isLoading
-              ? Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="flex flex-col gap-2 rounded-md border p-3">
-                    <Skeleton className="h-4 w-2/3" />
-                    <Skeleton className="h-3 w-1/2" />
-                    <div className="flex items-center justify-between">
-                      <Skeleton className="h-5 w-16 rounded-md" />
-                      <Skeleton className="h-4 w-12" />
-                    </div>
+              ? Array.from({ length: 2 }).map((_, i) => (
+                  <div key={i} className="flex flex-col gap-2">
+                    <Skeleton className="h-3 w-16" />
+                    <Skeleton className="h-9 w-16" />
+                    <Skeleton className="h-3 w-32" />
                   </div>
                 ))
-              : sortedData.length === 0
-                ? (
-                    <p className="py-10 text-center text-sm text-muted-foreground">
-                      {loadError
-                        ? `목록을 불러오지 못했습니다. ${loadError}`
-                        : '마감 임박 오더가 없습니다.'}
-                    </p>
-                  )
-                : sortedData.slice(0, 10).map(row => {
-                    const statusCfg = stageStyle(row.status)
-                    return (
-                      <div key={row.id} className="rounded-md border bg-card p-3">
-                        <div className="flex min-w-0 items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-foreground">{row.productName}</p>
-                            <p className="mt-0.5 text-xs leading-normal text-muted-foreground">제조번호 {row.batchNo}</p>
-                          </div>
-                          <Badge variant="outline" className="shrink-0 gap-1.5">
-                            <span className={cn('size-1.5 rounded-full', statusCfg.dot)} />
-                            {row.status}
-                          </Badge>
-                        </div>
-                        <div className="mt-3 flex items-center justify-between border-t pt-2 text-xs leading-normal">
-                          <span className="text-muted-foreground">QC 완료예정 {row.dueDate ?? '-'}</span>
-                          <span className={cn('tabular-nums', dDayColor(row.dDay))}>{dDayLabel(row.dDay)}</span>
-                        </div>
-                      </div>
-                    )
-                  })}
+              : alerts.map(alert => (
+                  <div key={alert.label} className="flex min-w-0 flex-col">
+                    <span className="text-xs font-medium text-muted-foreground">{alert.label}</span>
+                    <span className={cn('mt-0.5 text-4xl font-semibold tabular-nums', alert.tone)}>
+                      {alert.value}
+                      <span className="ml-1 text-sm font-medium text-muted-foreground">건</span>
+                    </span>
+                    {/* break-keep: 한글은 단어 중간에서 끊으면 안 읽힌다("지났습/니다") */}
+                    <span className="mt-1 text-xs leading-normal break-keep text-muted-foreground">
+                      {alert.hint}
+                    </span>
+                  </div>
+                ))}
           </div>
-          <div className="hidden md:block">
+
+          <div className="min-w-0 flex-1 px-4 py-4 md:px-5">
+            {isLoading ? (
+              <div className="flex flex-col gap-3">
+                <Skeleton className="h-5 w-28" />
+                <Skeleton className="h-2 w-full" />
+                <Skeleton className="h-3 w-2/3" />
+              </div>
+            ) : (
+              <>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-xs font-medium text-muted-foreground">전체 오더</span>
+                  <span className="text-xl font-semibold tabular-nums text-foreground">{stats.total}</span>
+                  <span className="text-xs text-muted-foreground">건</span>
+                </div>
+                <div
+                  className="mt-2.5 flex h-2 w-full overflow-hidden rounded-md bg-muted"
+                  role="img"
+                  aria-label={composition.map(seg => `${seg.label} ${seg.value}건`).join(', ')}
+                >
+                  {composition.map(seg => (
+                    <div key={seg.label} className={cn('h-full', seg.bar)} style={{ width: `${share(seg.value)}%` }} />
+                  ))}
+                </div>
+                <dl className="mt-2.5 flex flex-wrap gap-x-5 gap-y-1.5">
+                  {composition.map((seg, i) => (
+                    <div key={seg.label} className="flex min-w-0 items-center gap-1.5">
+                      <span className={cn('size-1.5 shrink-0 rounded-full', seg.bar)} />
+                      <dt className="text-xs text-muted-foreground">{seg.label}</dt>
+                      <dd className="text-xs font-semibold tabular-nums text-foreground">
+                        {seg.value}
+                        <span className="ml-0.5 font-normal text-muted-foreground">({sharePcts[i]}%)</span>
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </>
+            )}
+          </div>
+        </div>
+      </Card>
+
+      {/* ── 기한 임박 오더 ─────────────────────────────────────────────── */}
+      <Card className="shrink-0 gap-0 overflow-hidden py-0">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b px-4 py-3">
+          <h2 className="text-sm font-semibold text-foreground">기한 임박 오더</h2>
+          <p className="text-xs leading-normal break-keep text-muted-foreground">
+            QC완료예정일 D-7 이내
+            {!isLoading && !loadError && (
+              <>
+                <span className="px-1 text-border">·</span>
+                <span className="tabular-nums">{sortedData.length}</span>건
+              </>
+            )}
+          </p>
+        </div>
+
+        {/* 모바일 — 칸마다 테두리를 두르는 대신 실선 하나로 나눈다(카드 안 카드 금지) */}
+        <div className="divide-y md:hidden">
+          {isLoading
+            ? Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex flex-col gap-2 px-4 py-3">
+                  <Skeleton className="h-4 w-2/3" />
+                  <div className="flex items-center justify-between">
+                    <Skeleton className="h-3 w-28" />
+                    <Skeleton className="h-3 w-12" />
+                  </div>
+                </div>
+              ))
+            : sortedData.length === 0
+              ? (
+                  <p className="px-4 py-10 text-center text-sm text-muted-foreground">
+                    {loadError ? '목록을 불러오지 못했습니다.' : '기한 임박 오더가 없습니다.'}
+                  </p>
+                )
+              : sortedData.slice(0, 10).map(row => {
+                  const statusCfg = stageStyle(row.status)
+                  return (
+                    <div key={row.id} className="px-4 py-3">
+                      <div className="flex min-w-0 items-start justify-between gap-3">
+                        <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                          {row.productName}
+                        </p>
+                        <span className={cn('shrink-0 text-sm tabular-nums', dDayColor(row.dDay))}>
+                          {dDayLabel(row.dDay)}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex min-w-0 items-center gap-2 text-xs leading-normal text-muted-foreground">
+                        <span className="inline-flex shrink-0 items-center gap-1.5">
+                          <span className={cn('size-1.5 rounded-full', statusCfg.dot)} />
+                          {row.status}
+                        </span>
+                        <span className="min-w-0 truncate">제조번호 {row.batchNo}</span>
+                        <span className="ml-auto shrink-0 tabular-nums">{row.dueDate ?? '-'}</span>
+                      </div>
+                    </div>
+                  )
+                })}
+        </div>
+
+        <div className="hidden md:block">
           <Table>
             {/* 논리 열은 3개(품목·기한·상태)지만 자동 펼침으로 최대 5칸이 된다.
                 table-fixed 에서 <col> 이 3개(합 100%)뿐이면 4·5번째 칸이 폭 0으로 접혀
                 'D-Day'와 '상태'가 화면에서 사라진다. 최대 칸 수만큼 선언한다.
                 칸 순서(펼침 / 합침):
                 품목명 / 품목 · 제조번호 / 기한 · QC완료예정일 / 상태 · D-Day · 상태 */}
+            {/* 표가 전체 폭을 쓰게 되면서 품목명에 자리를 더 준다 — 제조번호·날짜는
+                고정 길이(KD26103 / 2026-08-24)라 남는 폭이 그냥 빈 칸이었다. */}
             <colgroup>
-              <col className="w-[28%]" />
-              <col className="w-[20%]" />
-              <col className="w-[20%]" />
+              <col className="w-[36%]" />
               <col className="w-[16%]" />
+              <col className="w-[18%]" />
+              <col className="w-[14%]" />
               <col className="w-[16%]" />
             </colgroup>
             <TableHeader>
@@ -457,16 +580,15 @@ export default function HomePage() {
                   ? (
                       <TableRow className="hover:bg-transparent">
                         <TableCell colSpan={3} className="py-14 text-center text-sm text-muted-foreground">
-                          {loadError
-                            ? `목록을 불러오지 못했습니다. ${loadError}`
-                            : '기한 임박 오더가 없습니다.'}
+                          {loadError ? '목록을 불러오지 못했습니다.' : '기한 임박 오더가 없습니다.'}
                         </TableCell>
                       </TableRow>
                     )
                 : sortedData.slice(0, 10).map(row => {
                     const statusCfg = stageStyle(row.status)
                     return (
-                      <TableRow key={row.id} className="cursor-pointer hover:bg-muted/40">
+                      /* 눌러도 열리는 화면이 없는 행이다 — 손가락 커서는 달지 않는다. */
+                      <TableRow key={row.id} className="hover:bg-muted/40">
                         <TableCell className="px-3 py-2">
                           <CellStack
                             primary={row.productName}
@@ -498,136 +620,111 @@ export default function HomePage() {
                   })}
             </TableBody>
           </Table>
-          </div>
-        </Card>
-
-        <Card className="flex-[2] gap-0 overflow-hidden py-0">
-          <div className="border-b px-4 py-3">
-            <span className="text-sm font-semibold text-foreground">오더 상태 현황</span>
-          </div>
-          <CardContent className="px-4 py-4">
-            <div className="mb-4 flex items-baseline gap-2">
-              <span className="text-3xl font-semibold tabular-nums text-foreground">{stats.total}</span>
-              <span className="text-sm text-muted-foreground">건 총 오더</span>
-            </div>
-            <div className="flex flex-col gap-3">
-              {statRows.map(row => {
-                const count = stats[row.key]
-                const pct = stats.total > 0 ? Math.round((count / stats.total) * 100) : 0
-                return (
-                  <div key={row.key}>
-                    <div className="mb-1 flex items-center justify-between">
-                      <span className="text-xs font-medium text-muted-foreground">{row.label}</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold tabular-nums text-foreground">{count}건</span>
-                        <span className="w-7 text-right text-xs leading-normal tabular-nums text-muted-foreground">{pct}%</span>
-                      </div>
-                    </div>
-                    <div className="h-2 w-full overflow-hidden rounded-md bg-muted">
-                      <div
-                        className={cn('h-full rounded-md transition-all', row.color)}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card className="gap-0 overflow-hidden py-0">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-foreground">시험자별 작업 현황</span>
-            <Badge variant="outline" className="text-muted-foreground">진행중 {totalActive}건</Badge>
-          </div>
-          <span className="text-xs leading-normal text-muted-foreground">시험자를 클릭하면 배정 상세를 봅니다.</span>
         </div>
-        <CardContent className="px-4 py-4">
-          {isLoading ? (
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="flex flex-col gap-2 rounded-md border px-3.5 py-3">
-                  <div className="flex items-center gap-2.5">
-                    <Skeleton className="size-8 rounded-md" />
-                    <div className="flex flex-col gap-1">
-                      <Skeleton className="h-3 w-14" />
-                      <Skeleton className="h-3 w-24" />
-                    </div>
-                  </div>
-                  <Skeleton className="h-6 w-full" />
-                  <Skeleton className="h-6 w-full" />
-                </div>
-              ))}
-            </div>
-          ) : testers.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              등록된 시험자가 없습니다.
-            </p>
-          ) : (
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {testers.map(tester => (
-                <button
-                  key={tester.id}
-                  type="button"
-                  onClick={() => setDetailTester({ id: tester.id, name: tester.name })}
-                  className="flex flex-col gap-2 rounded-md border bg-card px-3.5 py-3 text-left transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                >
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <TesterAvatar testerId={tester.id} name={tester.name} size="md" />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-xs font-semibold text-foreground">{tester.name}</p>
-                      <p className="text-xs leading-normal text-muted-foreground">
-                        진행중 <span className="font-semibold text-foreground">{tester.activeCount}</span>건
-                        <span className="px-1 text-border">·</span>
-                        대기 <span className="font-semibold text-foreground">{tester.pendingCount}</span>건
-                      </p>
-                    </div>
-                  </div>
-
-                  {tester.items.length === 0 ? (
-                    <p className="rounded-md bg-muted/40 px-2.5 py-2 text-xs leading-normal text-muted-foreground">
-                      배정된 작업이 없습니다.
-                    </p>
-                  ) : (
-                    <ul className="flex flex-col gap-1">
-                      {tester.items.slice(0, MAX_ITEMS_PER_TESTER).map(item => (
-                        <li
-                          key={item.id}
-                          className="flex items-center gap-1.5 rounded-md bg-muted/40 px-2.5 py-1.5"
-                          title={`${item.productName} / ${item.batchNo} · ${item.status} · ${item.dueDate ?? '기한 미정'}`}
-                        >
-                          <span className={cn('size-1.5 shrink-0 rounded-full', stageStyle(item.status).dot)} />
-                          <span className="min-w-0 flex-1 truncate text-xs leading-normal text-foreground">
-                            {item.productName}
-                            <span className="text-muted-foreground"> / {item.batchNo}</span>
-                          </span>
-                          {item.isUrgent && (
-                            <span className="shrink-0 rounded-md bg-destructive/10 px-1 text-xs leading-normal font-semibold text-destructive">
-                              긴급
-                            </span>
-                          )}
-                          <span className="shrink-0 text-xs leading-normal text-muted-foreground">{item.status}</span>
-                          <span className={cn('w-9 shrink-0 text-right text-xs leading-normal tabular-nums', dDayColor(item.dDay))}>
-                            {dDayLabel(item.dDay)}
-                          </span>
-                        </li>
-                      ))}
-                      {tester.items.length > MAX_ITEMS_PER_TESTER && (
-                        <li className="px-2.5 pt-0.5 text-xs leading-normal text-muted-foreground">
-                          외 {tester.items.length - MAX_ITEMS_PER_TESTER}건
-                        </li>
-                      )}
-                    </ul>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
-        </CardContent>
       </Card>
+
+      {/* ── 시험자별 작업 현황 ──────────────────────────────────────────────
+          카드 안에 카드를 또 넣지 않는다. 바깥 테두리를 걷어내고 제목 밑 실선만
+          남겨, 테두리를 가진 층이 시험자 타일 하나뿐이 되게 한다. */}
+      <section className="flex min-w-0 shrink-0 flex-col gap-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b pb-2">
+          <h2 className="text-sm font-semibold text-foreground">시험자별 작업 현황</h2>
+          {isLoading ? (
+            <Skeleton className="h-3 w-56" />
+          ) : (
+            <p className="text-xs leading-normal break-keep text-muted-foreground">
+              진행중 <span className="font-semibold tabular-nums text-foreground">{totalActive}</span>건
+              <span className="px-1 text-border">·</span>
+              시험자를 누르면 배정 상세를 봅니다
+            </p>
+          )}
+        </div>
+
+        {isLoading ? (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="flex flex-col rounded-md border">
+                <div className="flex items-center gap-2.5 px-3.5 py-3">
+                  <Skeleton className="size-8 rounded-md" />
+                  <div className="flex flex-col gap-1.5">
+                    <Skeleton className="h-3.5 w-16" />
+                    <Skeleton className="h-3 w-28" />
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1.5 border-t px-3.5 py-2.5">
+                  <Skeleton className="h-3 w-full" />
+                  <Skeleton className="h-3 w-4/5" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : testers.length === 0 ? (
+          <p className="py-10 text-center text-sm text-muted-foreground">
+            {loadError ? '시험자를 불러오지 못했습니다.' : '등록된 시험자가 없습니다.'}
+          </p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {testers.map(tester => (
+              <button
+                key={tester.id}
+                type="button"
+                onClick={() => setDetailTester({ id: tester.id, name: tester.name })}
+                /* min-w-0: 그리드 칸의 기본 최소폭은 내용 크기라, 긴 품목명 한 줄이
+                   칸을 화면 밖까지 밀어낸다. 0 으로 낮춰야 안쪽 truncate 가 동작한다. */
+                className="flex min-w-0 flex-col rounded-md border bg-card text-left transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              >
+                <div className="flex min-w-0 items-center gap-2.5 px-3.5 py-3">
+                  <TesterAvatar testerId={tester.id} name={tester.name} size="md" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-foreground">{tester.name}</p>
+                    <p className="text-xs leading-normal text-muted-foreground">
+                      진행중 <span className="font-semibold tabular-nums text-foreground">{tester.activeCount}</span>건
+                      <span className="px-1 text-border">·</span>
+                      대기 <span className="font-semibold tabular-nums text-foreground">{tester.pendingCount}</span>건
+                    </p>
+                  </div>
+                </div>
+
+                {tester.items.length === 0 ? (
+                  <p className="border-t px-3.5 py-2.5 text-xs leading-normal text-muted-foreground">
+                    배정된 작업이 없습니다.
+                  </p>
+                ) : (
+                  <ul className="flex flex-col gap-1 border-t px-3.5 py-2.5">
+                    {tester.items.slice(0, MAX_ITEMS_PER_TESTER).map(item => (
+                      <li
+                        key={item.id}
+                        className="flex items-center gap-1.5"
+                        title={`${item.productName} / ${item.batchNo} · ${item.status} · ${item.dueDate ?? '기한 미정'}`}
+                      >
+                        <span className={cn('size-1.5 shrink-0 rounded-full', stageStyle(item.status).dot)} />
+                        <span className="min-w-0 flex-1 truncate text-xs leading-normal text-foreground">
+                          {item.productName}
+                          <span className="text-muted-foreground"> / {item.batchNo}</span>
+                        </span>
+                        {item.isUrgent && (
+                          <span className="shrink-0 rounded-md bg-destructive/10 px-1 text-xs leading-normal font-semibold text-destructive">
+                            긴급
+                          </span>
+                        )}
+                        <span className="shrink-0 text-xs leading-normal text-muted-foreground">{item.status}</span>
+                        <span className={cn('w-9 shrink-0 text-right text-xs leading-normal tabular-nums', dDayColor(item.dDay))}>
+                          {dDayLabel(item.dDay)}
+                        </span>
+                      </li>
+                    ))}
+                    {tester.items.length > MAX_ITEMS_PER_TESTER && (
+                      <li className="pt-0.5 text-xs leading-normal text-muted-foreground">
+                        외 {tester.items.length - MAX_ITEMS_PER_TESTER}건
+                      </li>
+                    )}
+                  </ul>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
 
       {detailTester && (
         <AssigneeDetailModal
@@ -639,4 +736,24 @@ export default function HomePage() {
 
     </div>
   )
+}
+
+/**
+ * 홈은 역할에 따라 다른 화면이다.
+ *   - 관리자: 팀 전체 지표(AdminHome) — 기존 화면을 그대로 유지한다.
+ *   - 시험자: 내 작업과 팀 휴가를 중심으로 한 개인 대시보드(TesterHome).
+ */
+export default function HomePage() {
+  const { user, loading } = useAuth()
+
+  if (loading) {
+    return (
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 p-4 md:gap-5 md:p-6">
+        <Skeleton className="h-6 w-40" />
+        <Skeleton className="h-28 w-full" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    )
+  }
+  return user?.role === 'admin' ? <AdminHome /> : <TesterHome />
 }

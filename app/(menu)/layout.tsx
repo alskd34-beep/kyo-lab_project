@@ -1,7 +1,11 @@
 'use client'
 
+import { useEffect } from 'react'
 import type { CSSProperties } from 'react'
 import dynamic from 'next/dynamic'
+import { usePathname, useRouter } from 'next/navigation'
+import { isAdminOnlyPath } from '@shared/route-access'
+import { useAuth } from '@frontend/lib/auth-context'
 import Chatbot from '@frontend/components/dashboard/chatbot'
 import NotificationBell from '@frontend/components/dashboard/notification-bell'
 import { Separator } from '@frontend/components/ui/separator'
@@ -16,7 +20,30 @@ const AppSidebar = dynamic(
   { ssr: false },
 )
 
+/**
+ * 관리자 전용 화면의 마지막 확인선.
+ *
+ * 차단은 미들웨어가 하지만, access 토큰이 만료되고 자동 로그인 쿠키만 남은 요청은
+ * 세션 복구를 위해 미들웨어를 그대로 통과한다. 그 틈으로 시험자가 관리자 화면을
+ * 열지 못하도록 역할이 확인되는 즉시 「할 일」로 돌려보낸다.
+ */
+function useAdminRouteGuard(): boolean {
+  const { user, loading } = useAuth()
+  const pathname = usePathname() ?? ''
+  const router = useRouter()
+
+  const blocked = !loading && !!user && user.role !== 'admin' && isAdminOnlyPath(pathname)
+
+  useEffect(() => {
+    if (blocked) router.replace('/my-tasks')
+  }, [blocked, router])
+
+  return blocked
+}
+
 export default function MenuLayout({ children }: { children: React.ReactNode }) {
+  const blocked = useAdminRouteGuard()
+
   return (
     <SidebarProvider
       style={{ '--sidebar-width': 'calc(var(--spacing) * 68)' } as CSSProperties}
@@ -53,7 +80,8 @@ export default function MenuLayout({ children }: { children: React.ReactNode }) 
 
         {/* 본문 — 높이를 고정해 각 페이지가 조회조건/목록 스크롤을 나눈다 */}
         <div id="main-content" tabIndex={-1} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden outline-none">
-          {children}
+          {/* 권한 없는 화면은 이동이 끝날 때까지 내용을 그리지 않는다 */}
+          {blocked ? null : children}
         </div>
       </SidebarInset>
 

@@ -5,6 +5,8 @@ import { useAuth } from "@frontend/lib/auth-context"
 import { cn } from "@frontend/lib/utils"
 import { Badge } from "@frontend/components/ui/badge"
 import { Button } from "@frontend/components/ui/button"
+import { Card } from "@frontend/components/ui/card"
+import { Input } from "@frontend/components/ui/input"
 import { DateRangeField } from "@frontend/components/ui/date-range-field"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import { CellStack } from "@frontend/components/ui/table-cell-stack"
@@ -59,11 +61,14 @@ const FILTERS: Array<{ id: FilterType; label: string }> = [
   { id: "ingest", label: "자동 적재" },
 ]
 
+/* 오더 수정과 담당자 변경이 똑같은 파랑이라 배지 색이 아무것도 구분해 주지 못했다.
+   셋을 서로 다르게 두되 브랜드 파랑 밖으로 나가지 않게 한다 —
+   자동 적재는 사람이 한 일이 아니라 잉크를 뺀 중립색으로 물러앉힌다(초록은 '완료'와 겹쳤다). */
 const TYPE_META: Record<HistoryType, { label: string; icon: typeof History; className: string }> = {
   edit: {
     label: "오더 수정",
     icon: ClipboardPenLine,
-    className: "border-blue-200 bg-blue-50 text-blue-700",
+    className: "",
   },
   reassign: {
     label: "담당자 변경",
@@ -73,7 +78,7 @@ const TYPE_META: Record<HistoryType, { label: string; icon: typeof History; clas
   ingest: {
     label: "자동 적재",
     icon: DatabaseZap,
-    className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    className: "bg-muted text-muted-foreground",
   },
 }
 
@@ -115,18 +120,18 @@ function TypeBadge({ type }: { type: HistoryType }) {
   )
 }
 
-function StatCard({ title, value, tone }: { title: string; value: number; tone: string }) {
+function StatCell({ title, value }: { title: string; value: number }) {
   return (
-    <div className="rounded-md border border-slate-200 bg-white px-4 py-3 shadow-sm">
-      <p className="text-xs font-semibold text-slate-500">{title}</p>
-      <p className={cn("mt-1 text-2xl font-black tabular-nums", tone)}>{value.toLocaleString("ko-KR")}</p>
+    <div className="flex min-w-0 flex-col bg-card px-4 py-3">
+      <span className="truncate text-xs font-medium text-muted-foreground">{title}</span>
+      <span className="mt-0.5 text-2xl font-semibold tabular-nums text-foreground">{value.toLocaleString("ko-KR")}</span>
     </div>
   )
 }
 
 function LoadingRows() {
   return Array.from({ length: 7 }).map((_, i) => (
-    <TableRow key={i} className="border-b border-slate-100 last:border-0">
+    <TableRow key={i}>
       <TableCell className="px-3 py-3"><Skeleton className="h-4 w-28" /></TableCell>
       <TableCell className="px-3 py-3"><Skeleton className="h-6 w-20 rounded-md" /></TableCell>
       <TableCell className="px-3 py-3"><Skeleton className="h-4 w-36" /></TableCell>
@@ -230,7 +235,7 @@ export default function ReassignmentsPage() {
         return String(av).localeCompare(String(bv)) * mul
       }
       if (sortField === "type") {
-        return TYPE_META[a.type].label.localeCompare(TYPE_META[b.type].label, "ko") * mul
+        return (TYPE_META[a.type]?.label ?? a.type).localeCompare((TYPE_META[b.type]?.label ?? b.type), "ko") * mul
       }
       return String(av).localeCompare(String(bv), "ko") * mul
     })
@@ -238,66 +243,70 @@ export default function ReassignmentsPage() {
 
   if (!isAdmin) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-3 md:p-5">
-        <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-4 py-4 text-sm font-medium text-amber-700">
-          <ShieldAlert size={18} /> 관리자만 접근할 수 있는 화면입니다.
-        </div>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4 md:p-6">
+        <p className="flex shrink-0 items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm break-keep text-amber-700">
+          <ShieldAlert size={16} className="shrink-0" /> 관리자만 접근할 수 있는 화면입니다.
+        </p>
       </div>
     )
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-3 md:p-5">
-      <div className="flex flex-col gap-3 rounded-md border border-slate-200 bg-white px-4 py-3 shadow-sm md:flex-row md:items-center md:justify-between md:py-4">
-        <div>
-          <h1 className="text-base font-bold text-slate-900 sm:text-lg">AI 스케줄 전체 이력</h1>
-          <p className="mt-1 text-xs font-medium text-slate-600">
-            자동 적재, 오더 수정, 담당자 변경 내역을 시간순으로 확인합니다.
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden p-4 md:p-6">
+      {/* ── 페이지 머리 ────────────────────────────────────────────────────
+          부제가 아래 필터 칩(전체·오더 수정·담당자 변경·자동 적재)을 그대로 읽어 주고 있었다.
+          지우고 그 자리에 "언제부터 언제까지를 보고 있는가"라는 사실을 적는다. */}
+      <header className="flex min-w-0 shrink-0 flex-wrap items-end justify-between gap-x-3 gap-y-2">
+        <div className="min-w-0">
+          <h1 className="text-lg font-semibold text-foreground">AI 스케줄 전체 이력</h1>
+          <p className="mt-0.5 text-xs leading-normal break-keep text-muted-foreground">
+            <span className="tabular-nums">{fromDate || "처음"}</span> ~ <span className="tabular-nums">{toDate || "오늘"}</span> 조회
           </p>
         </div>
-        <button
-          onClick={() => void load()}
-          disabled={loading}
-          className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:opacity-50"
-        >
-          {loading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
+        <Button variant="outline" size="lg" onClick={() => void load()} disabled={loading}>
+          {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
           새로고침
-        </button>
-      </div>
+        </Button>
+      </header>
 
       {msg && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{msg}</div>
+        <p className="shrink-0 rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs break-keep text-destructive">{msg}</p>
       )}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard title="전체 이력" value={stats.total} tone="text-slate-900" />
-        <StatCard title="오더 수정" value={stats.edits} tone="text-blue-700" />
-        <StatCard title="담당자 변경" value={stats.reassignments} tone="text-blue-700" />
-        <StatCard title="자동 적재" value={stats.ingests} tone="text-emerald-700" />
-      </div>
+      {/* 네 장의 카드 대신 카드 한 장을 실선으로 나눈다 — 테두리를 가진 층은 하나만 */}
+      <Card className="shrink-0 gap-0 py-0">
+        <div className="grid grid-cols-2 gap-px bg-border lg:grid-cols-4">
+          <StatCell title="전체 이력" value={stats.total} />
+          <StatCell title="오더 수정" value={stats.edits} />
+          <StatCell title="담당자 변경" value={stats.reassignments} />
+          <StatCell title="자동 적재" value={stats.ingests} />
+        </div>
+      </Card>
 
-      <div className="flex flex-col gap-2 rounded-md border border-slate-200 bg-white p-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex flex-wrap items-center gap-1.5">
+      {/* 조회조건 줄 — 위아래가 전부 테두리 상자면 리듬이 죽는다. 여기는 테두리 없이 둔다.
+          필터 4개 + 기간 + 검색이라 좁은 폭에선 반드시 넘친다 → flex-wrap 으로 줄을 접는다. */}
+      <div className="flex min-w-0 shrink-0 flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           {FILTERS.map(item => (
             <button
               key={item.id}
+              type="button"
               onClick={() => setFilter(item.id)}
+              aria-pressed={filter === item.id}
               className={cn(
-                "h-8 rounded-md border px-3 text-xs font-semibold transition-colors",
+                "h-8 rounded-md border px-3 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
                 filter === item.id
-                  ? "border-slate-900 bg-slate-900 text-white"
-                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "bg-background text-muted-foreground hover:bg-muted hover:text-foreground",
               )}
             >
               {item.label}
             </button>
           ))}
           <DateRangeField
-            compact
             label="조회기간"
             startDate={fromDate}
             endDate={toDate}
-            numberOfMonths={2}
             onChange={(start, end) => {
               setFromDate(start)
               setToDate(end)
@@ -312,25 +321,72 @@ export default function ReassignmentsPage() {
             최근 30일
           </Button>
         </div>
-        <div className="relative w-full lg:w-80">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
-          <input
+        <div className="relative w-full min-w-0 lg:w-80">
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder="품목명, 제조번호, 변경내용 검색"
-            className="h-8 w-full rounded-md border border-slate-300 bg-white pl-8 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus-visible:border-blue-600 focus-visible:ring-2 focus-visible:ring-blue-200 focus-visible:outline-none"
+            className="h-8 pl-8"
           />
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-slate-200 bg-white py-0 shadow-sm">
-        <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
-          <div className="flex items-center gap-1.5">
-            <History className="size-4 text-slate-400" />
-            <span className="text-sm font-bold text-slate-900">타임라인</span>
-          </div>
-          <span className="text-xs font-medium text-slate-500">표시 {filteredRows.length.toLocaleString("ko-KR")}건</span>
+      <Card className="flex min-h-0 min-w-0 flex-1 flex-col gap-0 py-0">
+        <div className="flex shrink-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b px-4 py-3">
+          <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+            <History className="size-3.5 text-muted-foreground" />
+            타임라인
+          </h2>
+          <p className="text-xs leading-normal text-muted-foreground">
+            표시 <span className="font-semibold tabular-nums text-foreground">{filteredRows.length.toLocaleString("ko-KR")}</span>건
+          </p>
         </div>
+        {/* ── 모바일 — 표를 표로 두지 않는다 ────────────────────────────────
+            다섯 열(일시·유형·오더·내용·작업자)을 320px 에 우겨넣을 수 없다.
+            품목명을 주 값으로 올리고 유형·내용·일시·작업자만 남긴 요약 목록으로 접는다. */}
+        <div className="min-h-0 min-w-0 flex-1 divide-y overflow-y-auto md:hidden">
+          {loading
+            ? Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="flex flex-col gap-2 px-4 py-3">
+                  <Skeleton className="h-4 w-2/3" />
+                  <Skeleton className="h-3 w-full" />
+                  <Skeleton className="h-3 w-1/2" />
+                </div>
+              ))
+            : displayedRows.length === 0
+              ? (
+                  <p className="px-4 py-12 text-center text-sm break-keep text-muted-foreground">
+                    표시할 AI 스케줄 이력이 없습니다.
+                  </p>
+                )
+              : displayedRows.map(row => (
+                  <div key={row.id} className="min-w-0 px-4 py-3">
+                    <div className="flex min-w-0 items-start justify-between gap-2">
+                      <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                        {row.productName ?? "—"}
+                      </p>
+                      <TypeBadge type={row.type} />
+                    </div>
+                    <p className="mt-1 text-xs leading-normal break-keep text-foreground">{row.title}</p>
+                    <p className="mt-0.5 truncate text-xs leading-normal text-muted-foreground">
+                      {row.summary}
+                    </p>
+                    <p className="mt-1 flex min-w-0 items-center gap-2 text-xs leading-normal text-muted-foreground">
+                      <span className="min-w-0 truncate tabular-nums">{formatDateTime(row.occurredAt)}</span>
+                      {row.actorName && (
+                        <>
+                          <span className="text-border">·</span>
+                          <span className="min-w-0 truncate">{row.actorName}</span>
+                        </>
+                      )}
+                    </p>
+                  </div>
+                ))}
+        </div>
+
+        {/* ── 데스크톱 ─────────────────────────────────────────────────────── */}
+        <div className="hidden min-h-0 min-w-0 flex-1 flex-col md:flex">
         <Table className="text-sm">
           {/* 논리 열 5개 + 다필드 묶음 1개(오더) → 최대 6칸.
               칸 순서(펼침 / 합침):
@@ -361,15 +417,16 @@ export default function ReassignmentsPage() {
             {loading ? (
               <LoadingRows />
             ) : displayedRows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={5} className="px-3 py-10 text-center text-sm text-slate-400">
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={5} className="px-3 py-14 text-center text-sm text-muted-foreground">
                   표시할 AI 스케줄 이력이 없습니다.
                 </TableCell>
               </TableRow>
             ) : (
+              /* 눌러도 열리는 화면이 없는 행이다 — 손가락 커서는 달지 않는다. */
               displayedRows.map(row => (
-                <TableRow key={row.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
-                  <TableCell className="px-3 py-2.5 text-xs text-muted-foreground">
+                <TableRow key={row.id} className="hover:bg-muted/40">
+                  <TableCell className="px-3 py-2.5 text-xs tabular-nums text-muted-foreground">
                     <span className="block truncate" title={formatDateTime(row.occurredAt)}>
                       {formatDateTime(row.occurredAt)}
                     </span>
@@ -381,7 +438,7 @@ export default function ReassignmentsPage() {
                     <CellStack
                       primary={row.productName ?? "—"}
                       secondary={`${row.productCode ?? "—"} · ${row.batchNo ?? "—"}`}
-                      primaryClass="font-semibold text-slate-900"
+                      primaryClass="font-medium text-foreground"
                       title={[row.productName, row.productCode, row.batchNo].filter(Boolean).join(" / ")}
                     />
                   </TableCell>
@@ -389,7 +446,7 @@ export default function ReassignmentsPage() {
                     <CellStack
                       primary={row.title}
                       secondary={row.reason ? `${row.summary} · 사유: ${row.reason}` : row.summary}
-                      primaryClass="font-medium text-slate-900"
+                      primaryClass="font-medium text-foreground"
                       title={[row.title, row.summary, row.reason ? `사유: ${row.reason}` : ""].filter(Boolean).join(" / ")}
                     />
                   </TableCell>
@@ -408,7 +465,8 @@ export default function ReassignmentsPage() {
             )}
           </TableBody>
         </Table>
-      </div>
+        </div>
+      </Card>
     </div>
   )
 }

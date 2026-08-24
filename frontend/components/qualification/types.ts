@@ -63,19 +63,24 @@ export function statusOf(qual: TesterQual | null): QualificationStatus {
   return qual ? qualificationStatus(qual.expiresOn) : "none"
 }
 
-/** 매트릭스 셀 색 — 시험자 역량 매트릭스(LEVEL_STYLE)와 같은 규격을 따른다. */
+/**
+ * 매트릭스 셀 색 — 시험자 역량 매트릭스(LEVEL_STYLE)와 같은 규격을 따른다.
+ * 유효는 브랜드 파랑, 임박은 앰버(경고), 만료는 기한초과라 빨강.
+ * 예전엔 유효=초록·만료=rose 였는데, 초록은 브랜드색 밖이고 rose 는 앱의 빨강과
+ * 같은 뜻을 다른 색으로 말하던 자리였다.
+ */
 export const STATUS_CELL_STYLE: Record<QualificationStatus, string> = {
-  valid:    "border-emerald-300 bg-emerald-700 text-white",
+  valid:    "border-blue-300 bg-blue-700 text-white",
   expiring: "border-amber-300 bg-amber-600 text-white",
-  expired:  "border-rose-300 bg-rose-700 text-white",
+  expired:  "border-red-300 bg-red-700 text-white",
   none:     "border bg-muted text-muted-foreground",
 }
 
 /** KPI·범례에 쓰는 점 색 */
 export const STATUS_DOT_STYLE: Record<QualificationStatus, string> = {
-  valid:    "bg-emerald-600",
+  valid:    "bg-blue-600",
   expiring: "bg-amber-500",
-  expired:  "bg-rose-600",
+  expired:  "bg-red-600",
   none:     "bg-muted-foreground/40",
 }
 

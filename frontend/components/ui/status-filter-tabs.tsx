@@ -42,7 +42,7 @@ export function StatusFilterTabs({
           onClick={() => onChange(t.key)}
           aria-pressed={value === t.key}
           className={cn(
-            "inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors",
+            "inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-sm font-medium transition-colors sm:px-3",
             value === t.key ? "bg-card text-foreground shadow-sm" : "hover:text-foreground",
           )}
         >

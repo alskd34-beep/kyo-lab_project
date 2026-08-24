@@ -53,7 +53,43 @@ export function VersionHistoryDialog({
         </DialogHeader>
 
         <DialogBody>
-          <Table>
+          {/* 모바일 — 4칸을 320px 에 밀어 넣으면 날짜가 잘린다. 가로로 미는 대신 세운다. */}
+          <ul className="divide-y md:hidden">
+            {loading ? (
+              Array.from({ length: 3 }).map((_, i) => (
+                <li key={i} className="flex flex-col gap-2 py-3">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-3 w-full" />
+                </li>
+              ))
+            ) : rows.length === 0 ? (
+              <li className="py-16 text-center text-sm break-keep text-muted-foreground">
+                기록된 변경이력이 없습니다.
+              </li>
+            ) : (
+              rows.map(v => (
+                <li key={v.id} className="py-3">
+                  <div className="flex min-w-0 items-baseline justify-between gap-3">
+                    <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                      v{v.version}
+                      {v.version === product.version && (
+                        <span className="ml-1.5 text-xs leading-normal font-normal text-primary">현재</span>
+                      )}
+                    </p>
+                    <span className="shrink-0 font-mono text-xs leading-normal tabular-nums text-muted-foreground">
+                      {v.effectiveFrom ?? v.createdAt.slice(0, 10)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm break-keep text-foreground">{v.changeNote ?? "—"}</p>
+                  <p className="mt-0.5 text-xs leading-normal text-muted-foreground">
+                    변경자 {v.changedBy ?? "—"}
+                  </p>
+                </li>
+              ))
+            )}
+          </ul>
+
+          <Table className="hidden md:flex">
             <colgroup>
               <col className="w-[14%]" />
               <col className="w-[24%]" />
@@ -90,7 +126,7 @@ export function VersionHistoryDialog({
                     <TableCell className="px-3 py-2.5 font-medium text-foreground">
                       v{v.version}
                       {v.version === product.version && (
-                        <span className="ml-1.5 text-[11px] font-normal text-primary">현재</span>
+                        <span className="ml-1.5 text-xs leading-normal font-normal text-primary">현재</span>
                       )}
                     </TableCell>
                     <TableCell className="px-3 py-2.5 font-mono text-xs text-muted-foreground">

@@ -2,11 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import {
-  RefreshCw, Search, Users, TriangleAlert, CheckCircle2, ClipboardList, Pencil,
+  RefreshCw, Search, Users, TriangleAlert, CheckCircle2, ClipboardList,
 } from "lucide-react"
 import { cn } from "@frontend/lib/utils"
 import { useAuth } from "@frontend/lib/auth-context"
-import { Badge } from "@frontend/components/ui/badge"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
 import { Input } from "@frontend/components/ui/input"
@@ -155,29 +154,30 @@ export default function ProdStatusPage() {
   }> = [
     {
       label: "작업 중 인원", value: totals?.workingTesters ?? 0, valueCls: "text-foreground", icon: Users,
-      foot: <span className="text-xs leading-normal text-slate-600">전체 {data?.workers.filter(w => w.isActive).length ?? 0}명 중</span>,
+      foot: <span className="text-xs leading-normal break-keep tabular-nums text-muted-foreground">전체 {data?.workers.filter(w => w.isActive).length ?? 0}명 중</span>,
     },
     {
       label: "진행 중 작업", value: totals?.activeJobs ?? 0, valueCls: "text-blue-700", icon: ClipboardList,
       foot: itemProgress.total > 0 ? (
-        <span className="flex items-center gap-1.5">
-          <span className="h-1.5 w-16 overflow-hidden rounded-md bg-muted">
+        /* 좁은 칸에서 막대와 글자가 한 줄에 안 들어가면 아랫줄로 접힌다 */
+        <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
+          <span className="h-1.5 w-16 shrink-0 overflow-hidden rounded-md bg-muted">
             <span className="block h-full rounded-md bg-blue-500" style={{ width: `${itemProgress.pct}%` }} />
           </span>
-          <span className="text-xs leading-normal tabular-nums text-slate-600">
+          <span className="text-xs leading-normal break-keep tabular-nums text-muted-foreground">
             시험항목 {itemProgress.cleared}/{itemProgress.total}
           </span>
         </span>
       ) : undefined,
     },
     {
-      label: "지연 작업", value: totals?.delayed ?? 0, valueCls: (totals?.delayed ?? 0) > 0 ? "text-red-600" : "text-foreground",
+      label: "지연 작업", value: totals?.delayed ?? 0, valueCls: (totals?.delayed ?? 0) > 0 ? "text-destructive" : "text-foreground",
       icon: TriangleAlert,
-      foot: <span className="text-xs leading-normal text-slate-600">완료예정일 경과</span>,
+      foot: <span className="text-xs leading-normal break-keep text-muted-foreground">완료예정일 경과</span>,
     },
     {
       label: "완료 작업", value: totals?.completedToday ?? 0, valueCls: "text-blue-800", icon: CheckCircle2,
-      foot: <span className="text-xs leading-normal text-slate-600">오늘 · 누적 {totals?.completedTotal ?? 0}건</span>,
+      foot: <span className="text-xs leading-normal break-keep tabular-nums text-muted-foreground">오늘 · 누적 {totals?.completedTotal ?? 0}건</span>,
       onClick: () => { setView("completed"); setCompletedRange("today") },
       hint: "클릭하면 오늘 완료한 작업 목록으로 이동합니다",
     },
@@ -185,6 +185,25 @@ export default function ProdStatusPage() {
 
   return (
     <div className="flex min-h-full min-w-0 flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto p-4 md:p-6">
+      {/* 머리말 — 지표 아래에 있던 화면 제목을 맨 위로 올렸다. 무엇을 보는 화면인지가
+          숫자보다 먼저 읽혀야 한다. 제목 옆 배지(인원수·완료건수)는 잔글씨 한 줄로 합쳤다. */}
+      <header className="flex min-w-0 shrink-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <h1 className="text-lg font-semibold text-foreground">작업자 작업 현황</h1>
+        <p className="text-xs leading-normal break-keep text-muted-foreground">
+          작업자 <span className="font-semibold tabular-nums text-foreground">{workers.length}</span>명
+          {view === "completed" && (
+            <>
+              <span className="px-1 text-border">·</span>
+              완료 <span className="font-semibold tabular-nums text-foreground">{completedShown}</span>건
+            </>
+          )}
+          <span className="px-1 text-border">·</span>
+          {view === "completed"
+            ? "승인완료된 작업을 작업자·기간별로 봅니다 (작업자당 최근 50건까지)"
+            : "작업자를 고르면 보유 작업이 지금 서 있는 단계 위에 표시됩니다"}
+        </p>
+      </header>
+
       {/* KPI */}
       <div className="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-4">
         {kpiCards.map((card) => {
@@ -204,44 +223,28 @@ export default function ProdStatusPage() {
                   }
                 : {})}
               className={cn(
-                "gap-1 px-4 py-3",
-                card.onClick && "cursor-pointer transition-colors hover:border-blue-300 hover:bg-muted/40",
+                "min-w-0 gap-1 px-4 py-3",
+                card.onClick && "cursor-pointer transition-colors hover:border-blue-300 hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
               )}
             >
-              <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                <Icon className="size-3.5" />{card.label}
+              <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <Icon className="size-3.5 shrink-0" />
+                <span className="min-w-0 truncate">{card.label}</span>
               </span>
               {loading
                 ? <Skeleton className="h-8 w-12" />
-                : <span className={cn("text-2xl font-semibold tabular-nums", card.valueCls)}>{card.value}</span>}
+                : <span className={cn("min-w-0 truncate text-xl font-semibold tabular-nums sm:text-2xl", card.valueCls)}>{card.value}</span>}
               {!loading && card.foot}
             </Card>
           )
         })}
       </div>
 
-      {/* 헤더 + 필터 */}
-      <div className="flex flex-col gap-3">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <h1 className="flex items-center gap-2 text-xl font-bold text-slate-950">
-            작업자 작업 현황
-            <Pencil className="size-4 text-muted-foreground" />
-          </h1>
-          <Badge variant="secondary" className="tabular-nums">{workers.length}명</Badge>
-          {view === "completed" && (
-            <Badge variant="outline" className="gap-1 border-blue-300 text-blue-800 tabular-nums">
-              <CheckCircle2 className="size-3" />완료 {completedShown}건
-            </Badge>
-          )}
-          <p className="w-full text-xs font-medium text-slate-700 sm:w-auto">
-            {view === "completed"
-              ? "승인완료된 작업을 작업자·기간별로 확인합니다. (작업자당 최근 50건까지)"
-              : "작업자마다 단계 레일을 하나씩 두고, 보유 작업을 지금 서 있는 단계 위에 세웁니다."}
-          </p>
-        </div>
-
+      {/* 필터 */}
+      <div className="flex shrink-0 flex-col gap-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <div className="inline-flex h-9 w-fit items-center gap-0.5 rounded-md bg-muted p-0.5 text-muted-foreground">
+          {/* 탭 묶음이 화면보다 넓어지면 페이지가 아니라 이 상자 안에서만 밀린다 */}
+          <div className="inline-flex h-9 w-fit max-w-full items-center gap-0.5 overflow-x-auto rounded-md bg-muted p-0.5 text-muted-foreground">
             {([
               { key: "working", label: "진행 중" },
               { key: "all", label: "전체" },
@@ -251,7 +254,7 @@ export default function ProdStatusPage() {
                 key={t.key}
                 type="button"
                 onClick={() => setView(t.key)}
-                className={cn("h-8 rounded-md px-3 text-sm font-medium transition-colors",
+                className={cn("h-8 shrink-0 rounded-md px-3 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
                   view === t.key ? "bg-card text-foreground shadow-sm" : "hover:text-foreground")}
               >
                 {t.label}
@@ -261,13 +264,13 @@ export default function ProdStatusPage() {
 
           {/* 완료 보기에서만 기간을 고른다 */}
           {view === "completed" && (
-            <div className="inline-flex h-9 w-fit items-center gap-0.5 rounded-md bg-muted p-0.5 text-muted-foreground">
+            <div className="inline-flex h-9 w-fit max-w-full items-center gap-0.5 overflow-x-auto rounded-md bg-muted p-0.5 text-muted-foreground">
               {COMPLETED_RANGES.map(r => (
                 <button
                   key={r.key}
                   type="button"
                   onClick={() => setCompletedRange(r.key)}
-                  className={cn("h-8 rounded-md px-3 text-xs font-medium transition-colors",
+                  className={cn("h-8 shrink-0 rounded-md px-3 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
                     completedRange === r.key ? "bg-card text-foreground shadow-sm" : "hover:text-foreground")}
                 >
                   {r.label}
@@ -292,10 +295,10 @@ export default function ProdStatusPage() {
       </div>
 
       {error && (
-        <Card className="items-center gap-1 border-amber-200 bg-amber-50 py-8 text-center">
+        <Card className="shrink-0 items-center gap-1 border-amber-200 bg-amber-50 py-8 text-center">
           <TriangleAlert className="mb-1 size-6 text-amber-500" />
-          <p className="text-sm font-semibold text-amber-800">{error}</p>
-          {!isAdmin && <p className="text-xs text-amber-700">관리자 계정으로 로그인하세요.</p>}
+          <p className="text-sm font-semibold break-keep text-amber-800">{error}</p>
+          {!isAdmin && <p className="text-xs leading-normal break-keep text-amber-700">관리자 계정으로 로그인하세요.</p>}
         </Card>
       )}
 
@@ -303,8 +306,8 @@ export default function ProdStatusPage() {
       {loading ? (
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="flex gap-4 rounded-md border bg-card p-4 shadow-sm">
-              <div className="flex w-40 shrink-0 items-center gap-2">
+            <div key={i} className="flex min-w-0 gap-4 rounded-md border bg-card p-4 shadow-sm">
+              <div className="flex w-28 shrink-0 items-center gap-2 sm:w-40">
                 <Skeleton className="size-8 rounded-md" />
                 <div className="flex flex-col gap-1">
                   <Skeleton className="h-4 w-16" />
@@ -316,41 +319,51 @@ export default function ProdStatusPage() {
           ))}
         </div>
       ) : !error && workers.length === 0 ? (
-        <Card className="items-center py-16 text-center text-sm text-muted-foreground">
+        <p className="py-16 text-center text-sm break-keep text-muted-foreground">
           {view === "working"
             ? "진행 중이거나 대기 중인 작업이 있는 작업자가 없습니다."
             : view === "completed"
               ? "선택한 기간에 완료된 작업이 없습니다. 기간을 넓혀 보세요."
               : "작업자가 없습니다."}
-        </Card>
+        </p>
       ) : !error ? (
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden md:grid-cols-[190px_minmax(0,1fr)]">
-          <div className="min-h-0 overflow-y-auto rounded-md border border-slate-200 bg-white p-2">
-            <div className="flex flex-col gap-1.5">
+        /* 모바일은 위아래 2행(작업자 띠 + 레일). 레일 행에 minmax(0,1fr) 을 줘야
+           남은 높이를 정확히 차지하고 자기 안에서 스크롤된다. */
+        <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden md:grid-cols-[190px_minmax(0,1fr)] md:grid-rows-1">
+          {/* 작업자 고르는 칸. 모바일에서는 세로 목록이 화면을 다 먹으므로
+              가로로 눕혀 칩처럼 훑고, md 이상에서만 왼쪽 세로 목록이 된다. */}
+          <div className="min-h-0 min-w-0 shrink-0 overflow-x-auto overflow-y-hidden rounded-md border bg-card p-2 md:shrink md:overflow-x-hidden md:overflow-y-auto">
+            <div className="flex gap-1.5 md:flex-col">
               {workers.map((w) => (
                 <button
                   key={w.testerId}
                   type="button"
                   onClick={() => setSelectedTesterId(w.testerId)}
+                  aria-pressed={selectedWorker?.testerId === w.testerId}
                   className={cn(
-                    "flex items-center gap-2.5 rounded-md border px-2.5 py-2.5 text-left transition-all",
+                    /* transition-all → 실제로 바뀌는 색만 애니메이션한다 */
+                    "flex min-w-0 shrink-0 items-center gap-2.5 rounded-md border px-2.5 py-2.5 text-left transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none md:w-full md:shrink",
                     selectedWorker?.testerId === w.testerId
-                      ? "border-blue-400 bg-blue-50/70 text-slate-950 shadow-sm"
-                      : "border-transparent text-slate-700 hover:border-slate-200 hover:bg-slate-50",
+                      ? "border-blue-300 bg-blue-50 text-foreground"
+                      : "border-transparent text-foreground hover:bg-muted/60",
                   )}
                 >
                   <TesterAvatar testerId={w.testerId} name={w.name} size="md" />
+                  {/* 이름과 사번을 같은 크기로 붙여 놓으면 위계가 없다 — 이름을 주 값으로 올린다 */}
                   <div className="min-w-0">
-                    <span className="block truncate text-xs font-bold text-slate-900">
-                      {w.name}{" "}
-                      <span className="font-mono font-medium text-slate-600">{w.employeeNo}</span>
+                    <span className="block truncate text-sm font-medium text-foreground">{w.name}</span>
+                    <span className="block truncate font-mono text-xs leading-normal tabular-nums text-muted-foreground">
+                      {w.employeeNo}
                     </span>
                   </div>
                 </button>
               ))}
             </div>
           </div>
-          <div className="min-h-0 min-w-0 overflow-y-auto">
+          {/* WorkerStageLane 이 모바일에서 스스로 세로 단계 목록으로 접히므로
+              최소 폭을 강제하던 임시 방편은 걷어냈다. overflow-x-auto 는 md 근처에서
+              레일이 빠듯할 때를 대비해 남겨 둔다(밀려도 이 상자 안에서만). */}
+          <div className="min-h-0 min-w-0 overflow-x-auto overflow-y-auto">
             {selectedWorker && (
               <WorkerStageLane
                 worker={selectedWorker}

@@ -131,7 +131,7 @@ export function StepDialog({
         </DialogHeader>
 
         <DialogBody className="grid gap-4">
-          <section className="rounded-lg border bg-card p-3 shadow-sm sm:p-4">
+          <section className="rounded-md border bg-card p-3 shadow-sm sm:p-4">
             <div className="mb-3 border-b pb-3">
               <h3 className="text-sm font-semibold text-foreground">단계 정보</h3>
             </div>
@@ -215,7 +215,7 @@ export function StepDialog({
                       {equipmentChoices.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                  <p className="mt-1 text-[11px] text-muted-foreground">
+                  <p className="mt-1 text-xs leading-normal text-muted-foreground">
                     기기공수는 &quot;기기 유형 + 사용시간&quot;으로 관리합니다. 대기·검토는 기기를 선택하지 않습니다.
                   </p>
                 </div>
@@ -223,7 +223,7 @@ export function StepDialog({
             </div>
           </section>
 
-          <section className="rounded-lg border bg-card p-3 shadow-sm sm:p-4">
+          <section className="rounded-md border bg-card p-3 shadow-sm sm:p-4">
             <div className="mb-3 border-b pb-3">
               <h3 className="text-sm font-semibold text-foreground">순서 · 옵션</h3>
             </div>

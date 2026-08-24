@@ -10,6 +10,7 @@ import { useConfirmMessage } from '@frontend/components/common/confirm-message'
 import { ManagementDrawer } from '@frontend/components/common/management-drawer'
 import { Button } from '@frontend/components/ui/button'
 import { Card } from '@frontend/components/ui/card'
+import { Input } from '@frontend/components/ui/input'
 import { CellStack } from '@frontend/components/ui/table-cell-stack'
 import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from '@frontend/components/ui/table-sort'
 import { StatusFilterTabs, type StatusFilterValue } from '@frontend/components/ui/status-filter-tabs'
@@ -194,30 +195,33 @@ export default function UsersAdminPage() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col gap-3 overflow-hidden p-4 md:p-6">
-      <div className="flex shrink-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-lg font-semibold text-slate-800">사용자 관리</h1>
-          <p className="text-xs text-slate-500">총 {users.length}명</p>
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden p-4 md:p-6">
+      <header className="flex min-w-0 shrink-0 flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-lg font-semibold text-foreground">사용자 관리</h1>
+          <p className="mt-0.5 text-xs leading-normal text-muted-foreground">
+            총 <span className="font-semibold tabular-nums text-foreground">{users.length}</span>명
+          </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusFilterTabs
-            value={statusFilter}
-            onChange={setStatusFilter}
-            counts={userStatusCounts}
-          />
-          <button
-            onClick={() => setCreating(true)}
-            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 md:flex-none"
-          >
-            <UserPlus size={13} />
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          {/* 탭 3개 + 건수가 320px 폭을 아슬아슬하게 채운다 —
+              넘치더라도 페이지가 아니라 이 줄 안에서만 밀리게 가둔다(px-1: 포커스 링 잘림 방지). */}
+          <div className="-mx-1 min-w-0 max-w-full overflow-x-auto px-1 sm:mx-0 sm:px-0">
+            <StatusFilterTabs
+              value={statusFilter}
+              onChange={setStatusFilter}
+              counts={userStatusCounts}
+            />
+          </div>
+          <Button size="lg" onClick={() => setCreating(true)} className="min-w-0 flex-1 md:flex-none">
+            <UserPlus />
             사용자 추가
-          </button>
+          </Button>
         </div>
-      </div>
+      </header>
 
       {error && (
-        <p className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">{error}</p>
+        <p className="shrink-0 rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs break-keep text-destructive">{error}</p>
       )}
 
       {creating && (
@@ -277,7 +281,7 @@ export default function UsersAdminPage() {
               : filteredUsers.map(u => (
               <TableRow
                 key={u.id}
-                className="cursor-pointer border-t border-slate-100 hover:bg-muted/40"
+                className="cursor-pointer hover:bg-muted/40"
                 onClick={() => setEditingUser(u)}
               >
                 <TableCell className="px-3 py-2">
@@ -303,7 +307,7 @@ export default function UsersAdminPage() {
                   <StatusBadge isActive={u.isActive} />
                 </TableCell>
                 <TableCell className="px-3 py-2">
-                  <div className="truncate font-mono text-xs text-muted-foreground" title={u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('ko-KR') : '-'}>
+                  <div className="truncate font-mono text-xs tabular-nums text-muted-foreground" title={u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('ko-KR') : '-'}>
                     {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('ko-KR') : '-'}
                   </div>
                 </TableCell>
@@ -313,49 +317,57 @@ export default function UsersAdminPage() {
         </Table>
       </Card>
 
-      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto md:hidden">
-        {loading
-          ? Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="rounded-md border border-slate-200 bg-white p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-5 w-14 rounded-md" />
+      {/* ── 모바일 — 행마다 테두리를 두르는 대신 카드 한 겹 안에서 실선으로 나눈다.
+             다른 화면(공휴일·이력·휴가)과 같은 모양으로 맞췄다. ─────────────────── */}
+      <Card className="flex min-h-0 min-w-0 flex-1 flex-col gap-0 py-0 md:hidden">
+        <div className="min-h-0 min-w-0 flex-1 divide-y overflow-y-auto">
+          {loading
+            ? Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex flex-col gap-2 px-4 py-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-5 w-14 rounded-md" />
+                  </div>
+                  <Skeleton className="h-3 w-2/3" />
                 </div>
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-3/4" />
-              </div>
-            ))
-          : users.map(u => (
-          <div
-            key={u.id}
-            role="button"
-            tabIndex={0}
-            onClick={() => setEditingUser(u)}
-            onKeyDown={e => {
-              if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditingUser(u) }
-            }}
-            className="cursor-pointer rounded-md border border-slate-200 bg-white p-3 transition-colors hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-          >
-            <div className="flex items-start gap-3">
-              <div className="flex min-w-0 items-center gap-2">
-                <UserAvatar user={u} />
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-slate-800">{u.displayName ?? '-'}</p>
-                  <p className="truncate font-mono text-xs text-slate-500">{u.username}</p>
-                  <p className="font-mono text-xs leading-normal text-slate-400">#{fmtCustomerNo(u.customerNo)}</p>
-                </div>
-              </div>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              <RoleBadge role={u.role} />
-              <StatusBadge isActive={u.isActive} />
-            </div>
-            <p className="mt-2 text-xs leading-normal text-slate-500">
-              마지막 로그인: {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('ko-KR') : '-'}
-            </p>
-          </div>
-        ))}
-      </div>
+              ))
+            : filteredUsers.length === 0
+              ? (
+                  <p className="px-4 py-12 text-center text-sm break-keep text-muted-foreground">
+                    {users.length === 0 ? '등록된 사용자가 없습니다.' : '조건에 맞는 사용자가 없습니다.'}
+                  </p>
+                )
+              /* 데스크톱 표와 같은 filteredUsers 를 쓴다 — 예전에는 여기만 users 라
+                 모바일에서 검색·필터가 통째로 무시됐다. */
+              : filteredUsers.map(u => (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onClick={() => setEditingUser(u)}
+                    className="flex w-full min-w-0 flex-col px-4 py-3 text-left transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none"
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <UserAvatar user={u} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium text-foreground">{u.displayName ?? '-'}</span>
+                        <span className="block truncate font-mono text-xs leading-normal text-muted-foreground">
+                          {u.username}
+                          <span className="px-1 text-border">·</span>
+                          <span className="tabular-nums">#{fmtCustomerNo(u.customerNo)}</span>
+                        </span>
+                      </span>
+                      <span className="flex shrink-0 flex-col items-end gap-1">
+                        <RoleBadge role={u.role} />
+                        <StatusBadge isActive={u.isActive} />
+                      </span>
+                    </span>
+                    <span className="mt-2 block text-xs leading-normal tabular-nums text-muted-foreground">
+                      마지막 로그인 {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('ko-KR') : '-'}
+                    </span>
+                  </button>
+                ))}
+        </div>
+      </Card>
 
       <EditUserDialog
         key={editingUser?.id ?? 'none'}
@@ -382,17 +394,19 @@ function UserAvatar({ user }: { user: UserRow }) {
   )
 }
 
+/** 역할 배지. 관리자는 브랜드 파랑, 시험자는 분류색(slate) — Tag 팔레트의 indigo 는 '공지' 자리다. */
 function RoleBadge({ role }: { role: UserRow['role'] }) {
   return (
-    <Tag color={role === 'admin' ? 'indigo' : 'slate'}>
+    <Tag color={role === 'admin' ? 'blue' : 'slate'}>
       {role === 'admin' ? '관리자' : '시험자'}
     </Tag>
   )
 }
 
+/** 활성은 on-off 상태다 - 초록(완료·승인)이 아니라 브랜드 파랑을 쓴다. */
 function StatusBadge({ isActive }: { isActive: boolean }) {
   return (
-    <Tag color={isActive ? 'green' : 'mono'}>
+    <Tag color={isActive ? 'blue' : 'mono'}>
       {isActive ? '활성' : '비활성'}
     </Tag>
   )
@@ -438,23 +452,23 @@ function CreateForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: 
         <>
           <Button type="button" variant="outline" onClick={onCancel} disabled={busy}>취소</Button>
           <Button type="submit" form="create-user-form" disabled={busy || !username || !password}>
-            {busy ? '생성 중...' : '생성'}
+            {busy ? '생성 중…' : '생성'}
           </Button>
         </>
       )}
     >
-      <form id="create-user-form" onSubmit={submit} className="grid gap-4 text-sm">
+      <form id="create-user-form" onSubmit={submit} className="grid gap-3 text-sm">
         <label className="grid gap-1.5 text-xs font-medium text-foreground">
           아이디
-          <input className="h-9 rounded-md border border-input bg-background px-3 text-sm" placeholder="아이디" value={username} onChange={e => setU(e.target.value)} />
+          <Input placeholder="아이디" value={username} onChange={e => setU(e.target.value)} />
         </label>
         <label className="grid gap-1.5 text-xs font-medium text-foreground">
           비밀번호
-          <input className="h-9 rounded-md border border-input bg-background px-3 text-sm" placeholder="비밀번호" type="password" value={password} onChange={e => setP(e.target.value)} />
+          <Input placeholder="비밀번호" type="password" value={password} onChange={e => setP(e.target.value)} />
         </label>
         <label className="grid gap-1.5 text-xs font-medium text-foreground">
           이름
-          <input className="h-9 rounded-md border border-input bg-background px-3 text-sm" placeholder="이름" value={displayName} onChange={e => setD(e.target.value)} />
+          <Input placeholder="이름" value={displayName} onChange={e => setD(e.target.value)} />
         </label>
         <label className="grid gap-1.5 text-xs font-medium text-foreground">
           역할
@@ -580,14 +594,15 @@ function EditUserDialog({
       )}
     >
         <div className="grid gap-5 md:grid-cols-[120px_1fr]">
-          <div className="flex flex-col items-center gap-3 rounded-md border border-slate-200 bg-slate-50 p-4">
+          {/* 드로어 안에 테두리 상자를 또 두르지 않는다 — 바탕색만으로 사진 영역을 구분한다. */}
+          <div className="flex flex-col items-center gap-3 rounded-md bg-muted/50 p-4">
             <TesterAvatar
               testerId={user.testerId}
               name={displayName || user.testerName || user.username}
               avatarUrl={avatarUrl}
               size="lg"
             />
-            <label className="inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-md bg-slate-800 px-3 py-2 text-xs font-medium text-white hover:bg-slate-700">
+            <label className="inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-md bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/80 focus-within:ring-2 focus-within:ring-ring">
               <Upload size={13} />
               사진 업로드
               <input
@@ -600,7 +615,7 @@ function EditUserDialog({
             <button
               type="button"
               onClick={() => setAvatarUrl(null)}
-              className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 hover:bg-slate-100"
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border bg-background px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             >
               <ImagePlus size={13} />
               사진 제거
@@ -608,15 +623,15 @@ function EditUserDialog({
           </div>
 
           <div className="space-y-3">
-            <label className="block text-xs font-medium text-slate-600">
+            <label className="block text-xs font-medium text-muted-foreground">
               이름
-              <input
-                className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              <Input
+                className="mt-1"
                 value={displayName}
                 onChange={e => setDisplayName(e.target.value)}
               />
             </label>
-            <label className="block text-xs font-medium text-slate-600">
+            <label className="block text-xs font-medium text-muted-foreground">
               역할
               <Select value={role} onValueChange={v => setRole(v as 'admin' | 'tester')}>
                 <SelectTrigger className="mt-1 h-9 w-full px-3">
@@ -628,10 +643,10 @@ function EditUserDialog({
                 </SelectContent>
               </Select>
               {role === 'tester' && (
-                <p className="mt-1 text-xs leading-normal text-slate-400">시험자 역할 저장 시 시험자 목록에 자동 등록됩니다.</p>
+                <p className="mt-1 text-xs leading-normal break-keep text-muted-foreground">시험자 역할 저장 시 시험자 목록에 자동 등록됩니다.</p>
               )}
             </label>
-            <label className="block text-xs font-medium text-slate-600">
+            <label className="block text-xs font-medium text-muted-foreground">
               상태
               <Select value={isActive ? '1' : '0'} onValueChange={v => setIsActive(v === '1')}>
                 <SelectTrigger className="mt-1 h-9 w-full px-3">
@@ -643,10 +658,10 @@ function EditUserDialog({
                 </SelectContent>
               </Select>
             </label>
-            <label className="block text-xs font-medium text-slate-600">
+            <label className="block text-xs font-medium text-muted-foreground">
               새 비밀번호
-              <input
-                className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              <Input
+                className="mt-1"
                 placeholder="변경할 때만 입력"
                 type="password"
                 value={password}
