@@ -35,6 +35,16 @@ interface EvalData {
 // '양호'를 초록으로 두면 브랜드색 밖으로 나가면서 '완료'와도 뜻이 겹친다 — 정상은 파랑이다.
 const rateColor = (r: number | null) =>
   r == null ? "#cbd5e1" : r >= 90 ? "#2563eb" : r >= 70 ? "#f59e0b" : "#ef4444"
+/*
+ * 같은 색을 글자에 그대로 쓰면 앰버가 흰 배경에서 2.1:1, 빨강이 3.8:1 로
+ * 본문 기준(4.5:1)에 못 미친다. 막대(그래픽 3:1)와 글자(4.5:1)는 요구가 다르므로
+ * 글자용은 한 단 어둡게 따로 둔다. 뜻(색상)은 같다.
+ */
+const rateTextClass = (r: number | null) =>
+  r == null ? "text-muted-foreground"
+  : r >= 90 ? "text-blue-700 dark:text-blue-300"
+  : r >= 70 ? "text-amber-700 dark:text-amber-400"
+  : "text-red-700 dark:text-red-400"
 const fmtPct = (v: number | null) => (v == null ? "—" : `${v}%`)
 const fmtDay = (v: number | null) => (v == null ? "—" : `${v}일`)
 const fmtMin = (v: number | null) => (v == null ? "—" : `${v}분`)
@@ -275,7 +285,11 @@ export default function TesterEvaluationPage() {
                   <YAxis type="category" dataKey="name" width={84} tick={{ fontSize: 15, fill: "#334155" }} />
                   <Tooltip cursor={{ fill: "#f8fafc" }} />
                   {/* 어느 막대가 무엇인지 hover 없이도 읽히게 범례를 화면에 내놓는다 */}
-                  <Legend wrapperStyle={{ fontSize: "0.75rem" }} />
+                  <Legend
+                    wrapperStyle={{ fontSize: "0.75rem" }}
+                    /* 범례 글자가 계열 색을 물려받아 흰 배경에서 2.5:1 이었다 — 본문색으로 고정한다. */
+                    formatter={(value) => <span className="text-foreground">{value}</span>}
+                  />
                   {/* 두 계열을 다른 색이 아니라 같은 파랑의 농도 차로 구분한다(보라는 브랜드 색이 아니다) */}
                   <Bar dataKey="completed" name="완료건" fill="#60a5fa" radius={[0, 3, 3, 0]} barSize={9} />
                   <Bar dataKey="weightedThroughput" name="가중처리량" fill="#1e40af" radius={[0, 3, 3, 0]} barSize={9} />
@@ -329,8 +343,7 @@ export default function TesterEvaluationPage() {
                       <span className="min-w-0 truncate text-sm font-medium text-foreground">{t.name}</span>
                     </span>
                     <span
-                      className="shrink-0 text-sm font-semibold tabular-nums"
-                      style={{ color: rateColor(t.adherenceRate) }}
+                      className={`shrink-0 text-sm font-semibold tabular-nums ${rateTextClass(t.adherenceRate)}`}
                     >
                       {fmtPct(t.adherenceRate)}
                     </span>
@@ -388,7 +401,7 @@ export default function TesterEvaluationPage() {
                     </TableCell>
                     <TableCell className="px-3 py-2.5 text-right tabular-nums">{t.completed}</TableCell>
                     <TableCell className="px-3 py-2.5 text-right tabular-nums">
-                      <span className="font-semibold" style={{ color: rateColor(t.adherenceRate) }}>{fmtPct(t.adherenceRate)}</span>
+                      <span className={`font-semibold ${rateTextClass(t.adherenceRate)}`}>{fmtPct(t.adherenceRate)}</span>
                     </TableCell>
                     <TableCell className="px-3 py-2.5 text-right tabular-nums">{fmtDay(t.avgActualDays)}</TableCell>
                     <TableCell className="px-3 py-2.5 text-right tabular-nums">{t.weightedThroughput}</TableCell>

@@ -66,10 +66,15 @@ const TYPE_CLS: Record<ScheduleType, string> = {
   BUSINESS_TRIP: "bg-slate-100 text-slate-700 border-slate-300 dark:bg-muted dark:text-muted-foreground dark:border-border",
 }
 // 연속 막대 색(채움)
+/*
+ * 막대 채움색. 흰 글자를 얹으므로 600 대를 쓴다 —
+ * 500 대에서는 흰 글자가 amber 2.1:1 · blue 3.8:1 로 본문 기준(4.5:1)에
+ * 한참 못 미쳐 막대 안 이름이 읽히지 않았다.
+ */
 const TYPE_BAR: Record<ScheduleType, string> = {
-  ANNUAL:        "bg-blue-500 hover:bg-blue-600",
-  HALF_DAY:      "bg-amber-500 hover:bg-amber-600",
-  BUSINESS_TRIP: "bg-slate-500 hover:bg-slate-600",
+  ANNUAL:        "bg-blue-600 hover:bg-blue-700",
+  HALF_DAY:      "bg-amber-700 hover:bg-amber-800",
+  BUSINESS_TRIP: "bg-slate-600 hover:bg-slate-700",
 }
 /**
  * 막대·범례·목록이 같은 색을 쓰도록 채움 색만 떼어 낸다(hover 변주 제외).

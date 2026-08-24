@@ -15,7 +15,7 @@ export interface PageStat {
 
 const STAT_TONE: Record<NonNullable<PageStat["tone"]>, string> = {
   default: "text-foreground",
-  blue: "text-blue-600",
+  blue: "text-blue-600 dark:text-blue-400",
   amber: "text-amber-700 dark:text-amber-400",
 }
 

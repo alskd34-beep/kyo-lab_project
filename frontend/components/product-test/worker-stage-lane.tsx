@@ -161,7 +161,7 @@ export function WorkerStageLane({
 
   // 6개 정거장별로 작업 배치
   const byNode: OverviewJob[][] = TRACK.map(() => [])
-  for (const j of w.activeJobs) {
+  for (const j of w.activeJobs ?? []) {
     const idx = trackIndexOf(j.status)
     byNode[idx].push(j)
   }
@@ -409,7 +409,7 @@ export function WorkerStageLane({
       </div>
 
       {/* ─── 하단 대기 큐 (Queue) 블록 ─── */}
-      {w.pendingOrders.length > 0 && (
+      {(w.pendingOrders?.length ?? 0) > 0 && (
         /* 모바일에서는 좌측 세로 타이틀 박스가 폭의 40%를 먹는다 — 위아래로 눕힌다 */
         <div className="mt-6 flex max-w-xl min-w-0 flex-col overflow-hidden rounded-md border bg-card shadow-sm sm:flex-row md:mt-8">
           {/* '대기 큐' 타이틀 박스 */}
@@ -438,7 +438,7 @@ export function WorkerStageLane({
 
             {queueOpen && (
               <div className="mt-2.5 flex flex-col gap-2 border-t pt-2">
-                {w.pendingOrders.map((order) => (
+                {(w.pendingOrders ?? []).map((order) => (
                   <div
                     key={order.orderId}
                     className="flex min-w-0 items-center justify-between gap-3 text-xs leading-normal text-muted-foreground"

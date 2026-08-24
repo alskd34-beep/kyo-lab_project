@@ -115,7 +115,7 @@ export default function ProdStatusPage() {
 
   const workers = useMemo(() => {
     let rows = (data?.workers ?? []).filter(w => w.isActive)
-    if (view === "working") rows = rows.filter(w => w.activeJobs.length > 0 || w.pendingCount > 0)
+    if (view === "working") rows = rows.filter(w => (w.activeJobs?.length ?? 0) > 0 || w.pendingCount > 0)
     if (view === "completed") rows = rows.filter(w => (completedByTester.get(w.testerId)?.length ?? 0) > 0)
     if (search.trim()) {
       const q = search.trim()
@@ -140,7 +140,7 @@ export default function ProdStatusPage() {
   const itemProgress = useMemo(() => {
     let total = 0, cleared = 0
     for (const w of data?.workers ?? []) {
-      for (const j of w.activeJobs) { total += j.itemsTotal; cleared += j.itemsCleared }
+      for (const j of w.activeJobs ?? []) { total += j.itemsTotal; cleared += j.itemsCleared }
     }
     return { total, cleared, pct: total > 0 ? Math.round((cleared / total) * 100) : 0 }
   }, [data])

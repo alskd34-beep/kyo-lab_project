@@ -588,7 +588,7 @@ export default function MonthlySchedulePage() {
                               <TableHead
                                 key={d}
                                 className={`border-b border-l ${BORDER} px-1 py-2 text-center text-xs leading-normal font-semibold ${
-                                  isWeekend ? 'text-red-500 dark:text-red-400' : TXT_MUTED
+                                  isWeekend ? 'text-red-700 dark:text-red-400' : TXT_MUTED
                                 }`}
                                 style={{ minWidth: 38 }}
                               >

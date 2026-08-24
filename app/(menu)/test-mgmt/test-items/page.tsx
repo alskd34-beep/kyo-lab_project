@@ -218,19 +218,16 @@ export default function TestItemsPage() {
     const ordered = [...items].sort((a, b) => a.sequenceOrder - b.sequenceOrder)
     const orderedTestItemIds = ordered.map((item) => item.testItemId)
     try {
-      const res = await fetch("/api/product-test-items/reorder", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          productId: selectedProduct.id,
-          orderedTestItemIds,
-        }),
+      await api.post("/api/product-test-items/reorder", {
+        productId: selectedProduct.id,
+        orderedTestItemIds,
       })
-      if (!res.ok) throw new Error(await res.text())
       setLinkedItems(
         ordered.map((item, idx) => ({ ...item, sequenceOrder: idx }))
       )
-    } catch {
+    } catch (e) {
+      /* 되돌리기만 하면 사용자는 "왜 원래대로 돌아갔지?" 만 남는다 — 이유를 말한다. */
+      setError(errorMessage(e, "순서를 저장하지 못했습니다."))
       await loadLinkedItems(selectedProduct.id)
     }
   }
@@ -386,14 +383,13 @@ export default function TestItemsPage() {
     )
     setLinkedItems(remaining)
     try {
-      const res = await fetch("/api/product-test-items", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productId: selectedProduct.id, testItemId }),
+      await api.del("/api/product-test-items", {
+        productId: selectedProduct.id,
+        testItemId,
       })
-      if (!res.ok) throw new Error(await res.text())
       if (remaining.length > 0) await reorderLinked(remaining)
-    } catch {
+    } catch (e) {
+      setError(errorMessage(e, "시험항목 연결을 해제하지 못했습니다."))
       await loadLinkedItems(selectedProduct.id)
     }
   }
@@ -417,18 +413,18 @@ export default function TestItemsPage() {
         (max, item) => Math.max(max, item.sequenceOrder),
         -1
       )
-      const promises = Array.from(selectedToAdd).map((testItemId, idx) =>
-        fetch("/api/product-test-items", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+      /* 날 fetch 를 Promise.all 에 넘기면 서버가 500 을 줘도 resolve 라
+         실패가 조용히 삼켜진다(다이얼로그가 닫히고 성공처럼 보인다).
+         api.post 는 !res.ok 를 에러로 올려 아래 catch 가 배너에 띄운다. */
+      await Promise.all(
+        Array.from(selectedToAdd).map((testItemId, idx) =>
+          api.post("/api/product-test-items", {
             productId: selectedProduct.id,
             testItemId,
             sequenceOrder: maxOrder + 1 + idx,
-          }),
-        })
+          })
+        )
       )
-      await Promise.all(promises)
       const refreshed = await loadLinkedItems(selectedProduct.id)
       if (refreshed.length > 0) await reorderLinked(refreshed)
       setSelectedToAdd(new Set())
@@ -465,15 +461,12 @@ export default function TestItemsPage() {
     )
     setLinkedItems(remaining)
     try {
+      /* api.del 로 바꿔 실패를 catch 까지 올린다(날 fetch 는 500 도 resolve). */
       await Promise.all(
         ids.map((testItemId) =>
-          fetch("/api/product-test-items", {
-            method: "DELETE",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              productId: selectedProduct.id,
-              testItemId,
-            }),
+          api.del("/api/product-test-items", {
+            productId: selectedProduct.id,
+            testItemId,
           })
         )
       )
@@ -535,16 +528,13 @@ export default function TestItemsPage() {
         (max, item) => Math.max(max, item.sequenceOrder),
         -1
       )
+      /* api.post 로 바꿔 실패를 catch 까지 올린다(날 fetch 는 500 도 resolve). */
       await Promise.all(
         toAdd.map((testItemId, idx) =>
-          fetch("/api/product-test-items", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              productId: selectedProduct.id,
-              testItemId,
-              sequenceOrder: maxOrder + 1 + idx,
-            }),
+          api.post("/api/product-test-items", {
+            productId: selectedProduct.id,
+            testItemId,
+            sequenceOrder: maxOrder + 1 + idx,
           })
         )
       )
