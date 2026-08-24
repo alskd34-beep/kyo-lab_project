@@ -134,6 +134,64 @@
   --sidebar-ring: oklch(0.62 0.16 262.88);
 }
 
+/*
+ * 다크 테마 토큰.
+ *
+ * 밝은 테마의 짝이며 **명도만 뒤집고 색상(hue)·채도는 유지**한다 —
+ * 브랜드 파랑(262.88)이 두 테마에서 같은 색으로 읽혀야 한다.
+ *
+ * 원칙
+ *  - 순수 검정(#000)을 쓰지 않는다. 브랜드 쪽으로 살짝 기운 어두운 중립을 바탕으로 둔다.
+ *  - 표면은 배경보다 **밝게** 올린다(카드 > 배경). 밝은 테마의 그림자 대신 명도로 층을 만든다.
+ *  - 파랑은 어두운 바탕에서 명도를 올린다. 밝은 테마의 blue-600 을 그대로 쓰면 묻힌다.
+ *  - 본문 대비는 최소 4.5:1, 보조 텍스트는 3:1 이상을 목표로 한다.
+ */
+.dark {
+  --background: oklch(0.17 0.012 262.88);
+  --foreground: oklch(0.96 0.004 262.88);
+
+  /* 표면은 배경보다 한 단 밝게 — 카드가 떠 보이게 한다 */
+  --card: oklch(0.21 0.014 262.88);
+  --card-foreground: oklch(0.96 0.004 262.88);
+  --popover: oklch(0.23 0.015 262.88);
+  --popover-foreground: oklch(0.96 0.004 262.88);
+
+  /* 브랜드 파랑 — 어두운 바탕에서 읽히도록 명도를 올린다 */
+  --primary: oklch(0.68 0.17 262.88);
+  --primary-foreground: oklch(0.16 0.02 262.88);
+  --secondary: oklch(0.32 0.07 262.88);
+  --secondary-foreground: oklch(0.92 0.03 262.88);
+
+  --muted: oklch(0.26 0.012 255);
+  --muted-foreground: oklch(0.72 0.02 255);
+  --accent: oklch(0.30 0.03 205);
+  --accent-foreground: oklch(0.93 0.02 255);
+
+  /* 오류는 어두운 바탕에서 명도를 올려야 경고로 읽힌다 */
+  --destructive: oklch(0.68 0.2 27.325);
+
+  --border: oklch(0.31 0.01 260);
+  --input: oklch(0.34 0.012 260);
+  --ring: oklch(0.66 0.16 262.88);
+
+  /* 차트 — 어두운 바탕 기준으로 전부 한 단씩 밝게 */
+  --chart-1: oklch(0.70 0.17 262.88);
+  --chart-2: oklch(0.75 0.15 152);
+  --chart-3: oklch(0.72 0.09 205);
+  --chart-4: oklch(0.66 0.03 255);
+  --chart-5: oklch(0.60 0.02 152);
+
+  /* 사이드바는 본문보다 한 단 어둡게 — 셸과 내용을 가른다 */
+  --sidebar: oklch(0.14 0.012 262.88);
+  --sidebar-foreground: oklch(0.94 0.004 262.88);
+  --sidebar-primary: oklch(0.68 0.17 262.88);
+  --sidebar-primary-foreground: oklch(0.16 0.02 262.88);
+  --sidebar-accent: oklch(0.30 0.06 262.88);
+  --sidebar-accent-foreground: oklch(0.93 0.03 262.88);
+  --sidebar-border: oklch(0.28 0.01 260);
+  --sidebar-ring: oklch(0.66 0.16 262.88);
+}
+
 @layer base {
   html {
     min-width: 320px;
@@ -236,3 +294,4 @@
 .scrollbar-none::-webkit-scrollbar {
   display: none;
 }
+

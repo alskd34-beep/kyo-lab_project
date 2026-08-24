@@ -8,6 +8,7 @@ import { isAdminOnlyPath } from '@shared/route-access'
 import { useAuth } from '@frontend/lib/auth-context'
 import Chatbot from '@frontend/components/dashboard/chatbot'
 import NotificationBell from '@frontend/components/dashboard/notification-bell'
+import { ThemeToggle } from '@frontend/components/common/theme-toggle'
 import { Separator } from '@frontend/components/ui/separator'
 import {
   SidebarInset, SidebarProvider, SidebarTrigger,
@@ -72,7 +73,8 @@ export default function MenuLayout({ children }: { children: React.ReactNode }) 
                 className="mx-2 data-[orientation=vertical]:h-4 data-[orientation=vertical]:self-center"
               />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              <ThemeToggle />
               <NotificationBell />
             </div>
           </div>
