@@ -52,3 +52,6 @@ pnpm-debug.log*
 next-env.d.ts
 
 .gstack/
+
+# 스킬 도구 — .claude/skills 에 같은 내용이 있어 저장소에 두 벌 둘 필요가 없다
+.agents/
