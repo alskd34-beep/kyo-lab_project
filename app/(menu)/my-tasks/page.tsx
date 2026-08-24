@@ -94,7 +94,7 @@ function ReadinessModal({
         <span className="flex items-center gap-2">
           <span className={cn(
             "flex size-8 items-center justify-center rounded-md",
-            isBlocked ? "bg-destructive/10 text-destructive" : "bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-300",
+            isBlocked ? "bg-destructive/10 text-destructive" : "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
           )}>
             {isBlocked ? <XCircle className="size-4" /> : <ShieldAlert className="size-4" />}
           </span>

@@ -51,7 +51,9 @@ const VARIANT_STYLE: Record<
   // 앰버는 토큰이 없어 리터럴을 쓴다 — 다크에서는 명도만 뒤집는다(50->950, 600->300).
   warning: {
     icon: AlertTriangle,
-    iconClassName: "bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-300",
+    /* amber-600 은 옅은 앰버 배경 위에서 3.2:1 이라 아이콘이 흐리게 읽힌다.
+       한 단 내려 대비를 확보한다(다크는 이미 밝은 쪽이라 그대로). */
+    iconClassName: "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
     buttonVariant: "default",
   },
   danger: {

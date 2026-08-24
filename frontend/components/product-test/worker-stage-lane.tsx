@@ -78,7 +78,7 @@ export function DDay({ due, className }: { due: string | null; className?: strin
     dd <= 3
       ? "border-red-300 bg-red-50 text-red-600 dark:border-red-700 dark:bg-red-950 dark:text-red-300"
       : dd <= 7
-        ? "border-amber-300 bg-amber-50 text-amber-600 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-300"
+        ? "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-300"
         : "border-border bg-muted text-muted-foreground"
 
   return (

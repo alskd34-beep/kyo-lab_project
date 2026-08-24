@@ -450,7 +450,7 @@ export default function TestersPage() {
   const summaryCards = [
     { label: "활성 시험자", value: summary.active, suffix: `/ ${testers.length}명`, tone: "text-foreground" },
     { label: "단독 가능", value: summary.solo, suffix: "명", tone: "text-blue-600" },
-    { label: "2인 가능", value: summary.duo, suffix: "명", tone: "text-amber-600" },
+    { label: "2인 가능", value: summary.duo, suffix: "명", tone: "text-amber-700 dark:text-amber-400" },
   ]
 
   // ─── 자격 탭 파생값 ─────────────────────────────────────────────────────────

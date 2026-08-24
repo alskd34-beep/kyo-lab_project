@@ -56,7 +56,7 @@ export default function QcDashboardPage() {
     { key: "inProgress",   label: "진행중",    value: data.counts.inProgress },
     { key: "completed",    label: "완료",      value: data.counts.completed },
     { key: "delayed",      label: "지연",      value: data.counts.delayed,    tone: data.counts.delayed > 0 ? "text-destructive" : undefined },
-    { key: "unassigned",   label: "미배정",    value: data.counts.unassigned, tone: data.counts.unassigned > 0 ? "text-amber-600" : undefined },
+    { key: "unassigned",   label: "미배정",    value: data.counts.unassigned, tone: data.counts.unassigned > 0 ? "text-amber-700 dark:text-amber-400" : undefined },
     { key: "psychotropic", label: "향정신성",  value: data.psychotropic },
     { key: "newProducts",  label: "신규 품목", value: data.newProducts },
     { key: "reassign",     label: "재배정",    value: data.reassignTotal },
@@ -174,10 +174,10 @@ export default function QcDashboardPage() {
                 <div className="flex min-w-0 items-center gap-2 px-1 text-xs leading-normal font-medium text-muted-foreground sm:gap-3">
                   <span className="min-w-0 flex-1 truncate sm:w-20 sm:flex-none">시험자</span>
                   <span className="hidden min-w-0 flex-1 sm:block" />
-                  <span className="w-10 shrink-0 text-center text-red-600">HIGH</span>
-                  <span className="w-10 shrink-0 text-center text-amber-600">MED</span>
+                  <span className="w-10 shrink-0 text-center text-red-600 dark:text-red-400">HIGH</span>
+                  <span className="w-10 shrink-0 text-center text-amber-700 dark:text-amber-400">MED</span>
                   {/* 난이도는 한 줄 눈금이다 — LOW 는 '괜찮다(초록)'가 아니라 눈금의 아래쪽이라 브랜드 파랑 */}
-                  <span className="w-10 shrink-0 text-center text-blue-600">LOW</span>
+                  <span className="w-10 shrink-0 text-center text-blue-600 dark:text-blue-400">LOW</span>
                 </div>
                 {data.byTesterDifficulty.length === 0 ? (
                   <p className="py-6 text-center text-sm break-keep text-muted-foreground">배정된 미완료 오더가 없습니다.</p>
@@ -195,9 +195,9 @@ export default function QcDashboardPage() {
                           </>
                         )}
                       </div>
-                      <span className="w-10 shrink-0 text-center text-sm font-semibold tabular-nums text-red-600">{t.high}</span>
-                      <span className="w-10 shrink-0 text-center text-sm font-semibold tabular-nums text-amber-600">{t.medium}</span>
-                      <span className="w-10 shrink-0 text-center text-sm font-semibold tabular-nums text-blue-600">{t.low}</span>
+                      <span className="w-10 shrink-0 text-center text-sm font-semibold tabular-nums text-red-600 dark:text-red-400">{t.high}</span>
+                      <span className="w-10 shrink-0 text-center text-sm font-semibold tabular-nums text-amber-700 dark:text-amber-400">{t.medium}</span>
+                      <span className="w-10 shrink-0 text-center text-sm font-semibold tabular-nums text-blue-600 dark:text-blue-400">{t.low}</span>
                     </div>
                   )
                 })}

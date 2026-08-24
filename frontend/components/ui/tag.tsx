@@ -15,14 +15,19 @@ import { cn } from "@frontend/lib/utils"
 export type TagColor = "blue" | "green" | "yellow" | "red" | "mono" | "indigo" | "slate"
 export type TagSize = "sm" | "md"
 
+/*
+ * 채움색은 600 대를 쓴다. 500 대 위의 흰 글자는 3.8:1 밖에 안 나와
+ * 본문 기준(4.5:1)에 못 미쳤다 - 한 단 내리면 5:1 을 넘긴다.
+ * 배지는 작은 글자라 대비를 특히 챙겨야 한다.
+ */
 const COLOR_CLASS: Record<TagColor, string> = {
-  blue: "bg-blue-500 text-white",
-  green: "bg-green-500 text-white",
-  yellow: "bg-amber-500 text-white",
-  red: "bg-red-500 text-white",
-  mono: "bg-slate-500 text-white",
-  indigo: "bg-indigo-500 text-white",
-  slate: "bg-slate-400 text-white",
+  blue: "bg-blue-600 text-white",
+  green: "bg-green-600 text-white",
+  yellow: "bg-amber-600 text-white",
+  red: "bg-red-600 text-white",
+  mono: "bg-slate-600 text-white",
+  indigo: "bg-indigo-600 text-white",
+  slate: "bg-slate-500 text-white",
 }
 
 const SIZE_CLASS: Record<TagSize, string> = {

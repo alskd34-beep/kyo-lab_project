@@ -72,7 +72,7 @@ function calibrationDueLine(dueDate: string | null) {
   const urgency = getCalibrationUrgency(dueDate)
   // 날짜는 세로로 열을 이루므로 폭이 고정되는 tabular-nums 로 맞춘다
   if (urgency === "expired") return <span className="font-medium tabular-nums text-red-600 dark:text-red-300">다음 {dueDate} · 만료</span>
-  if (urgency === "soon") return <span className="font-medium tabular-nums text-amber-600 dark:text-amber-300">다음 {dueDate} · 30일 이내</span>
+  if (urgency === "soon") return <span className="font-medium tabular-nums text-amber-700 dark:text-amber-300">다음 {dueDate} · 30일 이내</span>
   return <span className="tabular-nums">다음 {dueDate}</span>
 }
 
@@ -237,7 +237,7 @@ export default function EquipmentMasterPage() {
               30일 이내{" "}
               <span className={cn(
                 "font-semibold tabular-nums",
-                calibrationAlert.soon > 0 ? "text-amber-600 dark:text-amber-300" : "text-foreground",
+                calibrationAlert.soon > 0 ? "text-amber-700 dark:text-amber-300" : "text-foreground",
               )}>{calibrationAlert.soon}</span>대
             </p>
           )}
