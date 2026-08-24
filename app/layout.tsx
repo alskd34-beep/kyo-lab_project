@@ -44,7 +44,11 @@ export default function RootLayout({
       suppressHydrationWarning
       className={cn("antialiased", fontMono.variable, "font-sans", pretendard.variable)}
     >
-      <body>
+      {/* 일부 브라우저 확장이 하이드레이션 전에 <body> 에 style 을 주입한다
+          (예: -webkit-text-size-adjust). 서버 HTML 은 깨끗하므로 앱의 문제는
+          아니지만 React 가 속성 불일치로 경고한다. suppressHydrationWarning 은
+          한 단계만 적용되어 <html> 것으로는 <body> 가 덮이지 않으므로 따로 둔다. */}
+      <body suppressHydrationWarning>
         <ThemeProvider>
           <AuthProvider>
             <ToastMessageProvider>
