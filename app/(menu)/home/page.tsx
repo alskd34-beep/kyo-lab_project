@@ -342,7 +342,7 @@ export default function HomePage() {
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
         {isLoading
           ? Array.from({ length: 6 }).map((_, i) => (
               <Card key={i} className="gap-1 border-l-4 border-l-muted px-4 py-4">
@@ -374,6 +374,49 @@ export default function HomePage() {
               <Badge variant="outline" className="border-amber-200 text-amber-700">D-7 이내</Badge>
             </div>
           </div>
+          <div className="flex flex-col gap-2 p-3 md:hidden">
+            {isLoading
+              ? Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="flex flex-col gap-2 rounded-md border p-3">
+                    <Skeleton className="h-4 w-2/3" />
+                    <Skeleton className="h-3 w-1/2" />
+                    <div className="flex items-center justify-between">
+                      <Skeleton className="h-5 w-16 rounded-md" />
+                      <Skeleton className="h-4 w-12" />
+                    </div>
+                  </div>
+                ))
+              : sortedData.length === 0
+                ? (
+                    <p className="py-10 text-center text-sm text-muted-foreground">
+                      {loadError
+                        ? `목록을 불러오지 못했습니다. ${loadError}`
+                        : '마감 임박 오더가 없습니다.'}
+                    </p>
+                  )
+                : sortedData.slice(0, 10).map(row => {
+                    const statusCfg = stageStyle(row.status)
+                    return (
+                      <div key={row.id} className="rounded-md border bg-card p-3">
+                        <div className="flex min-w-0 items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-foreground">{row.productName}</p>
+                            <p className="mt-0.5 text-xs leading-normal text-muted-foreground">제조번호 {row.batchNo}</p>
+                          </div>
+                          <Badge variant="outline" className="shrink-0 gap-1.5">
+                            <span className={cn('size-1.5 rounded-full', statusCfg.dot)} />
+                            {row.status}
+                          </Badge>
+                        </div>
+                        <div className="mt-3 flex items-center justify-between border-t pt-2 text-xs leading-normal">
+                          <span className="text-muted-foreground">QC 완료예정 {row.dueDate ?? '-'}</span>
+                          <span className={cn('tabular-nums', dDayColor(row.dDay))}>{dDayLabel(row.dDay)}</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+          </div>
+          <div className="hidden md:block">
           <Table>
             {/* 논리 열은 3개(품목·기한·상태)지만 자동 펼침으로 최대 5칸이 된다.
                 table-fixed 에서 <col> 이 3개(합 100%)뿐이면 4·5번째 칸이 폭 0으로 접혀
@@ -455,6 +498,7 @@ export default function HomePage() {
                   })}
             </TableBody>
           </Table>
+          </div>
         </Card>
 
         <Card className="flex-[2] gap-0 overflow-hidden py-0">
