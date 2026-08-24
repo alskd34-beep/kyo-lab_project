@@ -13,14 +13,14 @@ export function ComingSoon({
   icon?: LucideIcon
 }) {
   return (
-    <div className="flex h-full w-full items-center justify-center p-10">
-      <div className="flex flex-col items-center text-center">
+    <div className="flex h-full w-full items-center justify-center p-4 sm:p-10">
+      <div className="flex max-w-md flex-col items-center text-center">
         <div className="flex size-11 items-center justify-center rounded-md bg-primary text-primary-foreground">
           <Icon size={20} />
         </div>
-        <h1 className="mt-4 text-xl font-semibold text-slate-700">{title}</h1>
+        <h1 className="mt-4 break-keep text-xl font-semibold text-slate-700">{title}</h1>
         <Tag color="slate" size="md" className="mt-3">예정 기능</Tag>
-        <p className="mt-2 text-sm text-slate-500">{description}</p>
+        <p className="mt-2 break-keep text-sm text-slate-500">{description}</p>
       </div>
     </div>
   )

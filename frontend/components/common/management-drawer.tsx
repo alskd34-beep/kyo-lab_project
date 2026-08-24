@@ -54,18 +54,18 @@ export function ManagementDrawer({
       <SheetContent
         side="right"
         style={{ '--sheet-width': sizeWidth[size] } as CSSProperties}
-        className={cn('flex w-full flex-col gap-0 p-0', className)}
+        className={cn('flex w-[calc(100vw-1.5rem)] flex-col gap-0 p-0 sm:w-full', className)}
       >
-        <SheetHeader className="border-b px-5 py-4 pr-14">
+        <SheetHeader className="border-b px-4 py-4 pr-14 sm:px-5">
           <SheetTitle className="text-base font-semibold">{title}</SheetTitle>
           <SheetDescription className="text-xs leading-5">
             {description}
           </SheetDescription>
         </SheetHeader>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5 sm:py-5">
           {children}
         </div>
-        <SheetFooter className="border-t bg-card px-5 py-4 sm:flex-row sm:justify-end">
+        <SheetFooter className="border-t bg-card px-4 py-4 sm:flex-row sm:justify-end sm:px-5">
           {footer}
         </SheetFooter>
       </SheetContent>

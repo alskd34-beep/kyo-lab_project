@@ -176,7 +176,7 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
       <DialogContent size="full" className="gap-0 overflow-hidden p-0" showCloseButton={false}>
         <DialogTitle className="sr-only">{testerName} 배정 현황</DialogTitle>
         <DialogDescription className="sr-only">담당자가 맡은 QC 과제를 계열별로 확인합니다.</DialogDescription>
-        <div className="flex h-full w-full overflow-hidden bg-muted/30">
+        <div className="flex h-full w-full flex-col overflow-hidden bg-muted/30 md:flex-row">
         {/* ── 좌측: 배정 현황 ─────────────────────────────────────────────── */}
         <div className="flex min-w-0 flex-1 flex-col overflow-y-auto overscroll-contain p-4 md:p-5">
           {/* 헤더 */}
@@ -188,7 +188,7 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
                 <p className="text-xs font-medium text-slate-500">QC 과제 배정 현황</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <StatChip label="총 그룹" value={groups.length} />
               <StatChip label="총 과제" value={`${totalCount}건`} />
               <StatChip label="긴급" value={`${urgentCount}건`} tone="red" />
@@ -224,11 +224,11 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
                   <button onClick={() => toggle(g.key)} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50">
                     {isCol ? <ChevronRight className="size-4 text-slate-400" /> : <ChevronDown className="size-4 text-slate-400" />}
                     <Layers className="size-4 text-blue-600" />
-                    <span className="text-sm font-bold text-slate-900">{g.label}</span>
+                    <span className="min-w-0 truncate text-sm font-bold text-slate-900">{g.label}</span>
                     {g.isFamily && (
                       <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-0.5 text-xs leading-normal font-semibold text-blue-700">동시분석 {g.rows.length}건</span>
                     )}
-                    <div className="ml-auto flex items-center gap-4 text-xs font-medium text-slate-500">
+                    <div className="ml-auto hidden shrink-0 items-center gap-4 text-xs font-medium text-slate-500 sm:flex">
                       <span>총 과제 <b className="text-slate-800">{g.rows.length}건</b></span>
                       <span>총공수 <b className="text-slate-800">{sumWork(g.rows)}일</b></span>
                       <span>완료예정 <b className="text-red-500">{maxDue(g.rows) ?? "-"}</b></span>
@@ -273,7 +273,7 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
         </div>
 
         {/* ── 우측: 담당자 상세 ────────────────────────────────────────────── */}
-        <aside className="flex w-[340px] shrink-0 flex-col border-l border-slate-200 bg-white">
+        <aside className="flex max-h-[42dvh] w-full shrink-0 flex-col border-t border-slate-200 bg-white md:max-h-none md:w-[340px] md:border-t-0 md:border-l">
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
             <h3 className="text-sm font-bold text-slate-900">담당자 상세</h3>
             <button type="button" onClick={onClose} aria-label="닫기" className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"><X className="size-4" /></button>
