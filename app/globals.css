@@ -239,7 +239,7 @@
   height: 14px;
   border: 1.5px solid var(--input);
   /* 모서리 기준(rounded-md)을 따른다 — 3px 리터럴은 이 값만 어긋나 있었다. */
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   background-color: var(--background);
   cursor: pointer;
   position: relative;
@@ -294,4 +294,3 @@
 .scrollbar-none::-webkit-scrollbar {
   display: none;
 }
-

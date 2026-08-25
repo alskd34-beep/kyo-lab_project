@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Bell, Check, AlertCircle, AlertTriangle, Info } from "lucide-react"
+import { cn } from "@frontend/lib/utils"
 
 interface Notif {
   id: string
@@ -19,7 +20,7 @@ const SEV_ICON: Record<string, React.ReactNode> = {
   info: <Info size={15} className="text-blue-500" />,
 }
 
-export default function NotificationBell() {
+export default function NotificationBell({ className }: { className?: string }) {
   const [open, setOpen] = useState(false)
   const [rows, setRows] = useState<Notif[]>([])
   const [unread, setUnread] = useState(0)
@@ -65,7 +66,7 @@ export default function NotificationBell() {
     <div className="relative" ref={ref}>
       <button
         onClick={() => { setOpen(o => !o); if (!open) void load() }}
-        className="relative rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        className={cn("relative rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground", className)}
         aria-label="알림"
       >
         <Bell size={16} />

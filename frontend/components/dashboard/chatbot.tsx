@@ -398,20 +398,18 @@ export default function Chatbot() {
       {/* ── Floating Button ───────────────────────────────────────────────── */}
       <button
         onClick={() => (open ? handleClose() : setOpen(true))}
-        className={`fixed right-6 z-30 flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-[opacity,transform] duration-300 hover:scale-105 active:scale-95 ${open ? 'bottom-6' : 'bottom-24'}`}
+        className={`z-30 flex size-7 items-center justify-center rounded-md bg-primary shadow-sm transition-[opacity,transform] duration-300 hover:bg-primary/90 active:scale-95 md:fixed md:right-6 md:size-14 md:rounded-full md:shadow-lg md:hover:scale-105 ${open ? 'md:bottom-6' : 'md:bottom-24'}`}
         style={{
           /* 브랜드 파랑 한 계열. 예전에는 blue-600 -> violet-600 이라
              앱에서 유일하게 보라가 남아 있는 자리였다(인라인 hex 라 클래스 검색에 안 걸렸다). */
-          background: 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)',
-          boxShadow: '0 0 0 0 rgba(37, 99, 235, 0.4)',
-          animation: open ? 'none' : 'chatbotPulse 2.5s ease-in-out infinite',
+          animation: open || viewportWidth < FLOATING_BREAKPOINT ? 'none' : 'chatbotPulse 2.5s ease-in-out infinite',
         }}
         title="QCink AI 에이전트"
       >
         {open ? (
-          <X size={22} className="text-white" />
+          <X className="size-3.5 text-primary-foreground md:size-5.5" />
         ) : (
-          <Sparkles size={22} className="text-white" style={{ animation: 'sparkleWiggle 3s ease-in-out infinite' }} />
+          <Sparkles className="size-3.5 text-primary-foreground md:size-5.5" style={{ animation: 'sparkleWiggle 3s ease-in-out infinite' }} />
         )}
       </button>
 

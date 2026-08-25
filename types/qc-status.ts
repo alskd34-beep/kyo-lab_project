@@ -120,7 +120,7 @@ export const STAGE_STYLE: Record<string, StageStyle> = {
   승인전:   { dot: 'bg-blue-700',  cls: 'border-blue-300 text-blue-800 bg-blue-100/60 dark:border-blue-700 dark:text-blue-200 dark:bg-blue-900/40' },
   승인완료: { dot: 'bg-blue-800',  cls: 'border-blue-400 text-blue-900 bg-blue-100 dark:border-blue-600 dark:text-blue-200 dark:bg-blue-900/60' },
   지연:     { dot: 'bg-red-500',     cls: 'border-red-200 text-red-700 bg-red-50 dark:border-red-800 dark:text-red-300 dark:bg-red-950' },
-  대기:     { dot: 'bg-slate-400',   cls: 'border-slate-200 text-slate-600 bg-slate-50 dark:border-border dark:text-muted-foreground dark:bg-muted' },
+  대기:     { dot: 'bg-amber-500',   cls: 'border-amber-200 text-amber-700 bg-amber-50 dark:border-amber-800 dark:text-amber-300 dark:bg-amber-950' },
   삭제:     { dot: 'bg-slate-300',   cls: 'border-slate-200 text-slate-400 bg-slate-50 dark:border-border dark:text-muted-foreground/70 dark:bg-muted/60' },
 }
 

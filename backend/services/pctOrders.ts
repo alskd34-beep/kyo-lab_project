@@ -29,6 +29,7 @@ export interface PctOrderRow {
   note: string | null
   ingestState: string
   source: 'manual' | 'auto'
+  testItemCount: number | null
   workdays: number | null   // 품목코드 기준 공수(일, DAY) — product_workload.avg_workdays
   hasJob: boolean           // QC 작업 시작 여부
   locked: boolean           // 관리자 확정/LOCK (원칙1·3). 컬럼 미적용 환경에서는 false
@@ -131,6 +132,8 @@ export async function listOrders(filters: {
   const codes = [...new Set(orders.map(o => o.product_code as string))]
   const workdaysByCode = new Map<string, number>()
   const jobOrderIds = new Set<string>()
+  const testItemCountByOrder = new Map<string, number>()
+  const baselineItemCountByCode = new Map<string, number>()
   {
     const { data: wl } = await supabaseAdmin
       .from('product_workload')
@@ -139,6 +142,33 @@ export async function listOrders(filters: {
     for (const w of wl ?? []) {
       const d = Number(w.avg_workdays) || 0
       if (d > 0) workdaysByCode.set(w.product_code as string, d)
+    }
+  }
+  {
+    const [{ data: products }, { data: orderItems }] = await Promise.all([
+      supabaseAdmin.from('products').select('id, product_code').in('product_code', codes),
+      supabaseAdmin.from('pct_order_test_items').select('order_id, is_excluded').in('order_id', orders.map(o => o.id as string)),
+    ])
+    const codeByProductId = new Map((products ?? []).map(p => [p.id as string, p.product_code as string]))
+    const productIds = [...codeByProductId.keys()]
+    if (productIds.length > 0) {
+      const { data: productItems } = await supabaseAdmin
+        .from('product_test_items')
+        .select('product_id')
+        .in('product_id', productIds)
+      for (const item of productItems ?? []) {
+        const code = codeByProductId.get(item.product_id as string)
+        if (code) baselineItemCountByCode.set(code, (baselineItemCountByCode.get(code) ?? 0) + 1)
+      }
+    }
+    const hasOrderItems = new Set<string>()
+    for (const item of orderItems ?? []) {
+      const orderId = item.order_id as string
+      hasOrderItems.add(orderId)
+      if (!item.is_excluded) testItemCountByOrder.set(orderId, (testItemCountByOrder.get(orderId) ?? 0) + 1)
+    }
+    for (const orderId of hasOrderItems) {
+      if (!testItemCountByOrder.has(orderId)) testItemCountByOrder.set(orderId, 0)
     }
   }
   // QC 작업 시작 여부
@@ -164,6 +194,7 @@ export async function listOrders(filters: {
     note: (o.note as string) ?? null,
     ingestState: o.ingest_state as string,
     source: o.ingest_state === 'manual' ? 'manual' : 'auto',
+    testItemCount: testItemCountByOrder.get(o.id as string) ?? baselineItemCountByCode.get(o.product_code as string) ?? null,
     workdays: workdaysByCode.get(o.product_code as string) ?? null,
     hasJob: jobOrderIds.has(o.id as string),
     locked: !!o.locked,   // select('*') 결과. 컬럼 미적용 시 undefined → false
@@ -275,6 +306,7 @@ export async function createOrder(input: {
     note: (o.note as string) ?? null,
     ingestState: o.ingest_state as string,
     source: 'manual',
+    testItemCount: null,
     workdays: null,
     hasJob: false,
     locked: !!o.locked,
