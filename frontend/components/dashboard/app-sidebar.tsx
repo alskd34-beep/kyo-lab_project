@@ -204,6 +204,15 @@ const PATH_MAP: Record<string, string> = {
 const TESTER_MENU_ORDER = ["home", "my-tasks", "test-mgmt", "stability", "schedule"]
 const TESTER_LABEL_OVERRIDE: Record<string, string> = { "my-tasks": "할 일" }
 
+/**
+ * 권한 확인 전에 자리만 잡아 둘 메뉴 묶음의 항목 수.
+ *
+ * 목적이 "목록이 들어올 때 사이드바가 늘거나 줄어 덜컥이지 않게" 하는 것이라 **개수가 곧 높이다.**
+ * `NAV_SECTIONS` 를 세는 대신 관리자 화면에 실제로 그려지는 수(메뉴 5 · 관리 3 · 설정 2)에 맞췄다 —
+ * 원본에는 `hidden` 항목이 섞여 있어 그대로 세면 한 칸 더 잡고 나중에 줄어든다.
+ */
+const SKELETON_GROUPS = [5, 3, 2]
+
 function menuSectionsFor(isAdmin: boolean): NavSection[] {
   if (isAdmin) return NAV_SECTIONS
   const rank = (id: string) => {
@@ -309,7 +318,33 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
 
       <SidebarContent>
-        {sections.map(section => (
+        {/* 권한이 확인되기 전에는 목록을 그리지 않는다.
+            사이드바는 이제 서버에서도 그려지는데(`app/(menu)/layout.tsx` 참고), 그 시점의
+            `user` 는 아직 null 이라 그대로 그리면 **관리자에게 시험자 메뉴를 잠깐 보여준 뒤
+            항목이 우르르 끼어드는** 모양이 된다. 자리와 개수만 잡아 두고 기다린다.
+            (아래 사용자 칸이 authLoading 에 쓰는 스켈레톤과 같은 방침이다) */}
+        {authLoading ? (
+          SKELETON_GROUPS.map((rows, gi) => (
+            <SidebarGroup key={gi}>
+              <SidebarGroupLabel>
+                <Skeleton className="h-3 w-14" />
+              </SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {Array.from({ length: rows }).map((_, i) => (
+                    <SidebarMenuItem key={i}>
+                      {/* 실제 메뉴 버튼과 같은 높이(h-8)·여백으로 두어야 목록이 들어올 때 안 밀린다 */}
+                      <div className="flex h-8 items-center gap-2 px-2">
+                        <Skeleton className="size-4 shrink-0" />
+                        <Skeleton className="h-3 flex-1" />
+                      </div>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ))
+        ) : sections.map(section => (
           <SidebarGroup key={section.title}>
             <SidebarGroupLabel>{section.title}</SidebarGroupLabel>
             <SidebarGroupContent>
