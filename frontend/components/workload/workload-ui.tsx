@@ -71,16 +71,30 @@ export function KpiCard({
   return (
     // 카드 왼쪽에 두르던 굵은 색 띠(border-l-4)를 걷어냈다.
     // 강조는 띠가 아니라 숫자 크기와 아이콘 색이 한다.
-    <Card className="min-w-0 gap-1 px-4 py-3.5">
+    <Card
+      className={cn(
+        /* 모바일은 라벨·숫자를 한 줄로 눕혀 타일 높이를 절반으로 줄인다 —
+           다섯 칸이 세로로 세 줄(300px 가까이) 쌓여 정작 봐야 할 품목 목록을
+           화면 밖으로 밀어내던 자리다. */
+        "min-h-8 min-w-0 flex-row items-center justify-between gap-1 px-2 py-1",
+        /* sm:justify-start — 격자는 칸 높이를 서로 맞추므로(stretch) justify-between 을
+           남겨 두면 짧은 칸에서 숫자가 바닥에 붙어 원래 모양과 달라진다. */
+        "sm:flex-col sm:items-stretch sm:justify-start sm:gap-1 sm:px-4 sm:py-3.5",
+      )}
+    >
       <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-muted-foreground">
-        <span className={cn("flex shrink-0 items-center", accent ?? "text-muted-foreground")}>{icon}</span>
+        {/* 좁은 칸에서 아이콘 20px 를 빼야 '평균 표준 소요일' 같은 라벨이 잘리지 않는다.
+            아이콘 색이 이어 주던 아래 차트도 모바일에서는 목록 뒤로 내려가 있다. */}
+        <span className={cn("hidden shrink-0 items-center sm:flex", accent ?? "text-muted-foreground")}>{icon}</span>
         <span className="min-w-0 truncate">{label}</span>
       </span>
       {/* 320px 2열 격자에서 "12.5시간" 같은 값이 칸을 밀어낸다 — 모바일에서 한 단 줄인다 */}
-      <span className="min-w-0 truncate text-xl font-semibold tabular-nums text-foreground sm:text-2xl" title={value}>
+      <span className="min-w-0 shrink-0 truncate text-sm font-semibold tabular-nums text-foreground sm:text-2xl" title={value}>
         {value}
       </span>
-      {hint && <span className="text-xs leading-normal break-keep text-muted-foreground">{hint}</span>}
+      {/* 한 줄로 눕힌 모바일에는 셋째 조각이 들어갈 자리가 없다. 두 힌트("전체 N 품목 중" ·
+          "공수 합계와 무관한 별도 값")는 화면 머리말 줄이 이미 같은 말을 하고 있다. */}
+      {hint && <span className="hidden text-xs leading-normal break-keep text-muted-foreground sm:block">{hint}</span>}
     </Card>
   )
 }

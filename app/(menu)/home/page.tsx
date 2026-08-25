@@ -416,31 +416,37 @@ function AdminHome() {
           내용이 세로로 넘치는 순간 카드가 선 하나로 찌부러지므로 줄어들지 않게 못 박는다. */}
       <Card className="shrink-0 gap-0 py-0">
         <div className="flex flex-col divide-y lg:flex-row lg:divide-x lg:divide-y-0">
-          <div className="grid grid-cols-2 gap-5 px-4 py-4 md:px-5 lg:w-[38%] lg:shrink-0">
+          {/* 이 카드는 홈의 본문이다 — 접지 않는다. 대신 눕혀서 줄인다.
+              375px 에서 이 한 장이 290px, 화면의 절반을 먹어 아래 「기한 임박 오더」를
+              y=376 까지 밀어냈다. 숫자 한 단(4xl→3xl)과 설명 한 줄을 모바일에서 덜어낸다. */}
+          <div className="grid grid-cols-2 gap-5 px-4 py-3 md:px-5 md:py-4 lg:w-[38%] lg:shrink-0">
             {isLoading
               ? Array.from({ length: 2 }).map((_, i) => (
+                  /* 뼈대도 실제 타일과 같은 모양으로 — 모바일에는 설명 줄이 없다 */
                   <div key={i} className="flex flex-col gap-2">
                     <Skeleton className="h-3 w-16" />
-                    <Skeleton className="h-9 w-16" />
-                    <Skeleton className="h-3 w-32" />
+                    <Skeleton className="h-7 w-16 sm:h-9" />
+                    <Skeleton className="hidden h-3 w-32 sm:block" />
                   </div>
                 ))
               : alerts.map(alert => (
                   <div key={alert.label} className="flex min-w-0 flex-col">
                     <span className="text-xs font-medium text-muted-foreground">{alert.label}</span>
-                    <span className={cn('mt-0.5 text-4xl font-semibold tabular-nums', alert.tone)}>
+                    <span className={cn('mt-0.5 text-3xl font-semibold tabular-nums sm:text-4xl', alert.tone)}>
                       {alert.value}
                       <span className="ml-1 text-sm font-medium text-muted-foreground">건</span>
                     </span>
-                    {/* break-keep: 한글은 단어 중간에서 끊으면 안 읽힌다("지났습/니다") */}
-                    <span className="mt-1 text-xs leading-normal break-keep text-muted-foreground">
+                    {/* 설명 줄은 모바일에서 접는다 — 좁은 2열에서 두 줄로 늘어지는데,
+                        '기한초과'·'D-7 임박'이라는 라벨이 이미 같은 말을 하고 있다.
+                        break-keep: 한글은 단어 중간에서 끊으면 안 읽힌다("지났습/니다") */}
+                    <span className="mt-1 hidden text-xs leading-normal break-keep text-muted-foreground sm:block">
                       {alert.hint}
                     </span>
                   </div>
                 ))}
           </div>
 
-          <div className="min-w-0 flex-1 px-4 py-4 md:px-5">
+          <div className="min-w-0 flex-1 px-4 py-3 md:px-5 md:py-4">
             {isLoading ? (
               <div className="flex flex-col gap-3">
                 <Skeleton className="h-5 w-28" />

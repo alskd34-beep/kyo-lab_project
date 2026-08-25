@@ -1,7 +1,8 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { RefreshCw, Loader2 } from "lucide-react"
+import { RefreshCw, Loader2, Gauge } from "lucide-react"
+import { MobileFilterPanel } from "@frontend/components/common/mobile-filter-panel"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
@@ -62,6 +63,12 @@ export default function QcDashboardPage() {
     { key: "reassign",     label: "재배정",    value: data.reassignTotal },
   ] : []
 
+  /* 접었을 때 막대에 남길 한 줄. 여덟 칸을 다 적을 수 없으니
+     전체 규모와 조치가 필요한 두 숫자(지연·미배정)만 남긴다. */
+  const kpiSummary = data
+    ? `전체 ${data.counts.total.toLocaleString("ko-KR")}건 · 지연 ${data.counts.delayed} · 미배정 ${data.counts.unassigned}`
+    : ""
+
   const maxDays = data && data.byTesterDays.length > 0
     ? Math.max(...data.byTesterDays.map(d => d.days), 1)
     : 1
@@ -85,18 +92,24 @@ export default function QcDashboardPage() {
 
       {loading && !data ? (
         <>
-          {/* KPI skeleton — 여덟 칸을 카드 한 장 안에서 실선으로 나눈다 */}
-          <Card className="shrink-0 gap-0 py-0">
-            {/* gap-px + bg-border: divide-* 는 그리드가 줄바꿈되면 칸 위치와 선이 어긋난다 */}
-            <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <div key={i} className="flex min-w-0 flex-col gap-2 bg-card px-4 py-3.5">
-                  <Skeleton className="h-3 w-16" />
-                  <Skeleton className="h-7 w-12" />
-                </div>
-              ))}
-            </div>
-          </Card>
+          {/* KPI skeleton — 여덟 칸을 카드 한 장 안에서 실선으로 나눈다.
+              본문과 같은 접기 막대를 두어 로딩이 끝날 때 상단 높이가 튀지 않게 한다. */}
+          <MobileFilterPanel label="요약" icon={Gauge} summary={<Skeleton className="h-3 w-32" />}>
+            <Card className="shrink-0 gap-0 py-0">
+              {/* gap-px + bg-border: divide-* 는 그리드가 줄바꿈되면 칸 위치와 선이 어긋난다 */}
+              <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="flex min-h-8 min-w-0 items-center justify-between gap-2 bg-card px-2 py-1 sm:min-h-0 sm:flex-col sm:items-stretch sm:justify-start sm:gap-2 sm:px-4 sm:py-3.5"
+                  >
+                    <Skeleton className="h-3 w-16" />
+                    <Skeleton className="h-4 w-10 sm:h-7 sm:w-12" />
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </MobileFilterPanel>
           {/* 차트 skeleton */}
           <div className="grid min-w-0 shrink-0 grid-cols-1 gap-4 lg:grid-cols-2">
             {Array.from({ length: 2 }).map((_, i) => (
@@ -119,19 +132,29 @@ export default function QcDashboardPage() {
         </>
       ) : !data ? null : (
         <>
-          {/* KPI — 여덟 장의 카드 대신 카드 한 장을 실선으로 나눈다(테두리 층은 하나만) */}
-          <Card className="shrink-0 gap-0 py-0">
-            <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
-              {kpis.map(k => (
-                <div key={k.key} className="flex min-w-0 flex-col bg-card px-4 py-3.5">
-                  <span className="truncate text-xs font-medium text-muted-foreground">{k.label}</span>
-                  <span className={cn("mt-0.5 text-2xl font-semibold tabular-nums", k.tone ?? "text-foreground")}>
-                    {k.value.toLocaleString("ko-KR")}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </Card>
+          {/* KPI — 여덟 장의 카드 대신 카드 한 장을 실선으로 나눈다(테두리 층은 하나만).
+              375px 에선 이 격자 하나가 340px, 화면의 절반을 먹어 아래 차트를 밀어냈다.
+              모바일에서는 기본으로 접고 조치가 필요한 숫자(지연·미배정)만 막대에 남긴다.
+              sm(640px) 이상에서는 접기 자체가 없어 데스크톱은 지금 모습 그대로다. */}
+          <MobileFilterPanel label="요약" icon={Gauge} summary={kpiSummary}>
+            <Card className="shrink-0 gap-0 py-0">
+              <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
+                {kpis.map(k => (
+                  /* 모바일은 라벨·숫자를 한 줄에 눕히고, sm 부터 원래의 세로 타일로 되돌린다.
+                     격자 칸은 stretch 되므로 sm:justify-start 가 없으면 숫자가 칸 바닥에 붙는다. */
+                  <div
+                    key={k.key}
+                    className="flex min-h-8 min-w-0 items-center justify-between gap-1 bg-card px-2 py-1 sm:min-h-0 sm:flex-col sm:items-stretch sm:justify-start sm:gap-0 sm:px-4 sm:py-3.5"
+                  >
+                    <span className="min-w-0 truncate text-xs font-medium text-muted-foreground">{k.label}</span>
+                    <span className={cn("shrink-0 text-sm font-semibold tabular-nums sm:mt-0.5 sm:text-2xl", k.tone ?? "text-foreground")}>
+                      {k.value.toLocaleString("ko-KR")}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </MobileFilterPanel>
 
           <div className="grid min-w-0 shrink-0 grid-cols-1 gap-4 lg:grid-cols-2">
             {/* 시험자별 보유 DAY */}

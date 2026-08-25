@@ -15,7 +15,7 @@ import {
   Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts"
 import {
-  Beaker, CalendarDays, Cpu, Layers, Pencil, Plus, Search, Timer, Trash2, UserRound,
+  Beaker, CalendarDays, ChartColumn, Cpu, Layers, Pencil, Plus, Search, Timer, Trash2, UserRound,
 } from "lucide-react"
 import { useAuth } from "@frontend/lib/auth-context"
 import { cn } from "@frontend/lib/utils"
@@ -35,6 +35,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@frontend/components/ui/table"
 import { useConfirmMessage } from "@frontend/components/common/confirm-message"
+import { MobileFilterPanel } from "@frontend/components/common/mobile-filter-panel"
 import {
   formatHours, formatLeadDays, formatMinutes, formatVarianceMinutes, formatVarianceRate, minutesToHours,
 } from "@frontend/lib/workload-format"
@@ -274,14 +275,24 @@ export default function ProductWorkloadPage() {
 
   const colCount = canEdit ? SORT_COLUMNS.length + 2 : SORT_COLUMNS.length + 1
 
+  /** 접힌 조회 막대에 한 줄로 남길 "지금 무엇으로 걸러 보고 있나" */
+  const activeFilterLabels = [
+    keyword.trim() ? `"${keyword.trim()}"` : null,
+    dosageFilter !== ALL ? dosageFilter : null,
+    statusFilter !== ALL ? WORKLOAD_STATUS_LABEL[statusFilter as WorkloadStatus] : null,
+    leadTimeFilter !== ALL ? LEAD_TIME_BUCKETS.find(b => b.id === leadTimeFilter)?.label : null,
+    equipmentFilter !== ALL ? equipmentFilter : null,
+  ].filter((v): v is string => !!v)
+
   return (
-    // 세로 flex 컨테이너로 두면 각 섹션이 flex-shrink 로 눌려 차트·표가 잘린다.
-    // 블록 흐름 + space-y 로 쌓아 각 섹션이 내용 높이를 유지하고 페이지 전체가 스크롤되게 한다.
-    <div className="min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto p-4 md:p-6">
+    // 세로 flex 로 되돌린 이유는 order 하나다 — 모바일에서 차트를 목록 뒤로 내려야 하는데
+    // order 는 flex/grid 에서만 듣는다. 예전에 블록 흐름을 쓴 이유(각 섹션이 flex-shrink 로
+    // 눌려 차트·표가 잘린다)는 직계 자식 전부에 shrink-0 을 줘서 막는다.
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4 md:p-6">
       {/* ── 헤더 ───────────────────────────────────────────────────────────
           장식용 아이콘 칩과 "…을 관리합니다" 부제를 걷어냈다. 화면 이름을 되풀이하는
           문장 대신 지금 몇 품목을 보고 있는지(필터가 걸렸으면 전체 대비)를 적는다. */}
-      <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-2">
+      <div className="flex min-w-0 shrink-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-2">
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
           <h1 className="text-lg font-semibold text-foreground">품목별 시험공수 관리</h1>
           {loading ? (
@@ -306,7 +317,7 @@ export default function ProductWorkloadPage() {
 
       {/* 마이그레이션 미적용 안내 */}
       {!loading && !schemaReady && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm break-keep text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+        <div className="shrink-0 rounded-md border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm break-keep text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
           공수 표준 테이블이 아직 생성되지 않아 <strong>예제 데이터(쌍화탕)</strong>를 보여주고 있습니다.
           저장은 되지 않습니다 — <code className="font-mono text-xs">supabase/migrations/0026_workload_standard.sql</code> 을 적용해 주세요.
         </div>
@@ -314,7 +325,7 @@ export default function ProductWorkloadPage() {
 
       {msg && (
         <div className={cn(
-          "rounded-md border px-4 py-2.5 text-sm font-medium break-keep",
+          "shrink-0 rounded-md border px-4 py-2.5 text-sm font-medium break-keep",
           msg.type === "error"
             ? "border-destructive/20 bg-destructive/10 text-destructive"
             : "border-primary/20 bg-primary/5 text-foreground",
@@ -324,7 +335,11 @@ export default function ProductWorkloadPage() {
       )}
 
       {/* ── 검색 · 필터 ──────────────────────────────────────────────────
-          필터가 5개다. 모바일에서는 검색이 한 줄을 다 쓰고 나머지 넷은 2열로 접힌다. */}
+          필터가 5개다. 모바일에서는 검색이 한 줄을 다 쓰고 나머지 넷은 2열로 접힌다.
+
+          그렇게 접어도 세로로 130px 을 먹어, 아래 KPI·차트와 합쳐 상단이 1200px 을
+          넘겼다. 모바일에서는 조회 옵션을 통째로 접고 지금 걸린 조건만 한 줄 남긴다. */}
+      <MobileFilterPanel summary={`${activeFilterLabels.join(" · ") || "전체"} · ${filtered.length}품목`}>
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         <div className="relative w-full sm:min-w-52 sm:flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -356,14 +371,28 @@ export default function ProductWorkloadPage() {
           />
         </div>
       </div>
+      </MobileFilterPanel>
 
-      {/* ── KPI ──────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      {/* ── KPI ──────────────────────────────────────────────────────────
+          다섯 칸이 모바일에서 2열 3줄로 쌓여 300px 가까이 먹는다. 접어 두고
+          평균 두 값만 막대에 남긴다 — 품목 수는 위 머리말 줄이 이미 말하고 있다. */}
+      <MobileFilterPanel
+        icon={ChartColumn}
+        label="요약"
+        summary={`평균 소요일 ${kpi.leadTime != null ? formatLeadDays(kpi.leadTime) : "—"} · 인적 ${formatHours(kpi.human)}`}
+      >
+      {/* 모바일은 한 칸씩 세로로 — 2열이면 '평균 표준 소요일' 이 '평균 표…' 로 잘린다.
+          눕힌 타일 한 줄은 34px 뿐이라 세로로 쌓아도 2열 때(126px)와 큰 차이가 없다. */}
+      <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {loading
           ? Array.from({ length: 5 }).map((_, i) => (
-              <Card key={i} className="min-w-0 gap-1 px-4 py-3.5">
+              /* 뼈대도 실제 타일과 같은 모양으로 — 모바일은 한 줄, sm 부터 세로 쌓기 */
+              <Card
+                key={i}
+                className="min-h-8 min-w-0 flex-row items-center justify-between gap-1 px-2 py-1 sm:flex-col sm:items-stretch sm:justify-start sm:gap-1 sm:px-4 sm:py-3.5"
+              >
                 <Skeleton className="h-3 w-16" />
-                <Skeleton className="h-8 w-14" />
+                <Skeleton className="h-4 w-10 shrink-0 sm:h-8 sm:w-14" />
               </Card>
             ))
           : (
@@ -396,14 +425,23 @@ export default function ProductWorkloadPage() {
             </>
           )}
       </div>
+      </MobileFilterPanel>
 
       {/* ── 공수 분포 차트 ───────────────────────────────────────────────
           아래로 테두리 있는 표 카드가 두 번 더 이어진다. 똑같은 헤더 바가 반복되면
           리듬이 죽으므로, 차트만 카드를 벗기고 제목 + 실선으로 담는다.
           '공수 합계 상위 N개' 순위는 이 차트가 유일하게 말한다 — 같은 열 개를 숫자표로
           한 번 더 늘어놓던 「공수가 높은 품목 TOP N」 섹션은 걷어냈다(모바일에서 아래
-          「품목 공수 리스트」와 카드 목록이 두 번 그려지던 원인). */}
-      <section className="flex min-w-0 flex-col gap-3">
+          「품목 공수 리스트」와 카드 목록이 두 번 그려지던 원인).
+
+          order-2: 상위 10개면 차트 높이만 520px 이라 모바일에서 정작 봐야 할
+          「품목 공수 리스트」를 통째로 화면 밖으로 밀어냈다. 좁은 폭의 가로 막대는
+          축 라벨부터 못 읽는 데다 같은 수치를 아래 목록·상세가 글자로 말한다 —
+          그래서 모바일에서만 뒤로 내린다(숨기지 않는다). md 부터는 원래 순서.
+
+          overflow-hidden: recharts 는 툴팁을 절대위치 요소로 차트 옆에 남겨 두는데,
+          좁은 폭에서 그 요소가 부모의 스크롤 폭을 수백 px 늘려 페이지를 옆으로 민다. */}
+      <section className="order-2 flex min-w-0 shrink-0 flex-col gap-3 overflow-hidden md:order-none">
         <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b pb-2">
           <h2 className="text-sm font-semibold text-foreground">품목별 공수 분포</h2>
           <p className="text-xs leading-normal break-keep text-muted-foreground">
@@ -444,8 +482,10 @@ export default function ProductWorkloadPage() {
         )}
       </section>
 
-      {/* ── 품목 공수 리스트 ─────────────────────────────────────────────── */}
-      <Card className="gap-0 overflow-hidden py-0">
+      {/* ── 품목 공수 리스트 ───────────────────────────────────────────────
+          shrink-0: Card 는 overflow-hidden 이라 세로 스크롤 컨테이너 안에서
+          min-height 가 0 이 되고, 행이 늘어나는 순간 선 하나로 찌부러진다. */}
+      <Card className="shrink-0 gap-0 overflow-hidden py-0">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2.5">
           <h2 className="text-sm font-semibold text-foreground">
             품목 공수 리스트
@@ -620,6 +660,7 @@ export default function ProductWorkloadPage() {
 
       {/* ── 표준공수 vs 실제공수 ─────────────────────────────────────────── */}
       <SectionCard
+        className="shrink-0"
         title="표준공수 vs 실제공수"
         hint={`실적 기반으로 표준공수를 개선하기 위한 비교 영역 · 편차율 ±${VARIANCE_THRESHOLD.warn}% 이내 정상 / ${VARIANCE_THRESHOLD.danger}% 초과 위험`}
         action={

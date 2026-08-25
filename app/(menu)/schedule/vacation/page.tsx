@@ -314,8 +314,12 @@ export default function VacationPage() {
           <Button variant="ghost" size="icon" type="button" onClick={nextMonth} aria-label="다음 달"><ChevronRight /></Button>
           <Button variant="outline" size="sm" type="button" onClick={goToday} className="ml-1">오늘</Button>
         </div>
-        {/* 범례 */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs leading-normal text-muted-foreground">
+        {/* 범례 — sm 미만에서는 감춘다.
+            모바일은 달력이 아니라 날짜별 목록이라 줄마다 색 점 옆에 유형 이름이 글자로 붙고
+            (연차 · 반차 · 출장), 공휴일도 이름이 그대로 나온다. 색↔뜻 대응표가 한 줄 더 필요 없다.
+            그 한 줄 때문에 월 이동 툴바가 2줄로 밀려 상단이 27px 더 잡아먹고 있었다.
+            sm 부터는 달력 격자로 바뀌어 색만 남으므로 범례를 그대로 되살린다. */}
+        <div className="hidden flex-wrap items-center gap-x-3 gap-y-1 text-xs leading-normal text-muted-foreground sm:flex">
           {(Object.keys(TYPE_LABEL) as ScheduleType[]).map(t => (
             <span key={t} className="inline-flex items-center gap-1.5">
               <span className={`size-2.5 rounded-md ${typeDot(t)}`} /> {TYPE_LABEL[t]}

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import {
-  RefreshCw, Search, Users, TriangleAlert, CheckCircle2, ClipboardList,
+  RefreshCw, Search, Users, TriangleAlert, CheckCircle2, ClipboardList, ChartColumn,
 } from "lucide-react"
 import { cn } from "@frontend/lib/utils"
 import { useAuth } from "@frontend/lib/auth-context"
@@ -10,6 +10,7 @@ import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
 import { Input } from "@frontend/components/ui/input"
 import { Skeleton } from "@frontend/components/ui/skeleton"
+import { MobileFilterPanel } from "@frontend/components/common/mobile-filter-panel"
 import { JobDetailModal } from "@frontend/components/product-test/job-detail-modal"
 import { TesterAvatar } from "@frontend/lib/tester-profiles"
 import {
@@ -26,6 +27,13 @@ interface Overview {
 
 /** 보기 모드 — 진행 중심(작업 있는 인원/전체) 과 완료 이력을 분리한다. */
 type ViewMode = "working" | "all" | "completed"
+
+/** 보기 탭. 모바일 접힘 막대의 요약 문구가 같은 라벨을 써야 해서 밖으로 뺀다. */
+const VIEW_TABS: { key: ViewMode; label: string }[] = [
+  { key: "working", label: "진행 중" },
+  { key: "all", label: "전체" },
+  { key: "completed", label: "완료" },
+]
 
 /** 완료 작업 조회 기간. 서버는 시험자당 최근 50건까지 내려주고 여기서 더 좁힌다. */
 const COMPLETED_RANGES = [
@@ -147,6 +155,18 @@ export default function ProdStatusPage() {
 
   const totals = data?.totals
 
+  /** 조회 옵션 막대에 남길 한 줄 — 어떤 보기로 몇 명을 보고 있는지 */
+  const filterSummary = [
+    VIEW_TABS.find(t => t.key === view)?.label ?? "",
+    `작업자 ${workers.length}명`,
+    view === "completed" ? `완료 ${completedShown}건` : null,
+    search.trim() ? `"${search.trim()}"` : null,
+  ].filter(Boolean).join(" · ")
+
+  /** 지표 요약 막대 — 네 칸 중 먼저 봐야 할 값 셋만 남긴다 */
+  const kpiSummary =
+    `작업 중 ${totals?.workingTesters ?? 0}명 · 진행 ${totals?.activeJobs ?? 0}건 · 지연 ${totals?.delayed ?? 0}건`
+
   /** onClick 이 있는 카드는 눌러서 해당 보기로 바로 넘어간다. */
   const kpiCards: Array<{
     label: string; value: number; valueCls: string; icon: typeof Users
@@ -189,7 +209,9 @@ export default function ProdStatusPage() {
           숫자보다 먼저 읽혀야 한다. 제목 옆 배지(인원수·완료건수)는 잔글씨 한 줄로 합쳤다. */}
       <header className="flex min-w-0 shrink-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <h1 className="text-lg font-semibold text-foreground">작업자 작업 현황</h1>
-        <p className="text-xs leading-normal break-keep text-muted-foreground">
+        {/* 부제 — 모바일에서는 접는다. 건수는 아래 조회 옵션 막대가 한 줄로 이미 말하고,
+            "작업자를 고르면 …" 안내문은 375px 에서 두 줄을 먹으며 목록을 밀어냈다. */}
+        <p className="hidden text-xs leading-normal break-keep text-muted-foreground sm:block">
           작업자 <span className="font-semibold tabular-nums text-foreground">{workers.length}</span>명
           {view === "completed" && (
             <>
@@ -204,7 +226,9 @@ export default function ProdStatusPage() {
         </p>
       </header>
 
-      {/* KPI */}
+      {/* KPI — 2x2 격자가 모바일에서 240px 을 먹어 작업자 띠를 화면 밖(y≈510)으로 밀어냈다.
+          지표는 조회 옵션과 별개로 한 번 더 접고, 펼쳤을 때도 타일을 한 줄로 눕힌다. */}
+      <MobileFilterPanel icon={ChartColumn} label="요약" summary={kpiSummary}>
       <div className="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-4">
         {kpiCards.map((card) => {
           const Icon = card.icon
@@ -223,33 +247,37 @@ export default function ProdStatusPage() {
                   }
                 : {})}
               className={cn(
-                "min-w-0 gap-1 px-4 py-3",
+                /* 모바일은 라벨·숫자를 한 줄로 눕혀 타일 높이를 절반으로 줄인다.
+                   sm:justify-start — 격자는 칸 높이를 서로 맞추므로(stretch) justify-between 을
+                   남겨 두면 짧은 칸에서 숫자가 바닥에 붙어 원래 모양과 달라진다. */
+                "min-h-8 min-w-0 flex-row items-center justify-between gap-1 px-2 py-1",
+                "sm:flex-col sm:items-stretch sm:justify-start sm:gap-1 sm:px-4 sm:py-3",
                 card.onClick && "cursor-pointer transition-colors hover:border-blue-300 dark:hover:border-blue-700 hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
               )}
             >
               <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                <Icon className="size-3.5 shrink-0" />
+                {/* 눕힌 한 줄에서 아이콘 20px 를 빼야 '작업 중 인원' 라벨이 잘리지 않는다 */}
+                <Icon className="hidden size-3.5 shrink-0 sm:block" />
                 <span className="min-w-0 truncate">{card.label}</span>
               </span>
               {loading
-                ? <Skeleton className="h-8 w-12" />
-                : <span className={cn("min-w-0 truncate text-xl font-semibold tabular-nums sm:text-2xl", card.valueCls)}>{card.value}</span>}
-              {!loading && card.foot}
+                ? <Skeleton className="h-4 w-10 shrink-0 sm:h-8 sm:w-12" />
+                : <span className={cn("min-w-0 shrink-0 truncate text-sm font-semibold tabular-nums sm:text-2xl", card.valueCls)}>{card.value}</span>}
+              {/* 한 줄로 눕힌 모바일에는 셋째 조각이 들어갈 자리가 없다 — 요약 막대가 대신 말한다 */}
+              {!loading && card.foot && <span className="hidden min-w-0 sm:block">{card.foot}</span>}
             </Card>
           )
         })}
       </div>
+      </MobileFilterPanel>
 
-      {/* 필터 */}
-      <div className="flex shrink-0 flex-col gap-3">
+      {/* 조회 옵션 — 탭 · 검색 · 새로고침이 모바일에서 세 줄로 쌓였다. 통째로 접고
+          지금 무엇을 보고 있는지만 한 줄 남긴다. sm 이상에서는 접기 자체가 없다. */}
+      <MobileFilterPanel summary={filterSummary}>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           {/* 탭 묶음이 화면보다 넓어지면 페이지가 아니라 이 상자 안에서만 밀린다 */}
           <div className="inline-flex h-9 w-fit max-w-full items-center gap-0.5 overflow-x-auto rounded-md bg-muted p-0.5 text-muted-foreground">
-            {([
-              { key: "working", label: "진행 중" },
-              { key: "all", label: "전체" },
-              { key: "completed", label: "완료" },
-            ] as const).map(t => (
+            {VIEW_TABS.map(t => (
               <button
                 key={t.key}
                 type="button"
@@ -292,7 +320,7 @@ export default function ProdStatusPage() {
             <RefreshCw className={cn(loading && "animate-spin")} />새로고침
           </Button>
         </div>
-      </div>
+      </MobileFilterPanel>
 
       {error && (
         <Card className="shrink-0 items-center gap-1 border-amber-200 bg-amber-50 py-8 text-center dark:border-amber-800 dark:bg-amber-950">

@@ -29,7 +29,9 @@ import {
   LayoutGrid,
   CalendarRange,
   UserSquare,
+  Gauge,
 } from 'lucide-react'
+import { MobileFilterPanel } from '@frontend/components/common/mobile-filter-panel'
 import MondayBoard, { type BoardGroup, type ColumnDef } from '@frontend/components/board/MondayBoard'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -449,7 +451,12 @@ export default function MonthlySchedulePage() {
           </div>
         )}
 
-        {/* 월 이동 — 조회조건 한 줄에 카드를 씌우지 않는다(테두리 겹 줄이기) */}
+        {/* 월 이동 — 조회조건 한 줄에 카드를 씌우지 않는다(테두리 겹 줄이기).
+            375px 에서는 버튼 넷과 월 선택 입력이 세 줄로 접혀 131px 을 먹었다.
+            모바일에서는 통째로 접고 지금 보고 있는 달만 막대에 남긴다 —
+            달을 바꾸는 일은 화면에 들어와서 늘 하는 일이 아니다.
+            sm(640px) 이상에서는 접기 자체가 없다. */}
+        <MobileFilterPanel label="월 이동" icon={CalendarRange} summary={`${month.replace('-', '년 ')}월`}>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => setMonth(shiftMonth(month, -1))} className="gap-1.5">
             <ChevronLeft size={14} />
@@ -474,6 +481,7 @@ export default function MonthlySchedulePage() {
             className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground tabular-nums shadow-xs transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none sm:ml-auto sm:w-auto [color-scheme:light] dark:[color-scheme:dark]"
           />
         </div>
+        </MobileFilterPanel>
 
         {/* 에러 */}
         {error && (
@@ -503,6 +511,14 @@ export default function MonthlySchedulePage() {
             {/* ── 요약 ────────────────────────────────────────────────────
                 파스텔 카드 네 장을 나란히 세우면 무엇이 급한지 화면이 말해 주지 못한다.
                 한 장으로 합쳐 실선으로만 나누고, 강조는 숫자 크기와 잉크 색으로 한다. */}
+            {/* 네 칸이 2열 2줄로 178px — 그 아래 뷰 탭까지 합쳐 정작 봐야 할 그리드를
+                y=534, 첫 화면 밖으로 밀어냈다. 모바일에서는 접고 조치가 필요한
+                숫자(긴급)까지만 막대에 남긴다 — 배정·시험자 수는 위 머리말 줄이 이미 말한다. */}
+            <MobileFilterPanel
+              label="요약"
+              icon={Gauge}
+              summary={`총 배정 ${stats.total}건 · 긴급 ${stats.urgent}건 · 듀오 ${stats.duo}건`}
+            >
             <Card className="gap-0 overflow-hidden py-0">
               <dl className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
                 {[
@@ -511,13 +527,19 @@ export default function MonthlySchedulePage() {
                   { label: '긴급',        value: `${stats.urgent}건`,  tone: stats.urgent > 0 ? 'text-destructive' : TXT_MUTED },
                   { label: '듀오',        value: `${stats.duo}건`,     tone: TXT_PRIMARY },
                 ].map(s => (
-                  <div key={s.label} className="flex min-w-0 flex-col bg-card px-4 py-3.5">
-                    <dt className={`text-xs font-medium ${TXT_MUTED}`}>{s.label}</dt>
-                    <dd className={`mt-0.5 text-2xl font-semibold tabular-nums ${s.tone}`}>{s.value}</dd>
+                  /* 모바일은 라벨·숫자를 한 줄로 눕힌다. 격자 칸은 서로 높이를 맞추므로
+                     (stretch) sm:justify-start 가 없으면 숫자가 칸 바닥에 붙는다. */
+                  <div
+                    key={s.label}
+                    className="flex min-h-8 min-w-0 items-center justify-between gap-1 bg-card px-2 py-1 sm:min-h-0 sm:flex-col sm:items-stretch sm:justify-start sm:gap-0 sm:px-4 sm:py-3.5"
+                  >
+                    <dt className={`min-w-0 truncate text-xs font-medium ${TXT_MUTED}`}>{s.label}</dt>
+                    <dd className={`shrink-0 text-sm font-semibold tabular-nums sm:mt-0.5 sm:text-2xl ${s.tone}`}>{s.value}</dd>
                   </div>
                 ))}
               </dl>
             </Card>
+            </MobileFilterPanel>
 
             {/* 뷰 전환 — 오더 화면과 같은 세그먼트 컨트롤로 맞춘다.
                 탭 옆 힌트("시험자 × 날짜")는 바로 아래 표 머리에서 한 번 더 말하므로 뺀다. */}

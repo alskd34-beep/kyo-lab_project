@@ -14,6 +14,7 @@ import { Skeleton } from "@frontend/components/ui/skeleton"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@frontend/components/ui/table"
+import { MobileFilterPanel } from "@frontend/components/common/mobile-filter-panel"
 import { ManagementDrawer } from "@frontend/components/common/management-drawer"
 import { useConfirmMessage } from "@frontend/components/common/confirm-message"
 
@@ -210,7 +211,14 @@ export default function TestCapabilitiesPage() {
         </div>
       )}
 
-      {/* 검색 + 요약 */}
+      {/* 검색 + 요약 — 모바일에서는 접는다.
+          배지 두 장과 검색창이 세로로 104px 을 먹어, 그 위 머리말·주의 카드와 합쳐
+          정작 봐야 할 역량 목록이 y=447 에서야 시작했다.
+          접힌 막대에 "지금 무엇을 보고 있는지"(검색어 · 개수)는 그대로 남긴다.
+          sm(640px) 이상에서는 접기 자체가 없다 — 데스크톱은 지금 모습 그대로다. */}
+      <MobileFilterPanel
+        summary={`${search.trim() ? `"${search.trim()}" · ` : ""}역량 ${rows.length}개 · 평가 ${ratedTotal}건`}
+      >
       <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
         <Badge variant="secondary" className="w-fit tabular-nums">역량 {rows.length}개</Badge>
         <Badge variant="outline" className="w-fit tabular-nums text-muted-foreground">
@@ -226,6 +234,7 @@ export default function TestCapabilitiesPage() {
           />
         </div>
       </div>
+      </MobileFilterPanel>
 
       {/* 모바일 카드
           flex-1 + 자식 shrink-0: Card 는 overflow-hidden 이라 세로 스크롤 열 안에서

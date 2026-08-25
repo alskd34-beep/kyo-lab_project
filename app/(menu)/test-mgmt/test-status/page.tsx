@@ -20,6 +20,7 @@ import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from '@fr
 import { TesterAvatar } from '@frontend/lib/tester-profiles'
 import { useAuth } from '@frontend/lib/auth-context'
 import { TestDetailDrawer } from '@frontend/components/test-mgmt/test-detail-drawer'
+import { MobileFilterPanel } from '@frontend/components/common/mobile-filter-panel'
 import { format, subMonths } from 'date-fns'
 import {
   Star,
@@ -30,6 +31,7 @@ import {
   PinOff,
   X,
   Eye,
+  Gauge,
 } from 'lucide-react'
 
 // ─── Static Data ──────────────────────────────────────────────────────────────
@@ -241,6 +243,11 @@ export default function TestStatusPage() {
 
   const kpis = useMemo(() => buildKpis(sortedData), [sortedData])
 
+  /* 접힌 요약 막대에 남길 한 줄. 일곱 칸을 다 적을 수 없으니 전체 규모와
+     지금 손이 가 있는 곳(진행중), 조치가 필요한 곳(부적합)만 남긴다. */
+  const kpiAt = (label: string) => kpis.find(k => k.label === label)?.value ?? '0'
+  const kpiSummary = `전체 ${sortedData.length}건 · 진행중 ${kpiAt('진행중')} · 부적합 ${kpiAt('부적합')}`
+
   const closeTab = (tab: string) => {
     setClosedTabs(prev => {
       const next = new Set(prev)
@@ -364,26 +371,36 @@ export default function TestStatusPage() {
                 (-translate-y + shadow)을 걷어냈다. 손가락 커서는 실제로 열리는 것이 있을 때만 쓴다.
                 min-w-0: 일곱 칸 그리드에서 칸의 최소폭은 내용 크기라, '검토대기·검토중' 같은
                 부가설명 한 줄이 칸을 화면 밖까지 밀어낸다. */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2.5 px-4 md:px-5 py-3">
-              {kpis.map(kpi => (
-                <Card
-                  key={kpi.label}
-                  className={`min-w-0 bg-card ${kpi.border} shadow-none rounded-md py-0`}
-                >
-                  <CardContent className="px-3.5 py-3">
-                    <div className="flex min-w-0 items-center gap-1.5">
-                      <span className={`size-1.5 shrink-0 rounded-full ${kpi.bg}`} />
-                      <p className="min-w-0 truncate text-xs leading-normal font-medium text-muted-foreground">{kpi.label}</p>
-                    </div>
-                    <div className="mt-0.5 flex items-baseline gap-0.5">
-                      <span className={`text-xl font-semibold tabular-nums ${kpi.accent}`}>{kpi.value}</span>
-                      <span className="ml-0.5 text-xs font-medium text-muted-foreground">{kpi.unit}</span>
-                    </div>
-                    {/* break-keep: 한글은 단어 중간에서 끊으면 안 읽힌다 */}
-                    <p className="mt-0.5 text-xs leading-normal break-keep text-muted-foreground">{kpi.sub}</p>
-                  </CardContent>
-                </Card>
-              ))}
+            {/* 375px 에서 일곱 장이 2열 4줄로 481px — 화면의 3/4 를 머리말이 덮어
+                정작 봐야 할 목록이 y=546, 첫 화면 밖에서 시작했다. 모바일에서는
+                기본으로 접고 전체·진행중·부적합만 막대에 남긴다.
+                sm(640px) 이상에서는 접기 자체가 없다 — 데스크톱은 지금 모습 그대로다. */}
+            <div className="px-4 py-3 md:px-5">
+              <MobileFilterPanel label="요약" icon={Gauge} summary={kpiSummary}>
+                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-7">
+                  {kpis.map(kpi => (
+                    <Card
+                      key={kpi.label}
+                      className={`min-w-0 bg-card ${kpi.border} shadow-none rounded-md py-0`}
+                    >
+                      {/* 모바일은 라벨·숫자를 한 줄로 눕혀 타일 높이를 1/3 로 줄인다 */}
+                      <CardContent className="flex min-h-8 min-w-0 items-center justify-between gap-1 px-2 py-1 sm:block sm:px-3.5 sm:py-3">
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <span className={`size-1.5 shrink-0 rounded-full ${kpi.bg}`} />
+                          <p className="min-w-0 truncate text-xs leading-normal font-medium text-muted-foreground">{kpi.label}</p>
+                        </div>
+                        <div className="flex shrink-0 items-baseline gap-0.5 sm:mt-0.5">
+                          <span className={`text-sm font-semibold tabular-nums sm:text-xl ${kpi.accent}`}>{kpi.value}</span>
+                          <span className="ml-0.5 text-xs font-medium text-muted-foreground">{kpi.unit}</span>
+                        </div>
+                        {/* 부가설명은 눕힌 한 줄에 셋째 조각으로 들어갈 자리가 없다.
+                            break-keep: 한글은 단어 중간에서 끊으면 안 읽힌다 */}
+                        <p className="mt-0.5 hidden text-xs leading-normal break-keep text-muted-foreground sm:block">{kpi.sub}</p>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </MobileFilterPanel>
             </div>
           </div>
 

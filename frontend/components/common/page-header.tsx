@@ -4,6 +4,7 @@ import type { LucideIcon } from "lucide-react"
 import type { ReactNode } from "react"
 
 import { cn } from "@frontend/lib/utils"
+import { MobileFilterPanel } from "@frontend/components/common/mobile-filter-panel"
 
 /** 헤더에 인라인으로 붙이는 요약 수치 한 칸. */
 export interface PageStat {
@@ -99,30 +100,42 @@ export function PageHeader({
 /**
  * 헤더 아래 **필터 한 줄**. 검색·드롭다운 필터·초기화 버튼만 담는다.
  * 탭 모양 세그먼트를 여러 줄 쌓지 않기 위한 공통 컨테이너다.
+ *
+ * "한 줄"은 데스크톱 이야기다 — 375px 에서는 검색창·드롭다운이 저마다 한 줄씩 차지해
+ * 네 줄, 170px 까지 부푼다. 그래서 모바일에서는 `MobileFilterPanel` 로 통째로 접고
+ * 지금 걸린 조건만 한 줄 남긴다. `sm`(640px) 이상에서는 접기 자체가 없다.
  */
 export function FilterBar({
   children,
   trailing,
+  summary,
   className,
 }: {
   children: ReactNode
   /** 우측 끝에 붙는 보조 정보(표시 건수 등). */
   trailing?: ReactNode
+  /**
+   * 접힌 막대에 한 줄로 남길 현재 상태. 생략하면 `trailing`(대개 "N / M건 표시")을 쓴다 —
+   * 무엇으로 걸렀는지까지 말하고 싶으면 직접 넘긴다.
+   */
+  summary?: ReactNode
   className?: string
 }) {
   return (
-    <div
-      className={cn(
-        "flex shrink-0 flex-wrap items-center gap-2 rounded-md border bg-card px-2.5 py-2 shadow-sm",
-        className,
-      )}
-    >
-      {children}
-      {trailing && (
-        <div className="ml-auto flex items-center gap-2 pr-1 text-xs text-muted-foreground">
-          {trailing}
-        </div>
-      )}
-    </div>
+    <MobileFilterPanel summary={summary ?? trailing ?? "전체"}>
+      <div
+        className={cn(
+          "flex shrink-0 flex-wrap items-center gap-2 rounded-md border bg-card px-2.5 py-2 shadow-sm",
+          className,
+        )}
+      >
+        {children}
+        {trailing && (
+          <div className="ml-auto flex items-center gap-2 pr-1 text-xs text-muted-foreground">
+            {trailing}
+          </div>
+        )}
+      </div>
+    </MobileFilterPanel>
   )
 }

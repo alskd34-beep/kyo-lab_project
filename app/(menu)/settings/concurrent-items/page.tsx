@@ -11,6 +11,7 @@ import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
 import { Badge } from "@frontend/components/ui/badge"
 import { Input } from "@frontend/components/ui/input"
+import { MobileFilterPanel } from "@frontend/components/common/mobile-filter-panel"
 import { ManagementDrawer } from "@frontend/components/common/management-drawer"
 import { useConfirmMessage } from "@frontend/components/common/confirm-message"
 
@@ -133,6 +134,14 @@ export default function ConcurrentItemsPage() {
         <p className="shrink-0 rounded-md border border-primary/20 bg-primary/10 px-3 py-2 text-xs break-keep text-primary">{msg}</p>
       )}
 
+      {/* 조회 옵션 — 모바일에서는 접는다.
+          건수 한 줄 + 검색창이 세로로 68px 을 잡아, 정작 봐야 할 품목군 카드를 화면 밖으로 밀어냈다.
+          접힌 막대에 "지금 무엇을 보고 있는지"(검색어 · 건수)는 그대로 남긴다.
+          sm(640px) 이상에서는 접기 자체가 없다 — 데스크톱은 지금 모습 그대로다. */}
+      <MobileFilterPanel
+        summary={`${search.trim() ? `검색 "${search.trim()}"` : "전체"} · ${search.trim() ? filtered.length : rows.length}개 품목군`}
+      >
+
       {/* 검색 */}
       <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-2">
         <span className="text-xs text-muted-foreground">
@@ -164,6 +173,8 @@ export default function ConcurrentItemsPage() {
           )}
         </div>
       </div>
+
+      </MobileFilterPanel>
 
       {/* 목록 */}
       {loading ? (
