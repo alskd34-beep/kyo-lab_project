@@ -593,33 +593,48 @@ function EditUserDialog({
         </div>
       )}
     >
-        <div className="grid gap-5 md:grid-cols-[120px_1fr]">
+        {/* 사진 칸을 120px 로 못 박아 두었더니 '사진 업로드' 가 잘렸다.
+            120 - p-4(32) - px-3(24) = 글자에 남는 폭이 64px 인데, 아이콘 13 + 간격 6 +
+            '사진 업로드'(text-xs 13.5px × 5자) 를 합치면 90px 이 필요하다.
+            숫자를 다시 찍어 맞추는 대신 **내용이 폭을 정하게** 둔다(auto) —
+            글자 크기 기준(최소 13.5px)이 바뀌어도 다시 잘리지 않는다.
+            min-w 는 아바타(lg)가 헐거워 보이지 않을 최소치다.
+
+            items-start: 격자 칸은 서로 높이를 맞추므로(stretch) 사진 영역 바탕이
+            오른쪽 입력 열 높이만큼 늘어나 버튼 아래로 빈 바탕이 90px 남았다.
+            바탕은 내용만 감싸야 '사진' 이 한 덩어리로 읽힌다. */}
+        <div className="grid items-start gap-5 md:grid-cols-[auto_1fr]">
           {/* 드로어 안에 테두리 상자를 또 두르지 않는다 — 바탕색만으로 사진 영역을 구분한다. */}
-          <div className="flex flex-col items-center gap-3 rounded-md bg-muted/50 p-4">
+          <div className="flex min-w-32 flex-col items-center gap-3 rounded-md bg-muted/50 p-4">
             <TesterAvatar
               testerId={user.testerId}
               name={displayName || user.testerName || user.username}
               avatarUrl={avatarUrl}
               size="lg"
             />
-            <label className="inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-md bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/80 focus-within:ring-2 focus-within:ring-ring">
-              <Upload size={13} />
-              사진 업로드
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/webp,image/gif"
-                className="sr-only"
-                onChange={e => { void handlePhotoChange(e.target.files?.[0]); e.currentTarget.value = '' }}
-              />
-            </label>
-            <button
-              type="button"
-              onClick={() => setAvatarUrl(null)}
-              className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border bg-background px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-            >
-              <ImagePlus size={13} />
-              사진 제거
-            </button>
+            {/* 버튼 둘은 한 묶음이다 — 아바타와의 사이(gap-3)보다 버튼끼리(gap-2)를
+                좁혀야 '사진을 다루는 조작' 이 한 덩어리로 읽힌다.
+                whitespace-nowrap: 라벨이 줄바꿈으로 흘러 버튼 높이가 들쭉날쭉해지지 않게. */}
+            <div className="flex w-full flex-col gap-2">
+              <label className="inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-md bg-primary px-2.5 py-2 text-xs font-medium whitespace-nowrap text-primary-foreground transition-colors hover:bg-primary/80 focus-within:ring-2 focus-within:ring-ring">
+                <Upload size={13} className="shrink-0" />
+                사진 업로드
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  className="sr-only"
+                  onChange={e => { void handlePhotoChange(e.target.files?.[0]); e.currentTarget.value = '' }}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => setAvatarUrl(null)}
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border bg-background px-2.5 py-2 text-xs whitespace-nowrap text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              >
+                <ImagePlus size={13} className="shrink-0" />
+                사진 제거
+              </button>
+            </div>
           </div>
 
           <div className="space-y-3">
