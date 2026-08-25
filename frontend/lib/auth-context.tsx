@@ -24,10 +24,33 @@ interface AuthCtx {
 
 const Ctx = createContext<AuthCtx | null>(null)
 const AUTO_LOGIN_COOKIE = 'kd_auto_login'
+const LS_AUTO_LOGIN = 'kd-auto-login'
+/** login/page.tsx 의 마커 Max-Age 와 같은 값 — refresh 쿠키 수명과 맞춘다 */
+const REFRESH_TTL_SEC = 60 * 60 * 24 * 7
 
 function clearAutoLoginCookie() {
   if (typeof document === 'undefined') return
   document.cookie = `${AUTO_LOGIN_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`
+}
+
+/**
+ * 자동 로그인 마커를 오늘 다시 7일간 연장한다.
+ *
+ * 마커는 로그인 페이지에서 딱 한 번 발급돼 갱신되지 않는 반면, refresh 쿠키는
+ * 회전(13분 주기·부팅 복구)할 때마다 Max-Age 가 리셋돼 사실상 무한히 살아있다.
+ * 둘의 수명이 어긋나면 로그인 7일 뒤부터 마커만 만료되어 미들웨어가
+ * `hasAutoLogin && hasRefresh` 검사에서 /login 으로 보내버린다 — 세션은 멀쩡히
+ * 살아 있는데 "자동 로그인이 풀린" 것처럼 보이는 원인(2026-08-25).
+ *
+ * 사용자 설정(localStorage)이 켜져 있을 때만 갱신한다. 꺼져 있으면 마커를
+ * 새로 심지 않는다(미들웨어 통과 조건이므로 설정 없이 늘리면 안 된다).
+ */
+function renewAutoLoginMarker() {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return
+  try {
+    if (localStorage.getItem(LS_AUTO_LOGIN) !== '1') return
+    document.cookie = `${AUTO_LOGIN_COOKIE}=1; Path=/; Max-Age=${REFRESH_TTL_SEC}; SameSite=Lax`
+  } catch {}
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -87,6 +110,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!r.ok) return false
       const { user } = await r.json()
       setUser(user)
+      // 세션이 연장됐으니 자동 로그인 마커도 함께 연장한다 (수명 어긋남 방지)
+      renewAutoLoginMarker()
       return true
     }
 
@@ -98,16 +123,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // 부팅 시 자동 로그인 시도: access → 실패 시 refresh
   useEffect(() => {
     let cancelled = false
-    ;(async () => {
+
+    const restore = async (): Promise<AuthUser | null> => {
       let me = await fetchMe()
       if (!me) {
         const refreshed = await refresh()
         if (refreshed) me = await fetchMe()
       }
+      return me
+    }
+
+    ;(async () => {
+      let me = await restore()
+      // 서버 재시작 직후의 첫 요청은 컴파일 지연·재시작 경합으로 실패할 수 있다.
+      // 일시적 실패(네트워크 오류·5xx)는 세션 만료가 아니므로 복구 불가(401 → /login
+      // 리다이렉트)가 아닌 경우 한 번만 더 시도한다.
+      if (!me && typeof window !== 'undefined' && window.location.pathname !== '/login') {
+        await new Promise(r => setTimeout(r, 700))
+        if (!cancelled) me = await restore()
+      }
       // 복구 불가(401)인 경우는 refresh 내부에서 로그인 화면으로 보낸다.
       if (cancelled) return
       setUser(me)
       setLoading(false)
+      // refresh 를 거치지 않고 access 로 바로 복구된 경우에도 마커를 연장한다
+      if (me) renewAutoLoginMarker()
     })()
     return () => { cancelled = true }
   }, [fetchMe, refresh])

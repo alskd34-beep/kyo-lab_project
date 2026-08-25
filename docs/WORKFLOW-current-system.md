@@ -33,7 +33,9 @@
   ▼ AuthProvider.setUser → /home
   │
   ├─ 부팅(앱 진입)   : GET /api/auth/me 실패 → POST /api/auth/refresh → 재시도 (자동 로그인)
+  │                    일시적 실패(네트워크·5xx·재시작 직후 컴파일 지연)는 1회 재시도
   ├─ 13분 주기       : POST /api/auth/refresh (access 만료 전 선제 갱신)
+  │                    성공 시 kd_auto_login 마커도 7일로 재연장 (쿠키 수명 어긋남 방지)
   ├─ 포커스/탭복귀   : visibilitychange/focus → 즉시 refresh (절전 복귀 대응)
   └─ 페이지 요청     : middleware.ts 가 kd_access 검증, 미인증 → /login?next=…
   ▼
