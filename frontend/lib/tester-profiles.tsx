@@ -276,7 +276,7 @@ export function TesterAvatar({
 
   if (resolvedUrl) {
     return (
-      <span className={cn('inline-block shrink-0 overflow-hidden ring-1 ring-border', sizeClass, className)}>
+      <span className={cn('inline-block shrink-0 overflow-hidden border border-border', sizeClass, className)}>
         <Image
           src={resolvedUrl}
           alt={label}
@@ -292,7 +292,7 @@ export function TesterAvatar({
   }
 
   return (
-    <span className={cn('inline-flex shrink-0 items-center justify-center bg-muted ring-1 ring-border', sizeClass, className)} aria-hidden>
+    <span className={cn('inline-flex shrink-0 items-center justify-center bg-muted border border-border', sizeClass, className)} aria-hidden>
       {emoji}
     </span>
   )
