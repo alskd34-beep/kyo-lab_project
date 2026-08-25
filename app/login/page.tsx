@@ -91,6 +91,13 @@ function LoginForm() {
     setRememberId(prefs.rememberId)
     setAutoLogin(prefs.autoLogin)
     /* eslint-enable react-hooks/set-state-in-effect */
+
+    /* 설정(localStorage)과 마커(쿠키)가 어긋난 상태를 되돌린다.
+       쿠키만 사라지면 체크박스는 켜진 채 자동 로그인만 조용히 멈춰
+       "체크했는데 왜 매번 로그인하지?" 가 된다. 설정이 켜져 있으면 마커를 다시 세운다. */
+    if (prefs.autoLogin) {
+      try { writeAutoLoginCookie(true) } catch {}
+    }
   }, [])
 
   // 자동로그인 체크되어있고 토큰이 유효해 user가 복원되면 홈으로 이동

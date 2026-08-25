@@ -5,6 +5,7 @@ import {
   AlertCircle,
   ArrowUpRight,
   CalendarClock,
+  ChartColumn,
   CheckCircle2,
   Clock3,
   DatabaseZap,
@@ -13,6 +14,7 @@ import {
   Search,
   Sheet,
 } from 'lucide-react'
+import { MobileFilterPanel } from '@frontend/components/common/mobile-filter-panel'
 import { Skeleton } from '@frontend/components/ui/skeleton'
 import { Badge } from '@frontend/components/ui/badge'
 import { Button } from '@frontend/components/ui/button'
@@ -312,7 +314,16 @@ export default function StabStatusPage() {
       </header>
 
       {/* 지표 칸 — 칸마다 파랑·초록 배경을 깔던 것을 걷어냈다. 여기엔 경보가 없고,
-          다섯 칸이 서로 다른 색을 두르면 색이 의미를 잃는다. 위계는 숫자 크기가 만든다. */}
+          다섯 칸이 서로 다른 색을 두르면 색이 의미를 잃는다. 위계는 숫자 크기가 만든다.
+
+          모바일에서는 이 다섯 칸이 세로로 세 줄(280px 가까이) 쌓여 정작 봐야 할
+          시트 목록을 화면 밖으로 밀어냈다. 접어 두고 가장 중요한 두 수치만 막대에 남긴다 —
+          목록이 몇 건인지는 아래 「시트 반영 목록」 제목이 따로 말하고 있다. */}
+      <MobileFilterPanel
+        icon={ChartColumn}
+        label="요약"
+        summary={`전체 ${rows.length}건 · 스케줄 후보 ${stats.active}건`}
+      >
       <div className="grid shrink-0 grid-cols-2 gap-2.5 lg:grid-cols-5">
         {[
           { label: '전체 건수', value: rows.length, icon: null },
@@ -324,7 +335,11 @@ export default function StabStatusPage() {
           <Card
             key={tile.label}
             className={cn(
-              'min-w-0 gap-0 px-4 py-3 shadow-none',
+              /* 펼쳤을 때도 모바일은 라벨·숫자를 한 줄로 눕힌다. sm 부터는 원래의 세로 쌓기. */
+              'min-h-8 min-w-0 flex-row items-center justify-between gap-1 px-2 py-1 shadow-none',
+              /* sm:justify-start — 격자는 칸 높이를 서로 맞추므로(stretch), justify-between 을
+                 남겨 두면 짧은 칸에서 숫자가 바닥에 붙어 원래 모양과 달라진다. */
+              'sm:flex-col sm:items-stretch sm:justify-start sm:gap-0 sm:px-4 sm:py-3',
               i === all.length - 1 && 'col-span-2 lg:col-span-1',
             )}
           >
@@ -333,13 +348,14 @@ export default function StabStatusPage() {
               <span className="min-w-0 truncate">{tile.label}</span>
             </p>
             {loading ? (
-              <Skeleton className="mt-1.5 h-7 w-12" />
+              <Skeleton className="h-4 w-8 shrink-0 sm:mt-1.5 sm:h-7 sm:w-12" />
             ) : (
-              <p className="mt-1 min-w-0 truncate text-xl font-semibold tabular-nums text-foreground sm:text-2xl">{tile.value}</p>
+              <p className="min-w-0 shrink-0 truncate text-sm font-semibold tabular-nums text-foreground sm:mt-1 sm:text-2xl">{tile.value}</p>
             )}
           </Card>
         ))}
       </div>
+      </MobileFilterPanel>
 
       {/* shrink-0: Card 는 overflow-hidden 이라 세로 스크롤 컨테이너 안에서
           min-height 가 0 이 되고, 행이 늘어나는 순간 선 하나로 찌부러진다. */}

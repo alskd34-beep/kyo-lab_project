@@ -11,6 +11,7 @@ import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell, Legend,
 } from "recharts"
 import { Loader2, Gauge, CalendarDays, CheckCircle2, Timer, RefreshCw } from "lucide-react"
+import { cn } from "@frontend/lib/utils"
 import { Button } from "@frontend/components/ui/button"
 import { DateRangeField } from "@frontend/components/ui/date-range-field"
 import { SortColumnHeader, sortCol, type SortDir } from "@frontend/components/ui/table-sort"
@@ -142,7 +143,9 @@ export default function TesterEvaluationPage() {
         </div>
         {/* 모바일에서는 기간 입력이 한 줄을 차지하고 새로고침이 아래로 접힌다 */}
         <div className="flex w-full min-w-0 flex-wrap items-end gap-2 md:w-auto md:shrink-0 md:flex-nowrap">
-          <div className="min-w-0 flex-1 md:flex-none">
+          {/* 375px 에서는 '조회기간 + 2026.05.27 ~ 2026.08.25' 만으로 225px 라
+              새로고침 버튼과 한 줄에 두면 날짜가 버튼 밑으로 파고든다. 한 줄을 통째로 쓴다. */}
+          <div className="w-full min-w-0 sm:w-auto sm:flex-1 md:flex-none">
             <DateRangeField
               label="조회기간"
               startDate={from}
@@ -166,23 +169,24 @@ export default function TesterEvaluationPage() {
           {/* KPI 카드 skeleton */}
           <div className="grid shrink-0 grid-cols-2 gap-3 lg:grid-cols-4">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="min-w-0 rounded-md border bg-card px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <Skeleton className="h-7 w-7 rounded-md" />
+              /* 뼈대도 실제 타일과 같은 높이로 — 모바일은 한 줄, sm 부터 세로 쌓기 */
+              <div key={i} className="flex min-h-8 min-w-0 items-center justify-between gap-1 rounded-md border bg-card px-2 py-1 sm:block sm:px-4 sm:py-3">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Skeleton className="hidden h-7 w-7 rounded-md sm:block" />
                   <Skeleton className="h-3.5 w-20" />
                 </div>
-                <Skeleton className="mt-2 h-8 w-16" />
+                <Skeleton className="h-4 w-10 shrink-0 sm:mt-2 sm:h-8 sm:w-16" />
               </div>
             ))}
           </div>
 
-          {/* 차트 skeleton */}
-          <div className="min-w-0 shrink-0 rounded-md border bg-card p-4">
+          {/* 차트 skeleton — 본문과 같은 자리에 놓는다(모바일은 표 뒤) */}
+          <div className="order-2 min-w-0 shrink-0 rounded-md border bg-card p-4 md:order-none">
             <Skeleton className="mb-3 h-4 w-48" />
             <Skeleton className="h-40 w-full" />
           </div>
 
-          <div className="grid shrink-0 gap-4 lg:grid-cols-2">
+          <div className="order-2 grid shrink-0 gap-4 md:order-none lg:grid-cols-2">
             {Array.from({ length: 2 }).map((_, i) => (
               <div key={i} className="min-w-0 rounded-md border bg-card p-4">
                 <Skeleton className="mb-3 h-4 w-40" />
@@ -260,8 +264,13 @@ export default function TesterEvaluationPage() {
             <KpiCard icon={<Timer size={16} />} label="평균 항목 소요시간" value={fmtMin(totals!.avgItemMinutes)} />
           </div>
 
-          {/* 시험자별 공수 준수율 */}
-          <ChartCard title="시험자별 공수 준수율 (%)" hint="지정 공수 이내에 끝낸 비율 · 90↑ 녹색 / 70↑ 황색 / 그 외 적색">
+          {/* 시험자별 공수 준수율.
+
+              order-2: 모바일에서는 그래프 세 장이 600px 넘게 쌓여 정작 읽어야 할
+              시험자별 상세가 화면 밖(y≈930)으로 밀려났다. 좁은 폭의 가로 막대그래프는
+              축 라벨부터 못 읽는 데다, 같은 수치를 바로 아래 카드 목록이 글자로 말한다 —
+              그래서 모바일에서만 표 뒤로 내린다(숨기지 않는다). md 부터는 원래 순서. */}
+          <ChartCard className="order-2 md:order-none" title="시험자별 공수 준수율 (%)" hint="지정 공수 이내에 끝낸 비율 · 90↑ 녹색 / 70↑ 황색 / 그 외 적색">
             <ResponsiveContainer width="100%" height={Math.max(160, data!.byTester.length * 38)}>
               <BarChart data={data!.byTester} layout="vertical" margin={{ left: 8, right: 24, top: 4, bottom: 4 }}>
                 <CartesianGrid horizontal={false} stroke="#f1f5f9" />
@@ -275,7 +284,7 @@ export default function TesterEvaluationPage() {
             </ResponsiveContainer>
           </ChartCard>
 
-          <div className="grid shrink-0 gap-4 lg:grid-cols-2">
+          <div className="order-2 grid shrink-0 gap-4 md:order-none lg:grid-cols-2">
             {/* 처리량 · 난이도 가중 */}
             <ChartCard title="시험자별 처리량 / 난이도 가중" hint="완료 건수와 난이도 가중(High3·Med2·Low1) 처리량">
               <ResponsiveContainer width="100%" height={Math.max(160, data!.byTester.length * 38)}>
@@ -426,22 +435,29 @@ export default function TesterEvaluationPage() {
  */
 function KpiCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
-    <div className="min-w-0 rounded-md border bg-card px-4 py-3">
+    /* 모바일은 라벨·숫자를 한 줄로 눕혀 타일 높이를 절반으로 줄인다 —
+       네 칸이 2줄로 쌓여 정작 봐야 할 시험자 목록을 화면 밖으로 밀어내던 자리다.
+       sm 부터는 원래의 세로 쌓기(라벨 위 / 숫자 아래) 그대로다. */
+    <div className="flex min-h-8 min-w-0 items-center justify-between gap-1 rounded-md border bg-card px-2 py-1 sm:block sm:px-4 sm:py-3">
       <div className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-muted-foreground">
-        <span className="flex shrink-0 items-center">{icon}</span>
-        <span className="min-w-0 truncate">{label}</span>
+        {/* 좁은 칸에서 아이콘 22px 를 빼야 '전체 공수 준수율' 같은 라벨이 잘리지 않는다 */}
+        <span className="hidden shrink-0 items-center sm:flex">{icon}</span>
+        <span className="min-w-0 truncate" title={label}>{label}</span>
       </div>
       {/* 320px 2열 격자에서 "125분" 같은 값이 칸을 밀어내지 않게 모바일에서 한 단 줄인다 */}
-      <p className="mt-1.5 min-w-0 truncate text-xl font-semibold tabular-nums text-foreground sm:text-2xl" title={value}>
+      <p className="min-w-0 shrink-0 truncate text-sm font-semibold tabular-nums text-foreground sm:mt-1.5 sm:text-2xl" title={value}>
         {value}
       </p>
     </div>
   )
 }
 
-function ChartCard({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
+function ChartCard({ title, hint, children, className }: { title: string; hint?: string; children: React.ReactNode; className?: string }) {
   return (
-    <div className="min-w-0 shrink-0 rounded-md border bg-card p-4">
+    /* overflow-hidden: recharts 는 툴팁을 절대위치 요소로 차트 옆에 남겨 두는데,
+       좁은 폭에서 그 요소가 부모의 스크롤 폭을 587px 까지 늘려 페이지가 옆으로 밀렸다.
+       카드 안에서 잘라 내면 툴팁 동작은 그대로면서 폭만 갇힌다. */
+    <div className={cn("min-w-0 shrink-0 overflow-hidden rounded-md border bg-card p-4", className)}>
       <h2 className="text-sm font-semibold text-foreground">{title}</h2>
       {hint && <p className="mt-0.5 mb-3 text-xs leading-normal break-keep text-muted-foreground">{hint}</p>}
       {children}

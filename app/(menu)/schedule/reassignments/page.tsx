@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
 import { cn } from "@frontend/lib/utils"
+import { MobileFilterPanel } from "@frontend/components/common/mobile-filter-panel"
 import { Badge } from "@frontend/components/ui/badge"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
@@ -122,9 +123,12 @@ function TypeBadge({ type }: { type: HistoryType }) {
 
 function StatCell({ title, value }: { title: string; value: number }) {
   return (
-    <div className="flex min-w-0 flex-col bg-card px-4 py-3">
-      <span className="truncate text-xs font-medium text-muted-foreground">{title}</span>
-      <span className="mt-0.5 text-2xl font-semibold tabular-nums text-foreground">{value.toLocaleString("ko-KR")}</span>
+    /* 모바일은 라벨·숫자를 한 줄로 눕혀 칸 높이를 절반 아래로 줄인다 —
+       네 칸이 2줄로 쌓여 170px 을 먹으며 타임라인을 화면 밖으로 밀어내던 자리다.
+       sm 부터는 원래의 세로 쌓기(라벨 위 / 숫자 아래) 그대로다. */
+    <div className="flex min-h-8 min-w-0 items-center justify-between gap-1 bg-card px-3 py-1 sm:flex-col sm:items-stretch sm:justify-start sm:px-4 sm:py-3">
+      <span className="min-w-0 truncate text-xs font-medium text-muted-foreground">{title}</span>
+      <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground sm:mt-0.5 sm:text-2xl">{value.toLocaleString("ko-KR")}</span>
     </div>
   )
 }
@@ -284,7 +288,13 @@ export default function ReassignmentsPage() {
       </Card>
 
       {/* 조회조건 줄 — 위아래가 전부 테두리 상자면 리듬이 죽는다. 여기는 테두리 없이 둔다.
-          필터 4개 + 기간 + 검색이라 좁은 폭에선 반드시 넘친다 → flex-wrap 으로 줄을 접는다. */}
+          필터 4개 + 기간 + 검색이라 좁은 폭에선 반드시 넘친다 → flex-wrap 으로 줄을 접는다.
+
+          모바일에서는 그 접힌 줄이 세로로 170px 을 먹어 타임라인 첫 줄을 화면 밖으로
+          밀어냈다. 기본으로 접고 "지금 무엇으로 걸러 보고 있는지"만 한 줄 남긴다. */}
+      <MobileFilterPanel
+        summary={`${FILTERS.find(item => item.id === filter)?.label ?? "전체"} · ${filteredRows.length.toLocaleString("ko-KR")}건`}
+      >
       <div className="flex min-w-0 shrink-0 flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           {FILTERS.map(item => (
@@ -331,6 +341,7 @@ export default function ReassignmentsPage() {
           />
         </div>
       </div>
+      </MobileFilterPanel>
 
       <Card className="flex min-h-0 min-w-0 flex-1 flex-col gap-0 py-0">
         <div className="flex shrink-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b px-4 py-3">

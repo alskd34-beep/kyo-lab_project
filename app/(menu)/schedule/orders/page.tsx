@@ -10,6 +10,7 @@ import {
 import { CLOSED_STAGE, JOB_STAGES, stageStyle } from "@shared/qc-status"
 import { describeConflicts, type TesterAbsence } from "@shared/leave"
 import { cn } from "@frontend/lib/utils"
+import { MobileFilterPanel } from "@frontend/components/common/mobile-filter-panel"
 import { ManagementDrawer } from "@frontend/components/common/management-drawer"
 import { AssigneeDetailModal } from "@frontend/components/schedule/assignee-detail-modal"
 import { useConfirmMessage } from "@frontend/components/common/confirm-message"
@@ -879,6 +880,13 @@ export default function OrdersPage() {
         </div>
       )}
 
+      {/* 조회 옵션 — 모바일에서는 접는다.
+          탭(2줄) + 상태 요약 9칸(3줄) + 조회조건까지 세로로 400px 가까이 쌓여
+          정작 봐야 할 오더 카드가 화면 밖으로 밀려났다. */}
+      <MobileFilterPanel
+        summary={`${TABS.find(t => t.id === tab)?.label ?? ""} · ${statusFilter || "전체"} ${scopedRows.length}건`}
+      >
+
       {/* 탭 (주차별 / 담당자별 / 상태별)
           세 탭을 합치면 300px 남짓이라 320px 폭에서 한 줄에 안 들어간다.
           글자를 줄이지 않고 줄을 바꾼다 — 좁으면 두 줄, sm 부터 한 줄. */}
@@ -915,8 +923,10 @@ export default function OrdersPage() {
               aria-pressed={active}
               onClick={() => setStatusFilter(status)}
               className={cn(
-                "flex min-h-14 min-w-0 flex-col justify-center gap-0.5 rounded-md border bg-card px-2 py-1.5 text-left transition-colors",
-                "sm:min-h-16 sm:gap-1 sm:px-2.5 sm:py-2",
+                /* 모바일은 라벨·숫자를 한 줄로 눕혀 타일 높이를 절반으로 줄인다
+                   (9칸이 3줄이라 세로로 가장 크게 잡아먹던 자리다). */
+                "flex min-h-8 min-w-0 items-center justify-between gap-1 rounded-md border bg-card px-2 py-1 text-left transition-colors",
+                "sm:min-h-16 sm:flex-col sm:items-start sm:justify-center sm:gap-1 sm:px-2.5 sm:py-2",
                 "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
                 active
                   ? "border-primary bg-primary/5 ring-1 ring-primary/20"
@@ -927,7 +937,7 @@ export default function OrdersPage() {
                 <span className={cn("size-2 shrink-0 rounded-full", dot)} />
                 <span className="min-w-0 truncate">{status || "전체"}</span>
               </span>
-              <span className="text-lg font-semibold tabular-nums text-foreground">{count}</span>
+              <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground sm:text-lg">{count}</span>
             </button>
           )
         })}
@@ -999,6 +1009,8 @@ export default function OrdersPage() {
           <Database />적재 이력
         </Button>
       </div>
+
+      </MobileFilterPanel>
 
       {/* 그룹 카드 — 조회조건 아래 아코디언만 스크롤 */}
       {loading ? (
@@ -1122,6 +1134,15 @@ export default function OrdersPage() {
               </section>
             )
           })}
+          {/* 하단 여백 — 화면 아래에 떠 있는 것들이 마지막 그룹을 덮는다.
+              선택 막대(fixed bottom-3)는 모바일에서 요약·배정·확정 3줄로 쌓여 200px 에 가깝고,
+              챗봇 버튼(fixed bottom-24)은 선택이 없어도 늘 오른쪽 아래에 앉아 있다.
+              스크롤 컨테이너가 flex 라 padding-bottom 은 브라우저에 따라 스크롤 범위에
+              안 잡히므로, 여백 대신 높이를 가진 빈 칸을 마지막에 둔다.
+              루트가 18px 라 rem 기반 값이 1.125 배로 커진다 — 막대도 같은 배율이라
+              비율은 그대로지만, 320px 폭에서 배정 버튼이 한 줄 더 접히는 경우까지
+              덮도록 넉넉히 잡는다(모자라면 버그가 그대로 남고, 남아도 스크롤 끝에서만 보인다). */}
+          <div aria-hidden className={cn(selected.size > 0 ? "h-64 sm:h-24" : "h-24 sm:h-10")} />
         </div>
         </div>
       )}

@@ -47,11 +47,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   /**
-   * 세션 복구 실패 처리. 자동 로그인 마커만 남으면 미들웨어가 페이지는 통과시키고
-   * API만 401을 내는 죽은 세션이 되므로, 마커를 지우고 로그인 화면으로 보낸다.
+   * 세션 복구 실패 처리.
+   *
+   * **자동 로그인 마커는 지우지 않는다.** 예전에는 여기서 지웠는데, 그 근거였던
+   * "마커만 남으면 페이지는 통과하고 API만 401인 죽은 세션이 된다"는 이제 성립하지
+   * 않는다 — 미들웨어가 마커와 refresh 쿠키를 **둘 다** 요구하고(`hasAutoLogin &&
+   * hasRefresh`), 서버의 `clearSessionCookies()` 가 refresh 를 이미 지운다.
+   *
+   * 반면 지웠을 때의 손해는 컸다. 자동 로그인은 자격증명이 아니라 **사용자 설정**인데,
+   * 회전된 refresh 토큰이 한 번 중복 제출되는 것만으로(탭 2개, 서버 재시작 직후 동시
+   * 갱신 등) 401 이 나고 설정이 영구히 꺼졌다. localStorage 의 체크박스는 켜진 채라
+   * 사용자에게는 "체크했는데 왜 매번 로그인하지?" 로만 보였다.
+   * 설정은 사용자가 직접 끄거나 로그아웃할 때만 지운다(백엔드 `auth-cookies.ts` 와 같은 방침).
    */
   const expireSession = useCallback(() => {
-    clearAutoLoginCookie()
     setUser(null)
     if (typeof window === 'undefined') return
     const { pathname, search } = window.location
