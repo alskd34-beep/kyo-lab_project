@@ -90,11 +90,21 @@ function matchesEntry(ip: string, entry: string): boolean {
 /**
  * 요청자의 IP 를 헤더에서 뽑는다.
  *
- * ⚠️ `x-forwarded-for` 는 **오른쪽 끝**을 쓴다.
- *    이 헤더는 클라이언트가 마음대로 실어 보낼 수 있고 Railway 엣지는 거기에 실제
- *    발신 IP 를 덧붙인다. 왼쪽 끝(가장 흔한 구현)을 믿으면 허용목록을 위조된 값으로
- *    통과할 수 있다. 프록시가 덧붙인 마지막 값만이 위조 불가능하다.
- *    (엣지가 헤더를 통째로 덮어쓰는 경우에도 항목이 하나뿐이라 결과는 같다)
+ * `x-forwarded-for` 는 **맨 왼쪽**을 쓴다. Railway 의 체인이 이 모양이기 때문이다.
+ *
+ *     x-forwarded-for: 221.138.234.85, 152.233.68.97
+ *                      └ 엣지가 넣는 실제 발신 IP   └ 내부 홉(요청마다 바뀜)
+ *
+ * 오른쪽 끝은 Railway 내부 프록시 주소라 허용목록과 영영 맞지 않는다.
+ *
+ * 왼쪽 끝은 보통 클라이언트가 위조할 수 있어 위험하지만, **Railway 엣지는 클라이언트가
+ * 실어 보낸 `x-forwarded-for` 를 덮어쓴다.** 2026-08-26 실제 배포에서 확인했다 —
+ * 위조 값(`1.2.3.4`, `8.8.8.8`)을 보내도 서버가 받은 체인에는 흔적조차 없었다.
+ * 그래서 이 환경에서는 왼쪽 끝이 신뢰할 수 있는 값이다.
+ *
+ * ⚠️ 앞단 구성을 바꾸면(다른 PaaS, 프록시 추가) 이 전제가 깨진다.
+ *    `docs/deploy-railway.md` 의 위조 검증을 다시 돌리고, 뚫리면 `IP_CLIENT_HEADER` 로
+ *    발신 IP 전용 헤더(예: `cf-connecting-ip`)를 지정한다.
  */
 export function clientIpFromHeaders(headers: Headers, trustedHeader?: string | null): string | null {
   // 프록시가 "실제 발신 IP" 만 담아 주는 전용 헤더가 있으면 그쪽이 더 안전하다.
@@ -108,9 +118,8 @@ export function clientIpFromHeaders(headers: Headers, trustedHeader?: string | n
 
   const forwarded = headers.get('x-forwarded-for')
   if (forwarded) {
-    const parts = forwarded.split(',').map(p => p.trim()).filter(Boolean)
-    const last = parts[parts.length - 1]
-    if (last) return normalizeIp(last)
+    const first = forwarded.split(',')[0]?.trim()
+    if (first) return normalizeIp(first)
   }
 
   const real = headers.get('x-real-ip')

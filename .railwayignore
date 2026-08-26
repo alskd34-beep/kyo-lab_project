@@ -1,0 +1,21 @@
+# railway up 으로 업로드할 때 제외할 것들.
+# ⚠️ .env* 를 최우선으로 막는다 — 시크릿은 Railway Variables 로만 들어가야 하고
+#    소스에 섞여 올라가면 빌드 산출물과 로그로 샐 수 있다.
+.env
+.env.*
+!.env.example
+
+node_modules
+.next
+.git
+*.log
+
+# 로컬 도구·임시물
+temp
+.omc
+.claude
+.agents
+.gstack
+.playwright-cli
+.playwright-mcp
+.vscode
