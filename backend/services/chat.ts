@@ -10,6 +10,7 @@
  */
 
 import { randomUUID } from 'crypto'
+import { assignedToTesterFilter } from '@backend/lib/assigneeFilter'
 import { DELETED_STATUS } from '@shared/qc-status'
 import { supabaseAdmin, supabaseAdmin as supabase } from '@backend/lib/supabase'
 import { runLetsurText } from '@backend/lib/letsurClient'
@@ -386,7 +387,8 @@ async function fetchScopedOrders(
   if (opts.dueFrom) q = q.gte('due_date', opts.dueFrom)
   if (opts.dueTo) q = q.lte('due_date', opts.dueTo)
   if (opts.urgent) q = q.eq('is_urgent', true)
-  if (restrictTester) q = q.eq('assignee_tester_id', restrictTester)
+  // 2인 배정 담당자2도 자기 오더로 본다(담당자1만 보면 담당자2는 0건으로 답한다)
+  if (restrictTester) q = q.or(assignedToTesterFilter(restrictTester))
 
   const { data } = await q.order('due_date', { ascending: true }).limit(20)
   return (data ?? []) as OrderRow[]
@@ -406,6 +408,7 @@ async function jobItemsForOrders(orderIds: string[]): Promise<Map<string, JobInf
   if (orderIds.length === 0) return map
   const { data: jobs } = await supabaseAdmin
     .from('qc_jobs').select('id, order_id, qc_no, status').in('order_id', orderIds)
+    .order('qc_no', { ascending: true })
   if (!jobs || jobs.length === 0) return map
   const jobIds = jobs.map(j => j.id as string)
   const { data: items } = await supabaseAdmin
@@ -420,10 +423,20 @@ async function jobItemsForOrders(orderIds: string[]): Promise<Map<string, JobInf
     itemsByJob.set(it.qc_job_id as string, arr)
   }
   for (const j of jobs) {
-    map.set(j.order_id as string, {
+    const orderId = j.order_id as string
+    const info: JobInfo = {
       qcNo: j.qc_no as string,
       status: j.status as string,
       items: itemsByJob.get(j.id as string) ?? [],
+    }
+    const prev = map.get(orderId)
+    if (!prev) { map.set(orderId, info); continue }
+    // 2인 배정 오더는 담당자별로 작업이 2건이다. 그대로 덮어쓰면 한 사람의 QC번호와
+    // 시험항목 진행상태가 통째로 사라져, AI 가 "그 배치는 항목이 3개뿐"이라고 잘못 답한다.
+    map.set(orderId, {
+      qcNo:   `${prev.qcNo}, ${info.qcNo}`,
+      status: prev.status === info.status ? prev.status : `${prev.status}/${info.status}`,
+      items:  [...prev.items, ...info.items],
     })
   }
   return map

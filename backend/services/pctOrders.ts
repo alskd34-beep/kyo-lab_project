@@ -8,7 +8,7 @@ import { assertTesterAssignable } from '@backend/services/testers'
 import { logReassignment } from '@backend/services/reassignmentHistory'
 import { warnIfAssigneeOnLeave } from '@backend/services/leaveConflicts'
 import {
-  METHOD_ALL, METHOD_PARTIAL, normalizeForMethod, replaceForOrder,
+  METHOD_ALL, METHOD_PARTIAL, normalizeForMethod, replaceForOrder, resetAssigneeSlots,
   type OrderTestItemInput,
 } from '@backend/services/pctOrderTestItems'
 
@@ -25,6 +25,10 @@ export interface PctOrderRow {
   status: string
   assigneeTesterId: string | null
   assigneeName: string | null
+  /** 2인 배정(0037) — 켜져 있으면 시험항목을 담당자1/2 로 나눠 배분한다 */
+  isDualAssignment: boolean
+  assigneeTesterId2: string | null
+  assigneeName2: string | null
   productSynced: boolean
   note: string | null
   ingestState: string
@@ -41,6 +45,7 @@ export interface PctOrderRow {
 const EDITABLE_FIELDS = [
   'productCode', 'productName', 'batchNo', 'dosageForm',
   'packagingDate', 'dueDate', 'isUrgent', 'method', 'status', 'note', 'assigneeTesterId',
+  'isDualAssignment', 'assigneeTesterId2',
 ] as const
 type EditableField = (typeof EDITABLE_FIELDS)[number]
 const AUTO_IMMUTABLE_FIELDS = ['productCode', 'productName', 'batchNo'] as const
@@ -53,19 +58,33 @@ const AUTO_IMMUTABLE_FIELDS = ['productCode', 'productName', 'batchNo'] as const
  * method/isUrgent 는 배정 방식 자체를 바꾸므로, 이것들이 열려 있으면
  * "확정된 일정"이 확정되지 않은 것과 같다.
  * note 는 메모라서 LOCK 후에도 남겨둔다.
+ * 2인 배정(isDualAssignment/assigneeTesterId2)도 담당자 배정의 일부라 같이 잠근다.
  */
 const LOCKED_IMMUTABLE_FIELDS = [
   'assigneeTesterId', 'packagingDate', 'dueDate', 'isUrgent', 'method',
+  'isDualAssignment', 'assigneeTesterId2',
 ] as const
 
 /**
  * [원칙2] QC 작업이 시작된 뒤에는 변경을 막는 필드.
  * "시험 시작(IN_PROGRESS)/완료 후 일정 변경 금지". status 는 작업 진행에 따라
  * 서버가 동기화하므로(qcJobs.advanceJobStage) 여기서 제외한다.
+ *
+ * assigneeTesterId/assigneeTesterId2 는 여기 없다 — 2인 배정에서는 "오더에 작업이
+ * 하나라도 있으면 담당자 변경 금지" 가 아니라 "그 담당자 본인이 이미 시작했으면
+ * 그 슬롯만 변경 금지" 가 맞는 규칙이라 별도로(슬롯 단위) 검사한다. 1인 배정 오더는
+ * 작업이 있으면 항상 그 작업의 담당자가 곧 assigneeTesterId 이므로 결과는 동일하다.
+ *
+ * isDualAssignment 는 반대로 여기 **있어야** 한다.
+ *  · 끄면 slot=2 항목이 전부 slot=1 로 돌아오는데(resetAssigneeSlots), 담당자1의
+ *    체크리스트는 이미 시작 시점에 굳어 그 항목들이 없다 → 아무도 시험하지 않게 된다.
+ *  · 켜도 담당자1의 체크리스트에 이미 전 항목이 들어가 있고, 작업이 시작된 뒤에는
+ *    슬롯 이동 자체가 막히므로(setAssigneeSlot) 담당자2는 맡을 항목이 0개가 된다.
+ * 어느 쪽도 성립하지 않으므로 작업 시작 후에는 2인 배정 전환을 통째로 막는다.
  */
 const STARTED_IMMUTABLE_FIELDS = [
-  'assigneeTesterId', 'packagingDate', 'dueDate', 'isUrgent', 'method',
-  'productCode', 'productName', 'batchNo',
+  'packagingDate', 'dueDate', 'isUrgent', 'method',
+  'productCode', 'productName', 'batchNo', 'isDualAssignment',
 ] as const
 
 /** 오류 메시지용 한국어 필드명 */
@@ -81,6 +100,8 @@ const FIELD_LABEL: Record<EditableField, string> = {
   status: '상태',
   note: '비고',
   assigneeTesterId: '담당자',
+  isDualAssignment: '2인 배정',
+  assigneeTesterId2: '담당자2',
 }
 function fieldLabel(f: EditableField): string {
   return FIELD_LABEL[f] ?? f
@@ -98,6 +119,8 @@ const FIELD_TO_COL: Record<EditableField, string> = {
   status: 'status',
   note: 'note',
   assigneeTesterId: 'assignee_tester_id',
+  isDualAssignment: 'is_dual_assignment',
+  assigneeTesterId2: 'assignee_tester_id_2',
 }
 
 export async function listOrders(filters: {
@@ -120,8 +143,10 @@ export async function listOrders(filters: {
   const orders = (data ?? []) as Record<string, unknown>[]
   if (orders.length === 0) return []
 
-  // 담당자 이름
-  const testerIds = [...new Set(orders.map(o => o.assignee_tester_id).filter(Boolean) as string[])]
+  // 담당자 이름 (2인 배정의 담당자2 포함 — 같은 맵을 공유해도 무방하다)
+  const testerIds = [...new Set(
+    orders.flatMap(o => [o.assignee_tester_id, o.assignee_tester_id_2]).filter(Boolean) as string[],
+  )]
   const nameByTester = new Map<string, string>()
   if (testerIds.length > 0) {
     const { data: testers } = await supabaseAdmin.from('testers').select('id, name').in('id', testerIds)
@@ -190,6 +215,9 @@ export async function listOrders(filters: {
     status: o.status as string,
     assigneeTesterId: (o.assignee_tester_id as string) ?? null,
     assigneeName: o.assignee_tester_id ? (nameByTester.get(o.assignee_tester_id as string) ?? null) : null,
+    isDualAssignment: !!o.is_dual_assignment,
+    assigneeTesterId2: (o.assignee_tester_id_2 as string) ?? null,
+    assigneeName2: o.assignee_tester_id_2 ? (nameByTester.get(o.assignee_tester_id_2 as string) ?? null) : null,
     productSynced: !!o.product_synced,
     note: (o.note as string) ?? null,
     ingestState: o.ingest_state as string,
@@ -302,6 +330,10 @@ export async function createOrder(input: {
     status: o.status as string,
     assigneeTesterId: (o.assignee_tester_id as string) ?? null,
     assigneeName,
+    // 수동 오더 생성은 항상 1인 배정으로 시작한다 — 2인 배정은 오더 수정 화면에서만 켠다(스펙 확정).
+    isDualAssignment: false,
+    assigneeTesterId2: null,
+    assigneeName2: null,
     productSynced: !!o.product_synced,
     note: (o.note as string) ?? null,
     ingestState: o.ingest_state as string,
@@ -363,6 +395,7 @@ export async function updateOrderWithReason(
   }
   // 담당자를 바꾸는 수정이면 비활성 시험자 지정을 차단한다
   if (patch.assigneeTesterId) await assertTesterAssignable(String(patch.assigneeTesterId))
+  if (patch.assigneeTesterId2) await assertTesterAssignable(String(patch.assigneeTesterId2))
 
   // 현재값 로드 (locked 컬럼까지 받기 위해 select('*') — 0015 미적용 환경에서는 자동 누락)
   const { data: current, error: curErr } = await supabaseAdmin
@@ -373,6 +406,20 @@ export async function updateOrderWithReason(
   if (curErr) throw curErr
 
   const currentRow = current as Record<string, unknown>
+
+  // [2인 배정] 패치가 적용된 뒤 최종적으로 남을 값 기준으로 검증한다
+  // (패치에 없는 필드는 현재값을 그대로 쓴다 — 예: 담당자2만 바꾸고 2인 배정 플래그는
+  // 건드리지 않는 요청도 이미 켜져 있던 2인 배정 기준으로 판정해야 한다).
+  const effectiveDual = 'isDualAssignment' in patch
+    ? !!patch.isDualAssignment
+    : !!currentRow.is_dual_assignment
+  const effectiveTester1 = 'assigneeTesterId' in patch
+    ? ((patch.assigneeTesterId as string | null) ?? null)
+    : ((currentRow.assignee_tester_id as string | null) ?? null)
+  const effectiveTester2 = 'assigneeTesterId2' in patch
+    ? ((patch.assigneeTesterId2 as string | null) ?? null)
+    : ((currentRow.assignee_tester_id_2 as string | null) ?? null)
+
   const isManual = currentRow.ingest_state === 'manual'
   const dbPatch: Record<string, unknown> = {}
   const edits: Array<{ field: string; old_value: string | null; new_value: string | null }> = []
@@ -392,9 +439,45 @@ export async function updateOrderWithReason(
     edits.push({ field, old_value: oldStr, new_value: newStr })
   }
 
+  // [2인 배정] 끄는 순간 담당자2는 항상 비운다 — 프런트가 값을 함께 보내지 않아도,
+  // 혹은 실수로 다른 값을 보내도 서버가 강제로 정리한다(단일 기준: is_dual_assignment=false
+  // 인 오더는 assignee_tester_id_2 가 항상 null 이라는 불변식을 지킨다).
+  const dualTurnedOff = edits.some(e => e.field === 'isDualAssignment' && e.new_value === 'false')
+  if (dualTurnedOff) {
+    dbPatch.assignee_tester_id_2 = null
+    const oldVal2 = currentRow.assignee_tester_id_2 ? String(currentRow.assignee_tester_id_2) : null
+    const existingIdx = edits.findIndex(e => e.field === 'assigneeTesterId2')
+    if (existingIdx >= 0) {
+      edits[existingIdx] = { field: 'assigneeTesterId2', old_value: oldVal2, new_value: null }
+    } else if (oldVal2 !== null) {
+      edits.push({ field: 'assigneeTesterId2', old_value: oldVal2, new_value: null })
+    }
+  }
+
   if (edits.length === 0) return  // 변경 없음
 
   const changed = new Set(edits.map(e => e.field))
+
+  // [2인 배정] 배정을 **실제로 건드리는 수정일 때만** 검증한다.
+  //
+  // 예전에는 패치 내용과 무관하게 항상 검증해서, 한 번 깨진 오더가 영영 수정 불가로 굳었다.
+  // `assignee_tester_id_2` 는 `on delete set null` 이라 시험자를 하드 삭제하면
+  // `is_dual_assignment = true` 인데 담당자2가 null 인 상태가 만들어지는데, 그 뒤로는
+  // **비고 한 줄만 고쳐도** "담당자 2명을 모두 선택해야 합니다" 로 400 이 났다.
+  // 작업이 시작된 오더면 2인 배정 체크박스도 잠겨 있어 빠져나갈 길이 없었다.
+  //
+  // 배정 필드를 건드릴 때만 막으면, 관리자가 담당자2를 다시 지정해 스스로 복구할 수 있고
+  // 무관한 수정은 그대로 통과한다.
+  const touchesAssignment =
+    changed.has('isDualAssignment') || changed.has('assigneeTesterId') || changed.has('assigneeTesterId2')
+  if (touchesAssignment) {
+    if (effectiveDual && (!effectiveTester1 || !effectiveTester2)) {
+      throw new Error('2인 배정은 담당자 2명을 모두 선택해야 합니다.')
+    }
+    if (effectiveTester1 && effectiveTester2 && effectiveTester1 === effectiveTester2) {
+      throw new Error('같은 담당자를 두 번 배정할 수 없습니다.')
+    }
+  }
 
   // [원칙3] 확정(LOCK)된 오더는 담당자뿐 아니라 일정·진행방법·긴급여부까지 잠근다.
   if (currentRow.locked) {
@@ -407,17 +490,41 @@ export async function updateOrderWithReason(
     }
   }
 
-  // [원칙2] QC 작업이 시작된 오더는 일정·배정을 변경하지 않는다.
-  const { data: startedJob } = await supabaseAdmin
+  // [원칙2] QC 작업이 시작된 오더는 일정·품목 등을 변경하지 않는다.
+  // 2인 배정에서는 오더당 작업이 최대 2건(담당자별)일 수 있어 존재 여부만 count 로 본다
+  // (.maybeSingle() 은 2건이면 "복수 행" 에러를 던진다 — 예전 코드의 버그).
+  const { count: startedJobCount, error: startedCntErr } = await supabaseAdmin
     .from('qc_jobs')
-    .select('id')
+    .select('id', { count: 'exact', head: true })
     .eq('order_id', id)
-    .maybeSingle()
-  if (startedJob) {
+  if (startedCntErr) throw startedCntErr
+  if ((startedJobCount ?? 0) > 0) {
     const blocked = STARTED_IMMUTABLE_FIELDS.filter(f => changed.has(f))
     if (blocked.length > 0) {
       throw new Error(
         `이미 시험이 시작된 오더는 ${blocked.map(fieldLabel).join('·')} 를 변경할 수 없습니다.`,
+      )
+    }
+  }
+
+  // [2인 배정] 이미 작업을 시작한 담당자를 해제·교체하는 것은 막는다.
+  // "오더에 작업이 있으면 담당자 전체를 잠근다"가 아니라 "그 담당자 본인이 이미
+  // 시작했으면 그 슬롯만 잠근다"가 맞는 규칙이다 — 슬롯별로 독립 판정한다.
+  // (1인 배정 오더는 작업이 있으면 항상 그 작업의 담당자가 곧 assigneeTesterId 이므로
+  //  이 검사가 곧 예전의 "작업이 있으면 담당자 변경 금지"와 동일하게 동작한다.)
+  for (const slotField of ['assigneeTesterId', 'assigneeTesterId2'] as const) {
+    if (!changed.has(slotField)) continue
+    const oldTesterId = (currentRow[FIELD_TO_COL[slotField]] as string | null) ?? null
+    if (!oldTesterId) continue
+    const { data: startedByThis } = await supabaseAdmin
+      .from('qc_jobs')
+      .select('qc_no')
+      .eq('order_id', id)
+      .eq('assignee_tester_id', oldTesterId)
+      .maybeSingle()
+    if (startedByThis) {
+      throw new Error(
+        `이미 작업을 시작한 담당자(QC ${startedByThis.qc_no})는 변경할 수 없습니다. 작업을 먼저 정리하세요.`,
       )
     }
   }
@@ -438,6 +545,18 @@ export async function updateOrderWithReason(
     .select('id')
   if (logErr) throw new Error(`수정 이력 기록 실패로 변경을 취소했습니다: ${logErr.message}`)
 
+  // [2인 배정] 2인 배정을 끄면 담당자별로 나눠뒀던 항목 배분도 되돌린다 —
+  // 담당자2 가 사라졌는데 항목이 slot=2 로 남으면 그 항목은 아무에게도 표시되지 않는다.
+  //
+  // 오더 UPDATE **앞에서** 되돌리는 이유: 뒤에 두면 여기서 실패했을 때 오더는 이미
+  // is_dual_assignment=false 로 커밋됐는데 slot=2 인 고아 항목이 남고, 사용자에게는
+  // "저장 실패"로 보이지만 재시도는 edits.length===0 으로 아무것도 하지 않아 손쓸 방법이 없다.
+  // 앞에 두면 최악의 경우가 "2인 배정은 아직 켜져 있는데 항목이 전부 slot=1" 인데,
+  // 이는 관리자가 다시 배분하면 되는 복구 가능한 상태다.
+  if (dualTurnedOff) {
+    await resetAssigneeSlots(id, editedBy)
+  }
+
   const { error: updErr } = await supabaseAdmin.from('pct_orders').update(dbPatch).eq('id', id)
   if (updErr) {
     // 값 변경이 실패했으므로 방금 남긴 이력을 제거해 "일어나지 않은 변경"이 남지 않게 한다.
@@ -451,11 +570,18 @@ export async function updateOrderWithReason(
     throw updErr
   }
 
-  const assigneeEdit = edits.find(e => e.field === 'assigneeTesterId')
-
   // 담당자 변경·해제는 재배정 이력에도 남긴다(자동배정/수동배정과 동일 저장소).
   // 이력 적재 실패가 수정 자체를 되돌리지는 않는다.
-  if (assigneeEdit) {
+  //
+  // 담당자1(assigneeTesterId)과 담당자2(assigneeTesterId2)를 **똑같이** 다룬다.
+  // 예전에는 담당자1만 봐서, 담당자2 배정은 reassignment_history 에 한 건도 남지 않았고
+  // (대시보드의 재배정 통계가 통째로 놓쳤다) 휴가 겹침 알림도 돌지 않았다 —
+  // 화면은 저장 직전에 "그대로 저장하면 관리자 알림이 남습니다" 라고 약속하는데
+  // 담당자2에 대해서는 그 약속이 지켜지지 않았다.
+  for (const slotField of ['assigneeTesterId', 'assigneeTesterId2'] as const) {
+    const assigneeEdit = edits.find(e => e.field === slotField)
+    if (!assigneeEdit) continue
+
     await logReassignment({
       orderId:    id,
       beforeUser: assigneeEdit.old_value,
@@ -476,7 +602,8 @@ export async function updateOrderWithReason(
       },
       productName: (currentRow.product_name as string) ?? '',
       batchNo:     (currentRow.batch_no as string) ?? '',
-      via:         '오더 수정',
+      // 알림에서 어느 슬롯 배정인지 구분되게 한다 — 2인 배정 오더는 같은 오더에 알림이 둘 뜬다.
+      via:         slotField === 'assigneeTesterId2' ? '오더 수정(담당자2)' : '오더 수정',
     })
   }
 }

@@ -10,10 +10,13 @@
 import { supabaseAdmin } from '@backend/lib/supabase'
 import { generateQcNo } from '@backend/lib/qcNumber'
 import { kstToday } from '@backend/lib/kstDate'
+import { describeSchemaError } from '@backend/lib/schemaError'
 import { createNotification } from '@backend/services/notifications'
 import { checkEquipmentReadiness, type ReadinessResult } from '@backend/services/equipmentMaster'
 import { listByProduct, type PretestNoteRow } from '@backend/services/productPretestNotes'
-import { METHOD_PARTIAL, listByOrder as listOrderTestItems } from '@backend/services/pctOrderTestItems'
+import {
+  METHOD_PARTIAL, listByOrder as listOrderTestItems, activeItemsForSlot, countActiveBySlot,
+} from '@backend/services/pctOrderTestItems'
 import { logJobStatusChange } from '@backend/services/qcJobStatusHistory'
 import {
   ACTIVE_JOB_STATUSES,
@@ -22,6 +25,7 @@ import {
   DELAYED_STATUS,
   DELETED_STATUS,
   IN_PROGRESS_STATUS,
+  JOB_STAGES,
   JOB_STATUSES,
   NEXT_STAGE,
   PENDING_STATUS,
@@ -191,20 +195,28 @@ export async function listWorkspace(userSub: string): Promise<{ testerLinked: bo
   if (!testerId) return { testerLinked: false, pendingOrders: [], jobs: [] }
 
   // 내 작업
-  const { data: jobRows } = await supabaseAdmin
+  const { data: jobRows, error: jobsErr } = await supabaseAdmin
     .from('qc_jobs')
     .select('id, order_id, qc_no, work_start_date, work_end_date, status')
     .eq('assignee_user_id', userSub)
     .order('created_at', { ascending: false })
+  if (jobsErr) throw describeSchemaError(jobsErr, '2인 배정')
 
   const jobOrderIds = (jobRows ?? []).map(j => j.order_id as string)
 
   // 오더 정보 (작업/대기 공통)
-  const { data: orderRows } = await supabaseAdmin
+  // 2인 배정 오더는 담당자2(assignee_tester_id_2)로 배정된 경우도 "내 오더"다 —
+  // eq() 하나만 쓰면 담당자2에게는 오더 자체가 보이지 않는다.
+  //
+  // 0037(2인 배정) 미적용 DB 에서는 is_dual_assignment 참조가 42703 을 낸다. 예전에는
+  // error 를 버려 data===null 이 되고, 대기 목록·작업 화면이 아무 안내 없이 텅 비었다.
+  // describeSchemaError 로 감싸 원인을 알 수 있는 메시지로 던진다.
+  const { data: orderRows, error: ordersErr } = await supabaseAdmin
     .from('pct_orders')
-    .select('id, product_code, product_name, batch_no, due_date, is_urgent, method, status, assignee_tester_id')
-    .eq('assignee_tester_id', testerId)
+    .select('id, product_code, product_name, batch_no, due_date, is_urgent, method, status, assignee_tester_id, is_dual_assignment')
+    .or(`assignee_tester_id.eq.${testerId},and(is_dual_assignment.eq.true,assignee_tester_id_2.eq.${testerId})`)
     .neq('status', DELETED_STATUS)
+  if (ordersErr) throw describeSchemaError(ordersErr, '2인 배정')
   const orderById = new Map<string, Record<string, unknown>>()
   for (const o of orderRows ?? []) orderById.set(o.id as string, o)
 
@@ -249,8 +261,32 @@ export async function listWorkspace(userSub: string): Promise<{ testerLinked: bo
     }
   })
 
+  // 2인 배정 오더는 "내 슬롯에 진행할 항목이 있는가"까지 봐야 한다. 항목이 0개면 시작해도
+  // startJob 이 '배정된 시험항목이 없습니다' 로 거절하는데, 그 오더가 대기 목록에 계속 남아
+  // 누를 때마다 에러만 나는 상태가 된다. 후보를 한 번에 세어 N+1 을 피한다.
+  const dualCandidateIds = (orderRows ?? [])
+    .filter(o => o.is_dual_assignment && !jobOrderIds.includes(o.id as string))
+    .map(o => o.id as string)
+  const slotCounts = await countActiveBySlot(dualCandidateIds)
+
   const pendingOrders: PendingOrderRow[] = (orderRows ?? [])
-    .filter(o => !jobOrderIds.includes(o.id as string) && o.status === PENDING_STATUS)
+    .filter(o => {
+      // 내가 이미 시작한 오더는 '작업'쪽에 있으므로 대기 목록에서 뺀다.
+      if (jobOrderIds.includes(o.id as string)) return false
+      // 1인 배정: 예전 그대로 오더 상태가 '대기'일 때만 시작 대기로 본다.
+      if (!o.is_dual_assignment) return o.status === PENDING_STATUS
+      // 2인 배정: 상대 담당자가 먼저 시작하면 오더 상태가 '진행중'으로 넘어간다.
+      // 오더 상태만 보면 아직 시작도 못 한 내 몫이 목록에서 사라져 영영 시작할 수 없다.
+      // "내 작업이 아직 없다"가 곧 내 시작 대기이므로, 종결·삭제만 제외한다.
+      if (o.status === CLOSED_STAGE || o.status === DELETED_STATUS) return false
+      // 내 슬롯에 할 일이 없으면 대기로 잡지 않는다.
+      // 스냅샷이 아직 없어 카운트를 모르는 오더(맵에 없음)는 예전처럼 남긴다 — 읽기 경로에서
+      // 스냅샷을 만들지 않기로 했으므로, 모를 때는 감추기보다 보여주는 쪽이 안전하다.
+      const counts = slotCounts.get(o.id as string)
+      if (!counts) return true
+      const mySlot = (o.assignee_tester_id as string) === testerId ? 1 : 2
+      return (mySlot === 1 ? counts.slot1 : counts.slot2) > 0
+    })
     .map(o => ({
       id: o.id as string,
       productCode: o.product_code as string,
@@ -485,9 +521,13 @@ export async function listWorkerOverview(): Promise<WorkerOverview> {
       .order('created_at', { ascending: false }),
     supabaseAdmin
       .from('pct_orders')
-      .select('id, product_name, batch_no, due_date, is_urgent, status, assignee_tester_id')
+      .select('id, product_name, batch_no, due_date, is_urgent, status, assignee_tester_id, is_dual_assignment, assignee_tester_id_2')
       .neq('status', DELETED_STATUS),
   ])
+  // 0037(2인 배정) 미적용 DB 에서는 is_dual_assignment 참조가 42703 을 낸다. 예전에는
+  // error 를 버려 관리자 「작업자 현황」이 안내 없이 통째로 비어 보였다(listWorkspace 와 같은 문제).
+  if (jobsRes.error) throw describeSchemaError(jobsRes.error, '2인 배정')
+  if (ordersRes.error) throw describeSchemaError(ordersRes.error, '2인 배정')
   const jobRows = (jobsRes.data ?? []) as Record<string, unknown>[]
   const orderRows = (ordersRes.data ?? []) as Record<string, unknown>[]
   const orderById = new Map<string, Record<string, unknown>>()
@@ -530,12 +570,15 @@ export async function listWorkerOverview(): Promise<WorkerOverview> {
   }
 
   let completedToday = 0
-  const startedOrderIds = new Set<string>()
+  // 오더별로 "이 담당자가 이미 자기 몫을 시작했는가"를 슬롯(담당자) 단위로 기억한다.
+  // 예전에는 오더 단위(startedOrderIds)라서, 2인 배정에서 한쪽만 시작해도 아직
+  // 시작하지 않은 다른 담당자 몫까지 "대기" 집계에서 함께 사라졌다.
+  const startedByTesterOrder = new Set<string>()   // `${orderId}::${testerId}`
 
   // 작업 집계
   for (const j of jobRows) {
     const testerId = j.assignee_tester_id as string | null
-    startedOrderIds.add(j.order_id as string)
+    if (testerId) startedByTesterOrder.add(`${j.order_id as string}::${testerId}`)
     if (!testerId) continue
     const row = rowByTester.get(testerId)
     if (!row) continue
@@ -561,21 +604,44 @@ export async function listWorkerOverview(): Promise<WorkerOverview> {
   }
 
   // 시작 대기 오더 집계 (배정됐고 status '대기' & 아직 미시작)
+  // 2인 배정 오더는 담당자1·담당자2 각각 아직 자기 몫을 시작하지 않았으면
+  // 각자의 목록에 따로 잡힌다(한 오더가 두 사람에게 각각 잡히는 것이 정상이다).
+  // 슬롯에 할 일이 0개인 담당자는 시작해도 startJob 이 거절하므로 대기로 세지 않는다
+  // (listWorkspace 와 같은 규칙). 후보를 한 번에 세어 N+1 을 피한다.
+  const dualOverviewIds = orderRows
+    .filter(o => o.is_dual_assignment && o.status !== CLOSED_STAGE && o.status !== DELETED_STATUS)
+    .map(o => o.id as string)
+  const overviewSlotCounts = await countActiveBySlot(dualOverviewIds)
+
   for (const o of orderRows) {
-    if (o.status !== PENDING_STATUS) continue
-    const testerId = o.assignee_tester_id as string | null
-    if (!testerId) continue
-    if (startedOrderIds.has(o.id as string)) continue
-    const row = rowByTester.get(testerId)
-    if (!row) continue
-    row.pendingCount += 1
-    row.pendingOrders.push({
-      orderId: o.id as string,
-      productName: o.product_name as string,
-      batchNo: o.batch_no as string,
-      dueDate: (o.due_date as string) ?? null,
-      isUrgent: !!o.is_urgent,
-    })
+    // 1인 배정은 예전 그대로 오더 상태가 '대기'일 때만 센다.
+    // 2인 배정은 상대가 먼저 시작하면 오더가 '진행중'이 되므로 오더 상태로 거르면
+    // 아직 시작 안 한 담당자의 대기 건이 집계에서 통째로 사라진다(listWorkspace 와 같은 이유).
+    if (o.is_dual_assignment
+      ? (o.status === CLOSED_STAGE || o.status === DELETED_STATUS)
+      : o.status !== PENDING_STATUS) continue
+    const orderId = o.id as string
+    const slotTesterIds: (string | null)[] = [o.assignee_tester_id as string | null]
+    if (o.is_dual_assignment) slotTesterIds.push(o.assignee_tester_id_2 as string | null)
+    for (const [idx, testerId] of slotTesterIds.entries()) {
+      if (!testerId) continue
+      if (startedByTesterOrder.has(`${orderId}::${testerId}`)) continue
+      if (o.is_dual_assignment) {
+        // 스냅샷이 아직 없어 카운트를 모르면(맵에 없음) 예전처럼 센다 — 안전한 쪽.
+        const counts = overviewSlotCounts.get(orderId)
+        if (counts && (idx === 0 ? counts.slot1 : counts.slot2) === 0) continue
+      }
+      const row = rowByTester.get(testerId)
+      if (!row) continue
+      row.pendingCount += 1
+      row.pendingOrders.push({
+        orderId,
+        productName: o.product_name as string,
+        batchNo: o.batch_no as string,
+        dueDate: (o.due_date as string) ?? null,
+        isUrgent: !!o.is_urgent,
+      })
+    }
   }
 
   // 완료예정 임박 순으로 활성 작업 정렬 (null은 뒤로)
@@ -615,7 +681,7 @@ export async function startJob(orderId: string, userSub: string): Promise<{ jobI
 
   const { data: order, error: oErr } = await supabaseAdmin
     .from('pct_orders')
-    .select('id, product_code, product_name, batch_no, assignee_tester_id, method')
+    .select('id, product_code, product_name, batch_no, assignee_tester_id, method, is_dual_assignment, assignee_tester_id_2')
     .eq('id', orderId)
     .single()
   if (oErr) throw oErr
@@ -632,9 +698,12 @@ export async function startJob(orderId: string, userSub: string): Promise<{ jobI
   if (!order.assignee_tester_id) {
     throw new Error('아직 담당자가 배정되지 않은 오더입니다. 관리자 배정 후 시작할 수 있습니다.')
   }
-  if (order.assignee_tester_id !== testerId) {
+  // 2인 배정이면 담당자1·담당자2 둘 중 하나만 맞아도 본인 오더다.
+  const isDual = !!order.is_dual_assignment
+  if (order.assignee_tester_id !== testerId && !(isDual && order.assignee_tester_id_2 === testerId)) {
     throw new Error('본인에게 배정된 오더만 시작할 수 있습니다.')
   }
+  const mySlot: 1 | 2 = order.assignee_tester_id === testerId ? 1 : 2
 
   // 장비 준비상태 검증
   const readiness = await getStartReadiness(orderId)
@@ -649,11 +718,22 @@ export async function startJob(orderId: string, userSub: string): Promise<{ jobI
     : undefined
 
   // 체크리스트에 넣을 항목을 작업 생성 '전에' 확정한다.
+  //  - 2인 배정: method 와 무관하게 항상 내 슬롯(mySlot) 몫만 (pct_order_test_items.assignee_slot)
   //  - 개별항목: 오더 생성 시 고른 항목만 (pct_order_test_items)
   //  - 전항목  : 품목에 등록된 시험항목 전체 (product_test_items)
   // 작업을 만든 뒤에 실패하면 QC번호만 소모된 빈 작업이 남으므로 순서가 중요하다.
   const plannedItems: Array<{ test_item_name: string; sequence_order: number }> = []
-  if (order.method === METHOD_PARTIAL) {
+  if (isDual) {
+    // 2인 배정은 슬롯이 유일한 기준이다 — method(전항목/개별항목) 값은 보지 않는다.
+    const selected = await activeItemsForSlot(orderId, order.product_code, mySlot)
+    if (selected.length === 0) {
+      throw new Error('배정된 시험항목이 없습니다. 관리자에게 항목 배분을 요청하세요.')
+    }
+    selected.forEach((it, idx) => plannedItems.push({
+      test_item_name: it.testItemName,
+      sequence_order: it.sequenceOrder ?? idx,
+    }))
+  } else if (order.method === METHOD_PARTIAL) {
     const selected = await listOrderTestItems(orderId)
     if (selected.length === 0) {
       // 오더 수정으로 진행방법만 개별항목으로 바뀌면 선택 목록이 비어 있을 수 있다.
@@ -680,11 +760,11 @@ export async function startJob(orderId: string, userSub: string): Promise<{ jobI
   }
 
   // 이미 작업이 있는 오더인지 먼저 본다.
-  // qc_jobs.order_id 는 unique 라 어차피 insert 가 23505 로 실패하는데, 아래 재시도 루프가
-  // 23505 를 전부 "QC번호 충돌"로 해석해 번호만 새로 뽑고 다시 실패한 뒤
-  // '작업 생성에 실패했습니다' 라는 엉뚱한 메시지를 냈다(그 사이 QC번호도 소모했다).
+  // 2인 배정에서는 오더당 작업이 최대 2건(담당자별)이라 order_id 만으로는 "이미
+  // 시작됨"을 판단할 수 없다 — 담당자(테스터) 기준으로 좁혀서 봐야 담당자2가
+  // 담당자1의 작업 때문에 시작을 거부당하지 않는다.
   const { data: dup } = await supabaseAdmin
-    .from('qc_jobs').select('qc_no').eq('order_id', orderId).maybeSingle()
+    .from('qc_jobs').select('qc_no').eq('order_id', orderId).eq('assignee_tester_id', testerId).maybeSingle()
   if (dup) {
     throw new Error(`이미 시작된 오더입니다 (QC ${dup.qc_no}). 작업 화면에서 이어서 진행하세요.`)
   }
@@ -701,8 +781,10 @@ export async function startJob(orderId: string, userSub: string): Promise<{ jobI
       .select('id')
       .single()
     if (!error) { jobId = data.id as string; break }
-    // order_id 유니크 위반은 재시도해도 소용없다(위에서 걸렀지만 경쟁 상황 대비).
-    if (error.code === '23505' && /order_id/.test(error.message ?? '')) {
+    // (order_id, assignee_tester_id) 유니크 위반은 재시도해도 소용없다(위에서 걸렀지만
+    // 경쟁 상황 대비). 0037 이전 제약명(order_id 단일 컬럼)과 이후 인덱스명
+    // (uq_qc_jobs_order_assignee / uq_qc_jobs_order_unassigned) 을 모두 잡는다.
+    if (error.code === '23505' && /order_id|uq_qc_jobs_order/.test(error.message ?? '')) {
       throw new Error('이미 시작된 오더입니다. 새로고침 후 확인하세요.')
     }
     if (error.code === '23505') { qcNo = await generateQcNo(); continue }  // QC번호 충돌
@@ -776,6 +858,85 @@ export async function updateJobDates(jobId: string, userSub: string, dates: { wo
 }
 
 /**
+ * 오더 상태를 그 오더에 속한 qc_jobs 상태들과 동기화한다.
+ *
+ * 2인 배정 이전에는 오더당 작업이 항상 1건이라 "작업 상태를 오더 상태에 그대로
+ * 덮어쓴다"가 곧 정답이었다. 2인 배정에서는 오더당 작업이 최대 2건(담당자별)이라
+ * 한쪽 상태만 보고 덮어쓰면, 담당자1이 먼저 끝내 '검토전'으로 넘어가도 담당자2는
+ * 아직 '진행중'인데 오더가 검토 단계로 넘어가 버린다.
+ *
+ * 그래서 오더 상태는 **그 오더의 모든 작업 중 가장 뒤처진(진척도가 가장 낮은) 단계**로
+ * 정한다 — JOB_STAGES 의 배열 순서를 진척도 기준으로 삼는다. '지연'은 단계가 아니라
+ * 납기 경과 표시이므로, 하나라도 '지연'이면 오더도 '지연'로 본다(진척도 비교 대상에서 뺀다).
+ *
+ * 2인 배정이 아닌 오더(작업 1건)에서는 그 작업의 상태가 곧 "가장 뒤처진 단계"이므로
+ * 결과가 예전(작업 상태를 그대로 덮어쓰던 방식)과 완전히 동일하다 — 하위호환.
+ *
+ * 작업이 하나도 없으면 아무것도 하지 않는다(오더 상태를 건드릴 근거가 없다).
+ */
+export async function syncOrderStatusFromJobs(orderId: string): Promise<void> {
+  const { data: jobs, error } = await supabaseAdmin
+    .from('qc_jobs')
+    .select('status, assignee_tester_id')
+    .eq('order_id', orderId)
+  if (error) throw error
+  if (!jobs || jobs.length === 0) return
+
+  const statuses = jobs.map(j => j.status as string)
+
+  // '지연'은 단계가 아니다 — 하나라도 지연이면 오더도 지연로 본다.
+  if (statuses.some(s => s === DELAYED_STATUS)) {
+    await supabaseAdmin.from('pct_orders').update({ status: DELAYED_STATUS }).eq('id', orderId)
+    return
+  }
+
+  // JOB_STAGES 순서를 진척도로 삼아 index 가 가장 작은(가장 덜 진행된) 단계를 찾는다.
+  let leastIdx: number = JOB_STAGES.length
+  for (const s of statuses) {
+    const idx = JOB_STAGES.indexOf(s as JobStage)
+    if (idx >= 0 && idx < leastIdx) leastIdx = idx
+  }
+  if (leastIdx >= JOB_STAGES.length) return   // 유효한 단계를 하나도 못 찾으면 손대지 않는다(방어적)
+
+  // 아직 '작업을 시작조차 하지 않은' 담당자는 qc_jobs 행이 없어서 위 비교에 잡히지 않는다.
+  // 그대로 두면 담당자1이 자기 몫을 끝낸 순간 오더가 '검토전'으로 넘어가는데, 담당자2는
+  // 아직 시작도 못 했다(그리고 오더가 '대기'가 아니게 되어 시작 목록에서도 사라진다).
+  // 그래서 시작하지 않은 담당자가 남아 있으면 오더는 '진행중'을 넘어설 수 없게 묶는다.
+  const stillUnstarted = await hasUnstartedAssignee(orderId, jobs.map(j => j.assignee_tester_id as string | null))
+  if (stillUnstarted) leastIdx = Math.min(leastIdx, JOB_STAGES.indexOf(IN_PROGRESS_STATUS))
+
+  await supabaseAdmin.from('pct_orders').update({ status: JOB_STAGES[leastIdx] }).eq('id', orderId)
+}
+
+/**
+ * 2인 배정 오더에서 "배정은 됐는데 아직 작업을 시작하지 않은 담당자"가 남아 있는가.
+ *
+ * 슬롯에 진행할 항목이 하나도 없는 담당자(관리자가 항목을 전부 한쪽에 몰아둔 경우)는
+ * 시작할 것이 없으므로 세지 않는다 — 그러지 않으면 오더가 '진행중'에서 영원히 못 벗어난다.
+ */
+async function hasUnstartedAssignee(orderId: string, startedTesterIds: (string | null)[]): Promise<boolean> {
+  const { data: order } = await supabaseAdmin
+    .from('pct_orders')
+    .select('product_code, is_dual_assignment, assignee_tester_id, assignee_tester_id_2')
+    .eq('id', orderId)
+    .maybeSingle()
+  if (!order?.is_dual_assignment) return false
+
+  const started = new Set(startedTesterIds.filter((t): t is string => !!t))
+  const slots: Array<{ slot: 1 | 2; testerId: string | null }> = [
+    { slot: 1, testerId: (order.assignee_tester_id as string) ?? null },
+    { slot: 2, testerId: (order.assignee_tester_id_2 as string) ?? null },
+  ]
+
+  for (const { slot, testerId } of slots) {
+    if (!testerId || started.has(testerId)) continue
+    const mine = await activeItemsForSlot(orderId, order.product_code as string, slot)
+    if (mine.length > 0) return true      // 할 일이 남았는데 아직 시작 안 함
+  }
+  return false
+}
+
+/**
  * 모든 시험항목이 완료되면 작업 상태를 '진행중' → '검토전' 으로 자동 전환한다.
  * 이후 검토·승인 단계는 관리자가 작업 현황 화면에서 버튼으로 넘긴다(advanceJobStage).
  *
@@ -807,8 +968,8 @@ async function autoAdvanceToReview(jobId: string): Promise<{ allCleared: boolean
     .maybeSingle()
   if (!updated) return { allCleared: true, statusChangedTo: null }
 
-  // 오더 상태 동기화 + 이력 + 감독관 알림
-  await supabaseAdmin.from('pct_orders').update({ status: target }).eq('id', updated.order_id as string)
+  // 오더 상태 동기화(2인 배정에서는 다른 담당자의 작업이 아직 뒤처져 있을 수 있다) + 이력 + 감독관 알림
+  await syncOrderStatusFromJobs(updated.order_id as string)
   await logJobStatusChange({
     jobId, orderId: updated.order_id as string,
     fromStatus: IN_PROGRESS_STATUS, toStatus: target,
@@ -876,7 +1037,7 @@ export async function advanceJobStage(
     throw new Error('다른 사용자가 먼저 단계를 변경했습니다. 새로고침 후 다시 시도하세요.')
   }
 
-  await supabaseAdmin.from('pct_orders').update({ status: target }).eq('id', updated.order_id as string)
+  await syncOrderStatusFromJobs(updated.order_id as string)
   await logJobStatusChange({
     jobId, orderId: updated.order_id as string,
     fromStatus: current, toStatus: target,
@@ -992,7 +1153,7 @@ export async function changeJobStatus(jobId: string, userSub: string, status: st
     .select('order_id').maybeSingle()
   if (error) throw error
   if (!job) throw new Error('다른 사용자가 먼저 상태를 변경했습니다. 새로고침 후 다시 시도하세요.')
-  await supabaseAdmin.from('pct_orders').update({ status }).eq('id', job.order_id)
+  await syncOrderStatusFromJobs(job.order_id as string)
   await logJobStatusChange({
     jobId, orderId: job.order_id as string,
     fromStatus: current, toStatus: status,
@@ -1047,7 +1208,7 @@ export async function setJobStatusByAdmin(
   if (error) throw error
   if (!updated) throw new Error('다른 사용자가 먼저 상태를 변경했습니다. 새로고침 후 다시 시도하세요.')
 
-  await supabaseAdmin.from('pct_orders').update({ status }).eq('id', updated.order_id as string)
+  await syncOrderStatusFromJobs(updated.order_id as string)
   await logJobStatusChange({
     jobId, orderId: updated.order_id as string,
     fromStatus: current, toStatus: status,

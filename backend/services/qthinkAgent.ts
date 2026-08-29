@@ -6,6 +6,7 @@
  */
 
 import { supabaseAdmin } from '@backend/lib/supabase'
+import { assignedToTesterFilter } from '@backend/lib/assigneeFilter'
 import { sanitizeFilterTerm } from '@backend/lib/postgrestFilter'
 import { DELETED_STATUS } from '@shared/qc-status'
 import {
@@ -222,7 +223,8 @@ async function overviewContext(scope: QthinkScope): Promise<string> {
     .from('pct_orders')
     .select('*', { count: 'exact', head: true })
     .neq('status', DELETED_STATUS)
-  if (!scope.isAdmin && scope.testerId) orderCountQuery.eq('assignee_tester_id', scope.testerId)
+  // 2인 배정 담당자2 몫도 그 사람의 오더다
+  if (!scope.isAdmin && scope.testerId) orderCountQuery.or(assignedToTesterFilter(scope.testerId))
 
   const jobCountQuery = supabaseAdmin.from('qc_jobs').select('*', { count: 'exact', head: true })
   if (!scope.isAdmin && scope.testerId) jobCountQuery.eq('assignee_tester_id', scope.testerId)
@@ -494,7 +496,7 @@ async function ordersContext(intent: QthinkIntent, scope: QthinkScope): Promise<
     .from('pct_orders')
     .select('product_code, product_name, batch_no, packaging_date, due_date, is_urgent, method, status, assignee_tester_id', { count: 'exact' })
     .neq('status', DELETED_STATUS)
-  if (!scope.isAdmin && scope.testerId) query = query.eq('assignee_tester_id', scope.testerId)
+  if (!scope.isAdmin && scope.testerId) query = query.or(assignedToTesterFilter(scope.testerId))
   if (keyword) query = query.ilike('product_name', `%${keyword}%`)
   if (intent.status) query = query.eq('status', intent.status)
   if (intent.urgent !== null) query = query.eq('is_urgent', intent.urgent)

@@ -202,13 +202,19 @@ function leaveWindow(orders: OrderForAssign[]): { from: string; to: string } {
 async function currentWorkload(): Promise<Map<string, number>> {
   const { data } = await supabaseAdmin
     .from('pct_orders')
-    .select('assignee_tester_id, status')
+    .select('assignee_tester_id, is_dual_assignment, assignee_tester_id_2, status')
     .not('assignee_tester_id', 'is', null)
     .not('status', 'in', `("${CLOSED_STAGE}","삭제")`)
   const m = new Map<string, number>()
   for (const r of data ?? []) {
     const id = r.assignee_tester_id as string
     m.set(id, (m.get(id) ?? 0) + 1)
+    // [2인 배정] 담당자2도 그 오더를 손에 들고 있다. 여기서 안 세면 담당자2로 몇 건을
+    // 맡고 있든 부하가 0으로 보여, 자동배정이 그 사람을 "가장 한가한 사람"으로 골라
+    // 신규 오더를 몰아준다. (AI 가 2인 배정을 새로 만들지 않는다는 규칙은 그대로다 —
+    //  이미 만들어진 2인 배정을 부하 계산에서 보이게 하는 것뿐이다.)
+    const second = r.is_dual_assignment ? ((r.assignee_tester_id_2 as string) ?? null) : null
+    if (second) m.set(second, (m.get(second) ?? 0) + 1)
   }
   return m
 }
@@ -825,6 +831,42 @@ export async function assignManually(
   // [원칙3] 확정(LOCK)된 오더는 배정·해제 대상에서 제외한다.
   if (before?.locked && beforeUser !== testerId) {
     throw new Error('확정(LOCK)된 오더는 담당자를 변경할 수 없습니다. 확정 해제 후 다시 시도해 주세요.')
+  }
+
+  // ─── [2인 배정] 이 경로는 updateOrderWithReason 의 검증을 하나도 거치지 않는다 ───
+  // 여기서 막지 않으면 담당자1만 직접 UPDATE 되어 오더가 모순된 상태로 굳는다.
+  if (beforeUser !== testerId) {
+    const isDual = !!before?.is_dual_assignment
+    const tester2 = (before?.assignee_tester_id_2 as string) ?? null
+
+    // 담당자1을 비우면 is_dual_assignment=true 인데 담당자1이 null 인 상태가 된다.
+    // 그러면 담당자2는 startJob 의 `!order.assignee_tester_id` 가드에 걸려 자기 몫조차
+    // 시작할 수 없고, 오더 수정도 배정 검증에 걸려 되돌릴 방법이 없다.
+    if (isDual && testerId === null) {
+      throw new Error('2인 배정 오더는 담당자를 해제할 수 없습니다. 오더 수정에서 2인 배정을 먼저 해제하세요.')
+    }
+
+    // 담당자2와 같은 사람을 담당자1로 넣으면 0037 의 chk_pct_orders_dual_distinct 위반(23514)이
+    // Postgres 원문 그대로 올라오고, assign 라우트의 errorStatus() 가 못 걸러 500 으로 샌다.
+    if (testerId !== null && tester2 !== null && testerId === tester2) {
+      throw new Error('이미 담당자2로 배정된 시험자입니다.')
+    }
+
+    // 이미 작업을 시작한 담당자는 교체하지 않는다(updateOrderWithReason 과 동일 규칙·동일 문구).
+    // 여기서 안 막으면 슬롯별 잠금이 이 경로로 그대로 우회된다.
+    if (beforeUser) {
+      const { data: startedByThis } = await supabaseAdmin
+        .from('qc_jobs')
+        .select('qc_no')
+        .eq('order_id', orderId)
+        .eq('assignee_tester_id', beforeUser)
+        .maybeSingle()
+      if (startedByThis) {
+        throw new Error(
+          `이미 작업을 시작한 담당자(QC ${startedByThis.qc_no})는 변경할 수 없습니다. 작업을 먼저 정리하세요.`,
+        )
+      }
+    }
   }
 
   // 조건부 갱신 — 읽기와 쓰기 사이에 다른 관리자가 LOCK 을 걸었을 수 있다(TOCTOU).

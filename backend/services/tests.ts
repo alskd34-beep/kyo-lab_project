@@ -33,6 +33,8 @@ interface OrderLite {
   status: string
   is_urgent: boolean | null
   assignee_tester_id: string | null
+  is_dual_assignment: boolean | null
+  assignee_tester_id_2: string | null
   created_at: string
 }
 
@@ -101,7 +103,7 @@ export async function listTests(q: TestsQuery = {}): Promise<TestRow[]> {
   // 1) 오더 (작업현황 원본, 삭제 제외)
   const { data: orderData, error } = await supabaseAdmin
     .from('pct_orders')
-    .select('id, product_code, product_name, batch_no, dosage_form, method, due_date, status, is_urgent, assignee_tester_id, created_at')
+    .select('id, product_code, product_name, batch_no, dosage_form, method, due_date, status, is_urgent, assignee_tester_id, is_dual_assignment, assignee_tester_id_2, created_at')
     .neq('status', DELETED_STATUS)
     .order('created_at', { ascending: false })
   if (error) throw error
@@ -119,14 +121,21 @@ export async function listTests(q: TestsQuery = {}): Promise<TestRow[]> {
     mapByOrders(orders.filter(o => o.method === METHOD_PARTIAL).map(o => o.id)),
   ])
 
-  const jobByOrder = new Map<string, { id: string; qcNo: string; status: string }>()
+  // 2인 배정 오더는 담당자별로 작업이 2건이다. 예전처럼 Map<orderId, job> 에 담으면
+  // 나중에 온 행이 앞 행을 덮어써서 한 사람 몫(QC번호·항목)만 남고 나머지는 조용히 사라진다.
+  // 시험현황의 한 줄은 어디까지나 "오더 한 건"이므로, 두 작업을 합쳐서 보여준다.
+  const jobsByOrder = new Map<string, { id: string; qcNo: string; status: string }[]>()
   for (const j of jobsRes.data ?? []) {
-    jobByOrder.set(j.order_id as string, { id: j.id as string, qcNo: j.qc_no as string, status: j.status as string })
+    const arr = jobsByOrder.get(j.order_id as string) ?? []
+    arr.push({ id: j.id as string, qcNo: j.qc_no as string, status: j.status as string })
+    jobsByOrder.set(j.order_id as string, arr)
   }
+  // QC번호 순으로 고정 — 조회할 때마다 순서가 바뀌면 화면이 흔들린다.
+  for (const arr of jobsByOrder.values()) arr.sort((a, b) => a.qcNo.localeCompare(b.qcNo))
   const testerName = new Map<string, string>((testersRes.data ?? []).map(t => [t.id as string, t.name as string]))
 
   // 3) 작업 항목(실제) — 작업이 있는 오더에만
-  const jobIds = [...jobByOrder.values()].map(j => j.id)
+  const jobIds = [...jobsByOrder.values()].flat().map(j => j.id)
   const itemsByJob = new Map<string, string[]>()
   if (jobIds.length > 0) {
     const { data: jis } = await supabaseAdmin
@@ -143,15 +152,26 @@ export async function listTests(q: TestsQuery = {}): Promise<TestRow[]> {
 
   // 4) TestRow 매핑
   const mapped: TestRow[] = orders.map((o, i) => {
-    const job  = jobByOrder.get(o.id)
+    const jobs = jobsByOrder.get(o.id) ?? []
+    const job  = jobs[0]
     const meta = productMeta.get(o.product_code)
-    const name = o.assignee_tester_id ? (testerName.get(o.assignee_tester_id) ?? '') : ''
-    // 진행상태는 작업 상태 우선(시작했으면), 없으면 오더 상태
-    const koStatus = job?.status ?? o.status
+    // 2인 배정이면 담당자 두 명을 함께 보여준다 — 담당자1만 쓰면 나머지 한 명이 화면에서 사라진다.
+    const names = [
+      o.assignee_tester_id,
+      o.is_dual_assignment ? o.assignee_tester_id_2 : null,
+    ].map(id => (id ? testerName.get(id) ?? '' : '')).filter(Boolean)
+    const name = names.join(', ')
+    // 진행상태: 1인 배정은 예전 그대로 작업 상태 우선. 2인 배정은 작업이 2건이라 어느 한쪽을
+    // 고를 수 없고, 오더 상태가 이미 두 작업 중 가장 뒤처진 단계로 동기화돼 있으므로 그것을 쓴다
+    // (backend/services/qcJobs.ts 의 syncOrderStatusFromJobs).
+    const koStatus = o.is_dual_assignment ? o.status : (job?.status ?? o.status)
     // 시작한 작업이 있으면 실제 체크리스트, 없으면 예정 항목
     //  (개별항목 오더는 오더에서 고른 항목, 전항목 오더는 품목 전체)
     const planned = o.method === METHOD_PARTIAL ? orderItems.get(o.id) : meta?.items
-    const items = (job ? itemsByJob.get(job.id) : planned) ?? []
+    // 2인 배정은 두 사람의 체크리스트를 합쳐야 그 제조번호의 전체 시험항목이 된다.
+    const items = (jobs.length > 0
+      ? [...new Set(jobs.flatMap(j => itemsByJob.get(j.id) ?? []))]
+      : planned) ?? []
     return {
       id:          i + 1,
       orderId:     o.id,
@@ -160,7 +180,8 @@ export async function listTests(q: TestsQuery = {}): Promise<TestRow[]> {
       type:        o.method ?? '-',
       product:     o.product_name,
       batchNo:     o.batch_no,
-      testNo:      job?.qcNo ?? '-',
+      // 2인 배정이면 QC번호가 담당자별로 2개다 — 둘 다 보여야 어느 시험인지 추적된다.
+      testNo:      jobs.length > 0 ? jobs.map(j => j.qcNo).join(', ') : '-',
       items:       items.join(', '),
       itemList:    items,
       contractor:  CONTRACTOR,

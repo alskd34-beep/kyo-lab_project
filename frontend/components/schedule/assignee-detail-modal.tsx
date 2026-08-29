@@ -40,6 +40,8 @@ interface OrderRow {
   status: string
   assigneeTesterId: string | null
   assigneeName: string | null
+  isDualAssignment: boolean
+  assigneeTesterId2: string | null
   workdays: number | null
   locked: boolean
 }
@@ -113,12 +115,15 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
     return m
   }, [families])
 
-  // 이 담당자의 과제 (상태 필터 반영)
+  // 이 담당자의 과제 (담당자1 또는 2인 배정의 담당자2로 맡은 것 · 상태 필터 반영)
   const myRows = useMemo(() => {
-    let rows = allRows.filter(r => r.assigneeTesterId === testerId)
+    let rows = allRows.filter(r =>
+      r.assigneeTesterId === testerId || (r.isDualAssignment && r.assigneeTesterId2 === testerId))
     if (statusFilter) rows = rows.filter(r => r.status === statusFilter)
     return rows
   }, [allRows, testerId, statusFilter])
+  // 담당자2로서 맡은 행인지 (배지 표시용)
+  const isSecondaryRow = (r: OrderRow) => r.assigneeTesterId !== testerId && r.isDualAssignment && r.assigneeTesterId2 === testerId
 
   // 동시분석 계열별 그룹 (계열 없으면 품목코드 단위)
   const groups = useMemo(() => {
@@ -251,6 +256,7 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
                           </div>
                           <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-normal text-muted-foreground">
                             <StatusBadge status={r.status} />
+                            {isSecondaryRow(r) && <Assignee2Badge />}
                             {r.isUrgent && (
                               <span className="inline-flex shrink-0 items-center rounded-md bg-red-50 px-2 py-0.5 text-xs leading-normal font-semibold text-red-600 dark:bg-red-950 dark:text-red-300">
                                 긴급
@@ -276,7 +282,12 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
                         <tbody>
                           {g.rows.map(r => (
                             <tr key={r.id} className="border-b last:border-0 text-foreground hover:bg-muted/40">
-                              <td className="px-3 py-2.5 font-medium text-foreground">{r.productName}</td>
+                              <td className="px-3 py-2.5 font-medium text-foreground">
+                                <span className="inline-flex items-center gap-1.5">
+                                  {r.productName}
+                                  {isSecondaryRow(r) && <Assignee2Badge />}
+                                </span>
+                              </td>
                               <td className="px-3 py-2.5 font-mono text-xs text-blue-600 dark:text-blue-300">{r.productCode}</td>
                               <td className="px-3 py-2.5 font-mono text-xs">{r.batchNo}</td>
                               <td className="px-3 py-2.5">{r.dosageForm ?? "-"}</td>
@@ -384,6 +395,7 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
                         <div className="min-w-0">
                           <p className="flex items-center gap-1.5 text-xs leading-normal font-semibold text-foreground">
                             <span className="truncate">{r.productName} (제조 {r.batchNo})</span>
+                            {isSecondaryRow(r) && <Assignee2Badge />}
                             {r.isUrgent && <span className="shrink-0 rounded-md bg-red-50 px-1.5 py-0.5 text-xs leading-normal font-semibold text-red-600 dark:bg-red-950 dark:text-red-300">긴급</span>}
                           </p>
                           <p className="mt-0.5 text-xs leading-normal text-muted-foreground">완료예정 {r.dueDate ?? "-"} · 공수 {r.workdays ?? "-"}일</p>
@@ -430,6 +442,14 @@ function MiniStat({ label, value, tone }: { label: string; value: string; tone?:
       <p className="text-xs leading-normal font-semibold text-muted-foreground">{label}</p>
       <p className={cn("mt-1 text-sm font-semibold", tone === "red" ? "text-red-500" : "text-foreground")}>{value}</p>
     </div>
+  )
+}
+/** 2인 배정 오더에서 이 담당자가 담당자2로 맡은 행임을 표시 (1인 배정 오더에는 절대 렌더되지 않음) */
+function Assignee2Badge() {
+  return (
+    <span className="inline-flex shrink-0 items-center rounded-md bg-blue-50 px-1.5 py-0.5 text-xs leading-normal font-semibold text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+      담당자2
+    </span>
   )
 }
 function StatusBadge({ status }: { status: string }) {

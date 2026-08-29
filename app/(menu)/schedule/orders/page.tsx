@@ -64,6 +64,10 @@ interface OrderRow {
   status: string
   assigneeTesterId: string | null
   assigneeName: string | null
+  /** 2인 배정 여부와 담당자2 — false/필드 없음이면 기존 1인 배정 오더와 동일하게 다룬다 */
+  isDualAssignment: boolean
+  assigneeTesterId2: string | null
+  assigneeName2: string | null
   productSynced: boolean
   note: string | null
   ingestState: string
@@ -90,6 +94,8 @@ interface EditRow {
 // 화면에 렌더링할 그룹(주차/담당자/상태 공통 형태)
 interface RenderGroup {
   key: string; label: string; color: string; rows: OrderRow[]; meta: string; isThisWeek?: boolean; assigneeTesterId?: string | null
+  /** 담당자별 그룹에서, 이 그룹에 "담당자2 자격"으로 들어온 오더 id (카드에 배지 표시용) */
+  secondaryIds?: Set<string>
 }
 
 type TabId = "week" | "assignee" | "status"
@@ -121,6 +127,7 @@ const FIELD_LABEL: Record<string, string> = {
   productCode: "품목코드", productName: "품목명", batchNo: "제조번호", dosageForm: "제형",
   packagingDate: "포장일", dueDate: "완료예정일", isUrgent: "긴급",
   method: "진행방법", status: "상태", note: "비고", assigneeTesterId: "담당자",
+  isDualAssignment: "2인 배정", assigneeTesterId2: "담당자2",
 }
 
 const AUTO_UNASSIGNED_NOTE_PREFIX = "자동배정 미배정 사유:"
@@ -342,13 +349,20 @@ export default function OrdersPage() {
     testerId: string | null,
     opts: { busyKey: string; reason: string; onlyAssigned?: boolean },
   ) => {
-    const targets = Array.from(selected)
+    const eligible = Array.from(selected)
       .map(id => rows.find(x => x.id === id))
       .filter((r): r is OrderRow => !!r && !r.locked && (!opts.onlyAssigned || !!r.assigneeTesterId))
+    // 2인 배정 오더는 서버가 "담당자 2명을 모두 선택해야 합니다"로 거절한다(정상 방어).
+    // 이유 없이 실패로만 보이지 않도록 일괄 배정/해제 대상에서 미리 제외하고 건수를 안내한다.
+    const dualExcluded = eligible.filter(r => r.isDualAssignment).length
+    const targets = eligible.filter(r => !r.isDualAssignment)
+    const dualNotice = dualExcluded > 0
+      ? `2인 배정 오더 ${dualExcluded}건은 제외했습니다(오더 수정에서 2인 배정을 먼저 해제하세요).`
+      : ""
     if (targets.length === 0) {
-      flash(opts.onlyAssigned
+      flash(dualNotice || (opts.onlyAssigned
         ? "해제할 담당자가 있는 미확정 오더가 없습니다."
-        : "확정 해제된 오더만 담당자 변경이 가능합니다.")
+        : "확정 해제된 오더만 담당자 변경이 가능합니다."))
       return
     }
 
@@ -399,7 +413,8 @@ export default function OrdersPage() {
       setSelected(new Set())
       setBulkTester("")
       const done = testerId ? `담당자 '${name}' 배정 완료` : "배정 해제 완료"
-      flash(`${okIds.size}건 ${done}${failed > 0 ? ` (실패 ${failed}건)` : ""}`)
+      // 제외한 2인 배정 건이 있으면 함께 알린다 — 안 알리면 "왜 몇 건이 빠졌지?" 가 된다
+      flash(`${okIds.size}건 ${done}${failed > 0 ? ` (실패 ${failed}건)` : ""}${dualNotice ? ` · ${dualNotice}` : ""}`)
     } catch (e) {
       const what = testerId ? "담당자 배정" : "배정 해제"
       flash(`${what} 실패: ${e instanceof Error ? e.message : ""}`)
@@ -530,10 +545,22 @@ export default function OrdersPage() {
     }
     if (tab === "assignee") {
       const m = new Map<string, OrderRow[]>()
-      for (const r of scopedRows) pushTo(m, r.assigneeTesterId ?? "__none", r)
+      // 담당자별 그룹에서 이 오더가 "담당자2 자격"으로 들어온 그룹의 키(assigneeTesterId2) 집합.
+      // 2인 배정 오더는 담당자1·담당자2 그룹 양쪽에 넣어야 "이 사람이 뭘 맡고 있나"가 맞게 보인다.
+      const secondaryKeys = new Map<string, Set<string>>()
+      for (const r of scopedRows) {
+        pushTo(m, r.assigneeTesterId ?? "__none", r)
+        if (r.isDualAssignment && r.assigneeTesterId2) {
+          pushTo(m, r.assigneeTesterId2, r)
+          const set = secondaryKeys.get(r.assigneeTesterId2) ?? new Set<string>()
+          set.add(r.id)
+          secondaryKeys.set(r.assigneeTesterId2, set)
+        }
+      }
       return Array.from(m.entries())
         .map(([key, rs]) => {
-          const assigneeName = rs.find(r => r.assigneeName)?.assigneeName ?? null
+          // 이 그룹의 담당자 이름 — 담당자1로 들어온 행은 assigneeName, 담당자2로 들어온 행은 assigneeName2 에서 찾는다
+          const assigneeName = rs.map(r => (r.assigneeTesterId === key ? r.assigneeName : r.assigneeName2)).find(Boolean) ?? null
           return {
           key: `as:${key}`,
           label: key === "__none" ? "미배정" : assigneeName ?? "이름없음",
@@ -542,6 +569,7 @@ export default function OrdersPage() {
           rows: rs,
           meta: `${rs.length}건`,
           assigneeTesterId: key === "__none" ? null : key,
+          secondaryIds: secondaryKeys.get(key),
           }
         })
         .sort((a, b) => {
@@ -639,8 +667,8 @@ export default function OrdersPage() {
     return [...familyItems, ...singleItems].map(x => x.item)
   }
 
-  // 단일 오더 행 렌더 (트리 들여쓰기 옵션)
-  const renderOrderCard = (r: OrderRow, indented = false) => {
+  // 단일 오더 행 렌더 (트리 들여쓰기 옵션, 담당자별 그룹에서 "담당자2 자격"으로 들어온 카드 여부)
+  const renderOrderCard = (r: OrderRow, indented = false, asSecondary = false) => {
     const dueSoon = isDueSoon(r.dueDate, r.status)
     const unassignedReason = !r.assigneeName ? getAutoUnassignedReason(r.note) : null
     const assigneeAvatarUrl = r.assigneeTesterId
@@ -704,6 +732,8 @@ export default function OrdersPage() {
                 {r.productName}
               </p>
               <div className="flex shrink-0 flex-wrap justify-end gap-0.5 sm:gap-1">
+                {/* 담당자별 그룹 뷰에서만 의미가 있는 배지 — 이 그룹은 담당자1이 아니라 담당자2 자격으로 온 카드다 */}
+                {asSecondary && <Badge variant="outline" className="border-blue-200 text-blue-700 dark:border-blue-800 dark:text-blue-300">담당자2</Badge>}
                 <StatusBadge status={r.status} />
                 <SourceBadge source={r.source} />
                 {r.source === "auto" && !r.productSynced && (
@@ -764,7 +794,7 @@ export default function OrdersPage() {
           </div>
         </dl>
 
-        <div className="mt-3 flex items-center gap-2 sm:mt-4 sm:gap-2.5" onClick={e => e.stopPropagation()}>
+        <div className="mt-3 flex flex-wrap items-center gap-2 sm:mt-4 sm:gap-2.5" onClick={e => e.stopPropagation()}>
           {r.assigneeName && r.assigneeTesterId ? (
             <button
               onClick={() => setAssigneeTarget({ id: r.assigneeTesterId!, name: r.assigneeName! })}
@@ -785,6 +815,20 @@ export default function OrdersPage() {
                 <span className="block text-sm font-medium">미배정</span>
               </span>
             </span>
+          )}
+          {/* 2인 배정 — 담당자2 아바타/이름을 담당자1 옆에 그대로 이어 보여준다(레이아웃은 그대로 두고 항목만 추가) */}
+          {r.isDualAssignment && r.assigneeName2 && r.assigneeTesterId2 && (
+            <button
+              onClick={() => setAssigneeTarget({ id: r.assigneeTesterId2!, name: r.assigneeName2! })}
+              title={`${r.assigneeName2} 담당 오더 보기`}
+              className="inline-flex min-w-0 items-center gap-2.5 rounded-md text-left transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            >
+              <TesterAvatar testerId={r.assigneeTesterId2} name={r.assigneeName2} size="sm" />
+              <span className="min-w-0">
+                <span className="block text-xs leading-normal text-muted-foreground">담당자2</span>
+                <span className="block truncate text-sm font-semibold text-foreground">{r.assigneeName2}</span>
+              </span>
+            </button>
           )}
           <span className="ml-auto shrink-0 text-xs leading-normal text-muted-foreground tabular-nums">공수 {r.workdays != null ? `${r.workdays}일` : "-"}</span>
           <Button
@@ -1112,7 +1156,7 @@ export default function OrdersPage() {
                 {!isCollapsed && (
                   <div className="grid w-full justify-start grid-cols-[repeat(auto-fit,minmax(min(100%,300px),400px))] gap-2 p-0.5">
                     {buildRowTree(g.key, g.rows).map(item => {
-                      if (item.type === "single") return renderOrderCard(item.row)
+                      if (item.type === "single") return renderOrderCard(item.row, false, g.secondaryIds?.has(item.row.id))
                       const fc = famCollapsed.has(item.familyId)
                       return (
                         /* 테두리를 가진 층은 안쪽 오더 카드 하나뿐이어야 한다 —
@@ -1136,7 +1180,7 @@ export default function OrdersPage() {
                           </button>
                           {!fc && (
                             <div className="mt-2 grid w-full justify-start grid-cols-[repeat(auto-fit,minmax(min(100%,300px),400px))] gap-2 border-t border-primary/15 pt-2">
-                              {item.rows.map(r => renderOrderCard(r, true))}
+                              {item.rows.map(r => renderOrderCard(r, true, g.secondaryIds?.has(r.id)))}
                             </div>
                           )}
                         </div>
@@ -1193,7 +1237,8 @@ export default function OrdersPage() {
         const lockedCount = selectedRows.filter(r => r.locked).length
         const unlockedCount = selected.size - lockedCount
         // 배정 해제 대상 = 미확정이면서 담당자가 있는 건
-        const unassignableCount = selectedRows.filter(r => !r.locked && !!r.assigneeTesterId).length
+        // 2인 배정 오더는 일괄 해제 대상이 아니다(applyAssignTo 가 제외한다) — 버튼 숫자도 같이 맞춘다.
+        const unassignableCount = selectedRows.filter(r => !r.locked && !!r.assigneeTesterId && !r.isDualAssignment).length
         return (
           /* 모바일: 요약 → 배정 → 확정 순으로 세로로 쌓는다.
              한 줄에 Select 1개 + 버튼 4개 + 구분선 2개를 밀어 넣으면 320px 에서는
@@ -1748,13 +1793,24 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
     method: order.method,
     status: order.status,
     assigneeTesterId: order.assigneeTesterId ?? "",
+    isDualAssignment: order.isDualAssignment,
+    assigneeTesterId2: order.assigneeTesterId2 ?? "",
     note: order.note ?? "",
   })
   const [reason, setReason] = useState("")
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
-  // 담당자·날짜가 바뀔 때마다 휴가 겹침을 다시 판정한다
+  // 담당자1이 바뀌면 담당자2 선택지에서도 빠진다 — 이미 같은 사람이 담당자2로 골라져 있으면 비운다
+  // (같은 담당자를 두 번 배정할 수 없다는 규칙을 프론트에서도 미리 지킨다)
+  useEffect(() => {
+    if (form.assigneeTesterId2 && form.assigneeTesterId2 === form.assigneeTesterId) {
+      setForm(f => ({ ...f, assigneeTesterId2: "" }))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.assigneeTesterId])
+
+  // 담당자·날짜가 바뀔 때마다 휴가 겹침을 다시 판정한다 (담당자2도 2인 배정일 때 같은 방식으로 판정)
   const leaveConflicts = useMemo(
     () => conflictsFor(
       form.assigneeTesterId || null,
@@ -1763,20 +1819,56 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
     ),
     [form.assigneeTesterId, form.packagingDate, form.dueDate, absences],
   )
+  const leaveConflicts2 = useMemo(
+    () => conflictsFor(
+      form.assigneeTesterId2 || null,
+      { packagingDate: form.packagingDate || null, dueDate: form.dueDate || null },
+      absences,
+    ),
+    [form.assigneeTesterId2, form.packagingDate, form.dueDate, absences],
+  )
   const assigneeName = testers.find(t => t.id === form.assigneeTesterId)?.name ?? "선택한"
+  const assigneeName2 = testers.find(t => t.id === form.assigneeTesterId2)?.name ?? "선택한"
   // 담당자가 그대로면(원래부터 그 사람이면) 다시 확인받지 않는다 — 날짜·비고만 고치는 경우
   const assigneeChanged = (form.assigneeTesterId || null) !== (order.assigneeTesterId ?? null)
+  const assignee2Changed = (form.assigneeTesterId2 || null) !== (order.assigneeTesterId2 ?? null)
+
+  // 2인 배정 체크 토글 — 원래부터 2인 배정이던 오더를 끌 때만 되돌림 확인을 받는다
+  // (체크만 하고 아직 저장 전이면 서버는 여전히 1인 배정이므로 확인 없이 그냥 꺼도 된다).
+  const handleDualToggle = async (checked: boolean) => {
+    if (!checked && order.isDualAssignment) {
+      const ok = await requestConfirm({
+        title: "2인 배정을 해제할까요?",
+        description: "2인 배정을 해제하면 담당자2에게 나눈 시험항목이 모두 담당자1에게 돌아갑니다.",
+        confirmLabel: "해제",
+        variant: "warning",
+      })
+      if (!ok) return
+    }
+    setForm(f => ({ ...f, isDualAssignment: checked, assigneeTesterId2: checked ? f.assigneeTesterId2 : "" }))
+  }
 
   const save = async () => {
     if (!isAutoOrder && (!form.productCode.trim() || !form.productName.trim() || !form.batchNo.trim())) {
       setErr("품목코드·품목명·제조번호는 비울 수 없습니다."); return
     }
     if (!reason.trim()) { setErr("수정 사유는 필수입니다."); return }
-    // 휴가 겹침은 차단하지 않고 확인만 받는다
-    if (leaveConflicts.length > 0 && assigneeChanged) {
+    if (form.isDualAssignment && (!form.assigneeTesterId || !form.assigneeTesterId2)) {
+      setErr("2인 배정은 담당자 2명을 모두 선택해야 합니다."); return
+    }
+    // 휴가 겹침은 차단하지 않고 확인만 받는다 — 담당자1·담당자2 둘 다 판정한다
+    const conflictNotices: { name: string; conflicts: TesterAbsence[] }[] = []
+    if (assigneeChanged && leaveConflicts.length > 0) conflictNotices.push({ name: assigneeName, conflicts: leaveConflicts })
+    if (form.isDualAssignment && assignee2Changed && leaveConflicts2.length > 0) conflictNotices.push({ name: assigneeName2, conflicts: leaveConflicts2 })
+    if (conflictNotices.length > 0) {
       const ok = await requestConfirm({
         title: "휴가 기간과 겹칩니다. 그대로 배정할까요?",
-        description: `${assigneeName} 담당자는 이 오더의 시험 기간에 ${describeConflicts(leaveConflicts)} 일정이 있습니다. 그대로 저장하면 관리자 알림이 남습니다.`,
+        description: (
+          <span className="block whitespace-pre-line">
+            {conflictNotices.map(n => `${n.name} 담당자는 이 오더의 시험 기간에 ${describeConflicts(n.conflicts)} 일정이 있습니다.`).join("\n")}
+            {"\n"}그대로 저장하면 관리자 알림이 남습니다.
+          </span>
+        ),
         confirmLabel: "그대로 저장",
         variant: "warning",
       })
@@ -1792,6 +1884,8 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
         method: form.method,
         status: form.status,
         assigneeTesterId: form.assigneeTesterId || null,
+        isDualAssignment: form.isDualAssignment,
+        assigneeTesterId2: form.assigneeTesterId2 || null,
         note: form.note || null,
       }
       if (!isAutoOrder) {
@@ -1890,7 +1984,26 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
           </Select>
         </Field>
         {/* 담당자 — '미배정' 선택이 곧 배정 해제. 확정(LOCK)된 오더는 변경 불가(원칙3) */}
-        <Field label="담당자">
+        <Field
+          label="담당자"
+          // 작업이 시작되면 서버가 2인 배정 전환을 거부한다([원칙2] STARTED_IMMUTABLE_FIELDS) —
+          // 체크는 되는데 저장만 실패하는 상태를 만들지 않도록 화면에서도 함께 잠근다
+          action={
+            <label
+              className="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium text-muted-foreground"
+              title={order.hasJob ? "이미 작업이 시작된 오더는 2인 배정을 바꿀 수 없습니다." : undefined}
+            >
+              <input
+                type="checkbox"
+                className="cb-custom"
+                checked={form.isDualAssignment}
+                disabled={order.locked || order.hasJob}
+                onChange={e => void handleDualToggle(e.target.checked)}
+              />
+              2인 배정
+            </label>
+          }
+        >
           <Select
             value={form.assigneeTesterId || "none"}
             disabled={order.locked}
@@ -1913,6 +2026,36 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
               ))}
             </SelectContent>
           </Select>
+          {/* 2인 배정 체크 시에만 노출 — 담당자1로 고른 사람은 담당자2 후보에서 뺀다(같은 사람 중복 배정 방지) */}
+          {form.isDualAssignment && (
+            <div className="mt-2">
+              <span className="mb-1 block text-xs font-semibold text-foreground">담당자2</span>
+              <Select
+                value={form.assigneeTesterId2 || "none"}
+                disabled={order.locked}
+                onValueChange={v => setForm({ ...form, assigneeTesterId2: v === "none" ? "" : v })}
+              >
+                <SelectTrigger className="!h-9 w-full px-3"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">미배정</SelectItem>
+                  {assignableTesters(testers, form.assigneeTesterId2)
+                    .filter(t => t.id !== form.assigneeTesterId)
+                    .map(t => (
+                      <SelectItem key={t.id} value={t.id}>
+                        <TesterOptionLabel testerId={t.id} name={t.name} />
+                        <LeaveChip
+                          conflicts={conflictsFor(
+                            t.id,
+                            { packagingDate: form.packagingDate || null, dueDate: form.dueDate || null },
+                            absences,
+                          )}
+                        />
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           {order.locked && (
             <p className="mt-1 text-xs leading-normal break-keep text-muted-foreground">
               확정(LOCK)된 오더입니다. 확정 해제 후 배정을 변경·해제할 수 있습니다.
@@ -1924,16 +2067,34 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
       </section>
 
       <LeaveConflictNotice conflicts={leaveConflicts} testerName={assigneeName} className="mt-3" />
+      {form.isDualAssignment && (
+        <LeaveConflictNotice conflicts={leaveConflicts2} testerName={assigneeName2} className="mt-2" />
+      )}
 
       {/*
         시험항목 가감 — 위 폼(저장 버튼)과 달리 체크할 때마다 즉시 서버에 반영된다.
         품목 기준은 그대로 두고 이 오더에서만 빼거나 더한다.
       */}
+      {/* 2인 배정을 막 체크했지만 아직 저장 전이면 서버는 여전히 1인 배정이다 —
+          슬롯 배분 PATCH 는 오더가 실제로 2인 배정이어야 통과하므로(400 방지),
+          여기서는 안내만 하고 항목별 담당자 컨트롤은 저장 후에 연다. */}
+      {form.isDualAssignment && !order.isDualAssignment && (
+        <p className="mt-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-normal break-keep text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300">
+          2인 배정을 저장하면 항목별로 담당자를 나눌 수 있습니다.
+        </p>
+      )}
       <OrderTestItemsSection
         orderId={order.id}
         productName={order.productName}
         canEdit={isAdmin && !order.locked}
         locked={order.locked}
+        dual={order.isDualAssignment}
+        /* 배분 버튼에는 **편집 중인** 담당자 이름을 보여준다. 저장된 값을 쓰면, 드롭다운에서
+           담당자2를 C 로 바꾸는 중에도 버튼에는 이전 담당자 B 가 적혀 있어
+           "B" 라고 쓰인 버튼을 눌러 배분한 항목이 저장 후 C 에게 가는 것처럼 보인다. */
+        assignee1Name={testers.find(t => t.id === form.assigneeTesterId)?.name ?? order.assigneeName}
+        assignee2Name={testers.find(t => t.id === form.assigneeTesterId2)?.name ?? order.assigneeName2}
+        jobStarted={order.hasJob}
       />
 
       <section className="mt-4 rounded-md border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-800 dark:bg-amber-950/20">
@@ -1957,9 +2118,11 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
 // ─── 수정이력 모달 ────────────────────────────────────────────────────────────
 // 수정이력 값 보기 좋게 변환 (담당자 id→이름, 긴급 boolean→라벨)
 function fmtEditValue(field: string, v: string | null, testers: Tester[]): string {
-  if (v == null || v === "") return field === "assigneeTesterId" ? "미배정" : "(없음)"
-  if (field === "assigneeTesterId") return testers.find(t => t.id === v)?.name ?? v
+  const isAssigneeField = field === "assigneeTesterId" || field === "assigneeTesterId2"
+  if (v == null || v === "") return isAssigneeField ? "미배정" : "(없음)"
+  if (isAssigneeField) return testers.find(t => t.id === v)?.name ?? v
   if (field === "isUrgent") return v === "true" ? "긴급" : "일반"
+  if (field === "isDualAssignment") return v === "true" ? "2인 배정" : "1인 배정"
   return v
 }
 
@@ -2213,14 +2376,31 @@ function IngestLogModal({ onClose }: { onClose: () => void }) {
 // ─── 공용 UI ──────────────────────────────────────────────────────────────────
 const inputCls = "h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
 
-function Field({ label, full, children }: { label: string; full?: boolean; children: React.ReactNode }) {
+/**
+ * action 이 없으면 예전과 완전히 같은 마크업이다(다른 호출부 영향 없음).
+ * action 이 있으면(예: 「2인 배정」 체크박스) 라벨과 나란히 놓되, <label> 밖으로 뺀다 —
+ * 안에 실제 <input type="checkbox"> 를 두면 그 체크박스가 label 의 "첫 번째 연결 가능한
+ * 컨트롤"이 되어, 라벨 글자를 눌러도 (children 이 아니라) 체크박스가 토글되는 오작동이 생긴다.
+ */
+function Field({ label, full, action, children }: { label: string; full?: boolean; action?: React.ReactNode; children: React.ReactNode }) {
+  if (!action) {
+    return (
+      <div className={full ? "sm:col-span-2" : ""}>
+        {/* 라벨이 컨트롤을 감싸 암묵적으로 연결된다(별도 id 불필요). */}
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold text-foreground">{label}</span>
+          {children}
+        </label>
+      </div>
+    )
+  }
   return (
     <div className={full ? "sm:col-span-2" : ""}>
-      {/* 라벨이 컨트롤을 감싸 암묵적으로 연결된다(별도 id 불필요). */}
-      <label className="block">
-        <span className="mb-1 block text-xs font-semibold text-foreground">{label}</span>
-        {children}
-      </label>
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="text-xs font-semibold text-foreground">{label}</span>
+        {action}
+      </div>
+      {children}
     </div>
   )
 }

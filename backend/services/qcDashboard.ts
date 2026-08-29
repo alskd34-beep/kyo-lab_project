@@ -50,7 +50,7 @@ export async function getQcDashboard(): Promise<QcDashboard> {
   // 1) 오더 (삭제 제외)
   const { data: orderData, error: orderErr } = await supabaseAdmin
     .from('pct_orders')
-    .select('id, status, assignee_tester_id, product_code, product_name, is_urgent, product_synced, ingest_state')
+    .select('id, status, assignee_tester_id, is_dual_assignment, assignee_tester_id_2, product_code, product_name, is_urgent, product_synced, ingest_state')
     .neq('status', DELETED_STATUS)
   if (orderErr) throw orderErr
   const orders = (orderData ?? []) as Record<string, unknown>[]
@@ -116,16 +116,27 @@ export async function getQcDashboard(): Promise<QcDashboard> {
     if (o.product_synced === false || o.ingest_state === 'new') newProducts += 1
 
     // 미완료 배정 오더만 보유 DAY / 난이도 분포 산정
-    if (assignee && OPEN_STATUSES.has(status)) {
+    //
+    // [2인 배정] 담당자2 몫도 그 사람의 보유량으로 잡는다 — 예전에는 assignee_tester_id 만 봐서
+    // 담당자2로 여러 건을 들고 있어도 화면에 0으로 보였다.
+    // 공수(DAY)는 두 사람이 나눠 수행하므로 절반씩 나눈다(품목 전체 공수를 양쪽에 온전히
+    // 더하면 조직 전체 보유량이 실제의 두 배로 부풀어 오른다).
+    // 난이도 분포는 "지금 손에 든 HIGH 품목이 몇 건인가" 라서 두 사람 모두에게 1건씩 센다.
+    const dualAssignee = o.is_dual_assignment ? ((o.assignee_tester_id_2 as string) ?? null) : null
+    const holders = [assignee, dualAssignee].filter((t): t is string => !!t)
+    if (holders.length > 0 && OPEN_STATUSES.has(status)) {
       const days = workdaysByCode.get(code) ?? DEFAULT_WORKDAYS // 공수 미등록 → 1일(근사치)
-      daysByTester.set(assignee, (daysByTester.get(assignee) ?? 0) + days)
+      const sharePerHolder = days / holders.length
+      for (const holder of holders) {
+        daysByTester.set(holder, (daysByTester.get(holder) ?? 0) + sharePerHolder)
 
-      const bucket = diffByTester.get(assignee) ?? { high: 0, medium: 0, low: 0 }
-      const diff = difficultyByCode.get(code)
-      if (diff === 'HIGH') bucket.high += 1
-      else if (diff === 'MEDIUM') bucket.medium += 1
-      else if (diff === 'LOW') bucket.low += 1
-      diffByTester.set(assignee, bucket)
+        const bucket = diffByTester.get(holder) ?? { high: 0, medium: 0, low: 0 }
+        const diff = difficultyByCode.get(code)
+        if (diff === 'HIGH') bucket.high += 1
+        else if (diff === 'MEDIUM') bucket.medium += 1
+        else if (diff === 'LOW') bucket.low += 1
+        diffByTester.set(holder, bucket)
+      }
     }
   }
 
