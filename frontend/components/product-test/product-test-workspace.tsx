@@ -1,6 +1,6 @@
 "use client"
 
-import { memo, useCallback, useDeferredValue, useEffect, useId, useMemo, useState, type ChangeEvent, type ReactNode } from "react"
+import { memo, useCallback, useDeferredValue, useEffect, useId, useMemo, useState, type ChangeEvent, type CSSProperties, type ReactNode } from "react"
 import {
   Box,
   Lock,
@@ -251,10 +251,18 @@ const DifficultyBadge = memo(function DifficultyBadge({ difficulty }: { difficul
   )
 })
 
-/* 첫 페인트에서 아직 실측값이 없을 때만 쓰는 대략치.
-   실제 높이는 useVirtualWindow 가 렌더된 행/카드를 재서 쓴다. */
+/* 데스크톱 표는 여전히 가상 스크롤을 쓴다. 첫 페인트에서 아직 실측값이 없을
+   때만 쓰는 대략치이고, 실제 높이는 useVirtualWindow 가 렌더된 행을 재서 쓴다. */
 const ROW_FALLBACK = 52
+
+/* 모바일 카드 목록은 가상 스크롤 대신 페이지 전체 스크롤을 쓴다. 대신 각 카드에
+   content-visibility:auto 를 줘서 화면 밖 카드는 브라우저가 레이아웃/페인트를
+   건너뛰게 한다 — 수백 장이어도 가볍다. containIntrinsicSize 는 실측 전 대략치. */
 const CARD_FALLBACK = 156
+const CARD_CONTENT_VISIBILITY_STYLE: CSSProperties = {
+  contentVisibility: "auto",
+  containIntrinsicSize: `0 ${CARD_FALLBACK}px`,
+}
 
 function StatusLine({
   color,
@@ -362,16 +370,13 @@ function EmptyRow({ children }: { children: ReactNode }) {
 const ProductCard = memo(function ProductCard({
   row,
   onEdit,
-  rowRef,
 }: {
   row: ProductRow
   onEdit: (row: ProductRow) => void
-  /** 가상 스크롤이 카드 높이를 실측할 수 있게 첫 카드에만 달린다. */
-  rowRef?: (node: HTMLElement | null) => void
 }) {
   return (
     <Card
-      ref={rowRef}
+      style={CARD_CONTENT_VISIBILITY_STYLE}
       className="cursor-pointer gap-0 px-3 py-3 transition-colors hover:bg-muted/30"
       onClick={() => onEdit(row)}
     >
@@ -541,12 +546,16 @@ const ProductMasterList = memo(function ProductMasterList({
   rows,
   loading,
   statusFilter,
+  onStatusFilterChange,
+  counts,
   onAdd,
   onEdit,
 }: {
   rows: ProductRow[]
   loading: boolean
   statusFilter: StatusFilterValue
+  onStatusFilterChange: (v: StatusFilterValue) => void
+  counts: { all: number; active: number; inactive: number }
   onAdd: () => void
   onEdit: (row: ProductRow) => void
 }) {
@@ -588,35 +597,44 @@ const ProductMasterList = memo(function ProductMasterList({
     })
   }, [rows, deferredSearch, sortField, sortDir, statusFilter])
 
-  /* 행 높이는 훅이 렌더된 행을 재서 쓴다. 아래 상수는 첫 페인트용 대략치이고,
-     모바일 카드 ↔ 데스크톱 행이 바뀌면 실측값도 따라 바뀐다. */
-  const { containerRef: virtualRef, itemRef, start, end, padTop, padBottom } = useVirtualWindow(
+  /* 데스크톱 표 행 높이는 훅이 렌더된 행을 재서 쓴다. ROW_FALLBACK 은 첫 페인트용 대략치다. */
+  const { containerRef, itemRef, start, end, padTop, padBottom } = useVirtualWindow(
     sorted.length,
-    isMobile ? CARD_FALLBACK : ROW_FALLBACK,
+    ROW_FALLBACK,
   )
   const windowedRows = sorted.slice(start, end)
 
   const columns = PRODUCT_COLUMNS
-  const containerRef = virtualRef
 
   return (
     <>
-      <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
-        <div className="relative w-full sm:w-64">
-          <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="품목명 / 코드 / 약호 검색..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="h-9 pl-9"
-          />
-        </div>
-        <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
-          <Badge variant="secondary" className="tabular-nums">{sorted.length}건</Badge>
-          <Button onClick={onAdd}>
-            <Plus />
-            품목 추가
-          </Button>
+      {/* 탭 + 검색줄 — 모바일에서는 목록을 페이지 전체 스크롤로 넘기는 대신
+          이 조회 영역을 화면 위에 고정한다. 써머리(KPI) 카드는 고정 대상에서 뺀다. */}
+      <div className="sticky top-0 z-10 flex shrink-0 flex-col gap-2 bg-background pb-2 md:static md:bg-transparent md:pb-0">
+        <StatusFilterTabs
+          value={statusFilter}
+          onChange={onStatusFilterChange}
+          counts={counts}
+          activeLabel="활성 품목"
+          inactiveLabel="비활성 품목"
+        />
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="relative w-full sm:w-64">
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="품목명 / 코드 / 약호 검색..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-9 pl-9"
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+            <Badge variant="secondary" className="tabular-nums">{sorted.length}건</Badge>
+            <Button onClick={onAdd}>
+              <Plus />
+              품목 추가
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -677,10 +695,10 @@ const ProductMasterList = memo(function ProductMasterList({
       )}
 
       {isMobile && (
-      <div ref={containerRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto md:hidden">
+      <div className="flex flex-col gap-2 md:hidden">
         {loading
           ? Array.from({ length: 4 }).map((_, i) => (
-              <Card key={i} className="mb-2 gap-2 px-3 py-3">
+              <Card key={i} className="gap-2 px-3 py-3">
                 <div className="flex items-center justify-between">
                   <Skeleton className="h-4 w-24" />
                   <Skeleton className="h-5 w-14 rounded-md" />
@@ -696,20 +714,9 @@ const ProductMasterList = memo(function ProductMasterList({
             </Card>
           )
           : (
-            <>
-              {padTop > 0 && <div aria-hidden style={{ height: padTop }} />}
-              <div className="flex flex-col gap-2">
-                {windowedRows.map((row, i) => (
-                  <ProductCard
-                    key={row.id}
-                    row={row}
-                    onEdit={onEdit}
-                    rowRef={i === 0 ? itemRef : undefined}
-                  />
-                ))}
-              </div>
-              {padBottom > 0 && <div aria-hidden style={{ height: padBottom }} />}
-            </>
+            sorted.map((row) => (
+              <ProductCard key={row.id} row={row} onEdit={onEdit} />
+            ))
           )
         }
       </div>
@@ -899,7 +906,7 @@ export function ProductTestWorkspace() {
   }
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden p-4 md:p-6">
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto p-4 md:overflow-hidden md:p-6">
       {/* 헤더 */}
       <div className="flex shrink-0 flex-col gap-0.5">
         <div className="flex items-center gap-2">
@@ -978,15 +985,6 @@ export function ProductTestWorkspace() {
         )}
       </div>
 
-      <StatusFilterTabs
-        value={statusFilter}
-        onChange={setStatusFilter}
-        counts={{ all: summary.total, active: summary.active, inactive: summary.total - summary.active }}
-        activeLabel="활성 품목"
-        inactiveLabel="비활성 품목"
-        className="shrink-0"
-      />
-
       {error && (
         <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive">
           {error}
@@ -997,6 +995,8 @@ export function ProductTestWorkspace() {
         rows={rows}
         loading={loading}
         statusFilter={statusFilter}
+        onStatusFilterChange={setStatusFilter}
+        counts={{ all: summary.total, active: summary.active, inactive: summary.total - summary.active }}
         onAdd={openAdd}
         onEdit={openEdit}
       />
