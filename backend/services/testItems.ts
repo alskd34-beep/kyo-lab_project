@@ -11,7 +11,7 @@ export interface TestItemRow {
 }
 
 export const TEST_ITEM_CATEGORIES = [
-  '성상·포장', '이화학', '함량시험', '확인시험', '기기분석', '안전성', '기타',
+  '성상·포장', '이화학', '함량시험', '확인시험', '기기분석', '안전성', '밸리데이션', '기타',
 ] as const
 export type TestItemCategory = typeof TEST_ITEM_CATEGORIES[number]
 
