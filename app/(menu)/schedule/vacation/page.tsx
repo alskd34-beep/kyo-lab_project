@@ -18,6 +18,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@frontend/components/ui/table"
 import { ManagementDrawer } from "@frontend/components/common/management-drawer"
+import { orderTestWindow, overlaps, todayIso } from "@shared/leave"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 type ScheduleType = "ANNUAL" | "HALF_DAY" | "BUSINESS_TRIP"
@@ -33,7 +34,15 @@ interface ScheduleRow {
   memo: string | null
   createdAt: string
 }
-interface UserOption { id: string; displayName: string | null; username: string }
+/**
+ * isActive · testerId 게이트가 핵심이다 — 절대 빠뜨리면 안 된다.
+ * operatorSchedule.ts 의 testerAbsences()/testersOnLeave() 가 `if (!testerId) continue` 로
+ * tester_id 가 null 인 사용자의 휴가를 조용히 버린다. 이 함수들은 AI 자동배정 하드 제외·
+ * 오더 화면 팝업·서버 알림 세 경로 전부의 단일 소스다. 그리고 users.ts 는 role='admin'
+ * 전환 시 tester_id 를 null 로 만든다. 따라서 시험자와 연결되지 않은(주로 관리자) 계정에
+ * 휴가를 등록하면 캘린더에는 정상으로 보이지만 배정에는 아무 효과가 없는 조용한 실패가 된다.
+ */
+interface UserOption { id: string; displayName: string | null; username: string; isActive: boolean; testerId: string | null }
 
 interface ProductSuggestion {
   productCode: string
@@ -173,11 +182,19 @@ export default function VacationPage() {
   useEffect(() => { void load() }, [load])
 
   // 관리자만 사용자 목록 조회 (대상 지정용)
+  // GET /api/users 는 { rows } 를 반환한다(다른 소비자 settings/users, schedule/reassignments 와 동일).
+  // 활성 + 시험자 연결(testerId)인 사람만 남긴다 — 선례: orders/page.tsx 의 담당자 Select.
+  // 정렬은 표시값(displayName ?? username)과 같은 키로 맞춘다(표시·정렬 불일치 방지).
   useEffect(() => {
     if (!isAdmin) return
     void fetch("/api/users", { credentials: "include" })
       .then(r => r.json())
-      .then(d => setUsers((d.users ?? []).map((u: UserOption) => ({ id: u.id, displayName: u.displayName, username: u.username }))))
+      .then(d => setUsers(
+        ((d.rows ?? []) as UserOption[])
+          .filter(u => u.isActive && u.testerId)
+          .map(u => ({ id: u.id, displayName: u.displayName, username: u.username, isActive: u.isActive, testerId: u.testerId }))
+          .sort((a, b) => (a.displayName ?? a.username).localeCompare(b.displayName ?? b.username, "ko")),
+      ))
       .catch(() => {})
   }, [isAdmin])
 
@@ -970,6 +987,7 @@ function AddModal({
   onError: (m: string) => void
 }) {
   const uid = useId()
+  const { requestConfirm } = useConfirmMessage()
   const [userId, setUserId] = useState("")
   const [type, setType] = useState<ScheduleType>("ANNUAL")
   const [startDate, setStartDate] = useState(defaults.start)
@@ -980,6 +998,44 @@ function AddModal({
   const submit = async () => {
     if (!startDate || !endDate) { onError("시작일과 종료일을 입력하세요."); return }
     if (endDate < startDate) { onError("종료일은 시작일 이후여야 합니다."); return }
+
+    // 역방향 경고: 관리자가 뒤늦게 대리 등록하는 상황은 그 기간에 이미 배정이 잡혀
+    // 있을 가능성이 높다는 뜻이다. 등록 시점에 알리지 않으면 아무도 그 오더를 다시
+    // 열지 않는 한 영영 드러나지 않는다. 대상자의 testerId 로 이미 배정된 오더를 찾아
+    // 겹치면 확인만 받는다(차단하지 않음 — 이 시스템의 일관된 정책, types/leave.ts 참고).
+    // 2인 배정의 담당자2도 포함된다 — listOrders 가 assignedToTesterFilter 로 두 슬롯을 모두 본다.
+    const targetTesterId = isAdmin ? (users.find(u => u.id === userId)?.testerId ?? null) : null
+    if (targetTesterId) {
+      try {
+        const res = await fetch(`/api/pct-orders?assigneeTesterId=${targetTesterId}`, { credentials: "include" })
+        if (res.ok) {
+          const d = await res.json()
+          const orders = (d.rows ?? []) as { productName: string; batchNo: string; packagingDate: string | null; dueDate: string | null }[]
+          const leaveWindow = { from: startDate, to: endDate }
+          const conflicting = orders.filter(o =>
+            overlaps(leaveWindow, orderTestWindow({ packagingDate: o.packagingDate, dueDate: o.dueDate }, todayIso())),
+          )
+          if (conflicting.length > 0) {
+            const ok = await requestConfirm({
+              title: "이미 배정된 오더와 겹칩니다. 그대로 등록할까요?",
+              description: (
+                <span className="block whitespace-pre-line">
+                  이 기간에 이미 이 사람에게 배정된 오더가 있습니다.
+                  {"\n"}{conflicting.map(o => `· ${o.productName} (${o.batchNo})`).join("\n")}
+                  {"\n"}그대로 등록할 수 있으며, 해당 오더는 관리자가 다시 확인해야 합니다.
+                </span>
+              ),
+              confirmLabel: "그대로 등록",
+              variant: "warning",
+            })
+            if (!ok) return
+          }
+        }
+      } catch {
+        // 조회 실패는 삼키고 등록은 그대로 진행한다 — 경고는 부가 기능이지 등록의 전제조건이 아니다.
+      }
+    }
+
     setSaving(true)
     try {
       const res = await fetch("/api/operator-schedule", {

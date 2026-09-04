@@ -7,6 +7,7 @@ import { DELETED_STATUS, PENDING_STATUS, ORDER_STATUSES } from '@shared/qc-statu
 import { assertTesterAssignable } from '@backend/services/testers'
 import { logReassignment } from '@backend/services/reassignmentHistory'
 import { warnIfAssigneeOnLeave } from '@backend/services/leaveConflicts'
+import { assignedToTesterFilter } from '@backend/lib/assigneeFilter'
 import {
   METHOD_ALL, METHOD_PARTIAL, normalizeForMethod, replaceForOrder, resetAssigneeSlots,
   type OrderTestItemInput,
@@ -135,7 +136,16 @@ export async function listOrders(filters: {
 
   if (!filters.includeDeleted) query = query.neq('status', DELETED_STATUS)
   if (filters.status) query = query.eq('status', filters.status)
-  if (filters.assigneeTesterId) query = query.eq('assignee_tester_id', filters.assigneeTesterId)
+  // 담당자1만 보면 2인 배정 오더의 담당자2에게는 자기 오더가 아예 안 잡힌다
+  // (휴가 등록 시 겹침 경고가 담당자2에서만 침묵하던 원인). 필터 문자열은
+  // assignedToTesterFilter 한 곳에서만 만든다 — 손으로 적으면 또 어긋난다.
+  if (filters.assigneeTesterId) {
+    const id = filters.assigneeTesterId
+    // 이 값은 쿼리스트링(app/api/pct-orders/route.ts)에서 온다. PostgREST 필터 문자열에
+    // 그대로 보간되는 자리라 UUID 형식을 강제한다(notifications.ts 의 scopeToViewer 와 동일한 가드).
+    if (!/^[0-9a-fA-F-]{36}$/.test(id)) throw new Error('잘못된 담당자 식별자입니다.')
+    query = query.or(assignedToTesterFilter(id))
+  }
 
   // Supabase 기본 1000행 상한 회피. pct_orders 는 소프트 삭제만 하므로 단조 증가한다.
   const { data, error } = await query.range(0, 9999)
@@ -578,23 +588,34 @@ export async function updateOrderWithReason(
   // (대시보드의 재배정 통계가 통째로 놓쳤다) 휴가 겹침 알림도 돌지 않았다 —
   // 화면은 저장 직전에 "그대로 저장하면 관리자 알림이 남습니다" 라고 약속하는데
   // 담당자2에 대해서는 그 약속이 지켜지지 않았다.
+  // 날짜만 바뀌어도(담당자는 그대로) 휴가 경고가 돌아야 한다 — 화면(EditModal)이 담당자
+  // 미변경 시에도 "그대로 저장하면 관리자 알림이 남습니다" 라고 약속하기 때문이다. 여기서
+  // 안 돌리면 화면이 없는 안전망을 있다고 믿게 만드는 셈이 된다.
+  const datesChanged = changed.has('packagingDate') || changed.has('dueDate')
+
   for (const slotField of ['assigneeTesterId', 'assigneeTesterId2'] as const) {
     const assigneeEdit = edits.find(e => e.field === slotField)
-    if (!assigneeEdit) continue
+    if (!assigneeEdit && !datesChanged) continue
 
-    await logReassignment({
-      orderId:    id,
-      beforeUser: assigneeEdit.old_value,
-      afterUser:  assigneeEdit.new_value,
-      reason:     trimmedReason,
-      changedBy:  editedBy,
-    }).catch(() => {})
+    // 재배정 이력(logReassignment)은 담당자가 실제로 바뀐 경우에만 남긴다 — 날짜 수정
+    // 건까지 섞이면 재배정 통계(대시보드)가 오염된다. 위 datesChanged 분기와 반드시 분리 유지.
+    if (assigneeEdit) {
+      await logReassignment({
+        orderId:    id,
+        beforeUser: assigneeEdit.old_value,
+        afterUser:  assigneeEdit.new_value,
+        reason:     trimmedReason,
+        changedBy:  editedBy,
+      }).catch(() => {})
+    }
 
     // 수동 배정은 차단하지 않는다. 휴가·출장과 겹치면 관리자 알림만 남긴다.
+    // 담당자가 이번 수정에서 안 바뀌었으면(날짜만 수정) 그 슬롯의 현재 담당자를 그대로 쓴다 —
+    // pickPatched 는 패치에 없는 컬럼이면 currentRow 값을 돌려주므로 그대로 재사용한다.
     // 날짜도 같은 수정에서 바뀔 수 있으므로 패치 적용 후 값을 기준으로 판정한다.
     await warnIfAssigneeOnLeave({
       orderId:     id,
-      testerId:    assigneeEdit.new_value,
+      testerId:    assigneeEdit ? assigneeEdit.new_value : pickPatched(dbPatch, currentRow, FIELD_TO_COL[slotField]),
       order: {
         // 'packaging_date' in dbPatch 로 판단한다 — 날짜를 비우는 수정(null)도 패치값이 이겨야 한다.
         packagingDate: pickPatched(dbPatch, currentRow, 'packaging_date'),

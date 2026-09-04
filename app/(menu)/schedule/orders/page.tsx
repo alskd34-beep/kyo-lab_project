@@ -1832,6 +1832,13 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
   // 담당자가 그대로면(원래부터 그 사람이면) 다시 확인받지 않는다 — 날짜·비고만 고치는 경우
   const assigneeChanged = (form.assigneeTesterId || null) !== (order.assigneeTesterId ?? null)
   const assignee2Changed = (form.assigneeTesterId2 || null) !== (order.assigneeTesterId2 ?? null)
+  // 담당자를 안 바꾸고 날짜만 밀어도 휴가 구간으로 들어갈 수 있으므로 날짜 변경도 확인 대상이다.
+  // `|| null` 로 ""를 접고 `?? null` 로 undefined 를 접는다 — 양쪽을 `??` 로 통일하면 안 된다.
+  // form 은 위 :1790-1791 에서 `?? ""` 로 정규화되므로, 포장일이 null 인 오더에서
+  // "" !== null 이 항상 참이 되어 비고만 고쳐도 매번 팝업이 뜬다(자동생성 오더는 흔한 케이스).
+  const datesChanged =
+    (form.packagingDate || null) !== (order.packagingDate ?? null) ||
+    (form.dueDate || null) !== (order.dueDate ?? null)
 
   // 2인 배정 체크 토글 — 원래부터 2인 배정이던 오더를 끌 때만 되돌림 확인을 받는다
   // (체크만 하고 아직 저장 전이면 서버는 여전히 1인 배정이므로 확인 없이 그냥 꺼도 된다).
@@ -1858,8 +1865,8 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
     }
     // 휴가 겹침은 차단하지 않고 확인만 받는다 — 담당자1·담당자2 둘 다 판정한다
     const conflictNotices: { name: string; conflicts: TesterAbsence[] }[] = []
-    if (assigneeChanged && leaveConflicts.length > 0) conflictNotices.push({ name: assigneeName, conflicts: leaveConflicts })
-    if (form.isDualAssignment && assignee2Changed && leaveConflicts2.length > 0) conflictNotices.push({ name: assigneeName2, conflicts: leaveConflicts2 })
+    if ((assigneeChanged || datesChanged) && leaveConflicts.length > 0) conflictNotices.push({ name: assigneeName, conflicts: leaveConflicts })
+    if (form.isDualAssignment && (assignee2Changed || datesChanged) && leaveConflicts2.length > 0) conflictNotices.push({ name: assigneeName2, conflicts: leaveConflicts2 })
     if (conflictNotices.length > 0) {
       const ok = await requestConfirm({
         title: "휴가 기간과 겹칩니다. 그대로 배정할까요?",
