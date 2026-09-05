@@ -60,6 +60,27 @@ const SHEET_KEY_DEADLINE = ['시험완료요청일', 'QC완료예정일', 'QC �
 const SHEET_KEY_URGENT   = ['긴급', '우선순위']
 const SHEET_KEY_METHOD   = ['진행방법']
 const SHEET_KEY_NOTE     = ['비고']
+// 2026-09 실측: 시트 실제 헤더는 '구분' 이다(예전 '밸리데이션구분' 은 현재 시트에 없음).
+// 그런데도 '구분'을 맨 뒤에 두는 이유는 pick()이 앞에서부터 빈 값이 아닌 첫 값을
+// 채택하기 때문 — '구분'은 일반적인 단어라, 시트가 나중에 더 구체적인 '밸리데이션구분'
+// 열을 다시 두면 그쪽이 우선해야 한다. 오늘 동작은 어느 순서든 동일하다.
+const SHEET_KEY_VALID    = ['밸리데이션구분', '밸리데이션 구분', '밸리데이션', '구분']
+
+/**
+ * 구분 정규화.
+ *
+ * 시트에는 PV1/CV/MV 처럼 대문자로 적히지만 사람이 손으로 채우는 열이라
+ * 'pv1', 'Cv' 가 섞여 들어온다. 그대로 두면 같은 구분이 다른 값으로 쌓여
+ * 집계·필터가 갈라지므로 대문자로 맞춘다(한글은 대소문자가 없어 영향 없다).
+ * 빈 값은 null 이다 — '일반' 으로 채우지 않는다. 시트가 비어 있는 것과
+ * 담당자가 '일반' 이라고 적은 것은 다른 사실이다.
+ */
+function normalizeValidationType(raw: string): string | null {
+  const v = (raw ?? '').trim()
+  if (!v) return null
+  // 셀 안의 줄바꿈·중복 공백은 한 칸으로 접는다 ('PV 1' 같은 표기 흔들림 흡수)
+  return v.replace(/\s+/g, ' ').toUpperCase()
+}
 
 /** 비고 텍스트에서 긴급 의도 추출 (부정표현 제외) */
 function noteImpliesUrgent(note: string): boolean {
@@ -92,6 +113,8 @@ export interface SheetPctRow {
   isUrgent: boolean
   method: '전항목' | '개별항목'
   note: string
+  /** 구분(일반/PV1/CV/MV/…). 시트 열이 비었으면 null */
+  validationType: string | null
 }
 
 /**
@@ -125,6 +148,7 @@ export async function fetchPctSheet(fileId: string): Promise<SheetPctRow[]> {
         isUrgent: urgentRaw === '긴급' || noteImpliesUrgent(note),
         method: methodRaw === '개별항목' ? '개별항목' : '전항목',
         note,
+        validationType: normalizeValidationType(pick(r, SHEET_KEY_VALID)),
       }
     })
     // 자연키(batch_no+code) 누락 행 제외

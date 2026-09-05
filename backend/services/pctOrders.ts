@@ -19,6 +19,8 @@ export interface PctOrderRow {
   productName: string
   batchNo: string
   dosageForm: string | null
+  /** 구분(제조팀 시트 원본). 일반/PV1/CV/MV/… · 0039 미적용 환경에서는 null */
+  validationType: string | null
   packagingDate: string | null
   dueDate: string | null
   isUrgent: boolean
@@ -44,12 +46,14 @@ export interface PctOrderRow {
 
 // 수정 가능 필드. 자동 적재 오더는 품목코드·품목명·제조번호를 서버에서 보호한다.
 const EDITABLE_FIELDS = [
-  'productCode', 'productName', 'batchNo', 'dosageForm',
+  'productCode', 'productName', 'batchNo', 'dosageForm', 'validationType',
   'packagingDate', 'dueDate', 'isUrgent', 'method', 'status', 'note', 'assigneeTesterId',
   'isDualAssignment', 'assigneeTesterId2',
 ] as const
 type EditableField = (typeof EDITABLE_FIELDS)[number]
-const AUTO_IMMUTABLE_FIELDS = ['productCode', 'productName', 'batchNo'] as const
+// 구분도 제조팀 시트가 원본이다 — 자동 적재 오더에서는 고정하고,
+// 수동 생성 오더에서만 관리자가 지정한다(품목코드·품목명·제조번호와 같은 취급).
+const AUTO_IMMUTABLE_FIELDS = ['productCode', 'productName', 'batchNo', 'validationType'] as const
 
 /**
  * [원칙3] 확정(LOCK) 시 변경을 막는 필드.
@@ -94,6 +98,7 @@ const FIELD_LABEL: Record<EditableField, string> = {
   productName: '품목명',
   batchNo: '제조번호',
   dosageForm: '제형',
+  validationType: '구분',
   packagingDate: '포장일',
   dueDate: '완료예정일',
   isUrgent: '긴급여부',
@@ -113,6 +118,7 @@ const FIELD_TO_COL: Record<EditableField, string> = {
   productName: 'product_name',
   batchNo: 'batch_no',
   dosageForm: 'dosage_form',
+  validationType: 'validation_type',
   packagingDate: 'packaging_date',
   dueDate: 'due_date',
   isUrgent: 'is_urgent',
@@ -218,6 +224,7 @@ export async function listOrders(filters: {
     productName: o.product_name as string,
     batchNo: o.batch_no as string,
     dosageForm: (o.dosage_form as string) ?? null,
+    validationType: (o.validation_type as string) ?? null,
     packagingDate: (o.packaging_date as string) ?? null,
     dueDate: (o.due_date as string) ?? null,
     isUrgent: !!o.is_urgent,
@@ -251,6 +258,7 @@ export async function createOrder(input: {
   productName: string
   batchNo: string
   dosageForm?: string | null
+  validationType?: string | null
   packagingDate?: string | null
   dueDate?: string | null
   isUrgent?: boolean
@@ -278,6 +286,9 @@ export async function createOrder(input: {
       product_name:       name,
       batch_no:           batch,
       dosage_form:        input.dosageForm?.trim() || null,
+      // 0039 미적용 환경에서 undefined 를 넣으면 supabase-js 가 키를 빼주므로 안전하다.
+      // 값이 없으면 아예 보내지 않아 컬럼이 없어도 수동 오더 생성이 실패하지 않는다.
+      ...(input.validationType?.trim() ? { validation_type: input.validationType.trim().toUpperCase() } : {}),
       packaging_date:     input.packagingDate || null,
       due_date:           input.dueDate || null,
       is_urgent:          input.isUrgent ?? false,
@@ -333,6 +344,7 @@ export async function createOrder(input: {
     productName: o.product_name as string,
     batchNo: o.batch_no as string,
     dosageForm: (o.dosage_form as string) ?? null,
+    validationType: (o.validation_type as string) ?? null,
     packagingDate: (o.packaging_date as string) ?? null,
     dueDate: (o.due_date as string) ?? null,
     isUrgent: !!o.is_urgent,
@@ -443,7 +455,9 @@ export async function updateOrderWithReason(
     const newStr = newVal === null ? null : String(newVal)
     if (oldStr === newStr) continue
     if (!isManual && AUTO_IMMUTABLE_FIELDS.includes(field as (typeof AUTO_IMMUTABLE_FIELDS)[number])) {
-      throw new Error('자동 적재 오더는 품목코드·품목명·제조번호를 수정할 수 없습니다.')
+      // 보호 필드가 늘어날 때마다 문구를 고쳐야 하는 하드코딩 목록이었다 —
+      // 실제로 막힌 필드 이름을 그대로 알려주는 편이 정확하고 유지보수도 없다.
+      throw new Error(`자동 적재 오더는 ${fieldLabel(field)}을(를) 수정할 수 없습니다. 제조팀 시트가 원본입니다.`)
     }
     dbPatch[col] = newVal
     edits.push({ field, old_value: oldStr, new_value: newStr })

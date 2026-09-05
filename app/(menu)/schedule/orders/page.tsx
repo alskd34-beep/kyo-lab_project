@@ -57,6 +57,8 @@ interface OrderRow {
   productName: string
   batchNo: string
   dosageForm: string | null
+  /** 구분(제조팀 시트 원본). 일반/PV1/CV/MV/… · 값 없으면 null */
+  validationType: string | null
   packagingDate: string | null
   dueDate: string | null
   isUrgent: boolean
@@ -125,9 +127,11 @@ const DOT_NONE = "bg-slate-400"
 
 const FIELD_LABEL: Record<string, string> = {
   productCode: "품목코드", productName: "품목명", batchNo: "제조번호", dosageForm: "제형",
+  validationType: "구분",
   packagingDate: "포장일", dueDate: "완료예정일", isUrgent: "긴급",
   method: "진행방법", status: "상태", note: "비고", assigneeTesterId: "담당자",
   isDualAssignment: "2인 배정", assigneeTesterId2: "담당자2",
+  testItemAssignee: "항목 담당자",
 }
 
 const AUTO_UNASSIGNED_NOTE_PREFIX = "자동배정 미배정 사유:"
@@ -307,7 +311,13 @@ export default function OrdersPage() {
       const res = await fetch("/api/cron/ingest-pct", { method: "POST", credentials: "include" })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      flash(`적재 완료 — 신규 ${data.created} · 변경 ${data.updated} · 삭제 ${data.deleted} · 미동기화 ${data.unsynced}`)
+      // 실패 건수를 감추면 "왜 시트에 있는데 안 올라오지"를 화면에서 알 길이 없다.
+      // (소프트 삭제된 오더와 자연키가 겹치면 insert 가 23505 로 실패한다 — 흔한 경우다)
+      const failed = (data.failures ?? []).length
+      flash(
+        `적재 완료 — 신규 ${data.created} · 변경 ${data.updated} · 삭제 ${data.deleted} · 미동기화 ${data.unsynced}`
+        + (failed > 0 ? ` · 실패 ${failed}` : ""),
+      )
       await load()
     } catch (e) {
       flash(`적재 실패: ${e instanceof Error ? e.message : ""}`)
@@ -464,7 +474,9 @@ export default function OrdersPage() {
       r.productName.toLowerCase().includes(q) ||
       r.productCode.toLowerCase().includes(q) ||
       r.batchNo.toLowerCase().includes(q) ||
-      (r.assigneeName ?? "").toLowerCase().includes(q)
+      (r.assigneeName ?? "").toLowerCase().includes(q) ||
+      // 'PV1' 처럼 구분으로 찾는 경우 — 시트 값이 대문자라 소문자로 쳐도 걸리게 한다
+      (r.validationType ?? "").toLowerCase().includes(q)
     )
   }, [rows, search])
 
@@ -740,6 +752,15 @@ export default function OrdersPage() {
                   <Badge variant="outline" className="border-amber-200 text-amber-700 dark:border-amber-800 dark:text-amber-300">미동기화</Badge>
                 )}
                 {r.isUrgent && <Badge variant="outline" className="border-red-200 text-red-700 dark:border-red-800 dark:text-red-300">긴급</Badge>}
+                {/* 밸리데이션 배치(PV1/CV/MV…)는 일반 생산배치와 시험 성격이 다르므로 관리자가
+                    목록에서 바로 알아볼 수 있어야 한다. 표시 전용이다 — 배정 엔진(pctAssign)은
+                    이 값을 읽지 않는다. 대부분이 '일반'이라 전부 붙이면 배지가 의미를 잃으므로
+                    일반이 아닐 때만 띄운다. */}
+                {r.validationType && r.validationType !== "일반" && (
+                  <Badge variant="outline" className="border-blue-200 text-blue-700 dark:border-blue-800 dark:text-blue-300">
+                    {r.validationType}
+                  </Badge>
+                )}
               </div>
             </div>
             {/* 상태는 카드 맨 아래가 아니라 이름 바로 밑이다.
@@ -1954,9 +1975,14 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
             <dt className="text-muted-foreground">제조번호</dt>
             <dd className="mt-1 font-mono text-sm font-medium tabular-nums text-foreground">{order.batchNo}</dd>
           </div>
-          <div className="col-span-2">
+          <div>
             <dt className="text-muted-foreground">품목명</dt>
             <dd className="mt-1 text-sm font-medium text-foreground">{order.productName}</dd>
+          </div>
+          {/* 구분도 제조팀 시트가 원본이라 품목 식별정보와 같은 칸에 둔다(읽기 전용) */}
+          <div>
+            <dt className="text-muted-foreground">구분</dt>
+            <dd className="mt-1 text-sm font-medium text-foreground">{order.validationType || "—"}</dd>
           </div>
         </dl>
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">

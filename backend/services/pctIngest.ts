@@ -71,6 +71,8 @@ const CHANGE_FIELDS: Array<{
   label: string
   oldVal: (e: ExistingOrder) => string
   newVal: (r: SheetPctRow) => string
+  /** 0039 적용 전에는 비교하면 안 되는 필드 — 아래 needsValidationColumn 주석 참고 */
+  needsValidationColumn?: boolean
 }> = [
   { label: '품목명',     oldVal: e => e.product_name,            newVal: r => r.productName },
   { label: '제형',       oldVal: e => e.dosage_form ?? '',       newVal: r => r.dosageForm },
@@ -79,6 +81,10 @@ const CHANGE_FIELDS: Array<{
   { label: '긴급',       oldVal: e => String(e.is_urgent),       newVal: r => String(r.isUrgent) },
   { label: '진행방법',   oldVal: e => e.method,                  newVal: r => r.method },
   { label: '비고',       oldVal: e => e.note ?? '',              newVal: r => r.note },
+  // 0039 미적용 환경에서는 e.validation_type 이 undefined → '' 가 되어 시트 값과 항상
+  // 달라진다. 가드 없이 두면 "구분: → 일반" 이라는 가짜 변경이 pct_order_edits 에 쌓이고
+  // 차단 알림 본문에도 섞인다(diffChanged 는 이미 같은 이유로 가드하고 있다).
+  { label: '구분', oldVal: e => e.validation_type ?? '', newVal: r => r.validationType ?? '', needsValidationColumn: true },
 ]
 
 /** 시트 ID 해석: app_settings > env > 기본값 */
@@ -106,9 +112,11 @@ interface ExistingOrder {
   method: string
   note: string | null
   status: string
+  /** 0039 미적용 환경에서는 이 키 자체가 없다(undefined) — hasValidationColumn 참고 */
+  validation_type?: string | null
 }
 
-function diffChanged(existing: ExistingOrder, row: SheetPctRow): boolean {
+function diffChanged(existing: ExistingOrder, row: SheetPctRow, hasValidationColumn: boolean): boolean {
   return (
     existing.product_name !== row.productName ||
     (existing.dosage_form ?? '') !== row.dosageForm ||
@@ -116,7 +124,10 @@ function diffChanged(existing: ExistingOrder, row: SheetPctRow): boolean {
     (existing.due_date ?? null) !== row.dueDate ||
     existing.is_urgent !== row.isUrgent ||
     existing.method !== row.method ||
-    (existing.note ?? '') !== row.note
+    (existing.note ?? '') !== row.note ||
+    // 0039 미적용 환경에서는 비교 자체를 하지 않는다 — 컬럼이 없으면 항상 undefined 라
+    // 시트에 값이 있는 모든 행이 매번 "변경됨"으로 잡혀 적재 로그가 오염된다.
+    (hasValidationColumn && (existing.validation_type ?? null) !== row.validationType)
   )
 }
 
@@ -138,6 +149,15 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
   for (const r of existingRows ?? []) {
     existingByKey.set(keyOf(r.batch_no as string, r.product_code as string), r as never)
   }
+
+  // 0039(validation_type) 적용 여부. 적재는 크론이라, 컬럼이 없는데 insert/update 에
+  // 넣으면 PGRST204 로 **적재 전체가 죽는다**. 마이그레이션 적용 순서에 배포가 매이지
+  // 않도록 실제 행에서 컬럼 존재를 확인하고 넣을지 정한다(pctOrders 의 locked 와 같은 방식).
+  // 행이 하나도 없으면 판정할 수 없으므로 넣지 않는다 — 다음 적재부터 자연히 켜진다.
+  const firstRow = (existingRows ?? [])[0]
+  const hasValidationColumn = firstRow != null && 'validation_type' in firstRow
+  const withValidation = <T extends Record<string, unknown>>(patch: T, value: string | null) =>
+    (hasValidationColumn ? { ...patch, validation_type: value } : patch)
 
   // ── 품목마스터 코드 집합 ───────────────────────────────────────────────────
   // 품목이 1000개를 넘으면 기본 limit 에 잘려 "미동기화" 오탐이 난다 → selectAll
@@ -186,7 +206,7 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
     const existing = existingByKey.get(key)
     if (!existing) {
       // ── 신규 ────────────────────────────────────────────────────────────────
-      const { error } = await supabaseAdmin.from('pct_orders').insert({
+      const { error } = await supabaseAdmin.from('pct_orders').insert(withValidation({
         product_code: row.productCode,
         product_name: row.productName,
         batch_no: row.batchNo,
@@ -198,18 +218,20 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
         product_synced: synced,
         ingest_state: 'new',
         source_file_id: fileId,
-      })
+      }, row.validationType))
       if (error) {
         fail(key, 'new', `신규 오더 생성 실패: ${error.message}`)
       } else {
         result.created++
         await logIngest(key, 'new', PENDING_STATUS, fileId)
       }
-    } else if (diffChanged(existing, row) && (isLockedStatus(existing.status) || (existing as { locked?: boolean }).locked)) {
+    } else if (diffChanged(existing, row, hasValidationColumn) && (isLockedStatus(existing.status) || (existing as { locked?: boolean }).locked)) {
       // ── 변경 차단 ──────────────────────────────────────────────────────────
       // 작업 진행 상태이거나 관리자 확정(LOCK)된 오더는 시트 변경을 자동 반영하지 않는다(일정·배정 보존).
       // before/after 를 pct_order_edits 에 기록하고 감독관 알림만 생성한다.
-      const changes = CHANGE_FIELDS.filter(f => f.oldVal(existing) !== f.newVal(row))
+      const changes = CHANGE_FIELDS
+        .filter(f => !f.needsValidationColumn || hasValidationColumn)
+        .filter(f => f.oldVal(existing) !== f.newVal(row))
       for (const c of changes) {
         await supabaseAdmin.from('pct_order_edits').insert({
           order_id: existing.id,
@@ -231,9 +253,9 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
         body: `${existing.product_name} (${row.batchNo}) 는 '${existing.status}' 상태로 시트 변경이 자동 반영되지 않았습니다. 변경내용: ${summary || '없음'}. 필요 시 수동 반영하세요.`,
         relatedOrderId: existing.id,
       })
-    } else if (diffChanged(existing, row)) {
+    } else if (diffChanged(existing, row, hasValidationColumn)) {
       // ── 변경 ────────────────────────────────────────────────────────────────
-      const { error } = await supabaseAdmin.from('pct_orders').update({
+      const { error } = await supabaseAdmin.from('pct_orders').update(withValidation({
         product_name: row.productName,
         dosage_form: row.dosageForm || null,
         packaging_date: row.packagingDate,
@@ -245,7 +267,7 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
         ingest_state: 'updated',
         last_seen_at: nowIso,
         source_file_id: fileId,
-      }).eq('id', existing.id)
+      }, row.validationType)).eq('id', existing.id)
       if (error) {
         fail(key, 'updated', `오더 변경 반영 실패: ${error.message}`)
       } else {

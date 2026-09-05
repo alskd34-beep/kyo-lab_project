@@ -39,6 +39,7 @@ const FIELD_LABEL: Record<string, string> = {
   productName: '품목명',
   batchNo: '제조번호',
   dosageForm: '제형',
+  validationType: '구분',
   packagingDate: '포장일',
   dueDate: '완료예정일',
   isUrgent: '긴급',
