@@ -86,6 +86,11 @@ export async function createNotification(input: CreateNotificationInput): Promis
 /**
  * 채널 전송. in_app 은 테이블 적재로 충분(no-op).
  * telegram/kakao 는 1차에서 홀드.
+ *
+ * 슬랙은 여기서 처리하지 않는다. 이 함수의 호출부 14곳이 전부 channel 을 넘기지 않아
+ * 항상 'in_app' 으로 들어오는데, 그 조건을 풀면 item_cleared(시험항목 1개마다 1건)·
+ * 적재 루프(시트 행마다)·개인 대상 알림까지 전부 슬랙으로 나가 rate limit(≈1/s)에 걸린다.
+ * 단계 전이 슬랙 알림은 @backend/services/slackNotify 가 별도 경로로 담당한다.
  */
 async function dispatch(channel: string, input: CreateNotificationInput): Promise<void> {
   if (channel === 'in_app') return

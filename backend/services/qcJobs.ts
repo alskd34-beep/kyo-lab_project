@@ -18,6 +18,7 @@ import {
   METHOD_PARTIAL, listByOrder as listOrderTestItems, activeItemsForSlot, countActiveBySlot,
 } from '@backend/services/pctOrderTestItems'
 import { logJobStatusChange } from '@backend/services/qcJobStatusHistory'
+import { notifyStageChangeToSlack } from '@backend/services/slackNotify'
 import {
   ACTIVE_JOB_STATUSES,
   APPROVAL_READY_STATUS,
@@ -817,6 +818,12 @@ export async function startJob(orderId: string, userSub: string): Promise<{ jobI
     changedBy: userSub, source: 'manual', note: `QC ${qcNo} 작업 시작`,
   })
 
+  // 슬랙 알림은 부가 기능이다 — 응답을 붙잡지 않도록 await 하지 않는다.
+  // 이 뒤의 return 값이 곧 HTTP 응답이라, await 하면 전이 API 가 슬랙 왕복만큼 느려진다.
+  void notifyStageChangeToSlack({
+    jobId, orderId, fromStatus: null, toStatus: IN_PROGRESS_STATUS, source: 'manual',
+  }).catch(() => {})
+
   // 감독관 알림 (경고 있으면 본문에 덧붙임)
   const warnSuffix = warnings ? ` ⚠ 경고: ${warnings.join(', ')}` : ''
   await createNotification({
@@ -975,6 +982,14 @@ async function autoAdvanceToReview(jobId: string): Promise<{ allCleared: boolean
     fromStatus: IN_PROGRESS_STATUS, toStatus: target,
     source: 'auto', note: '전 시험항목 완료로 서버가 자동 전환했습니다.',
   })
+
+  // 슬랙 알림은 부가 기능이다 — 응답을 붙잡지 않도록 await 하지 않는다.
+  // 이 뒤의 return 값이 곧 HTTP 응답이라, await 하면 전이 API 가 슬랙 왕복만큼 느려진다.
+  void notifyStageChangeToSlack({
+    jobId, orderId: updated.order_id as string,
+    fromStatus: IN_PROGRESS_STATUS, toStatus: target, source: 'auto',
+  }).catch(() => {})
+
   await createNotification({
     type: 'status_changed',
     title: '검토 대기',
@@ -1044,6 +1059,14 @@ export async function advanceJobStage(
     changedBy: changedBy ?? null, source: 'manual',
     note: STAGE_ACTION_LABEL[current] ?? '단계 전이',
   })
+
+  // 슬랙 알림은 부가 기능이다 — 응답을 붙잡지 않도록 await 하지 않는다.
+  // 이 뒤의 return 값이 곧 HTTP 응답이라, await 하면 전이 API 가 슬랙 왕복만큼 느려진다.
+  void notifyStageChangeToSlack({
+    jobId, orderId: updated.order_id as string,
+    fromStatus: current, toStatus: target, source: 'manual',
+  }).catch(() => {})
+
   await createNotification({
     type: 'status_changed',
     title: `${STAGE_ACTION_LABEL[current] ?? '단계 변경'} 처리`,
@@ -1159,6 +1182,14 @@ export async function changeJobStatus(jobId: string, userSub: string, status: st
     fromStatus: current, toStatus: status,
     changedBy: userSub, source: 'manual', note: '담당자 상태 변경',
   })
+
+  // 슬랙 알림은 부가 기능이다 — 응답을 붙잡지 않도록 await 하지 않는다.
+  // 이 뒤의 return 값이 곧 HTTP 응답이라, await 하면 전이 API 가 슬랙 왕복만큼 느려진다.
+  void notifyStageChangeToSlack({
+    jobId, orderId: job.order_id as string,
+    fromStatus: current, toStatus: status, source: 'manual',
+  }).catch(() => {})
+
   await createNotification({
     type: 'status_changed',
     title: '상태 변경',
@@ -1214,6 +1245,14 @@ export async function setJobStatusByAdmin(
     fromStatus: current, toStatus: status,
     changedBy: adminUserSub, source: 'manual', note: `관리자 직접 변경 — ${note}`,
   })
+
+  // 슬랙 알림은 부가 기능이다 — 응답을 붙잡지 않도록 await 하지 않는다.
+  // 이 뒤의 return 값이 곧 HTTP 응답이라, await 하면 전이 API 가 슬랙 왕복만큼 느려진다.
+  void notifyStageChangeToSlack({
+    jobId, orderId: updated.order_id as string,
+    fromStatus: current, toStatus: status, source: 'manual', note,
+  }).catch(() => {})
+
   await createNotification({
     type: 'status_changed',
     title: '관리자 상태 변경',

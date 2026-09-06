@@ -79,6 +79,7 @@ openssl rand -hex 32   # JWT_ACCESS_SECRET / JWT_REFRESH_SECRET 각각
 |---|---|
 | `LETSUR_BASE_URL` · `LETSUR_API_KEY` | 관리자 챗봇. 없으면 챗봇만 동작하지 않는다 |
 | `GOOGLE_SHEETS_PCT_FILE_ID` | PCT 적재 대상 시트. DB 설정값이 우선이고 없으면 이 값을 쓴다 |
+| `SLACK_WEBHOOK_URL` | 시험 단계 전이 슬랙 알림. 없으면 알림만 조용히 비활성이고 전이는 정상 동작한다. Slack App → Incoming Webhooks 에서 발급 |
 
 ### 선택
 
@@ -88,6 +89,7 @@ openssl rand -hex 32   # JWT_ACCESS_SECRET / JWT_REFRESH_SECRET 각각
 | `DISABLE_PCT_CRON` | (비움) | `1` 이면 자동 적재 중단 |
 | `LETSUR_MODEL` | `gpt-5-mini` | |
 | `LETSUR_TIMEOUT_MS` | `180000` | |
+| `SLACK_TIMEOUT_MS` | `1500` | 슬랙 응답 대기 상한(ms). 초과하면 알림을 포기하고 전이는 그대로 진행한다 |
 
 ### 설정하면 안 되는 것
 
