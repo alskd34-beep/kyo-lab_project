@@ -416,11 +416,14 @@ function FormFields({
   setForm,
   categories,
   classifications,
+  codeField,
 }: {
   form: ProductFormState
   setForm: (fn: (prev: ProductFormState) => ProductFormState) => void
   categories: LookupOptionRow[]
   classifications: LookupOptionRow[]
+  /** 품목코드 입력/표시 영역. 추가는 입력, 수정은 읽기 전용으로 호출부에서 넘긴다. */
+  codeField?: ReactNode
 }) {
   const uid = useId()
 
@@ -438,6 +441,11 @@ function FormFields({
       <section className="rounded-md border bg-card p-4 shadow-sm">
         <h3 className="mb-3 border-b pb-2 text-sm font-semibold text-foreground">식별 정보</h3>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {codeField}
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor={`${uid}-abbreviation`} className={labelClass}>약호</label>
+            <Input id={`${uid}-abbreviation`} value={form.abbreviation} onChange={f("abbreviation")} placeholder="예) ABC" />
+          </div>
           <div className="flex flex-col gap-1.5 sm:col-span-2">
             <label htmlFor={`${uid}-name`} className={labelClass}>품목명 <span className="text-destructive">*</span></label>
             <Input id={`${uid}-name`} value={form.name} onChange={f("name")} placeholder="품목명을 입력하세요" />
@@ -445,10 +453,6 @@ function FormFields({
           <div className="flex flex-col gap-1.5 sm:col-span-2">
             <label htmlFor={`${uid}-nameAlt`} className={labelClass}>품목명2</label>
             <Input id={`${uid}-nameAlt`} value={form.nameAlt} onChange={f("nameAlt")} placeholder="품목명2 (선택)" />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor={`${uid}-abbreviation`} className={labelClass}>약호</label>
-            <Input id={`${uid}-abbreviation`} value={form.abbreviation} onChange={f("abbreviation")} placeholder="예) ABC" />
           </div>
         </div>
       </section>
@@ -1019,9 +1023,12 @@ export function ProductTestWorkspace() {
         )}
       >
           <div className="grid gap-4">
-              <section className="rounded-md border bg-card p-4 shadow-sm">
-                <h3 className="mb-3 border-b pb-2 text-sm font-semibold text-foreground">식별 정보</h3>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <FormFields
+                form={addForm}
+                setForm={(fn) => setAddForm((p) => ({ ...fn(p), productCode: p.productCode }))}
+                categories={categories}
+                classifications={classifications}
+                codeField={(
                   <div className="flex flex-col gap-1.5">
                     <label htmlFor={`${addUid}-productCode`} className={labelClass}>품목코드 <span className="text-destructive">*</span></label>
                     <Input
@@ -1031,41 +1038,7 @@ export function ProductTestWorkspace() {
                       placeholder="예) PR-001"
                     />
                   </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label htmlFor={`${addUid}-abbreviation`} className={labelClass}>약호</label>
-                    <Input
-                      id={`${addUid}-abbreviation`}
-                      value={addForm.abbreviation}
-                      onChange={(e) => setAddForm((p) => ({ ...p, abbreviation: e.target.value }))}
-                      placeholder="예) ABC"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5 sm:col-span-2">
-                    <label htmlFor={`${addUid}-name`} className={labelClass}>품목명 <span className="text-destructive">*</span></label>
-                    <Input
-                      id={`${addUid}-name`}
-                      value={addForm.name}
-                      onChange={(e) => setAddForm((p) => ({ ...p, name: e.target.value }))}
-                      placeholder="품목명을 입력하세요"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5 sm:col-span-2">
-                    <label htmlFor={`${addUid}-nameAlt`} className={labelClass}>품목명2</label>
-                    <Input
-                      id={`${addUid}-nameAlt`}
-                      value={addForm.nameAlt}
-                      onChange={(e) => setAddForm((p) => ({ ...p, nameAlt: e.target.value }))}
-                      placeholder="품목명2 (선택)"
-                    />
-                  </div>
-                </div>
-              </section>
-
-              <FormFields
-                form={addForm}
-                setForm={(fn) => setAddForm((p) => ({ ...fn(p), productCode: p.productCode }))}
-                categories={categories}
-                classifications={classifications}
+                )}
               />
 
               {error && (
@@ -1105,24 +1078,22 @@ export function ProductTestWorkspace() {
         )}
       >
           <div className="grid gap-4">
-              {/* 품목코드 읽기 전용 */}
-              <section className="rounded-md border bg-card p-4 shadow-sm">
-                <h3 className="mb-3 border-b pb-2 text-sm font-semibold text-foreground">식별 정보</h3>
-                <div className="flex items-center gap-2 rounded-md border border-dashed bg-muted/40 px-3 py-2.5">
-                  <Lock size={13} className="shrink-0 text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground">품목코드</span>
-                  <span className="font-mono text-sm font-semibold text-foreground">
-                    {editTarget?.productCode ?? "—"}
-                  </span>
-                  <span className="ml-auto text-xs leading-normal text-muted-foreground">변경 불가</span>
-                </div>
-              </section>
-
               <FormFields
                 form={editForm}
                 setForm={setEditForm}
                 categories={categories}
                 classifications={classifications}
+                codeField={(
+                  /* 품목코드는 읽기 전용 */
+                  <div className="flex items-center gap-2 rounded-md border border-dashed bg-muted/40 px-3 py-2.5 sm:col-span-2">
+                    <Lock size={13} className="shrink-0 text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">품목코드</span>
+                    <span className="font-mono text-sm font-semibold text-foreground">
+                      {editTarget?.productCode ?? "—"}
+                    </span>
+                    <span className="ml-auto text-xs leading-normal text-muted-foreground">변경 불가</span>
+                  </div>
+                )}
               />
 
               {error && (
