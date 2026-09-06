@@ -14,6 +14,9 @@ import { kstToday, kstDateAfter } from '@backend/lib/kstDate'
 import { fetchPctSheet, type SheetPctRow } from '@backend/lib/googleSheet'
 import { createNotification } from '@backend/services/notifications'
 import { rebuildGroups } from '@backend/services/concurrentGroups'
+import { resetAssigneeSlots } from '@backend/services/pctOrderTestItems'
+import { logReassignment } from '@backend/services/reassignmentHistory'
+import { syncOrderStatusFromJobs } from '@backend/services/qcJobs'
 import {
   CLOSED_STAGE,
   DELETED_STATUS,
@@ -31,6 +34,8 @@ export interface IngestResult {
   updated: number
   blocked: number      // 작업 진행/LOCK 상태로 변경 차단된 건수
   deleted: number
+  /** 소프트 삭제됐던 오더가 시트에 재등장해 되살아난 건수(배정·확정은 초기화됨) */
+  restored: number
   unsynced: number
   deadlineAlerts: number
   /**
@@ -38,17 +43,25 @@ export interface IngestResult {
    * 크론 로그와 요약 알림이 "성공한 것만" 보고했다. 의약품 제조 시스템에서
    * 적재 누락이 무증상으로 발생하면 사후 추적이 불가능하다.
    */
-  failures: Array<{ orderKey: string; stage: 'product' | 'new' | 'blocked' | 'updated' | 'deleted'; message: string }>
+  failures: Array<{ orderKey: string; stage: 'product' | 'new' | 'blocked' | 'updated' | 'deleted' | 'restored'; message: string }>
 }
 
-/** pct_orders 전체를 1000행 단위로 끝까지 모아 온다(기본 limit 우회) */
+/**
+ * pct_orders 전체를 1000행 단위로 끝까지 모아 온다(기본 limit 우회).
+ *
+ * ⚠️ '삭제' 상태도 반드시 포함해야 한다 — 자연키 unique(batch_no, product_code) 는
+ * 삭제된 행도 여전히 점유한다. 삭제 행을 여기서 안 읽으면, 그 자연키가 시트에 다시
+ * 나타났을 때 existingByKey 에 없으니 "신규"로 오판해 insert 하고, DB 는 unique 위반
+ * (23505) 으로 거절한다 — 그 오더는 이후 회차에서도 계속 이 실패를 반복해 영원히
+ * 다시 살아나지 못한다.
+ */
 async function selectAllRange(
-  client: typeof supabaseAdmin, table: string, excludeStatus: string,
+  client: typeof supabaseAdmin, table: string,
 ): Promise<{ data: Record<string, unknown>[] | null; error: { message: string } | null }> {
   const PAGE = 1000
   const all: Record<string, unknown>[] = []
   for (let from = 0; ; from += PAGE) {
-    const res = await client.from(table).select('*').neq('status', excludeStatus).range(from, from + PAGE - 1)
+    const res = await client.from(table).select('*').range(from, from + PAGE - 1)
     if (res.error) return { data: null, error: res.error }
     const rows = (res.data ?? []) as Record<string, unknown>[]
     all.push(...rows)
@@ -104,6 +117,8 @@ const MUTABLE: Array<keyof SheetPctRow> = [
 
 interface ExistingOrder {
   id: string
+  product_code: string
+  batch_no: string
   product_name: string
   dosage_form: string | null
   packaging_date: string | null
@@ -112,6 +127,12 @@ interface ExistingOrder {
   method: string
   note: string | null
   status: string
+  ingest_state: string | null
+  assignee_tester_id: string | null
+  assignee_tester_id_2: string | null
+  is_dual_assignment: boolean
+  /** 0015 미적용 환경에서는 이 키 자체가 없다(undefined) — hasLockedColumn 참고 */
+  locked?: boolean
   /** 0039 미적용 환경에서는 이 키 자체가 없다(undefined) — hasValidationColumn 참고 */
   validation_type?: string | null
 }
@@ -137,17 +158,24 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
   const sheetRows = await fetchPctSheet(fileId)
   void MUTABLE // 문서용(diff는 diffChanged에서 명시 비교)
 
-  // ── 기존 오더 로드 (삭제 제외) ─────────────────────────────────────────────
-  // Supabase 기본 1000행 상한을 넘기지 않도록 페이지네이션한다.
-  // pct_orders 는 소프트 삭제만 하므로 단조 증가한다. 잘리면 기존 오더가 "신규"로 판정돼
-  // unique(batch_no, product_code) 위반 insert 가 나고, 그 오류는 아래에서 조용히
-  // 삼켜져 적재 누락이 무증상으로 발생한다.
+  // ── 기존 오더 로드 (전체 — '삭제' 포함) ─────────────────────────────────────
+  // Supabase 기본 1000행 상한을 넘기지 않도록 페이지네이션한다. selectAllRange 의
+  // 상단 주석 참고: '삭제' 상태를 제외하고 읽으면 자연키가 재등장했을 때 신규로
+  // 오판돼 unique(batch_no, product_code) 위반(23505)으로 죽는다.
   const { data: existingRows, error: exErr } =
-    await selectAllRange(supabaseAdmin, 'pct_orders', DELETED_STATUS)
+    await selectAllRange(supabaseAdmin, 'pct_orders')
   if (exErr) throw new Error(`기존 오더 조회 실패: ${exErr.message}`)
-  const existingByKey = new Map<string, ExistingOrder & { batch_no: string; product_code: string }>()
+
+  // 자연키는 전체에서 유일하므로 두 맵의 키는 절대 겹치지 않는다 — 상태로만 나눈다.
+  //   existingByKey : 변경감지·변경없음갱신·삭제감지 3개 루프가 쓰는, 지금까지의 "기존 오더" 그 집합(의미 불변)
+  //   deletedByKey  : 복구 판정 전용. 여기 섞으면 삭제 감지 루프가 이미 삭제된 건을 매 회차 다시 훑는다.
+  const existingByKey = new Map<string, ExistingOrder>()
+  const deletedByKey = new Map<string, ExistingOrder>()
   for (const r of existingRows ?? []) {
-    existingByKey.set(keyOf(r.batch_no as string, r.product_code as string), r as never)
+    const row = r as unknown as ExistingOrder
+    const key = keyOf(row.batch_no, row.product_code)
+    if (row.status === DELETED_STATUS) deletedByKey.set(key, row)
+    else existingByKey.set(key, row)
   }
 
   // 0039(validation_type) 적용 여부. 적재는 크론이라, 컬럼이 없는데 insert/update 에
@@ -159,6 +187,12 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
   const withValidation = <T extends Record<string, unknown>>(patch: T, value: string | null) =>
     (hasValidationColumn ? { ...patch, validation_type: value } : patch)
 
+  // locked/locked_by/locked_at(0015) 적용 여부. hasValidationColumn 과 동일한 이유로
+  // 가드한다 — 없는 컬럼을 patch 에 넣으면 PGRST204 로 적재 전체가 죽는다.
+  const hasLockedColumn = firstRow != null && 'locked' in firstRow
+  const withLocked = <T extends Record<string, unknown>>(patch: T, lock: boolean) =>
+    (hasLockedColumn ? { ...patch, locked: lock, locked_by: null, locked_at: null } : patch)
+
   // ── 품목마스터 코드 집합 ───────────────────────────────────────────────────
   // 품목이 1000개를 넘으면 기본 limit 에 잘려 "미동기화" 오탐이 난다 → selectAll
   const { data: prodRows, error: prodErr } = await selectAll(supabaseAdmin, 'products', 'product_code')
@@ -166,7 +200,7 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
   const productCodes = new Set((prodRows ?? []).map(p => String(p.product_code)))
 
   const result: IngestResult = {
-    fileId, total: sheetRows.length, created: 0, updated: 0, blocked: 0, deleted: 0, unsynced: 0, deadlineAlerts: 0,
+    fileId, total: sheetRows.length, created: 0, updated: 0, blocked: 0, deleted: 0, restored: 0, unsynced: 0, deadlineAlerts: 0,
     failures: [],
   }
   const fail = (orderKey: string, stage: IngestResult['failures'][number]['stage'], message: string) => {
@@ -175,6 +209,135 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
   }
   const seen = new Set<string>()
   const nowIso = new Date().toISOString()
+  // 복구 성공한 오더 키 — 요약 알림에 앞 5건만 나열한다(오더별 알림은 만들지 않는다).
+  const restoredKeys: string[] = []
+
+  /**
+   * 소프트 삭제됐던 오더가 자연키로 시트에 재등장 — 복구한다.
+   * 트랜잭션이 없으므로 순서가 중요하다: **실패해도 덜 나쁜 쪽부터** 진행한다.
+   *
+   * 슬롯(assignee_slot)을 오더 UPDATE보다 먼저 되돌리는 이유: 오더를 먼저
+   * is_dual_assignment=false 로 바꾼 뒤 슬롯 되돌리기가 실패하면, assignee_slot=2
+   * 항목이 남아 아무 담당자에게도 보이지 않는 유령 항목이 된다. 슬롯을 먼저 되돌리면
+   * 최악의 경우도 "슬롯은 1로 돌아왔는데 오더 상태 갱신만 실패"라 재시도(다음 적재
+   * 회차)로 스스로 복구된다.
+   */
+  async function restoreOrder(existing: ExistingOrder, row: SheetPctRow, key: string, synced: boolean): Promise<boolean> {
+    // 1) qc_jobs 존재 여부 — 정상 흐름에서는 삭제 대상이 '대기' 상태뿐이라 있을 수
+    // 없지만, 수동 개입 등 이상 케이스를 방어한다.
+    const { count: jobCount, error: jobErr } = await supabaseAdmin
+      .from('qc_jobs')
+      .select('id', { count: 'exact', head: true })
+      .eq('order_id', existing.id)
+    if (jobErr) {
+      fail(key, 'restored', `qc_jobs 조회 실패: ${jobErr.message}`)
+      return false
+    }
+    const hadJobs = (jobCount ?? 0) > 0
+
+    if (hadJobs) {
+      // ── 이상 케이스: 배정을 지우지 않는다 ────────────────────────────────
+      // 이미 시작된 작업의 담당자를 잃게 되므로, 시트값만 갱신하고 상태는
+      // syncOrderStatusFromJobs 에 위임한다.
+      const { error } = await supabaseAdmin.from('pct_orders').update(withValidation({
+        deleted_at: null,
+        ingest_state: 'restored',
+        last_seen_at: nowIso,
+        source_file_id: fileId,
+        note: row.note || null,
+        product_synced: synced,
+        product_name: row.productName,
+        dosage_form: row.dosageForm || null,
+        packaging_date: row.packagingDate,
+        due_date: row.dueDate,
+        is_urgent: row.isUrgent,
+        method: row.method,
+      }, row.validationType)).eq('id', existing.id)
+      if (error) {
+        fail(key, 'restored', `오더 복구(작업 존재) 실패: ${error.message}`)
+        return false
+      }
+      try {
+        await syncOrderStatusFromJobs(existing.id)
+      } catch (err) {
+        console.error(`[pct-ingest] 복구 후 상태 동기화 실패(복구 자체는 반영됨) (${key}):`, err)
+      }
+      await createNotification({
+        type: 'status_changed',
+        severity: 'warning',
+        title: '삭제됐던 오더가 작업 이력과 함께 복구됨',
+        body: `${row.productName} (${row.batchNo}) 는 삭제 상태였으나 이미 진행된 작업(qc_jobs)이 있어 배정을 유지한 채 복구했습니다. 상태를 확인하세요.`,
+        relatedOrderId: existing.id,
+      })
+      return true
+    }
+
+    // ── 정상 케이스: 배정·확정 초기화 후 '대기'로 복구 ───────────────────────
+    // 슬롯 먼저(위 주석 참고)
+    try {
+      await resetAssigneeSlots(existing.id, null)
+    } catch (err) {
+      fail(key, 'restored', `배정 슬롯 초기화 실패: ${err instanceof Error ? err.message : String(err)}`)
+      return false
+    }
+
+    // is_dual_assignment=false 와 assignee_tester_id_2=null 을 다른 문장으로 나누면
+    // 그 사이 순간 0038 의 chk_pct_orders_dual_off_no_second 위반(23514)이 날 수 있다
+    // — 반드시 한 UPDATE 문에 함께 담는다.
+    const { error } = await supabaseAdmin.from('pct_orders').update(withLocked(withValidation({
+      status: PENDING_STATUS,
+      assignee_tester_id: null,
+      assignee_tester_id_2: null,
+      is_dual_assignment: false,
+      deleted_at: null,
+      ingest_state: 'restored',
+      last_seen_at: nowIso,
+      source_file_id: fileId,
+      note: row.note || null,
+      product_synced: synced,
+      product_name: row.productName,
+      dosage_form: row.dosageForm || null,
+      packaging_date: row.packagingDate,
+      due_date: row.dueDate,
+      is_urgent: row.isUrgent,
+      method: row.method,
+    }, row.validationType), false)).eq('id', existing.id)
+    if (error) {
+      fail(key, 'restored', `오더 복구 실패: ${error.message}`)
+      return false
+    }
+
+    // 이력 기록 — 실패해도 복구 자체는 되돌리지 않는다(console.error 만).
+    const { error: editErr } = await supabaseAdmin.from('pct_order_edits').insert({
+      order_id: existing.id,
+      field: 'status',
+      old_value: DELETED_STATUS,
+      new_value: PENDING_STATUS,
+      reason: '생산계획 시트 재등장으로 자동 복구 — 담당자·확정 초기화',
+      edited_by: null,
+    })
+    if (editErr) {
+      console.error(`[pct-ingest] 복구 이력(pct_order_edits) 기록 실패 — 복구 자체는 반영됨 (${key}):`, editErr.message)
+    }
+    for (const [slotLabel, before] of [
+      ['담당자1', existing.assignee_tester_id],
+      ['담당자2', existing.assignee_tester_id_2],
+    ] as const) {
+      if (!before) continue
+      try {
+        await logReassignment({
+          orderId: existing.id,
+          beforeUser: before,
+          afterUser: null,
+          reason: '적재 자동 복구 — 배정 초기화',
+        })
+      } catch (err) {
+        console.error(`[pct-ingest] 재배정 이력 기록 실패(${slotLabel}) — 복구 자체는 반영됨 (${key}):`, err)
+      }
+    }
+
+    return true
+  }
 
   for (const row of sheetRows) {
     const key = keyOf(row.batchNo, row.productCode)
@@ -204,7 +367,21 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
     }
 
     const existing = existingByKey.get(key)
-    if (!existing) {
+    // 기존(삭제 아님)에 없을 때만 삭제 맵을 본다 — 자연키가 전체 유니크라 둘 다에
+    // 있을 수는 없지만, 순서를 명시해 의도를 남긴다.
+    const deleted = existing ? undefined : deletedByKey.get(key)
+
+    if (deleted) {
+      // ── 복구 ────────────────────────────────────────────────────────────────
+      // ⚠️ 반드시 diffChanged 분기보다 앞에 와야 한다. 뒤에 두면, 시트값이 삭제 당시와
+      // 동일한 오더는 diffChanged=false 라 "변경 없음"으로 빠져 영원히 삭제 상태로 남는다.
+      const ok = await restoreOrder(deleted, row, key, synced)
+      if (ok) {
+        result.restored++
+        restoredKeys.push(key)
+        await logIngest(key, 'restored', PENDING_STATUS, fileId)
+      }
+    } else if (!existing) {
       // ── 신규 ────────────────────────────────────────────────────────────────
       const { error } = await supabaseAdmin.from('pct_orders').insert(withValidation({
         product_code: row.productCode,
@@ -225,7 +402,7 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
         result.created++
         await logIngest(key, 'new', PENDING_STATUS, fileId)
       }
-    } else if (diffChanged(existing, row, hasValidationColumn) && (isLockedStatus(existing.status) || (existing as { locked?: boolean }).locked)) {
+    } else if (diffChanged(existing, row, hasValidationColumn) && (isLockedStatus(existing.status) || existing.locked)) {
       // ── 변경 차단 ──────────────────────────────────────────────────────────
       // 작업 진행 상태이거나 관리자 확정(LOCK)된 오더는 시트 변경을 자동 반영하지 않는다(일정·배정 보존).
       // before/after 를 pct_order_edits 에 기록하고 감독관 알림만 생성한다.
@@ -285,6 +462,11 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
   for (const [key, existing] of existingByKey) {
     if (seen.has(key)) continue
     if (existing.status !== PENDING_STATUS) continue
+    // 수동 오더는 정의상 시트에 없다 — "시트에서 사라졌다"는 판정 자체가 성립하지
+    // 않는다. 가드가 없으면 '대기' 상태 수동 오더는 다음 적재에서 100% 삭제되고,
+    // 게다가 삭제가 ingest_state 를 'deleted' 로 덮어써 'manual' 마커까지 잃어
+    // 사후 식별조차 불가능해진다.
+    if (existing.ingest_state === 'manual') continue
     const { error } = await supabaseAdmin.from('pct_orders').update({
       status: DELETED_STATUS, ingest_state: 'deleted', deleted_at: nowIso,
     }).eq('id', existing.id)
@@ -317,7 +499,7 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
     title: failed > 0 ? `PCT 시트 적재 완료 (실패 ${failed}건)` : 'PCT 시트 적재 완료',
     body:
       `신규 ${result.created} · 변경 ${result.updated} · 차단 ${result.blocked} · 삭제 ${result.deleted} · ` +
-      `미동기화 ${result.unsynced} · 동시분석그룹 ${groupsCreated}` +
+      `복구 ${result.restored} · 미동기화 ${result.unsynced} · 동시분석그룹 ${groupsCreated}` +
       (failed > 0
         ? `
 ⚠ 실패 ${failed}건: ` +
@@ -327,10 +509,26 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
     severity: failed > 0 ? 'critical' : 'info',
   })
 
+  // 복구 건은 오더마다 알림을 만들면 첫 실행에 수십 건이 한꺼번에 쌓인다 —
+  // 요약 알림 1건으로만 안내한다.
+  if (result.restored > 0) {
+    await createNotification({
+      type: 'ingest',
+      title: '삭제됐던 오더 복구됨 — 재배정 필요',
+      body:
+        `복구된 오더 ${result.restored}건은 담당자·확정이 초기화되었습니다. 재배정이 필요합니다.` +
+        ` 앞 5건: ${restoredKeys.slice(0, 5).join(', ')}` +
+        (restoredKeys.length > 5 ? ` 외 ${restoredKeys.length - 5}건` : ''),
+      severity: 'warning',
+    })
+  }
+
   return result
 }
 
-async function logIngest(orderKey: string, changeType: 'new' | 'updated' | 'blocked' | 'deleted', status: string, fileId: string) {
+async function logIngest(
+  orderKey: string, changeType: 'new' | 'updated' | 'blocked' | 'deleted' | 'restored', status: string, fileId: string,
+) {
   await supabaseAdmin.from('pct_ingest_log').insert({
     order_key: orderKey, change_type: changeType, status, file_id: fileId,
   })

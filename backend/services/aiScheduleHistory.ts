@@ -54,6 +54,7 @@ const INGEST_LABEL: Record<string, string> = {
   updated: '자동 적재 변경',
   deleted: '자동 적재 삭제',
   blocked: '자동 적재 차단',
+  restored: '자동 적재 복구',
 }
 
 function displayEditValue(field: string, value: string | null, testerNames: Map<string, string>): string | null {

@@ -34,7 +34,7 @@ export async function register() {
     try {
       const r = await ingestPctSheet()
       const failed = r.failures.length
-      const line = `[pct-cron:${label}] 적재 완료 — 신규 ${r.created} / 변경 ${r.updated} / 삭제 ${r.deleted} / 미동기화 ${r.unsynced}`
+      const line = `[pct-cron:${label}] 적재 완료 — 신규 ${r.created} / 변경 ${r.updated} / 삭제 ${r.deleted} / 복구 ${r.restored} / 미동기화 ${r.unsynced}`
       if (failed > 0) {
         // 실패를 성공 로그에 묻으면 적재 누락이 무증상으로 지나간다.
         console.error(`${line} / ⚠ 실패 ${failed}`, r.failures)
