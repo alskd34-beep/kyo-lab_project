@@ -53,6 +53,8 @@ interface ScheduleRow {
   duo_partner_id: number | string | null
   status: string
   note: string | null
+  locked?: boolean   // 관리자 확정(LOCK). DB 출처에만 있다
+  has_job?: boolean  // QC 작업이 시작돼 실제 착수일을 아는 행인지. DB 출처에만 있다
   source?: 'db' | 'pct'  // 데이터 출처
 }
 
@@ -266,10 +268,17 @@ export default function MonthlySchedulePage() {
 
   const days = useMemo(() => getDaysInMonth(month), [month])
 
-  // DB + PCT 합친 전체 스케줄
+  // DB + PCT 합친 전체 스케줄.
+  // DB(pct_orders 정본)와 PCT 스냅샷은 같은 배정을 각자 담을 수 있다 — 스냅샷은 AI 스케줄
+  // 화면에서 [스케줄 생성]을 누른 시점의 사본이기 때문이다. 같은 품목·제조번호·담당자면
+  // 한 배정이므로 정본 쪽만 남긴다. 안 그러면 같은 일이 셀에 두 번 쌓인다.
   const allSchedules: ScheduleRow[] = useMemo(() => {
     const dbRows: ScheduleRow[] = (data?.schedules ?? []).map(r => ({ ...r, source: 'db' as const }))
-    return [...dbRows, ...pctSchedulesMerged]
+    const dbKeys = new Set(dbRows.map(r => `${r.product_code ?? ''}::${r.batch_no ?? ''}::${r.tester_id}`))
+    const pctOnly = pctSchedulesMerged.filter(
+      r => !dbKeys.has(`${r.product_code ?? ''}::${r.batch_no ?? ''}::${r.tester_id}`),
+    )
+    return [...dbRows, ...pctOnly]
   }, [data, pctSchedulesMerged])
 
   // 시험자별 + 날짜별 셀에 들어갈 row들 인덱스
@@ -775,6 +784,13 @@ function CellDetailDialog({ detail, onClose }: { detail: CellDetail; onClose: ()
     ...(row.product_code ? [{ label: '품목코드', value: <span className="tabular-nums">{row.product_code}</span> }] : []),
     { label: '시험항목', value: items.length > 0 ? items.join(', ') : '—' },
     { label: '공수', value: <span className="tabular-nums">{workloadText(row)}</span> },
+    // 아래 둘은 정본(pct_orders)에서 온 행만 아는 값이다. PCT 스냅샷 행에는 없다.
+    ...(row.source === 'db' ? [
+      // 상태는 작업이 섰으면 작업 단계(진행중·검토전…), 아직이면 오더 상태(대기)다.
+      { label: '상태', value: <>{row.status}{row.locked ? ' · 확정' : ''}</> },
+      // 이 날짜가 실제인지 예측인지는 달력에서 가장 알고 싶은 것이다 — 숨기지 않는다.
+      { label: '일정 근거', value: row.has_job ? '실제 착수일 기준' : '포장일·납기 기준 예정' },
+    ] : []),
     // note 는 줄바꿈으로 여러 사실을 담고 있다 — 한 줄로 뭉개지 않는다
     { label: '비고', value: row.note ? <span className="whitespace-pre-line">{row.note}</span> : '—' },
   ]

@@ -14,6 +14,10 @@
  */
 
 import { nextFriday } from '@backend/services/assignRules'
+import {
+  addDays, expandRange,
+  workingDaysAfter, workingDaysBefore, workingDaysFromInclusive,
+} from '@backend/lib/workdays'
 
 // ─── 입력 타입 ─────────────────────────────────────────────────────────────────
 export interface EnginePctRow {
@@ -158,72 +162,6 @@ function normalizeDate(s: string, year: number): string | null {
   const m = s.match(/^(\d{1,2})[./](\d{1,2})$/)
   if (!m) return null
   return `${year}-${String(Number(m[1])).padStart(2, '0')}-${String(Number(m[2])).padStart(2, '0')}`
-}
-
-function isWeekend(iso: string): boolean {
-  const dow = new Date(iso + 'T00:00:00Z').getUTCDay()
-  return dow === 0 || dow === 6
-}
-
-function isNonWorkingDay(iso: string, holidays: Set<string>, skip?: Set<string>): boolean {
-  return isWeekend(iso) || holidays.has(iso) || (skip?.has(iso) ?? false)
-}
-
-/** 'YYYY-MM-DD' 구간을 하루 단위로 펼친다 (양끝 포함, 폭주 방지 상한 400일) */
-function expandRange(from: string, to: string): string[] {
-  const out: string[] = []
-  let cur = from
-  let guard = 0
-  while (cur <= to && guard < 400) { out.push(cur); cur = addDays(cur, 1); guard++ }
-  return out
-}
-
-function addDays(iso: string, n: number): string {
-  const d = new Date(iso + 'T00:00:00Z')
-  d.setUTCDate(d.getUTCDate() + n)
-  return d.toISOString().slice(0, 10)
-}
-
-/** 포장일 다음 근무일부터 count개의 연속 근무일(주말·공휴일 제외) 반환 */
-function workingDaysAfter(packISO: string, count: number, holidays: Set<string>): string[] {
-  const out: string[] = []
-  let cur = addDays(packISO, 1)
-  let guard = 0
-  while (out.length < count && guard < 400) {
-    if (!isNonWorkingDay(cur, holidays)) out.push(cur)
-    cur = addDays(cur, 1)
-    guard++
-  }
-  return out
-}
-
-/**
- * 완료예정일(dueISO)부터 거꾸로 count개의 근무일(주말·공휴일 제외)을 모아 오름차순 반환.
- * 마지막 날 ≤ dueISO (완료예정일 당일이 근무일이면 그 날 완료). 역순 ALAP 스케줄링용.
- */
-function workingDaysBefore(dueISO: string, count: number, holidays: Set<string>): string[] {
-  const out: string[] = []
-  let cur = dueISO
-  let guard = 0
-  while (out.length < count && guard < 400) {
-    if (!isNonWorkingDay(cur, holidays)) out.unshift(cur)
-    cur = addDays(cur, -1)
-    guard++
-  }
-  return out
-}
-
-/** startISO(당일 포함)부터 정방향으로 count개의 근무일(주말·공휴일 제외)을 모아 반환. dense 패킹용. */
-function workingDaysFromInclusive(startISO: string, count: number, holidays: Set<string>, skip?: Set<string>): string[] {
-  const out: string[] = []
-  let cur = startISO
-  let guard = 0
-  while (out.length < count && guard < 400) {
-    if (!isNonWorkingDay(cur, holidays, skip)) out.push(cur)
-    cur = addDays(cur, 1)
-    guard++
-  }
-  return out
 }
 
 // ─── 역량 매칭 ─────────────────────────────────────────────────────────────────
