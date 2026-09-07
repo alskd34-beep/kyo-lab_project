@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import {
-  loadPctMonthlySnapshot,
   fetchPctMonthlyFromServer,
   clearPctMonthlySnapshot,
   clearPctMonthlyOnServer,
@@ -194,16 +193,19 @@ export default function MonthlySchedulePage() {
   const [sideError, setSideError] = useState<string | null>(null)
   const [sideTarget, setSideTarget] = useState<SideWorkDialogTarget | null>(null)
 
-  // PCT 스냅샷 (localStorage에서 로드)
+  // PCT 스냅샷 — 서버(DB) 영속본만 읽는다.
   const [pctSnapshot, setPctSnapshot] = useState<PctMonthlyAssignment[]>([])
   const [pctGeneratedAt, setPctGeneratedAt] = useState<string | null>(null)
 
   useEffect(() => {
-    // 서버(DB) 영속본을 우선 조회하고, 없으면 localStorage 폴백.
-    // (AI 스케줄 결과가 기기/브라우저 무관하게 월간에 반영됨)
+    // localStorage 폴백을 걷어냈다. 그 폴백 때문에 **같은 달을 봐도 사람마다 화면이
+    // 달랐다** — AI 스케줄을 돌린 관리자 브라우저에만 스냅샷이 남아 있어서, 관리자는
+    // 보이는 행을 시험자는 볼 수 없었다. 스냅샷을 만드는 코드는 이미 전부 사라졌고
+    // (savePctMonthlySnapshot·persistPctMonthlyToServer 호출부 0곳) 월간 스케줄의 정본은
+    // pct_orders + qc_jobs 다. 화면은 모두에게 같은 서버 데이터 하나만 본다.
     let aborted = false
     void (async () => {
-      const snap = (await fetchPctMonthlyFromServer()) ?? loadPctMonthlySnapshot()
+      const snap = await fetchPctMonthlyFromServer()
       if (aborted) return
       setPctSnapshot(snap?.assignments ?? [])
       setPctGeneratedAt(snap?.generatedAt ?? null)
@@ -894,7 +896,8 @@ export default function MonthlySchedulePage() {
                 { swatch: 'border-border bg-card', label: '일반' },
                 { swatch: 'border-red-300 bg-red-200 dark:border-red-800 dark:bg-red-900/60', label: '긴급' },
                 { swatch: 'border-blue-300 bg-blue-200 dark:border-blue-800 dark:bg-blue-900/60', label: '듀오' },
-                { swatch: 'border-dashed border-amber-400 bg-amber-200 dark:border-amber-700 dark:bg-amber-900/60', label: 'PCT 생산관리 출처' },
+                /* PCT 스냅샷 출처는 범례에서 뺀다 — 만드는 코드가 없어 이 색이 화면에 뜰 일이
+                   없다. 있지도 않은 색을 범례가 설명하면 사용자가 자기 화면을 의심하게 된다. */
                 { swatch: 'border-teal-300 bg-teal-100 dark:border-teal-800 dark:bg-teal-900/60', label: '부업무(시험 외)' },
                 { swatch: 'border-transparent bg-muted', label: '주말' },
               ].map(l => (
