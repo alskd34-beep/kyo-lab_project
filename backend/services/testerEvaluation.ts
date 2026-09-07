@@ -1,14 +1,22 @@
 /**
- * [BACKEND] 시험자 운영평가 — 완료 작업 실적 기반 KPI 집계
+ * [BACKEND] 시험자 성과 집계 — 완료 작업 기준 (「시험자 운영 분석」의 '성과' 절반)
  *
- * 의약품 QC 시험자 운영평가 지표를 완료된 작업(qc_jobs)에서 집계한다.
+ * 의약품 QC 시험자 평가 지표를 완료된 작업(qc_jobs)에서 집계한다.
  *   - 공수 준수율: 실소요 근무일(시작~종료, 주말·공휴일 제외) ≤ 품목 지정 공수(avg_workdays)면 준수
- *   - 평균 소요일 / 항목 평균 소요시간(elapsed_minutes)
- *   - 처리량 / 난이도 가중 처리량 / 가동률(지정공수합 / 기간 가용 근무일)
+ *   - 평균 소요일
+ *   - 처리량 / 난이도 가중 처리량 / **계획** 가동률(지정공수합 / 기간 가용 근무일)
+ *
+ * ⚠️ 여기의 가동률은 **계획** 기준이다(배정된 공수가 근무일 대비 얼마인가).
+ *    실측 기준 가동률은 operationReport 의 `coverage` 이며 뜻이 다르다 —
+ *    화면에서 두 값을 '계획'·'실적'으로 이름 갈라 나란히 보여준다.
+ *
+ * 시험항목별 소요시간은 여기서 재지 않는다. operationReport 의 `byTestItem` 이
+ * 같은 값을 건수·총소요까지 포함해 내놓는 상위집합이라, 두 곳에서 재면 기준이 갈린다
+ * (여기는 '완료 작업에 딸린 항목', 저기는 '이 기간에 완료된 항목'으로 모집단부터 달랐다).
  *
  * 공수는 일(day) 단위(product_workload.avg_workdays = 절대값).
  * 집계 기준키는 tester_id(qc_jobs.assignee_tester_id).
- * 데이터: qc_jobs(완료) → pct_orders(품목) → product_workload+products, qc_job_items, public_holidays.
+ * 데이터: qc_jobs(완료) → pct_orders(품목) → product_workload+products, public_holidays.
  */
 
 import { supabaseAdmin } from '@backend/lib/supabase'
@@ -28,17 +36,10 @@ export interface TesterEvalRow {
   utilization:        number | null // 가동률 % (지정공수합 / 기간 가용 근무일)
 }
 
-export interface ItemEvalRow {
-  testItemName: string
-  count:        number
-  avgMinutes:   number
-}
-
 export interface TesterEvaluation {
   period:   { from: string; to: string; workingDays: number }
-  totals:   { completedJobs: number; adherenceRate: number | null; avgActualDays: number | null; avgItemMinutes: number | null }
+  totals:   { completedJobs: number; adherenceRate: number | null; avgActualDays: number | null }
   byTester: TesterEvalRow[]
-  byItem:   ItemEvalRow[]
 }
 
 // ─── 근무일 계산 (주말 + 공휴일 제외). scheduleEngine 내부 로직과 동일 규칙. ──────
@@ -92,20 +93,18 @@ export async function getTesterEvaluation(params: { from: string; to: string }):
   if (jobs.length === 0) {
     return {
       period: { from, to, workingDays: periodWorkingDays },
-      totals: { completedJobs: 0, adherenceRate: null, avgActualDays: null, avgItemMinutes: null },
-      byTester: [], byItem: [],
+      totals: { completedJobs: 0, adherenceRate: null, avgActualDays: null },
+      byTester: [],
     }
   }
 
   // 2) 참조 데이터
   const orderIds  = [...new Set(jobs.map(j => j.order_id).filter(Boolean) as string[])]
-  const jobIds    = jobs.map(j => j.id)
   const testerIds = [...new Set(jobs.map(j => j.assignee_tester_id).filter(Boolean) as string[])]
 
-  const [orders, testers, items] = await Promise.all([
-    loadIn('pct_orders',   'id, product_code',                       'id',        orderIds),
-    loadIn('testers',      'id, name',                               'id',        testerIds),
-    loadIn('qc_job_items', 'qc_job_id, test_item_name, elapsed_minutes', 'qc_job_id', jobIds),
+  const [orders, testers] = await Promise.all([
+    loadIn('pct_orders', 'id, product_code', 'id', orderIds),
+    loadIn('testers',    'id, name',         'id', testerIds),
   ])
   const orderToCode = new Map<string, string>()
   for (const o of orders) orderToCode.set(o.id as string, (o.product_code as string) ?? '')
@@ -157,34 +156,17 @@ export async function getTesterEvaluation(params: { from: string; to: string }):
     utilization:        periodWorkingDays ? Math.round((a.assignedSum / periodWorkingDays) * 1000) / 10 : null,
   })).sort((x, y) => y.completed - x.completed)
 
-  // 4) 항목별 평균 소요시간
-  const itemAcc = new Map<string, { sum: number; cnt: number }>()
-  for (const it of items) {
-    const m = it.elapsed_minutes
-    if (m == null) continue
-    const name = (it.test_item_name as string) ?? '(미상)'
-    const e = itemAcc.get(name) ?? { sum: 0, cnt: 0 }
-    e.sum += Number(m); e.cnt++; itemAcc.set(name, e)
-  }
-  const byItem: ItemEvalRow[] = [...itemAcc.entries()]
-    .map(([testItemName, e]) => ({ testItemName, count: e.cnt, avgMinutes: Math.round(e.sum / e.cnt) }))
-    .sort((a, b) => b.count - a.count)
-
-  // 5) 전체 합계
+  // 4) 전체 합계
   let totOnTime = 0, totEligible = 0, totActualSum = 0, totActualCnt = 0
   for (const a of acc.values()) { totOnTime += a.onTime; totEligible += a.eligible; totActualSum += a.actualSum; totActualCnt += a.actualCnt }
-  let itemSum = 0, itemCnt = 0
-  for (const e of itemAcc.values()) { itemSum += e.sum; itemCnt += e.cnt }
 
   return {
     period: { from, to, workingDays: periodWorkingDays },
     totals: {
-      completedJobs:  jobs.length,
-      adherenceRate:  totEligible  ? Math.round((totOnTime / totEligible) * 1000) / 10 : null,
-      avgActualDays:  totActualCnt ? Math.round((totActualSum / totActualCnt) * 10) / 10 : null,
-      avgItemMinutes: itemCnt      ? Math.round(itemSum / itemCnt) : null,
+      completedJobs: jobs.length,
+      adherenceRate: totEligible  ? Math.round((totOnTime / totEligible) * 1000) / 10 : null,
+      avgActualDays: totActualCnt ? Math.round((totActualSum / totActualCnt) * 10) / 10 : null,
     },
     byTester,
-    byItem,
   }
 }

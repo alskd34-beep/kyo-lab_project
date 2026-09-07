@@ -1,5 +1,5 @@
 /**
- * [BACKEND] 시험자 운영평가 집계
+ * [BACKEND] 시험자 성과 집계 — 「시험자 운영 분석」(/insights/stats)의 '성과' 절반
  *   GET /api/insights/tester-evaluation?from=YYYY-MM-DD&to=YYYY-MM-DD   (admin)
  *   미지정 시 to=오늘, from=90일 전.
  */

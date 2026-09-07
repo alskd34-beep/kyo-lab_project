@@ -2,7 +2,7 @@
 
 프로세스 정의: `.claude/commands/qc-schedule-process.md` (`/qc-schedule-process`)
 현재 시스템 전체 PRD(as-built): [`docs/PRD-current-system.md`](./PRD-current-system.md)
-최종 갱신: 2026-09-07
+최종 갱신: 2026-09-08
 
 ## ✅ 완료 (PCT 1차 구현)
 - 구글시트 자동 적재(9시/14시 크론) + 신규/수정/삭제 diff 감지 — `backend/services/pctIngest.ts`, `instrumentation.ts`
@@ -82,15 +82,34 @@
   부업무 칩은 청록(teal)이라 시험 배정과 한눈에 갈린다.
 - **권한**(휴가 `operator_schedule` 와 같은 모양): 시험자는 **본인 기록만** 등록·수정·삭제, 팀 기록은 읽기 전용.
   관리자는 전체. 이 값이 리포트의 분모·분자로 들어가므로 화면 숨김이 아니라 서버(`assertLogAccess`)에서 막는다.
-- **운영 결과 리포트**(`/insights/ins-report`, admin): 시험업무 vs 부업무를 같은 기간·같은 자로 나란히 놓는다.
-  KPI(시험/부업무/부업무 비중/완료 작업/인원) · 시험자별 나란한 막대와 상세표(부업무 비중·가동률) ·
-  부업무 분류별 소요 · 일자별 추이 · **시험 진행 항목**(항목별 건수·총소요·평균).
+- **운영 결과 리포트**: 시험업무 vs 부업무를 같은 기간·같은 자로 나란히 놓는다.
   기간 포함 기준은 시험업무=항목 완료 시각(KST 경계), 부업무=`work_date`, 완료 작업=승인완료+종료일.
+  → 2026-09-08 「시험자 운영 분석」(`/insights/stats`)에 흡수됐다(아래 항목 참조).
 - **분류 마스터 화면**: 기준 설정 > 부업무 분류(`/settings/side-work-categories`, admin).
   기록이 달린 분류는 삭제 대신 [사용 안 함] — 지우면 과거 기록을 리포트가 다시 읽을 수 없다(FK `on delete restrict`).
 - 관련 파일: `backend/services/sideWork.ts`, `backend/services/operationReport.ts`, `backend/lib/testerLink.ts`,
   `app/api/side-work/**`, `app/api/insights/operation-report`, `types/side-work.ts`,
   `frontend/components/schedule/side-work-dialog.tsx`, `app/(menu)/schedule/monthly/page.tsx`.
+
+## ✅ 추가 완료 (2026-09-08, 운영평가 + 운영 결과 리포트 통합)
+두 화면을 **「시험자 운영 분석」(`/insights/stats`)** 하나로 합쳤다. 합친 이유는 셋이다.
+- **질문이 두 화면에 걸쳐 있었다.** "이 사람 공수 준수율이 왜 낮지?"의 답이 "부업무를 40% 하고
+  있었다"인데, 그 둘이 다른 화면이면 관리자가 숫자를 머리에 들고 화면을 오가야 했다.
+  이제 통합 시험자 표 **한 행**에 준수율과 부업무 비중이 함께 있다(그래서 차트보다 위에 둔다).
+- **'가동률'이 같은 이름, 다른 뜻이었다.** 운영평가 쪽은 배정 공수(계획 DAY) ÷ 근무일,
+  리포트 쪽은 기록 시간(실측 분) ÷ 근무시간. 화면에서 **계획 / 실적**으로 이름을 갈라 나란히 둔다.
+- **시험항목별 소요가 양쪽에 있었다.** 모집단부터 달랐다(운영평가=완료 작업에 딸린 항목,
+  리포트=이 기간에 완료된 항목). 상위집합인 리포트 쪽(`byTestItem`, 건수·총소요·평균)만 남기고
+  `testerEvaluation` 의 `byItem`·`totals.avgItemMinutes` 와 그 `qc_job_items` 조회를 걷어냈다.
+- **구성**: KPI 6칸(시간 배분 3 + 성과 3) → 통합 시험자 표 → 탭(성과 / 시간 배분).
+  표는 적응형 컬럼(논리 8칸, 최대 펼침 11칸 — `colgroup` 도 11개)이며 시험업무·부업무·가동률이
+  `CellStack` 묶음이다.
+- **두 집계는 따로 실패할 수 있다.** `Promise.allSettled` 로 병렬 조회하고 실패한 쪽만 안내 줄을
+  띄운다 — 부업무 스키마(0041)가 없는 환경에서도 성과 지표는 읽혀야 한다.
+- **기본 탭은 데이터가 있는 쪽**으로 연다. 완료 작업이 0건인 기간에 '성과'를 기본으로 열면
+  표에는 실적이 가득한데 탭만 비어 화면이 고장 난 것처럼 읽힌다.
+- 옛 경로 `/insights/ins-report` 는 지우지 않고 `/insights/stats` 로 리다이렉트한다(공유된 링크 보호).
+  사이드바에서는 「리포트」 항목을 내리고 「운영평가」를 **「시험자 운영 분석」**으로 바꿨다.
 
 ## ⬜ 미구현 / 부분
 - 상태값 영문 전환(현재 한글 → AUTO_ASSIGNED/MANAGER_REVIEW/CONFIRMED/LOCKED/READY/ASSIGNED/IN_PROGRESS/REVIEW/COMPLETED/DELAY/CANCEL) — 기존 데이터 마이그레이션 + 프론트 전반 수정 필요. **DB 데이터 마이그레이션(대시보드/DB 접근) 선행 필수 → 단독 세션 권장.** (차단 로직 `LOCKED_STATUSES`는 한/영 상태값 모두 미리 포함해둠)
