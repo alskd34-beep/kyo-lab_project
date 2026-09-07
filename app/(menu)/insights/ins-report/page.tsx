@@ -156,13 +156,13 @@ export default function OperationReportPage() {
       )}
 
       {loading && !data ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20" />)}
         </div>
       ) : !data ? null : (
         <>
           {/* ── KPI ──────────────────────────────────────────────────────── */}
-          <div className="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-5">
+          <div className="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             <KpiCard
               label="시험업무"
               value={formatMinutes(totals?.testMinutes, "0분")}
@@ -199,7 +199,7 @@ export default function OperationReportPage() {
           </div>
 
           {!hasData ? (
-            <SectionCard title="집계 결과" hint="이 기간에 쌓인 실적이 없습니다.">
+            <SectionCard className="shrink-0" title="집계 결과" hint="이 기간에 쌓인 실적이 없습니다.">
               <p className="py-10 text-center text-sm break-keep text-muted-foreground">
                 조회 기간에 완료된 시험항목도, 기록된 부업무도 없습니다.
                 <br />
@@ -213,6 +213,7 @@ export default function OperationReportPage() {
                   같은 축 위에 두 막대를 나란히 세운다. 쌓아 올리면(stacked)
                   총량은 보이지만 "둘의 차이"가 안 보이는데, 여기서 알고 싶은 것이 그 차이다. */}
               <SectionCard
+                className="shrink-0"
                 title="시험자별 시험업무 vs 부업무"
                 hint={`상위 ${Math.min(TOP_N, data.byTester.length)}명 · 단위 시간`}
               >
@@ -227,8 +228,8 @@ export default function OperationReportPage() {
                         contentStyle={{ fontSize: 12, borderRadius: 6 }}
                       />
                       <Legend wrapperStyle={{ fontSize: 12 }} />
-                      <Bar dataKey="시험업무" fill={TEST_HEX} radius={[3, 3, 0, 0]} />
-                      <Bar dataKey="부업무"   fill={SIDE_HEX} radius={[3, 3, 0, 0]} />
+                      <Bar dataKey="시험업무" fill={TEST_HEX} radius={[3, 3, 0, 0]} maxBarSize={44} />
+                      <Bar dataKey="부업무"   fill={SIDE_HEX} radius={[3, 3, 0, 0]} maxBarSize={44} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -238,7 +239,7 @@ export default function OperationReportPage() {
                   부업무가 고르게 깔리는지, 특정 주에 몰리는지가 대응을 가른다 —
                   몰린다면 그 주의 시험 배정을 줄이는 것이 답이고, 고르게 깔린다면
                   1인당 가용 공수 자체를 낮춰 잡아야 한다. 쌓아 올려 그날의 총량도 함께 읽는다. */}
-              <SectionCard title="일자별 추이" hint="완료 시각(시험) · 기록 날짜(부업무) 기준 · 단위 시간">
+              <SectionCard className="shrink-0" title="일자별 추이" hint="완료 시각(시험) · 기록 날짜(부업무) 기준 · 단위 시간">
                 <div className="h-56 min-w-0">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={dailyChart} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
@@ -250,8 +251,8 @@ export default function OperationReportPage() {
                         contentStyle={{ fontSize: 12, borderRadius: 6 }}
                       />
                       <Legend wrapperStyle={{ fontSize: 12 }} />
-                      <Bar dataKey="시험업무" stackId="d" fill={TEST_HEX} />
-                      <Bar dataKey="부업무"   stackId="d" fill={SIDE_HEX} />
+                      <Bar dataKey="시험업무" stackId="d" fill={TEST_HEX} maxBarSize={32} />
+                      <Bar dataKey="부업무"   stackId="d" fill={SIDE_HEX} maxBarSize={32} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -259,6 +260,7 @@ export default function OperationReportPage() {
 
               {/* ── 시험자별 표 ────────────────────────────────────────── */}
               <SectionCard
+                className="shrink-0"
                 title="시험자별 상세"
                 hint="가동률은 (시험+부업무) ÷ 기간 근무시간. 100%를 넘으면 초과근무이거나 기록이 겹친 것이다"
               >
@@ -327,6 +329,7 @@ export default function OperationReportPage() {
 
               {/* ── 부업무 분류별 ──────────────────────────────────────── */}
               <SectionCard
+                className="shrink-0"
                 title="부업무 분류별 소요"
                 hint={
                   data.byCategory.length === 0
@@ -350,7 +353,7 @@ export default function OperationReportPage() {
                             formatter={v => [`${v}시간`, "소요"]}
                             contentStyle={{ fontSize: 12, borderRadius: 6 }}
                           />
-                          <Bar dataKey="시간" fill={SIDE_HEX} radius={[0, 3, 3, 0]} />
+                          <Bar dataKey="시간" fill={SIDE_HEX} radius={[0, 3, 3, 0]} maxBarSize={28} />
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
@@ -385,6 +388,7 @@ export default function OperationReportPage() {
                   운영 결과에는 "시험을 무엇을 얼마나 쳤는가"가 함께 있어야 한다.
                   시간만으로는 오래 걸리는 항목 하나가 여러 건을 이겨 버린다. */}
               <SectionCard
+                className="shrink-0"
                 title="시험 진행 항목"
                 hint={`완료된 시험항목 ${totals?.testItems ?? 0}건 · 소요 많은 순`}
               >
