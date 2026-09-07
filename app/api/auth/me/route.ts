@@ -23,6 +23,8 @@ export async function GET(req: NextRequest) {
       avatarUrl:   user.avatarUrl,
       role:        user.role,
       customerNo:  user.customerNo,
+      // 월간 그리드가 "내 행"을 찾는 키. users.id 로는 tester 기준 데이터에 닿지 못한다.
+      testerId:    user.testerId,
     },
   })
 }

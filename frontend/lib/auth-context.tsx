@@ -12,6 +12,11 @@ export interface AuthUser {
   avatarUrl:   string | null
   role:        UserRole
   customerNo:  number | null
+  /**
+   * 이 계정에 연결된 시험자(testers.id). 연결이 없으면 null.
+   * 월간 스케줄·내 작업처럼 "내 것"이 tester 기준인 화면이 이 값으로 자기 행을 찾는다.
+   */
+  testerId:    string | null
 }
 
 interface AuthCtx {

@@ -36,6 +36,7 @@ export const ADMIN_ONLY_ROUTES: readonly string[] = [
   '/test-mgmt/pretest-checklist',
   '/test-mgmt/test-capabilities',
   '/settings/concurrent-items',
+  '/settings/side-work-categories',
 
   // 일탈관리·인사이트 — 하위가 전부 관리자 전용
   '/deviation',

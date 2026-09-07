@@ -2,7 +2,7 @@
 
 프로세스 정의: `.claude/commands/qc-schedule-process.md` (`/qc-schedule-process`)
 현재 시스템 전체 PRD(as-built): [`docs/PRD-current-system.md`](./PRD-current-system.md)
-최종 갱신: 2026-06-14
+최종 갱신: 2026-09-07
 
 ## ✅ 완료 (PCT 1차 구현)
 - 구글시트 자동 적재(9시/14시 크론) + 신규/수정/삭제 diff 감지 — `backend/services/pctIngest.ts`, `instrumentation.ts`
@@ -65,10 +65,39 @@
   `on delete set null` 과 충돌해 시험자 하드 삭제가 실패하기 때문이다. 대신 오더 수정 검증을
   "배정을 실제로 건드리는 수정일 때만" 돌게 해서, 담당자가 삭제로 사라진 오더도 관리자가 복구할 수 있다.
 
+## ✅ 추가 완료 (2026-09-07, 부업무 기록 · 운영 결과 리포트)
+시험자의 하루에서 **시험이 아닌 시간**을 처음으로 기록·집계한다. — `0041_side_work.sql`
+- **왜**: 문서작성·교육·장비점검·시약관리·감사대응이 실제 시간을 상당히 먹는데 어디에도 남지 않아,
+  월간 그리드의 빈 칸이 늘 '노는 날'로 읽혔다. "왜 이 사람에게 시험을 더 못 주는가"를 설명할 근거가 없었다.
+- **기록 단위는 분(minutes)** — 시험업무 실적(`qc_job_items.elapsed_minutes`)이 이미 분이라
+  같은 자로 재야 '시험 vs 부업무' 비교가 성립한다. 공수(DAY)는 계획의 단위라 섞지 않는다.
+  입력은 프리셋(30분/1시간/2시간/반일/종일) 한 번으로 끝나고, 저장되는 값은 언제나 분이다.
+- **데이터 모델**: `side_work_categories`(분류 마스터, 삭제 대신 `is_active=false`)
+  + `side_work_logs`(1행 = 한 시험자의 하루 한 가지 일). 집계 키는 `tester_id` —
+  월간 그리드 행도, 리포트의 시험업무(`qc_jobs.assignee_tester_id`)도 tester 기준이라 여기에 맞춰야 join 이 선다.
+  `user_id` 는 "누가 입력했는가"(감사 추적)이지 집계 키가 아니다.
+- **기록 UX**: 월간 스케줄 > 월간 그리드에서 **자기 행의 칸을 눌러** 남긴다(누른 칸이 날짜·시험자를 이미 정했으므로
+  다이얼로그는 '무엇을 했는지'만 묻는다). 내 행은 「나」 배지 + 옅은 파랑으로 구분하고,
+  배정이 하나도 없는 달에도 본인 행은 반드시 낸다 — 그러지 않으면 기록할 칸 자체가 없다.
+  부업무 칩은 청록(teal)이라 시험 배정과 한눈에 갈린다.
+- **권한**(휴가 `operator_schedule` 와 같은 모양): 시험자는 **본인 기록만** 등록·수정·삭제, 팀 기록은 읽기 전용.
+  관리자는 전체. 이 값이 리포트의 분모·분자로 들어가므로 화면 숨김이 아니라 서버(`assertLogAccess`)에서 막는다.
+- **운영 결과 리포트**(`/insights/ins-report`, admin): 시험업무 vs 부업무를 같은 기간·같은 자로 나란히 놓는다.
+  KPI(시험/부업무/부업무 비중/완료 작업/인원) · 시험자별 나란한 막대와 상세표(부업무 비중·가동률) ·
+  부업무 분류별 소요 · 일자별 추이 · **시험 진행 항목**(항목별 건수·총소요·평균).
+  기간 포함 기준은 시험업무=항목 완료 시각(KST 경계), 부업무=`work_date`, 완료 작업=승인완료+종료일.
+- **분류 마스터 화면**: 기준 설정 > 부업무 분류(`/settings/side-work-categories`, admin).
+  기록이 달린 분류는 삭제 대신 [사용 안 함] — 지우면 과거 기록을 리포트가 다시 읽을 수 없다(FK `on delete restrict`).
+- 관련 파일: `backend/services/sideWork.ts`, `backend/services/operationReport.ts`, `backend/lib/testerLink.ts`,
+  `app/api/side-work/**`, `app/api/insights/operation-report`, `types/side-work.ts`,
+  `frontend/components/schedule/side-work-dialog.tsx`, `app/(menu)/schedule/monthly/page.tsx`.
+
 ## ⬜ 미구현 / 부분
 - 상태값 영문 전환(현재 한글 → AUTO_ASSIGNED/MANAGER_REVIEW/CONFIRMED/LOCKED/READY/ASSIGNED/IN_PROGRESS/REVIEW/COMPLETED/DELAY/CANCEL) — 기존 데이터 마이그레이션 + 프론트 전반 수정 필요. **DB 데이터 마이그레이션(대시보드/DB 접근) 선행 필수 → 단독 세션 권장.** (차단 로직 `LOCKED_STATUSES`는 한/영 상태값 모두 미리 포함해둠)
 
 ## ⚠️ 주의
+- **`0041_side_work.sql` 은 아직 운영 DB 에 적용되지 않았다.** Supabase 대시보드 > SQL Editor 에서 실행할 것(idempotent).
+  적용 전에는 월간 스케줄이 부업무 줄만 앰버 경고로 알리고 나머지는 정상 동작하며, 운영 결과 리포트는 조회에 실패한다.
 - 공수 단위: **DAY 확정(2026-08-22).** 정본은 `product_workload.avg_workdays`(DAY, 절대값).
   `products.avg_hours`(Hour)는 레거시이며 운영 DB 전 행이 null 이다. 대시보드·자동배정·월간 화면 모두 DAY 기준으로 통일했다.
   ⚠️ 단, 운영 DB `product_workload` 가 **0행**이라 실제 공수 값이 비어 있다 → 등록 필요.

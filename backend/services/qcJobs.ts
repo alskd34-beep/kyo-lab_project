@@ -11,6 +11,7 @@ import { supabaseAdmin } from '@backend/lib/supabase'
 import { generateQcNo } from '@backend/lib/qcNumber'
 import { kstToday } from '@backend/lib/kstDate'
 import { describeSchemaError } from '@backend/lib/schemaError'
+import { getTesterId } from '@backend/lib/testerLink'
 import { createNotification } from '@backend/services/notifications'
 import { checkEquipmentReadiness, type ReadinessResult } from '@backend/services/equipmentMaster'
 import { listByProduct, type PretestNoteRow } from '@backend/services/productPretestNotes'
@@ -76,51 +77,6 @@ export interface PendingOrderRow {
   dueDate: string | null
   isUrgent: boolean
   method: string
-}
-
-/**
- * 로그인 사용자의 tester_id 조회.
- * 사용자·시험자 통합 모델에서 로그인 ID(username) = 시험자 사번(employee_no) 이므로,
- * users.tester_id 가 비어 있어도 사번이 같은 시험자를 찾아 즉시 연결(자가복구)한다.
- * (재시드·수동 편집 등으로 1:1 링크가 끊긴 계정도 다음 접근 시 자동 복구)
- */
-async function getTesterId(userSub: string): Promise<string | null> {
-  const { data: user } = await supabaseAdmin
-    .from('users').select('tester_id, username').eq('id', userSub).maybeSingle()
-  if (!user) return null
-  if (user.tester_id) return user.tester_id as string
-
-  // 링크 누락 — 사번(=username)이 동일한 시험자로 자가복구
-  const username = user.username as string | undefined
-  if (!username) return null
-  const { data: tester } = await supabaseAdmin
-    .from('testers').select('id').eq('employee_no', username).maybeSingle()
-  if (!tester?.id) return null
-
-  const testerId = tester.id as string
-
-  // 2026-08-23 수정: 예전에는 "사번이 같다"는 이유만으로 이 시험자를 점유 중인
-  // **다른 사용자의 링크를 조용히 끊고** 가져왔다. 링크가 끊긴 쪽은 이후
-  // getTesterId 가 null 을 반환해 본인 작업 화면이 비고, testerAbsences 가 그 사람의
-  // 휴가를 배정 엔진에 전달하지 못한다(operatorSchedule: `if (!testerId) continue`).
-  // 남의 링크는 건드리지 않고, 비어 있을 때만 연결한다.
-  const { data: holder } = await supabaseAdmin
-    .from('users').select('id').eq('tester_id', testerId).maybeSingle()
-  if (holder && holder.id !== userSub) {
-    console.warn(
-      `[qcJobs] 시험자 ${testerId} 는 이미 사용자 ${holder.id} 에 연결돼 있어 자가복구를 건너뜁니다 ` +
-      `(요청자 ${userSub}). 관리자 화면에서 연결을 정리하세요.`,
-    )
-    return null
-  }
-
-  const { error: linkErr } = await supabaseAdmin
-    .from('users').update({ tester_id: testerId }).eq('id', userSub)
-  if (linkErr) {
-    console.error('[qcJobs] 시험자 자가복구 연결 실패:', linkErr)
-    return null
-  }
-  return testerId
 }
 
 /**

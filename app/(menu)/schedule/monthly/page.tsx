@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   loadPctMonthlySnapshot,
   fetchPctMonthlyFromServer,
@@ -30,7 +30,15 @@ import {
   CalendarRange,
   UserSquare,
   Gauge,
+  Plus,
 } from 'lucide-react'
+import { useAuth } from '@frontend/lib/auth-context'
+import { formatMinutes } from '@frontend/lib/workload-format'
+import type { SideWorkCategory, SideWorkLog } from '@shared/side-work'
+import {
+  SideWorkDialog,
+  type SideWorkDialogTarget,
+} from '@frontend/components/schedule/side-work-dialog'
 import { MobileFilterPanel } from '@frontend/components/common/mobile-filter-panel'
 import MondayBoard, { type BoardGroup, type ColumnDef } from '@frontend/components/board/MondayBoard'
 
@@ -87,6 +95,11 @@ const BOARD_COLORS  = ['bg-blue-700', 'bg-blue-600', 'bg-blue-500', 'bg-blue-400
 function thisMonth(): string {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+/** KST 기준 오늘 (YYYY-MM-DD). 이 시스템의 '오늘'은 한국 근무일 기준이다 */
+function todayISO(): string {
+  return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
 }
 
 function shiftMonth(monthYM: string, delta: number): string {
@@ -167,6 +180,19 @@ export default function MonthlySchedulePage() {
   // 셀 상세 — 시험항목·공수·비고가 title 툴팁에만 있어서 터치에서는 닿을 수 없었다.
   // 셀을 누르면 여기에 담기고 아래 다이얼로그가 그 값을 화면에 내놓는다.
   const [cellDetail, setCellDetail] = useState<CellDetail | null>(null)
+
+  // ── 부업무(시험 외 업무) ───────────────────────────────────────────────────
+  // 이 화면의 빈 칸은 지금까지 '노는 날'로 읽혔다. 실제로는 문서·교육·장비점검이
+  // 그 자리를 채우고 있었고 어디에도 기록되지 않았다. 자기 칸을 눌러 남긴다.
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
+  const myTesterId = user?.testerId ?? null
+  const [sideLogs, setSideLogs] = useState<SideWorkLog[]>([])
+  const [sideCategories, setSideCategories] = useState<SideWorkCategory[]>([])
+  // 0041 마이그레이션 전에는 조회가 실패한다. 그렇다고 스케줄 화면을 통째로 막지 않는다 —
+  // 한 줄 안내만 띄우고 나머지는 그대로 보여준다.
+  const [sideError, setSideError] = useState<string | null>(null)
+  const [sideTarget, setSideTarget] = useState<SideWorkDialogTarget | null>(null)
 
   // PCT 스냅샷 (localStorage에서 로드)
   const [pctSnapshot, setPctSnapshot] = useState<PctMonthlyAssignment[]>([])
@@ -268,6 +294,72 @@ export default function MonthlySchedulePage() {
 
   const days = useMemo(() => getDaysInMonth(month), [month])
 
+  // ── 부업무 조회 ────────────────────────────────────────────────────────────
+  const loadSideWork = useCallback(async () => {
+    if (days.length === 0) return
+    try {
+      const res = await fetch(
+        `/api/side-work?from=${days[0]}&to=${days[days.length - 1]}`,
+        { credentials: 'include' },
+      )
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? '부업무 조회 실패')
+      setSideLogs(json.rows as SideWorkLog[])
+      setSideError(null)
+    } catch (e) {
+      setSideLogs([])
+      setSideError(e instanceof Error ? e.message : '부업무를 불러오지 못했습니다.')
+    }
+  }, [days])
+
+  useEffect(() => { void loadSideWork() }, [loadSideWork])
+
+  // 분류는 달을 바꿔도 변하지 않는다 — 한 번만 읽는다.
+  useEffect(() => {
+    let aborted = false
+    void (async () => {
+      try {
+        const res = await fetch('/api/side-work/categories', { credentials: 'include' })
+        const json = await res.json()
+        if (!res.ok || aborted) return
+        setSideCategories(json.rows as SideWorkCategory[])
+      } catch { /* 분류가 없으면 기록 폼이 스스로 막는다 */ }
+    })()
+    return () => { aborted = true }
+  }, [])
+
+  /** `${testerId}::${YYYY-MM-DD}` → 그 칸의 부업무 기록 */
+  const sideByCell = useMemo(() => {
+    const m = new Map<string, SideWorkLog[]>()
+    for (const log of sideLogs) {
+      const k = `${log.testerId}::${log.workDate}`
+      const list = m.get(k) ?? []
+      list.push(log)
+      m.set(k, list)
+    }
+    return m
+  }, [sideLogs])
+
+  /** DB 에 실재하는 시험자 id — PCT 스냅샷에만 있는 가상 행(`pct-이름`)과 가른다 */
+  const dbTesterIds = useMemo(
+    () => new Set((data?.testers ?? []).map(t => String(t.id))),
+    [data],
+  )
+
+  /**
+   * 이 칸을 고칠 수 있는가 — 본인 칸이거나 관리자. 서버도 같은 규칙으로 막는다.
+   * PCT 스냅샷에만 있는 가상 행은 붙일 시험자 레코드가 없어 관리자도 기록하지 못한다
+   * (넣어 봐야 FK 위반으로 튕긴다 — 버튼을 먼저 감추는 쪽이 정직하다).
+   */
+  const canEditCell = useCallback(
+    (testerId: number | string) => {
+      const id = String(testerId)
+      if (!dbTesterIds.has(id)) return false
+      return isAdmin || (myTesterId != null && id === myTesterId)
+    },
+    [dbTesterIds, isAdmin, myTesterId],
+  )
+
   // DB + PCT 합친 전체 스케줄.
   // DB(pct_orders 정본)와 PCT 스냅샷은 같은 배정을 각자 담을 수 있다 — 스냅샷은 AI 스케줄
   // 화면에서 [스케줄 생성]을 누른 시점의 사본이기 때문이다. 같은 품목·제조번호·담당자면
@@ -310,24 +402,35 @@ export default function MonthlySchedulePage() {
   }, [allSchedules, month])
 
   // 데이터가 있는 시험자만 표시 (DB + PCT 모두 포함)
+  // 배정이 하나도 없어도 (1) 부업무를 남긴 사람과 (2) 로그인한 본인은 행을 낸다.
+  // 본인 행이 없으면 기록할 칸 자체가 없어 "자기 칸을 눌러 남긴다"가 성립하지 않고,
+  // 배정이 비는 달일수록 오히려 부업무가 많다.
   const visibleTesters = useMemo(() => {
-    const usedIds = new Set(allSchedules.map(s => s.tester_id))
+    const usedIds = new Set<number | string>(allSchedules.map(s => s.tester_id))
+    for (const log of sideLogs) usedIds.add(log.testerId)
+    if (myTesterId) usedIds.add(myTesterId)
     return mergedTesters
       .filter(t => usedIds.has(t.id))
       .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
-  }, [allSchedules, mergedTesters])
+  }, [allSchedules, mergedTesters, sideLogs, myTesterId])
 
   // 요약 통계 (DB + PCT)
   const stats = useMemo(() => {
     const pctCount = pctSchedulesMerged.length
+    const mine = myTesterId ? sideLogs.filter(l => l.testerId === myTesterId) : []
     return {
       total:   allSchedules.length,
       urgent:  allSchedules.filter(s => s.is_urgent).length,
       duo:     allSchedules.filter(s => s.is_duo).length,
       testers: visibleTesters.length,
       pct:     pctCount,
+      // 부업무는 건수와 시간을 함께 본다 — 건수만 보면 30분짜리와 종일짜리가 같아진다.
+      sideCount:   sideLogs.length,
+      sideMinutes: sideLogs.reduce((sum, l) => sum + l.minutes, 0),
+      mySideCount:   mine.length,
+      mySideMinutes: mine.reduce((sum, l) => sum + l.minutes, 0),
     }
-  }, [allSchedules, pctSchedulesMerged, visibleTesters])
+  }, [allSchedules, pctSchedulesMerged, visibleTesters, sideLogs, myTesterId])
 
   // ─── Monday 스타일 보드 데이터 (주간 / 개인별 탭) ─────────────────────────────
   const testerNameById = useMemo(() => {
@@ -500,6 +603,14 @@ export default function MonthlySchedulePage() {
           </p>
         )}
 
+        {/* 부업무만 실패한 경우 — 스케줄 자체는 멀쩡하므로 화면을 막지 않고 한 줄로 알린다 */}
+        {sideError && (
+          <p className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-xs leading-normal break-keep text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+            <AlertCircle size={14} className="mt-0.5 shrink-0" />
+            {sideError}
+          </p>
+        )}
+
         {/* 로딩 — 실제로 나올 모양(시험자 한 줄 + 날짜 칸)과 같은 뼈대를 보여준다 */}
         {loading && (
           <Card className={`gap-0 overflow-hidden py-0 ${BORDER} ${CARD_BG}`}>
@@ -526,15 +637,18 @@ export default function MonthlySchedulePage() {
             <MobileFilterPanel
               label="요약"
               icon={Gauge}
-              summary={`총 배정 ${stats.total}건 · 긴급 ${stats.urgent}건 · 듀오 ${stats.duo}건`}
+              summary={`총 배정 ${stats.total}건 · 긴급 ${stats.urgent}건 · 부업무 ${stats.sideCount}건`}
             >
             <Card className="gap-0 overflow-hidden py-0">
-              <dl className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
+              <dl className="grid grid-cols-2 gap-px bg-border sm:grid-cols-5">
                 {[
                   { label: '총 배정',     value: `${stats.total}건`,   tone: TXT_PRIMARY },
                   { label: '활동 시험자', value: `${stats.testers}명`, tone: TXT_PRIMARY },
                   { label: '긴급',        value: `${stats.urgent}건`,  tone: stats.urgent > 0 ? 'text-destructive' : TXT_MUTED },
                   { label: '듀오',        value: `${stats.duo}건`,     tone: TXT_PRIMARY },
+                  // 시험 밖에서 사라진 시간이 얼마인지 — 이 화면에서 처음으로 답할 수 있게 된 값이다
+                  { label: '부업무',      value: `${stats.sideCount}건`, tone: TXT_PRIMARY,
+                    sub: stats.sideMinutes > 0 ? formatMinutes(stats.sideMinutes) : null },
                 ].map(s => (
                   /* 모바일은 라벨·숫자를 한 줄로 눕힌다. 격자 칸은 서로 높이를 맞추므로
                      (stretch) sm:justify-start 가 없으면 숫자가 칸 바닥에 붙는다. */
@@ -543,7 +657,13 @@ export default function MonthlySchedulePage() {
                     className="flex min-h-8 min-w-0 items-center justify-between gap-1 bg-card px-2 py-1 sm:min-h-0 sm:flex-col sm:items-stretch sm:justify-start sm:gap-0 sm:px-4 sm:py-3.5"
                   >
                     <dt className={`min-w-0 truncate text-xs font-medium ${TXT_MUTED}`}>{s.label}</dt>
-                    <dd className={`shrink-0 text-sm font-semibold tabular-nums sm:mt-0.5 sm:text-2xl ${s.tone}`}>{s.value}</dd>
+                    <dd className={`shrink-0 text-sm font-semibold tabular-nums sm:mt-0.5 sm:text-2xl ${s.tone}`}>
+                      {s.value}
+                      {/* 건수 옆의 시간 — 30분짜리와 종일짜리를 건수만으로는 가를 수 없다 */}
+                      {'sub' in s && s.sub && (
+                        <span className={`ml-1 text-xs font-normal ${TXT_MUTED}`}>{s.sub}</span>
+                      )}
+                    </dd>
                   </div>
                 ))}
               </dl>
@@ -585,11 +705,40 @@ export default function MonthlySchedulePage() {
             {view === 'monthly' && (<>
             {/* 간트 그리드 — 머리말은 탭 이름을 되풀이하는 대신 이 표의 크기를 적는다 */}
             <Card className={`gap-0 overflow-hidden py-0 ${BORDER} ${CARD_BG}`}>
-              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b px-4 py-3">
                 <h2 className={`text-sm font-semibold ${TXT_PRIMARY}`}>월간 그리드</h2>
-                <p className={`text-xs leading-normal break-keep tabular-nums ${TXT_MUTED}`}>
-                  시험자 {visibleTesters.length}명 × {days.length}일
-                </p>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                  <p className={`text-xs leading-normal break-keep tabular-nums ${TXT_MUTED}`}>
+                    시험자 {visibleTesters.length}명 × {days.length}일
+                    {myTesterId && stats.mySideCount > 0 && (
+                      <>
+                        <span className="px-1 text-border">·</span>
+                        내 부업무 {stats.mySideCount}건 {formatMinutes(stats.mySideMinutes)}
+                      </>
+                    )}
+                  </p>
+                  {/* 칸을 눌러 기록하는 길이 기본이지만, 그 길은 처음 보는 사람에게 보이지 않는다.
+                      오늘 자리로 바로 데려가는 버튼 하나를 같이 둔다. */}
+                  {myTesterId && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
+                      onClick={() => {
+                        const me = mergedTesters.find(t => String(t.id) === myTesterId)
+                        setSideTarget({
+                          date: todayISO(),
+                          testerId: myTesterId,
+                          testerName: me?.name ?? (user?.displayName ?? '나'),
+                          canEdit: true,
+                        })
+                      }}
+                    >
+                      <Plus size={14} />
+                      오늘 부업무 기록
+                    </Button>
+                  )}
+                </div>
               </div>
               <div className="min-w-0">
                 {visibleTesters.length === 0 ? (
@@ -631,19 +780,32 @@ export default function MonthlySchedulePage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {visibleTesters.map(t => (
-                          <TableRow key={t.id} className="hover:bg-muted/40">
+                        {visibleTesters.map(t => {
+                          // 내 행을 먼저 찾을 수 있어야 "자기 칸을 눌러 기록한다"가 성립한다.
+                          const isMe = myTesterId != null && String(t.id) === myTesterId
+                          return (
+                          <TableRow key={t.id} className={cn('hover:bg-muted/40', isMe && 'bg-primary/5')}>
                             <TableCell
                               className={`sticky left-0 z-10 border-b ${BORDER} ${CARD_BG} px-3 py-2 text-sm font-medium ${TXT_PRIMARY}`}
                             >
                               <div className="flex min-w-0 items-center gap-1.5">
                                 <TesterAvatar testerId={String(t.id)} name={t.name} size="xs" />
                                 <span className="min-w-0 truncate">{t.name}</span>
+                                {isMe && (
+                                  <span className="shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-xs leading-normal font-semibold text-primary">
+                                    나
+                                  </span>
+                                )}
                               </div>
                             </TableCell>
                             {days.map(d => {
                               const k = `${t.id}::${d}`
                               const rows = cellMap.get(k) ?? []
+                              const side = sideByCell.get(k) ?? []
+                              const editable = canEditCell(t.id)
+                              const openSide = () => setSideTarget({
+                                date: d, testerId: String(t.id), testerName: t.name, canEdit: editable,
+                              })
                               const isWeekend = (() => {
                                 const dow = dayOfWeek(d)
                                 return dow === 0 || dow === 6
@@ -651,7 +813,7 @@ export default function MonthlySchedulePage() {
                               return (
                                 <TableCell
                                   key={k}
-                                  className={`border-b border-l ${BORDER} p-0.5 align-top ${
+                                  className={`group/cell border-b border-l ${BORDER} p-0.5 align-top ${
                                     isWeekend ? 'bg-muted/50' : ''
                                   }`}
                                   style={{ minWidth: 38 }}
@@ -675,12 +837,49 @@ export default function MonthlySchedulePage() {
                                         </button>
                                       )
                                     })}
+
+                                    {/* 부업무 — 시험 배정과 색으로 갈라 둔다. 이 칸의 일이
+                                        '시험'인지 아닌지가 이 화면에서 가장 먼저 읽혀야 한다. */}
+                                    {side.map(log => (
+                                      <button
+                                        key={log.id}
+                                        type="button"
+                                        onClick={openSide}
+                                        title={`[부업무] ${log.categoryName}\n${log.title}\n소요: ${formatMinutes(log.minutes)}${log.note ? `\n${log.note}` : ''}`}
+                                        aria-label={`${t.name} ${d} 부업무 ${log.title} ${editable ? '수정' : '보기'}`}
+                                        className="flex min-h-8 w-full min-w-0 items-center rounded-md border border-teal-300 bg-teal-100 px-1 py-0.5 text-xs leading-normal font-medium text-teal-900 transition-colors hover:bg-teal-200 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:min-h-0 dark:border-teal-800 dark:bg-teal-900/60 dark:text-teal-100"
+                                      >
+                                        <span className="min-w-0 truncate">{log.title.slice(0, 6)}</span>
+                                      </button>
+                                    ))}
+
+                                    {/* 기록 버튼 — 평소에는 물러서 있다가 그 칸에 손이 오면 나온다.
+                                        30칸마다 [+] 가 늘 떠 있으면 정작 봐야 할 배정을 가린다.
+                                        빈 칸일 때는 칸 전체가 터치 타깃이 된다(모바일 36px). */}
+                                    {editable && (
+                                      <button
+                                        type="button"
+                                        onClick={openSide}
+                                        title="부업무 기록"
+                                        aria-label={`${t.name} ${d} 부업무 기록 추가`}
+                                        className={cn(
+                                          'flex w-full items-center justify-center rounded-md border border-dashed border-transparent text-muted-foreground transition-colors',
+                                          'hover:border-border hover:bg-muted focus-visible:border-border focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+                                          rows.length + side.length === 0
+                                            ? 'min-h-8 sm:min-h-6'
+                                            : 'h-4 opacity-0 group-hover/cell:opacity-100 focus-visible:opacity-100',
+                                        )}
+                                      >
+                                        <Plus size={11} className="opacity-40" />
+                                      </button>
+                                    )}
                                   </div>
                                 </TableCell>
                               )
                             })}
                           </TableRow>
-                        ))}
+                          )
+                        })}
                       </TableBody>
                     </Table>
                   </div>
@@ -696,6 +895,7 @@ export default function MonthlySchedulePage() {
                 { swatch: 'border-red-300 bg-red-200 dark:border-red-800 dark:bg-red-900/60', label: '긴급' },
                 { swatch: 'border-blue-300 bg-blue-200 dark:border-blue-800 dark:bg-blue-900/60', label: '듀오' },
                 { swatch: 'border-dashed border-amber-400 bg-amber-200 dark:border-amber-700 dark:bg-amber-900/60', label: 'PCT 생산관리 출처' },
+                { swatch: 'border-teal-300 bg-teal-100 dark:border-teal-800 dark:bg-teal-900/60', label: '부업무(시험 외)' },
                 { swatch: 'border-transparent bg-muted', label: '주말' },
               ].map(l => (
                 <span key={l.label} className="flex items-center gap-1.5">
@@ -704,7 +904,10 @@ export default function MonthlySchedulePage() {
                 </span>
               ))}
               {/* hover 로만 열리던 안내였다 — 터치에서도 같은 정보에 닿으므로 문장을 사실에 맞춘다 */}
-              <span className="ml-auto break-keep">셀을 누르면 시험항목·공수·비고를 볼 수 있습니다.</span>
+              <span className="ml-auto break-keep">
+                셀을 누르면 시험항목·공수·비고를 볼 수 있습니다.
+                {(isAdmin || myTesterId) && ' 내 행의 빈 칸을 누르면 부업무를 기록합니다.'}
+              </span>
             </div>
             </>)}
 
@@ -757,6 +960,18 @@ export default function MonthlySchedulePage() {
             터치에는 hover 가 없으므로 같은 값을 눌러서 여는 다이얼로그로 내놓는다. */}
         {cellDetail && (
           <CellDetailDialog detail={cellDetail} onClose={() => setCellDetail(null)} />
+        )}
+
+        {/* ── 부업무 기록 ────────────────────────────────────────────────────
+            누른 칸의 시험자·날짜가 그대로 넘어가므로 다이얼로그는 '무엇을 했는지'만 묻는다. */}
+        {sideTarget && (
+          <SideWorkDialog
+            target={sideTarget}
+            logs={sideByCell.get(`${sideTarget.testerId}::${sideTarget.date}`) ?? []}
+            categories={sideCategories}
+            onClose={() => setSideTarget(null)}
+            onChanged={() => void loadSideWork()}
+          />
         )}
       </div>
     </div>
