@@ -334,6 +334,14 @@ export interface WorkerOverviewRow {
   name: string
   employeeNo: string
   isActive: boolean
+  /** 시험자 본인 화면에서 "나"인 행. 관리자 화면에서는 항상 false */
+  isSelf: boolean
+  /**
+   * 2인 배정으로 함께 맡은 상대. 이 행의 숫자·목록은 **나와 함께 배정된 오더로 한정**된다.
+   * 상대의 다른 업무까지 보여주는 것은 요청 범위 밖이고, 시험자에게 동료의 전체 업무를
+   * 열어 주는 것은 별개의 결정이다.
+   */
+  isPartner: boolean
   pendingCount: number
   inProgress: number
   reviewing: number
@@ -354,6 +362,8 @@ export interface WorkerOverview {
     completedTotal: number   // 승인완료 작업 총수(기간 제한 없음)
   }
   workers: WorkerOverviewRow[]
+  /** 'admin' = 전체 시험자, 'tester' = 본인 + 2인 배정 상대(공유 오더 한정) */
+  scope: 'admin' | 'tester'
 }
 
 // 진행 중으로 간주하는 작업 상태는 @shared/qc-status 의 ACTIVE_JOB_STATUSES 를 쓴다.
@@ -503,14 +513,61 @@ export async function getJobDetail(jobId: string): Promise<JobDetail | null> {
 }
 
 /**
- * 작업자(시험자)별 작업 현황 집계 — 관리자가 "내 작업"을 수행 중인 작업자들의
- * 진행 상황을 한눈에 보기 위한 뷰. 기존 테이블만 읽어 JS에서 집계한다.
+ * 이 사용자가 그 작업의 상세를 열람할 수 있는가.
+ *
+ * 원칙은 "본인 작업만"이다(관리자는 전체). 여기에 2인 배정 상대를 더한다 — 같은 오더를
+ * 둘이 나눠 맡으면 상대가 어디까지 했는지 보여야 남은 몫을 판단할 수 있고, 작업 현황
+ * 화면이 그 상대 행을 이미 보여주므로 눌러도 열리지 않으면 화면이 거짓말을 하는 셈이다.
+ *
+ * 넓히는 것은 **같은 오더에 함께 배정된 경우로 한정**한다. 상대의 다른 작업은 여전히
+ * 남의 작업이다. 쓰기(clearItem·changeJobStatus 등)는 그대로 assertOwner 가 막는다 —
+ * 여기는 읽기 전용 판정이다.
+ */
+export async function canViewJob(jobId: string, userSub: string): Promise<boolean> {
+  const { data: job } = await supabaseAdmin
+    .from('qc_jobs').select('order_id, assignee_user_id').eq('id', jobId).maybeSingle()
+  if (!job) return false
+  if ((job.assignee_user_id as string | null) === userSub) return true
+
+  const testerId = await getTesterId(userSub)
+  if (!testerId) return false
+
+  const { data: order } = await supabaseAdmin
+    .from('pct_orders')
+    .select('is_dual_assignment, assignee_tester_id, assignee_tester_id_2')
+    .eq('id', job.order_id as string)
+    .maybeSingle()
+  if (!order?.is_dual_assignment) return false
+  return order.assignee_tester_id === testerId || order.assignee_tester_id_2 === testerId
+}
+
+/**
+ * 시험자 본인용 작업 현황 — 로그인 계정에 연결된 시험자를 뷰어로 잡는다.
+ * 관리자는 인자 없는 listWorkerOverview() 로 전체를 본다.
+ */
+export async function listWorkerOverviewForTester(userSub: string): Promise<WorkerOverview> {
+  const testerId = await getTesterId(userSub)
+  if (!testerId) {
+    throw new Error('로그인 계정에 연결된 시험자가 없습니다. 관리자에게 시험자 연결을 요청하세요.')
+  }
+  return listWorkerOverview(testerId)
+}
+
+/**
+ * 작업자(시험자)별 작업 현황 집계. 기존 테이블만 읽어 JS에서 집계한다.
  *  - testers       : 활성 시험자 목록
  *  - qc_jobs       : 시험자별 작업(진행중/검토중/지연/완료)
  *  - qc_job_items  : 작업별 항목 진행률(완료/전체)
  *  - pct_orders    : 작업 메타(품목·제조번호·완료예정·긴급) + 시작 대기 오더
+ *
+ * viewerTesterId 를 주면 시험자 시점으로 좁힌다.
+ *   - 본인 행    : 전체 현황
+ *   - 상대 행    : **나와 함께 배정된 2인 오더에 한정된** 현황
+ *   - 그 외 시험자는 목록에서 빠지고, 상단 지표도 남은 행들로만 계산된다.
+ * 좁히기는 집계 루프 안에서 하고 나중에 걸러내지 않는다 — 나중에 거르면 지표가 이미
+ * 전체를 세어 버려서, 화면에는 안 보이는 남의 작업이 숫자에만 남는다.
  */
-export async function listWorkerOverview(): Promise<WorkerOverview> {
+export async function listWorkerOverview(viewerTesterId: string | null = null): Promise<WorkerOverview> {
   const today = kstToday()
 
   // 1) 시험자
@@ -540,6 +597,30 @@ export async function listWorkerOverview(): Promise<WorkerOverview> {
   const orderById = new Map<string, Record<string, unknown>>()
   for (const o of orderRows) orderById.set(o.id as string, o)
 
+  // 3-1) 시험자 시점이면 "내가 낀 2인 오더"와 그 상대를 먼저 추린다.
+  //      상대 행은 이 오더들에 한정해서만 채운다.
+  const sharedOrderIds = new Set<string>()
+  const partnerTesterIds = new Set<string>()
+  if (viewerTesterId) {
+    for (const o of orderRows) {
+      if (!o.is_dual_assignment) continue
+      const slot1 = o.assignee_tester_id as string | null
+      const slot2 = o.assignee_tester_id_2 as string | null
+      if (slot1 !== viewerTesterId && slot2 !== viewerTesterId) continue
+      sharedOrderIds.add(o.id as string)
+      const partner: string | null = slot1 === viewerTesterId ? slot2 : slot1
+      // 같은 사람이 두 슬롯에 들어간 오더는 상대가 없는 것과 같다
+      if (partner && partner !== viewerTesterId) partnerTesterIds.add(partner)
+    }
+  }
+
+  /** 이 (시험자, 오더) 조합을 지금 보는 사람에게 보여도 되는가 */
+  const visible = (testerId: string, orderId: string): boolean => {
+    if (!viewerTesterId) return true                 // 관리자 — 전체
+    if (testerId === viewerTesterId) return true     // 본인 — 전부
+    return partnerTesterIds.has(testerId) && sharedOrderIds.has(orderId)
+  }
+
   // 4) 작업 항목 진행률 (완료/전체)
   const jobIds = jobRows.map(j => j.id as string)
   const itemAgg = new Map<string, { total: number; cleared: number }>()
@@ -560,11 +641,16 @@ export async function listWorkerOverview(): Promise<WorkerOverview> {
   // 시험자별 빈 행 초기화
   const rowByTester = new Map<string, WorkerOverviewRow>()
   for (const t of testers) {
-    rowByTester.set(t.id as string, {
-      testerId: t.id as string,
+    const tid = t.id as string
+    // 시험자 시점에서는 본인과 2인 배정 상대만 행을 만든다.
+    if (viewerTesterId && tid !== viewerTesterId && !partnerTesterIds.has(tid)) continue
+    rowByTester.set(tid, {
+      testerId: tid,
       name: t.name as string,
       employeeNo: t.employee_no as string,
       isActive: !!t.is_active,
+      isSelf: viewerTesterId ? tid === viewerTesterId : false,
+      isPartner: viewerTesterId ? partnerTesterIds.has(tid) : false,
       pendingCount: 0,
       inProgress: 0,
       reviewing: 0,
@@ -587,6 +673,9 @@ export async function listWorkerOverview(): Promise<WorkerOverview> {
     const testerId = j.assignee_tester_id as string | null
     if (testerId) startedByTesterOrder.add(`${j.order_id as string}::${testerId}`)
     if (!testerId) continue
+    // startedByTesterOrder 는 가드보다 먼저 채운다 — 시험자 시점에서 상대가 이미 시작한
+    // 작업을 놓치면 그 몫이 아래 '시작 대기'로 다시 잡혀 한 건이 두 번 보인다.
+    if (!visible(testerId, j.order_id as string)) continue
     const row = rowByTester.get(testerId)
     if (!row) continue
 
@@ -632,6 +721,7 @@ export async function listWorkerOverview(): Promise<WorkerOverview> {
     if (o.is_dual_assignment) slotTesterIds.push(o.assignee_tester_id_2 as string | null)
     for (const [idx, testerId] of slotTesterIds.entries()) {
       if (!testerId) continue
+      if (!visible(testerId, orderId)) continue
       if (startedByTesterOrder.has(`${orderId}::${testerId}`)) continue
       if (o.is_dual_assignment) {
         // 스냅샷이 아직 없어 카운트를 모르면(맵에 없음) 예전처럼 센다 — 안전한 쪽.
@@ -663,6 +753,8 @@ export async function listWorkerOverview(): Promise<WorkerOverview> {
 
   // 작업량 많은 순(진행중→대기) 정렬, 활성 시험자 우선
   const workers = [...rowByTester.values()].sort((a, b) => {
+    // 본인 화면은 "내 현황"이 먼저다. 작업량 순으로 두면 상대가 더 바쁠 때 내가 밀린다.
+    if (a.isSelf !== b.isSelf) return a.isSelf ? -1 : 1
     if (a.isActive !== b.isActive) return a.isActive ? -1 : 1
     const aLoad = a.activeJobs.length + a.pendingCount
     const bLoad = b.activeJobs.length + b.pendingCount
@@ -679,7 +771,7 @@ export async function listWorkerOverview(): Promise<WorkerOverview> {
     completedTotal: workers.reduce((s, w) => s + w.completedTotal, 0),
   }
 
-  return { totals, workers }
+  return { totals, workers, scope: viewerTesterId ? 'tester' : 'admin' }
 }
 
 /** 작업 시작 — 장비 준비상태 검증 + QC번호 채번 + 항목 체크리스트 생성 + 오더 상태 진행중 + 알림 */

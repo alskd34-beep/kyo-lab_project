@@ -23,6 +23,8 @@ interface Overview {
     delayed: number; completedToday: number; completedTotal: number
   }
   workers: WorkerRow[]
+  /** 'admin' = 전체 시험자, 'tester' = 본인 + 2인 배정 상대(공유 오더 한정) */
+  scope?: "admin" | "tester"
 }
 
 /** 보기 모드 — 진행 중심(작업 있는 인원/전체) 과 완료 이력을 분리한다. */
@@ -86,7 +88,8 @@ export default function ProdStatusPage() {
     try {
       const res = await fetch("/api/qc-jobs/overview", { credentials: "include" })
       if (!res.ok) {
-        if (res.status === 403) throw new Error("관리자만 볼 수 있는 화면입니다.")
+        // 시험자도 본인 현황을 보므로 더 이상 "관리자 전용"이 아니다.
+        // 서버가 돌려준 사유(시험자 미연결 등)를 그대로 보여준다.
         throw new Error((await res.json().catch(() => ({}))).error ?? "불러오기 실패")
       }
       setData((await res.json()) as Overview)
@@ -122,9 +125,11 @@ export default function ProdStatusPage() {
   )
 
   const workers = useMemo(() => {
-    let rows = (data?.workers ?? []).filter(w => w.isActive)
-    if (view === "working") rows = rows.filter(w => (w.activeJobs?.length ?? 0) > 0 || w.pendingCount > 0)
-    if (view === "completed") rows = rows.filter(w => (completedByTester.get(w.testerId)?.length ?? 0) > 0)
+    // 본인 행은 어떤 필터에서도 빼지 않는다. 시험자 화면의 목적이 "내 현황"이라,
+    // 오늘 할 일이 없다는 이유로 내가 목록에서 사라지면 화면이 고장난 것처럼 보인다.
+    let rows = (data?.workers ?? []).filter(w => w.isActive || w.isSelf)
+    if (view === "working") rows = rows.filter(w => w.isSelf || (w.activeJobs?.length ?? 0) > 0 || w.pendingCount > 0)
+    if (view === "completed") rows = rows.filter(w => w.isSelf || (completedByTester.get(w.testerId)?.length ?? 0) > 0)
     if (search.trim()) {
       const q = search.trim()
       rows = rows.filter(w => w.name.includes(q) || w.employeeNo.includes(q))
@@ -144,28 +149,40 @@ export default function ProdStatusPage() {
 
   const selectedWorker = workers.find(w => w.testerId === selectedTesterId) ?? workers[0]
 
+  /** 시험자 시점 — 본인과 2인 배정 상대만 담긴 응답이다 */
+  const isTesterScope = data?.scope === "tester"
+  const partnerCount = (data?.workers ?? []).filter(w => w.isPartner).length
+  /** 시험자 시점의 지표는 **본인 숫자**여야 한다. 상대의 공유 작업까지 합치면
+      "내 진행은 1건인데 지표는 2건" 이 되어 화면이 자기 얘기를 하지 않는다. */
+  const selfRow = (data?.workers ?? []).find(w => w.isSelf) ?? null
+  const selfCompletedToday =
+    (selfRow?.completedJobs ?? []).filter(j => j.workEndDate === daysAgo(0)).length
+
   /** 진행 중 작업들의 시험항목 소화율 — '진행 중 작업' 카드의 막대 */
   const itemProgress = useMemo(() => {
+    // 시험자 시점에서는 본인 작업만 센다(지표는 본인 얘기여야 한다).
+    const rows = isTesterScope ? (selfRow ? [selfRow] : []) : (data?.workers ?? [])
     let total = 0, cleared = 0
-    for (const w of data?.workers ?? []) {
+    for (const w of rows) {
       for (const j of w.activeJobs ?? []) { total += j.itemsTotal; cleared += j.itemsCleared }
     }
     return { total, cleared, pct: total > 0 ? Math.round((cleared / total) * 100) : 0 }
-  }, [data])
+  }, [data, isTesterScope, selfRow])
 
   const totals = data?.totals
 
   /** 조회 옵션 막대에 남길 한 줄 — 어떤 보기로 몇 명을 보고 있는지 */
   const filterSummary = [
     VIEW_TABS.find(t => t.key === view)?.label ?? "",
-    `작업자 ${workers.length}명`,
+    isTesterScope ? (partnerCount > 0 ? `나 + 상대 ${partnerCount}명` : "내 작업") : `작업자 ${workers.length}명`,
     view === "completed" ? `완료 ${completedShown}건` : null,
     search.trim() ? `"${search.trim()}"` : null,
   ].filter(Boolean).join(" · ")
 
   /** 지표 요약 막대 — 네 칸 중 먼저 봐야 할 값 셋만 남긴다 */
-  const kpiSummary =
-    `작업 중 ${totals?.workingTesters ?? 0}명 · 진행 ${totals?.activeJobs ?? 0}건 · 지연 ${totals?.delayed ?? 0}건`
+  const kpiSummary = isTesterScope
+    ? `내 진행 ${selfRow?.activeJobs.length ?? 0}건 · 대기 ${selfRow?.pendingCount ?? 0}건 · 지연 ${selfRow?.delayed ?? 0}건`
+    : `작업 중 ${totals?.workingTesters ?? 0}명 · 진행 ${totals?.activeJobs ?? 0}건 · 지연 ${totals?.delayed ?? 0}건`
 
   /** onClick 이 있는 카드는 눌러서 해당 보기로 바로 넘어간다. */
   const kpiCards: Array<{
@@ -173,11 +190,21 @@ export default function ProdStatusPage() {
     foot?: React.ReactNode; onClick?: () => void; hint?: string
   }> = [
     {
-      label: "작업 중 인원", value: totals?.workingTesters ?? 0, valueCls: "text-foreground", icon: Users,
-      foot: <span className="text-xs leading-normal break-keep tabular-nums text-muted-foreground">전체 {data?.workers.filter(w => w.isActive).length ?? 0}명 중</span>,
+      label: isTesterScope ? "함께 작업" : "작업 중 인원",
+      value: isTesterScope ? partnerCount : (totals?.workingTesters ?? 0),
+      valueCls: "text-foreground", icon: Users,
+      foot: (
+        <span className="text-xs leading-normal break-keep tabular-nums text-muted-foreground">
+          {isTesterScope
+            ? "2인 배정 상대"
+            : `전체 ${data?.workers.filter(w => w.isActive).length ?? 0}명 중`}
+        </span>
+      ),
     },
     {
-      label: "진행 중 작업", value: totals?.activeJobs ?? 0, valueCls: "text-blue-700 dark:text-blue-300", icon: ClipboardList,
+      label: isTesterScope ? "내 진행 작업" : "진행 중 작업",
+      value: isTesterScope ? (selfRow?.activeJobs.length ?? 0) : (totals?.activeJobs ?? 0),
+      valueCls: "text-blue-700 dark:text-blue-300", icon: ClipboardList,
       foot: itemProgress.total > 0 ? (
         /* 좁은 칸에서 막대와 글자가 한 줄에 안 들어가면 아랫줄로 접힌다 */
         <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
@@ -191,13 +218,21 @@ export default function ProdStatusPage() {
       ) : undefined,
     },
     {
-      label: "지연 작업", value: totals?.delayed ?? 0, valueCls: (totals?.delayed ?? 0) > 0 ? "text-destructive" : "text-foreground",
+      label: isTesterScope ? "내 지연 작업" : "지연 작업",
+      value: isTesterScope ? (selfRow?.delayed ?? 0) : (totals?.delayed ?? 0),
+      valueCls: (isTesterScope ? (selfRow?.delayed ?? 0) : (totals?.delayed ?? 0)) > 0 ? "text-destructive" : "text-foreground",
       icon: TriangleAlert,
       foot: <span className="text-xs leading-normal break-keep text-muted-foreground">완료예정일 경과</span>,
     },
     {
-      label: "완료 작업", value: totals?.completedToday ?? 0, valueCls: "text-blue-800 dark:text-blue-200", icon: CheckCircle2,
-      foot: <span className="text-xs leading-normal break-keep tabular-nums text-muted-foreground">오늘 · 누적 {totals?.completedTotal ?? 0}건</span>,
+      label: isTesterScope ? "내 완료 작업" : "완료 작업",
+      value: isTesterScope ? selfCompletedToday : (totals?.completedToday ?? 0),
+      valueCls: "text-blue-800 dark:text-blue-200", icon: CheckCircle2,
+      foot: (
+        <span className="text-xs leading-normal break-keep tabular-nums text-muted-foreground">
+          오늘 · 누적 {(isTesterScope ? selfRow?.completedTotal : totals?.completedTotal) ?? 0}건
+        </span>
+      ),
       onClick: () => { setView("completed"); setCompletedRange("today") },
       hint: "클릭하면 오늘 완료한 작업 목록으로 이동합니다",
     },
@@ -208,11 +243,15 @@ export default function ProdStatusPage() {
       {/* 머리말 — 지표 아래에 있던 화면 제목을 맨 위로 올렸다. 무엇을 보는 화면인지가
           숫자보다 먼저 읽혀야 한다. 제목 옆 배지(인원수·완료건수)는 잔글씨 한 줄로 합쳤다. */}
       <header className="flex min-w-0 shrink-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <h1 className="text-lg font-semibold text-foreground">작업자 작업 현황</h1>
+        <h1 className="text-lg font-semibold text-foreground">
+          {isTesterScope ? "내 작업 현황" : "작업자 작업 현황"}
+        </h1>
         {/* 부제 — 모바일에서는 접는다. 건수는 아래 조회 옵션 막대가 한 줄로 이미 말하고,
             "작업자를 고르면 …" 안내문은 375px 에서 두 줄을 먹으며 목록을 밀어냈다. */}
         <p className="hidden text-xs leading-normal break-keep text-muted-foreground sm:block">
-          작업자 <span className="font-semibold tabular-nums text-foreground">{workers.length}</span>명
+          {isTesterScope
+            ? <>2인 배정 상대 <span className="font-semibold tabular-nums text-foreground">{partnerCount}</span>명</>
+            : <>작업자 <span className="font-semibold tabular-nums text-foreground">{workers.length}</span>명</>}
           {view === "completed" && (
             <>
               <span className="px-1 text-border">·</span>
@@ -220,9 +259,13 @@ export default function ProdStatusPage() {
             </>
           )}
           <span className="px-1 text-border">·</span>
-          {view === "completed"
-            ? "승인완료된 작업을 작업자·기간별로 봅니다 (작업자당 최근 50건까지)"
-            : "작업자를 고르면 보유 작업이 지금 서 있는 단계 위에 표시됩니다"}
+          {isTesterScope
+            ? (partnerCount > 0
+                ? "본인 현황과, 2인 배정으로 함께 맡은 상대의 해당 작업만 표시됩니다"
+                : "본인 현황입니다. 2인 배정 작업이 생기면 상대 현황도 함께 표시됩니다")
+            : view === "completed"
+              ? "승인완료된 작업을 작업자·기간별로 봅니다 (작업자당 최근 50건까지)"
+              : "작업자를 고르면 보유 작업이 지금 서 있는 단계 위에 표시됩니다"}
         </p>
       </header>
 
@@ -307,16 +350,19 @@ export default function ProdStatusPage() {
             </div>
           )}
 
-          <div className="relative w-full sm:ml-auto sm:w-72">
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="작업자명, 사번 검색..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="h-9 pl-9"
-            />
-          </div>
-          <Button variant="outline" onClick={() => void load()} disabled={loading} className="w-full sm:w-auto">
+          {/* 시험자 시점에는 본인과 상대 몇 명뿐이라 검색이 자리만 차지한다 */}
+          {!isTesterScope && (
+            <div className="relative w-full sm:ml-auto sm:w-72">
+              <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="작업자명, 사번 검색..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="h-9 pl-9"
+              />
+            </div>
+          )}
+          <Button variant="outline" onClick={() => void load()} disabled={loading} className={cn("w-full sm:w-auto", isTesterScope && "sm:ml-auto")}>
             <RefreshCw className={cn(loading && "animate-spin")} />새로고침
           </Button>
         </div>
@@ -326,7 +372,6 @@ export default function ProdStatusPage() {
         <Card className="shrink-0 items-center gap-1 border-amber-200 bg-amber-50 py-8 text-center dark:border-amber-800 dark:bg-amber-950">
           <TriangleAlert className="mb-1 size-6 text-amber-500" />
           <p className="text-sm font-semibold break-keep text-amber-800 dark:text-amber-200">{error}</p>
-          {!isAdmin && <p className="text-xs leading-normal break-keep text-amber-700 dark:text-amber-300">관리자 계정으로 로그인하세요.</p>}
         </Card>
       )}
 
@@ -348,11 +393,13 @@ export default function ProdStatusPage() {
         </div>
       ) : !error && workers.length === 0 ? (
         <p className="py-16 text-center text-sm break-keep text-muted-foreground">
-          {view === "working"
-            ? "진행 중이거나 대기 중인 작업이 있는 작업자가 없습니다."
-            : view === "completed"
-              ? "선택한 기간에 완료된 작업이 없습니다. 기간을 넓혀 보세요."
-              : "작업자가 없습니다."}
+          {isTesterScope
+            ? "표시할 작업이 없습니다. 배정된 작업이 생기면 여기에 나타납니다."
+            : view === "working"
+              ? "진행 중이거나 대기 중인 작업이 있는 작업자가 없습니다."
+              : view === "completed"
+                ? "선택한 기간에 완료된 작업이 없습니다. 기간을 넓혀 보세요."
+                : "작업자가 없습니다."}
         </p>
       ) : !error ? (
         /* 모바일은 위아래 2행(작업자 띠 + 레일). 레일 행에 minmax(0,1fr) 을 줘야
@@ -379,7 +426,16 @@ export default function ProdStatusPage() {
                   <TesterAvatar testerId={w.testerId} name={w.name} size="md" />
                   {/* 이름과 사번을 같은 크기로 붙여 놓으면 위계가 없다 — 이름을 주 값으로 올린다 */}
                   <div className="min-w-0">
-                    <span className="block truncate text-sm font-medium text-foreground">{w.name}</span>
+                    <span className="flex min-w-0 items-center gap-1">
+                      <span className="min-w-0 truncate text-sm font-medium text-foreground">{w.name}</span>
+                      {/* 상대 행은 "함께 맡은 오더만" 담고 있다 — 전체 업무로 오해하지 않게 이름 옆에 밝힌다 */}
+                      {w.isSelf && (
+                        <span className="shrink-0 rounded-md border border-blue-200 bg-blue-50 px-1 text-xs leading-normal font-semibold text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300">나</span>
+                      )}
+                      {w.isPartner && (
+                        <span className="shrink-0 rounded-md border px-1 text-xs leading-normal font-medium text-muted-foreground">2인</span>
+                      )}
+                    </span>
                     <span className="block truncate font-mono text-xs leading-normal tabular-nums text-muted-foreground">
                       {w.employeeNo}
                     </span>
@@ -392,6 +448,13 @@ export default function ProdStatusPage() {
               최소 폭을 강제하던 임시 방편은 걷어냈다. overflow-x-auto 는 md 근처에서
               레일이 빠듯할 때를 대비해 남겨 둔다(밀려도 이 상자 안에서만). */}
           <div className="min-h-0 min-w-0 overflow-x-auto overflow-y-auto">
+            {/* 상대 행을 열었을 때 이 목록이 상대의 전부가 아님을 밝힌다.
+                밝히지 않으면 "저 사람 일이 이것뿐인가" 로 읽힌다. */}
+            {selectedWorker?.isPartner && (
+              <p className="mb-2 rounded-md border border-dashed bg-muted/40 px-3 py-2 text-xs leading-normal break-keep text-muted-foreground">
+                2인 배정으로 <span className="font-medium text-foreground">함께 맡은 작업</span>만 표시됩니다. {selectedWorker.name} 님의 다른 업무는 포함되지 않습니다.
+              </p>
+            )}
             {selectedWorker && (
               <WorkerStageLane
                 worker={selectedWorker}
