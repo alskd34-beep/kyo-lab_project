@@ -32,11 +32,13 @@ interface JobItemsSnapshot {
   status: string
   workStartDate: string | null
   workEndDate: string | null
-  currentItemId: string | null
+  /** 시험자가 [시작]을 눌러 진행 중인 항목 id 목록 (병행 시험이라 여럿일 수 있다) */
+  currentItemIds: string[]
   items: Array<{
     id: string
     testItemName: string
     status: string
+    startedAt: string | null
     clearedAt: string | null
     elapsedMinutes: number | null
   }>
@@ -235,7 +237,7 @@ export function TestDetailDrawer({
                 <ul className="mt-3 flex flex-col gap-1.5">
                   {items.map((it, idx) => {
                     const done = it.status === "cleared"
-                    const isCurrent = testing && it.id === detail?.currentItemId
+                    const isCurrent = testing && (detail?.currentItemIds ?? []).includes(it.id)
                     return (
                       <li
                         key={it.id}

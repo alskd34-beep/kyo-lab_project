@@ -36,6 +36,28 @@ export const DELETED_STATUS = '삭제'
  */
 export const UNASSIGNED_LABEL = '미배정'
 
+// ─── 시험항목 상태 (qc_job_items.status) ─────────────────────────────────────
+/**
+ * 작업(qc_jobs)의 단계와 달리 항목 상태는 DB에 영문으로 저장된다(0010 부터).
+ *
+ * 시험자는 순번대로 시험하지 않는다 — 오래 걸리는 항목을 걸어두고 다른 항목을
+ * 병행한다. 그래서 `in_progress` 는 **동시에 여러 건일 수 있고**, 어떤 항목이
+ * 진행 중인지는 추론하지 않고 시험자가 [시작] 으로 직접 정한다.
+ */
+export const ITEM_PENDING = 'pending'
+export const ITEM_IN_PROGRESS = 'in_progress'
+export const ITEM_CLEARED = 'cleared'
+
+export const JOB_ITEM_STATUSES = [ITEM_PENDING, ITEM_IN_PROGRESS, ITEM_CLEARED] as const
+export type JobItemStatus = (typeof JOB_ITEM_STATUSES)[number]
+
+/** 항목 상태 → 화면 라벨 */
+export const ITEM_STATUS_LABEL: Record<JobItemStatus, string> = {
+  pending: '대기',
+  in_progress: '진행 중',
+  cleared: '완료',
+}
+
 /** 작업(qc_jobs)에 올 수 있는 모든 상태 */
 export const JOB_STATUSES: readonly string[] = [...JOB_STAGES, DELAYED_STATUS]
 /** 오더(pct_orders)에 올 수 있는 모든 상태 */

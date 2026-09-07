@@ -132,13 +132,15 @@ Google Sheet 행 읽기 (googleSheet.ts)
 본인 배정 qc_jobs 조회 (대기 / 진행중 / 종료 3단)
   ▼ 시작 전 장비 준비상태 검증 — getStartReadiness
   │   (필요 장비의 검교정 유효성·가용성 확인 → 부적합 시 시작 차단/경고)
-  ▼ [항목 시작] qc_job_items 진행중
-  ▼ [항목 완료] cleared_at·elapsed_minutes 기록
-  ▼ 모든 항목 완료 → 잡 상태: 진행중 → 검토중 → 완료
+  ▼ [항목 시작] qc_job_items.status='in_progress' + started_at 기록
+  │   (순번 강제 없음 — 시험자가 시작할 항목을 직접 고르고, 동시에 여러 항목을 걸 수 있다)
+  ▼ [항목 완료] cleared_at·elapsed_minutes(항목 실소요)·elapsed_total_minutes(작업 시작 누적) 기록
+  ▼ 모든 항목 완료 → 잡 상태: 진행중 → 검토전 → 검토중 → 승인전 → 승인완료
   ▼ 상태 변경 시 알림 적재
 ```
 
 - 장비 가용성은 장비 예약(§6)·장비 마스터(검교정일/status)와 연동.
+- 시험 순서는 시험자가 정한다. 관리자 화면의 "진행 중"은 추론이 아니라 시험자가 [시작]을 누른 항목이며(`getJobDetail.currentItemIds`), 아무것도 시작하지 않은 상태도 정상이다. 근거 `0040_qc_job_item_start.sql`.
 
 ---
 

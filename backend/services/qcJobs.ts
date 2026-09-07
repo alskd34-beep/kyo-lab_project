@@ -26,6 +26,9 @@ import {
   DELAYED_STATUS,
   DELETED_STATUS,
   IN_PROGRESS_STATUS,
+  ITEM_CLEARED,
+  ITEM_IN_PROGRESS,
+  ITEM_PENDING,
   JOB_STAGES,
   JOB_STATUSES,
   NEXT_STAGE,
@@ -42,9 +45,12 @@ export interface JobItemRow {
   id: string
   testItemName: string
   sequenceOrder: number
+  /** 'pending' | 'in_progress' | 'cleared' */
   status: string
+  /** 시험자가 이 항목을 시작한 시각. null = 미시작(또는 0040 이전에 완료된 옛 항목) */
+  startedAt: string | null
   clearedAt: string | null
-  /** 직전 항목 완료(첫 항목은 작업 시작) 이후 구간 소요 분 — 통계·평가 기준 */
+  /** 이 항목의 실소요 분(시작→완료). 옛 항목은 직전 항목 완료 이후 구간 — 통계·평가 기준 */
   elapsedMinutes: number | null
   /** 작업 시작부터 이 항목 완료까지 누적 소요 분 — 작업 화면 표시 기준 */
   elapsedTotalMinutes: number | null
@@ -227,7 +233,7 @@ export async function listWorkspace(userSub: string): Promise<{ testerLinked: bo
   if (jobIds.length > 0) {
     const { data: items } = await supabaseAdmin
       .from('qc_job_items')
-      .select('id, qc_job_id, test_item_name, sequence_order, status, cleared_at, elapsed_minutes, elapsed_total_minutes')
+      .select('id, qc_job_id, test_item_name, sequence_order, status, started_at, cleared_at, elapsed_minutes, elapsed_total_minutes')
       .in('qc_job_id', jobIds)
       .order('sequence_order', { ascending: true })
     for (const it of items ?? []) {
@@ -237,6 +243,7 @@ export async function listWorkspace(userSub: string): Promise<{ testerLinked: bo
         testItemName: it.test_item_name as string,
         sequenceOrder: it.sequence_order as number,
         status: it.status as string,
+        startedAt: (it.started_at as string) ?? null,
         clearedAt: (it.cleared_at as string) ?? null,
         elapsedMinutes: (it.elapsed_minutes as number) ?? null,
         elapsedTotalMinutes: (it.elapsed_total_minutes as number) ?? null,
@@ -396,9 +403,11 @@ export interface JobDetail {
   testerName: string | null
   testerEmployeeNo: string | null
   items: JobItemRow[]
-  /** 현재 수행 중으로 간주되는 항목 id (미완료 중 sequence_order 최소). 작업이 활성 상태가 아니면 null */
+  /** 시험자가 [시작]을 눌러 진행 중인 항목 id 목록 (병행 시험이므로 여럿일 수 있다) */
+  currentItemIds: string[]
+  /** 위 목록의 첫 항목 — "지금 무엇을 하는가"를 한 줄로 보여주는 요약용. 없으면 null */
   currentItemId: string | null
-  /** 현재 항목을 시작한 시각 = 직전 클리어 시각 ?? 작업 시작 시각 (clearItem 의 구간 소요시간 기준과 동일) */
+  /** currentItemId 항목의 시작 시각 */
   currentItemStartedAt: string | null
   /** 관리자가 버튼으로 넘길 수 있는 다음 단계. 없으면 null */
   nextStage: string | null
@@ -411,9 +420,10 @@ export interface JobDetail {
 /**
  * 작업 상세 조회 — 어떤 시험항목을 수행 중인지 확인용 (관리자 작업현황 화면).
  *
- * qc_job_items 에는 'pending' | 'cleared' 두 상태만 있고 항목별 "진행중" 플래그가 없다.
- * clearItem 이 직전 cleared_at 을 기준으로 경과시간을 적재하는 순차 처리 모델이므로,
- * 미완료 항목 중 sequence_order 가 가장 작은 항목을 현재 수행 항목으로 간주한다.
+ * 예전에는 "미완료 항목 중 sequence_order 가 가장 작은 것"을 진행 중으로 추론했다.
+ * 그래서 1번을 완료하면 2번이 저절로 진행 중이 되었는데, 시험자는 순번대로 시험하지
+ * 않는다. 0040 부터 항목이 'in_progress' 상태와 started_at 을 직접 갖는다 — 추론하지
+ * 않고 시험자가 [시작]으로 정한 것만 진행 중으로 본다(병행이라 여럿일 수 있다).
  */
 export async function getJobDetail(jobId: string): Promise<JobDetail | null> {
   const { data: job } = await supabaseAdmin
@@ -434,7 +444,7 @@ export async function getJobDetail(jobId: string): Promise<JobDetail | null> {
       : Promise.resolve({ data: null }),
     supabaseAdmin
       .from('qc_job_items')
-      .select('id, test_item_name, sequence_order, status, cleared_at, elapsed_minutes, elapsed_total_minutes')
+      .select('id, test_item_name, sequence_order, status, started_at, cleared_at, elapsed_minutes, elapsed_total_minutes')
       .eq('qc_job_id', jobId)
       .order('sequence_order', { ascending: true }),
   ])
@@ -447,6 +457,7 @@ export async function getJobDetail(jobId: string): Promise<JobDetail | null> {
     testItemName: it.test_item_name as string,
     sequenceOrder: it.sequence_order as number,
     status: it.status as string,
+    startedAt: (it.started_at as string) ?? null,
     clearedAt: (it.cleared_at as string) ?? null,
     elapsedMinutes: (it.elapsed_minutes as number) ?? null,
     elapsedTotalMinutes: (it.elapsed_total_minutes as number) ?? null,
@@ -456,16 +467,10 @@ export async function getJobDetail(jobId: string): Promise<JobDetail | null> {
   // "현재 수행 중인 항목"은 아직 시험을 하고 있는 단계에서만 의미가 있다.
   // 검토전 이후 단계는 시험이 끝난 상태라 현재 항목을 표시하지 않는다.
   const testing = status === IN_PROGRESS_STATUS || status === DELAYED_STATUS
-  const current = testing
-    ? items.find(i => i.status !== 'cleared') ?? null
-    : null
-
-  // 직전 클리어 시각(가장 늦은 cleared_at) — 없으면 작업 시작 시각
-  const lastClearedAt = items
-    .filter(i => i.clearedAt)
-    .map(i => i.clearedAt as string)
-    .sort()
-    .at(-1) ?? null
+  const running = testing ? items.filter(i => i.status === ITEM_IN_PROGRESS) : []
+  // 요약 줄에는 가장 먼저 시작한 항목을 세운다 — 여러 개를 걸어둔 시험자의 화면에서
+  // 순번이 아니라 "가장 오래 돌고 있는 것"이 먼저 눈에 들어와야 한다.
+  const current = [...running].sort((a, b) => (a.startedAt ?? '').localeCompare(b.startedAt ?? ''))[0] ?? null
 
   // 0030 이전 작업은 work_started_at 이 비어 있어 created_at 으로 대체
   const workStartedAt = (job.work_started_at as string) ?? (job.created_at as string) ?? null
@@ -488,8 +493,9 @@ export async function getJobDetail(jobId: string): Promise<JobDetail | null> {
     testerName: (tester?.name as string) ?? null,
     testerEmployeeNo: (tester?.employee_no as string) ?? null,
     items,
+    currentItemIds: running.map(i => i.id),
     currentItemId: current?.id ?? null,
-    currentItemStartedAt: current ? (lastClearedAt ?? workStartedAt) : null,
+    currentItemStartedAt: current?.startedAt ?? null,
     nextStage: canAdvanceByAdmin(status) ? NEXT_STAGE[status] : null,
     nextStageLabel: canAdvanceByAdmin(status) ? STAGE_ACTION_LABEL[status] : null,
     assigneeUserId: (job.assignee_user_id as string) ?? null,
@@ -546,7 +552,7 @@ export async function listWorkerOverview(): Promise<WorkerOverview> {
       const jid = it.qc_job_id as string
       const agg = itemAgg.get(jid) ?? { total: 0, cleared: 0 }
       agg.total += 1
-      if (it.status === 'cleared') agg.cleared += 1
+      if (it.status === ITEM_CLEARED) agg.cleared += 1
       itemAgg.set(jid, agg)
     }
   }
@@ -960,7 +966,7 @@ async function autoAdvanceToReview(jobId: string): Promise<{ allCleared: boolean
     .from('qc_job_items')
     .select('id', { count: 'exact', head: true })
     .eq('qc_job_id', jobId)
-    .neq('status', 'cleared')
+    .neq('status', ITEM_CLEARED)
   if (cntErr || remaining === null || remaining > 0) return { allCleared: false, statusChangedTo: null }
 
   const target = NEXT_STAGE[IN_PROGRESS_STATUS] ?? REVIEW_READY_STATUS   // '검토전'
@@ -1079,58 +1085,123 @@ export async function advanceJobStage(
   return { from: current, to: target }
 }
 
+/** 항목을 만지기 전 공통 확인 — 소유권 + 시험 단계 여부 + 항목 존재.
+ *
+ *  [원칙2] 검토·승인 단계로 넘어간 작업의 항목은 더 이상 손댈 수 없다.
+ *  예전에는 상태를 보지 않아 '승인완료' 작업에도 cleared_at 을 쓰고 알림까지 보냈다.
+ */
+async function loadItemForEdit(jobId: string, itemId: string, userSub: string) {
+  await assertOwner(jobId, userSub)
+
+  const { data: job } = await supabaseAdmin
+    .from('qc_jobs').select('work_started_at, created_at, order_id, status').eq('id', jobId).single()
+  if (job && !SELF_SERVICE_STATUSES.has(job.status as string)) {
+    throw new Error(`"${job.status}" 단계의 작업은 시험항목을 변경할 수 없습니다.`)
+  }
+
+  const { data: item } = await supabaseAdmin
+    .from('qc_job_items').select('id, test_item_name, status, started_at')
+    .eq('id', itemId).eq('qc_job_id', jobId).maybeSingle()
+  if (!item) throw new Error('시험항목을 찾을 수 없습니다.')
+
+  return { job, item }
+}
+
+/** 시험자가 그 항목의 시작을 누른다 — 'pending' → 'in_progress' + started_at 적재.
+ *
+ *  순번을 강제하지 않는다. 시험자는 장비·시약·시료 상황에 따라 아무 항목이나 먼저
+ *  시작할 수 있고, 오래 걸리는 시험을 걸어둔 채 다른 항목을 함께 시작해도 된다.
+ */
+export async function startItem(
+  jobId: string, itemId: string, userSub: string,
+): Promise<{ startedAt: string }> {
+  const { item } = await loadItemForEdit(jobId, itemId, userSub)
+  if (item.status === ITEM_CLEARED) throw new Error('이미 완료된 시험항목입니다.')
+  // 이미 진행 중이면 시작 시각을 다시 쓰지 않는다 — 두 번 눌러 소요시간이 깎이면 안 된다.
+  if (item.status === ITEM_IN_PROGRESS && item.started_at) {
+    return { startedAt: item.started_at as string }
+  }
+
+  const now = new Date().toISOString()
+  const { error } = await supabaseAdmin
+    .from('qc_job_items')
+    .update({ status: ITEM_IN_PROGRESS, started_at: now })
+    .eq('id', itemId).eq('qc_job_id', jobId)
+  if (error) throw error
+  return { startedAt: now }
+}
+
+/** 시작 취소 — 잘못 누른 항목을 대기로 되돌린다. 시작 시각도 함께 지운다. */
+export async function cancelItemStart(
+  jobId: string, itemId: string, userSub: string,
+): Promise<void> {
+  const { item } = await loadItemForEdit(jobId, itemId, userSub)
+  if (item.status === ITEM_CLEARED) {
+    throw new Error('이미 완료된 시험항목은 시작을 취소할 수 없습니다.')
+  }
+  const { error } = await supabaseAdmin
+    .from('qc_job_items')
+    .update({ status: ITEM_PENDING, started_at: null })
+    .eq('id', itemId).eq('qc_job_id', jobId)
+  if (error) throw error
+}
+
 /** 항목 클리어 — 시간 적재 + 감독관 알림 + 전체 완료 시 '검토전' 자동 전환
  *
  *  소요시간은 두 기준을 함께 적재한다.
  *   - elapsed_total_minutes : 작업 시작 → 이 항목 완료 (작업 화면에 보여주는 값)
- *   - elapsed_minutes       : 직전 항목 완료 → 이 항목 완료 (구간, 통계·평가 기준)
+ *   - elapsed_minutes       : 이 항목 시작 → 완료 (항목 실소요, 통계·평가 기준)
  *  완료 버튼을 눌러도 작업 시작 시각은 움직이지 않으므로 누적값은 항목이 진행될수록 커진다.
+ *
+ *  started_at 이 없는 경우(시작을 누르지 않고 바로 완료했거나 0040 이전 항목)에는
+ *  예전 기준인 '직전 항목 완료 이후 구간' 으로 계산한다 — 병행 시험에서는 부정확하지만
+ *  값이 아예 비는 것보다 낫고, 통계의 과거 데이터와 의미가 이어진다.
  */
 export async function clearItem(
   jobId: string, itemId: string, userSub: string,
 ): Promise<{ allCleared: boolean; statusChangedTo: string | null }> {
-  await assertOwner(jobId, userSub)
+  const { job, item } = await loadItemForEdit(jobId, itemId, userSub)
+  if (item.status === ITEM_CLEARED) throw new Error('이미 완료된 시험항목입니다.')
   const now = new Date()
 
-  const { data: job } = await supabaseAdmin
-    .from('qc_jobs').select('work_started_at, created_at, order_id, status').eq('id', jobId).single()
-
-  // [원칙2] 검토·승인 단계로 넘어간 작업의 항목은 더 이상 클리어할 수 없다.
-  // 예전에는 상태를 보지 않아 '승인완료' 작업에도 cleared_at 을 쓰고 알림까지 보냈다.
-  if (job && !SELF_SERVICE_STATUSES.has(job.status as string)) {
-    throw new Error(`"${job.status}" 단계의 작업은 시험항목을 변경할 수 없습니다.`)
-  }
-  const { data: lastCleared } = await supabaseAdmin
-    .from('qc_job_items').select('cleared_at')
-    .eq('qc_job_id', jobId).eq('status', 'cleared')
-    .order('cleared_at', { ascending: false }).limit(1).maybeSingle()
-
   // 작업 시작 시각 — 0030 이전에 만들어진 작업은 work_started_at 이 비어 있어 created_at 으로 대체
-  const startedAt = new Date(
+  const jobStartedAt = new Date(
     (job?.work_started_at as string) ?? (job?.created_at as string) ?? now.toISOString(),
   )
-  const prevClearedAt = lastCleared?.cleared_at ? new Date(lastCleared.cleared_at as string) : startedAt
-  const minutesSince = (base: Date) => Math.max(0, Math.round((now.getTime() - base.getTime()) / 60000))
-  const elapsedTotal = minutesSince(startedAt)
-  const elapsed = minutesSince(prevClearedAt)
 
-  const { data: item, error } = await supabaseAdmin
+  let itemStartedAt: Date
+  if (item.started_at) {
+    itemStartedAt = new Date(item.started_at as string)
+  } else {
+    const { data: lastCleared } = await supabaseAdmin
+      .from('qc_job_items').select('cleared_at')
+      .eq('qc_job_id', jobId).eq('status', ITEM_CLEARED)
+      .order('cleared_at', { ascending: false }).limit(1).maybeSingle()
+    itemStartedAt = lastCleared?.cleared_at ? new Date(lastCleared.cleared_at as string) : jobStartedAt
+  }
+
+  const minutesSince = (base: Date) => Math.max(0, Math.round((now.getTime() - base.getTime()) / 60000))
+  const elapsedTotal = minutesSince(jobStartedAt)
+  const elapsed = minutesSince(itemStartedAt)
+
+  const { error } = await supabaseAdmin
     .from('qc_job_items')
     .update({
-      status: 'cleared',
+      status: ITEM_CLEARED,
+      // 시작을 누르지 않고 바로 완료한 항목도 시작 시각을 남겨 둔다 — 이후 조회가
+      // started_at 하나만 보면 되도록 기준을 한 곳으로 모은다.
+      started_at: itemStartedAt.toISOString(),
       cleared_at: now.toISOString(),
       elapsed_minutes: elapsed,
       elapsed_total_minutes: elapsedTotal,
     })
     .eq('id', itemId).eq('qc_job_id', jobId)
-    .select('test_item_name')
-    .single()
   if (error) throw error
 
   await createNotification({
     type: 'item_cleared',
     title: '시험항목 완료',
-    body: `시험항목 "${item.test_item_name}" 완료 (작업 시작 후 ${elapsedTotal}분, 구간 ${elapsed}분)`,
+    body: `시험항목 "${item.test_item_name}" 완료 (작업 시작 후 ${elapsedTotal}분, 항목 소요 ${elapsed}분)`,
     relatedOrderId: (job?.order_id as string) ?? null,
     relatedQcJobId: jobId, severity: 'info',
   })

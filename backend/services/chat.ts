@@ -11,7 +11,7 @@
 
 import { randomUUID } from 'crypto'
 import { assignedToTesterFilter } from '@backend/lib/assigneeFilter'
-import { DELETED_STATUS } from '@shared/qc-status'
+import { DELETED_STATUS, ITEM_STATUS_LABEL, type JobItemStatus } from '@shared/qc-status'
 import { supabaseAdmin, supabaseAdmin as supabase } from '@backend/lib/supabase'
 import { runLetsurText } from '@backend/lib/letsurClient'
 import { resolveChatImages } from '@backend/lib/chatUploads'
@@ -442,8 +442,10 @@ async function jobItemsForOrders(orderIds: string[]): Promise<Map<string, JobInf
   return map
 }
 
-const ITEM_STATUS_KO: Record<string, string> = { cleared: '완료', pending: '대기', in_progress: '진행중' }
-function itemStatusKo(s: string): string { return ITEM_STATUS_KO[s] ?? s }
+/** 항목 상태 라벨은 types/qc-status.ts 가 단일 기준이다 — 여기서 따로 적지 않는다. */
+function itemStatusKo(s: string): string {
+  return ITEM_STATUS_LABEL[s as JobItemStatus] ?? s
+}
 
 function formatOrderLine(o: OrderRow, names: Map<string, string>, jobs: Map<string, JobInfo>): string {
   const tester = o.assignee_tester_id ? (names.get(o.assignee_tester_id) ?? '미지정') : '미배정'

@@ -2,9 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react"
 import {
-  Play, CheckCircle2, Circle, Loader2, AlertTriangle, Clock, XCircle, ShieldAlert, ClipboardList,
+  Play, CheckCircle2, Circle, LoaderCircle, Loader2, AlertTriangle, Clock, XCircle, Undo2,
+  ShieldAlert, ClipboardList,
 } from "lucide-react"
-import { ACTIVE_JOB_STATUSES, CLOSED_STAGE, stageStyle } from "@shared/qc-status"
+import {
+  ACTIVE_JOB_STATUSES, CLOSED_STAGE, ITEM_CLEARED, ITEM_IN_PROGRESS, stageStyle,
+} from "@shared/qc-status"
 import { useAuth } from "@frontend/lib/auth-context"
 import { cn } from "@frontend/lib/utils"
 import { Skeleton } from "@frontend/components/ui/skeleton"
@@ -14,12 +17,15 @@ import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
 import { ManagementDrawer } from "@frontend/components/common/management-drawer"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@frontend/components/ui/select"
-import { formatItemElapsed } from "@frontend/lib/elapsed-format"
+import { formatElapsedMinutes, formatItemElapsed } from "@frontend/lib/elapsed-format"
 
 interface JobItem {
   id: string; testItemName: string; sequenceOrder: number
-  status: string; clearedAt: string | null
-  /** 직전 항목 완료 이후 구간 소요 분 */
+  status: string
+  /** 시험자가 이 항목을 시작한 시각. null = 아직 시작 안 함 */
+  startedAt: string | null
+  clearedAt: string | null
+  /** 이 항목의 실소요 분(시작→완료) */
   elapsedMinutes: number | null
   /** 작업 시작부터 이 항목 완료까지 누적 소요 분 */
   elapsedTotalMinutes: number | null
@@ -66,6 +72,11 @@ function dDay(due: string | null): number | null {
   const today = new Date(); today.setHours(0, 0, 0, 0)
   const d = new Date(due); d.setHours(0, 0, 0, 0)
   return Math.round((d.getTime() - today.getTime()) / 86400000)
+}
+
+/** 기준 시각(now) 이후 경과 분. now 를 인자로 받아야 1분 타이머가 다시 그릴 때 값이 따라온다. */
+function minutesSince(iso: string, now: number): number {
+  return Math.max(0, Math.round((now - new Date(iso).getTime()) / 60000))
 }
 
 /** 장비 준비상태 모달 */
@@ -187,6 +198,8 @@ export default function MyTasksPage() {
   const [jobs, setJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
+  // 진행 중 항목의 "N분 경과" 표시용 시계. 1분마다 한 번만 다시 그리면 충분하다.
+  const [nowTick, setNowTick] = useState(() => Date.now())
   const [msg, setMsg] = useState<string | null>(null)
   const [msgType, setMsgType] = useState<"info" | "error">("info")
   // 다중 선택(배정완료·시작 대기) 일괄 실행
@@ -215,6 +228,12 @@ export default function MyTasksPage() {
     } finally { setLoading(false) }
   }, [])
   useEffect(() => { void load() }, [load])
+
+  // 진행 중 항목의 경과시간을 1분마다 갱신한다. 서버를 다시 부르지 않고 시계만 움직인다.
+  useEffect(() => {
+    const t = setInterval(() => setNowTick(Date.now()), 60_000)
+    return () => clearInterval(t)
+  }, [])
 
   // pending 갱신 시(시작 완료 등) 더 이상 없는 항목은 선택에서 제거
   useEffect(() => {
@@ -355,13 +374,19 @@ export default function MyTasksPage() {
   const toggleOne = (id: string) =>
     setSelected(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
 
-  const clearItem = async (jobId: string, itemId: string) => {
+  /**
+   * 시험항목 액션 — 시작 / 시작 취소 / 완료.
+   *
+   * 시험 순서는 시험자가 정한다. 순번대로 강제하지 않으므로 아무 항목이나 시작할 수
+   * 있고, 오래 걸리는 시험을 걸어둔 채 다른 항목을 함께 시작해도 된다.
+   */
+  const itemAction = async (jobId: string, itemId: string, action: "start" | "cancel" | "clear") => {
     setBusy(itemId)
     try {
       const res = await fetch(`/api/qc-jobs/${jobId}/items`, {
         method: "PATCH", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ itemId, action: "clear" }),
+        body: JSON.stringify({ itemId, action }),
       })
       const data = await res.json() as { error?: string; statusChangedTo?: string | null }
       if (!res.ok) throw new Error(data.error)
@@ -684,7 +709,8 @@ export default function MyTasksPage() {
   )
 
   function renderJobCard(job: Job, selectable = false) {
-    const cleared = job.items.filter(i => i.status === "cleared").length
+    const cleared = job.items.filter(i => i.status === ITEM_CLEARED).length
+    const running = job.items.filter(i => i.status === ITEM_IN_PROGRESS).length
     const dd = dDay(job.dueDate)
     const isDone = job.status === CLOSED_STAGE
     return (
@@ -778,13 +804,19 @@ export default function MyTasksPage() {
           {/* 카드 안에 또 카드를 넣지 않는다 — 항목마다 두르던 테두리를 걷고 실선 한 겹으로 나눈다 */}
           <p className="mb-1 text-xs leading-normal font-semibold text-muted-foreground">
             시험항목 진행 <span className="tabular-nums text-foreground">{cleared}/{job.items.length}</span>
+            {running > 0 && (
+              <span className="text-primary"> · 진행 중 <span className="tabular-nums">{running}</span>건</span>
+            )}
           </p>
           {job.items.length === 0 ? (
             <p className="py-2 text-xs leading-normal text-muted-foreground">등록된 시험항목이 없습니다. (품목-시험항목 매핑 확인 필요)</p>
           ) : (
             <ul className="flex flex-col divide-y">
+              {/* 순번은 안내일 뿐 강제가 아니다 — 시험자가 시작할 항목을 직접 고른다. */}
               {job.items.map(it => {
-                const done = it.status === "cleared"
+                const done = it.status === ITEM_CLEARED
+                const started = it.status === ITEM_IN_PROGRESS
+                const itemBusy = busy === it.id
                 return (
                   <li
                     key={it.id}
@@ -794,30 +826,62 @@ export default function MyTasksPage() {
                     <div className="flex min-w-0 items-center gap-2">
                       {done
                         ? <CheckCircle2 size={16} className="shrink-0 text-blue-600 dark:text-blue-300" />
-                        : <Circle size={16} className="shrink-0 text-muted-foreground" />}
-                      <span className={cn("min-w-0 truncate text-sm", done ? "font-medium text-blue-800 dark:text-blue-200" : "text-foreground")}>
+                        : started
+                          ? <LoaderCircle size={16} className="shrink-0 animate-spin text-primary" />
+                          : <Circle size={16} className="shrink-0 text-muted-foreground" />}
+                      <span className={cn(
+                        "min-w-0 truncate text-sm",
+                        done ? "font-medium text-blue-800 dark:text-blue-200"
+                          : started ? "font-semibold text-foreground"
+                          : "text-foreground",
+                      )}>
                         {it.testItemName}
                       </span>
+                      {/* 진행 중 항목은 시작 후 경과시간을 이름 옆에 붙인다 — 여러 건을 걸어둔
+                          시험자가 어느 것이 오래 돌고 있는지 한눈에 보게 한다. */}
+                      {started && it.startedAt && (
+                        <span className="shrink-0 text-xs leading-normal tabular-nums text-primary">
+                          {formatElapsedMinutes(minutesSince(it.startedAt, nowTick))} 경과
+                        </span>
+                      )}
                     </div>
                     {done ? (
                       <span className="shrink-0 text-xs leading-normal tabular-nums text-blue-700 dark:text-blue-300">
                         {it.clearedAt && new Date(it.clearedAt).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
-                        {/* 작업 시작 기준 누적 소요시간 (구간이 다르면 함께 표기) */}
+                        {/* 작업 시작 기준 누적 소요시간 (항목 실소요가 다르면 함께 표기) */}
                         {(() => {
                           const label = formatItemElapsed(it.elapsedTotalMinutes, it.elapsedMinutes)
                           return label && ` · ${label}`
                         })()}
                       </span>
-                    ) : (
-                      !isDone && (
+                    ) : isDone ? null : started ? (
+                      <div className="flex shrink-0 items-center gap-1">
                         <Button
-                          size="sm"
-                          onClick={() => clearItem(job.id, it.id)}
+                          variant="ghost"
+                          size="icon-sm"
+                          title="시작 취소 — 대기로 되돌립니다"
+                          onClick={() => void itemAction(job.id, it.id, "cancel")}
                           disabled={busy !== null}
                         >
-                          {busy === it.id ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}완료
+                          <Undo2 className="size-3.5" />
                         </Button>
-                      )
+                        <Button
+                          size="sm"
+                          onClick={() => void itemAction(job.id, it.id, "clear")}
+                          disabled={busy !== null}
+                        >
+                          {itemBusy ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}완료
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void itemAction(job.id, it.id, "start")}
+                        disabled={busy !== null}
+                      >
+                        {itemBusy ? <Loader2 className="animate-spin" /> : <Play />}시작
+                      </Button>
                     )}
                   </li>
                 )

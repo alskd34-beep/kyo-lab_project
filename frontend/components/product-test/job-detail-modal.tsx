@@ -35,8 +35,11 @@ const IN_PROGRESS_STYLE = stageStyle(IN_PROGRESS_STATUS)
 // ─── Types (백엔드 JobDetail 과 동일) ────────────────────────────────────────
 interface JobItem {
   id: string; testItemName: string; sequenceOrder: number
-  status: string; clearedAt: string | null
-  /** 직전 항목 완료 이후 구간 소요 분 */
+  status: string
+  /** 시험자가 이 항목을 시작한 시각. null = 아직 시작 안 함 */
+  startedAt: string | null
+  clearedAt: string | null
+  /** 이 항목의 실소요 분(시작→완료) */
   elapsedMinutes: number | null
   /** 작업 시작부터 이 항목 완료까지 누적 소요 분 */
   elapsedTotalMinutes: number | null
@@ -49,6 +52,8 @@ export interface JobDetail {
   dueDate: string | null; isUrgent: boolean; method: string | null
   testerName: string | null; testerEmployeeNo: string | null
   items: JobItem[]
+  /** 시험자가 시작한 진행 중 항목 id 목록 (병행 시험이라 여럿일 수 있다) */
+  currentItemIds: string[]
   currentItemId: string | null
   currentItemStartedAt: string | null
   nextStage: string | null
@@ -122,13 +127,11 @@ export function JobDetailModal({
   const total = detail?.items.length ?? 0
   const pct = total > 0 ? Math.round((cleared / total) * 100) : 0
   const statusMeta = detail ? stageStyle(detail.status) : null
-  // 순번은 sequence_order 값(0-based/1-based 혼재 가능)이 아니라 정렬된 배열 위치로 표기한다
-  const currentIdx = detail ? detail.items.findIndex(i => i.id === detail.currentItemId) : -1
-  const currentItem = currentIdx >= 0 ? detail!.items[currentIdx] : null
+  // 시험자가 [시작]을 누른 항목들. 순번으로 추론하지 않으므로 아무것도 안 눌렀으면 빈 목록이다.
+  const runningIds = new Set(detail?.currentItemIds ?? [])
+  const runningItems = detail?.items.filter(i => runningIds.has(i.id)) ?? []
 
   const minutesSince = (iso: string) => Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000))
-  // 현재 항목 경과시간 (직전 클리어 시각 기준)
-  const currentElapsed = detail?.currentItemStartedAt ? minutesSince(detail.currentItemStartedAt) : null
   // 작업 시작 이후 누적 경과시간 — 항목 완료로 초기화되지 않는 기준값
   const jobElapsed = detail?.workStartedAt ? minutesSince(detail.workStartedAt) : null
 
@@ -209,28 +212,35 @@ export function JobDetailModal({
                 />
               )}
 
-              {/* 현재 수행 항목 */}
-              {currentItem ? (
+              {/* 현재 수행 항목 — 시험자가 직접 시작한 것만. 병행 시험이라 여러 건일 수 있다. */}
+              {runningItems.length > 0 ? (
                 <section className="rounded-md border bg-muted/40 p-3">
-                  <p className="flex items-center gap-1.5 text-xs leading-normal font-semibold text-muted-foreground">
-                    <LoaderCircle className="size-3" />
-                    현재 수행 중인 시험항목
-                  </p>
-                  <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-sm font-semibold text-foreground">
-                      {currentItem.testItemName}
+                  <p className="flex flex-wrap items-center justify-between gap-2 text-xs leading-normal font-semibold text-muted-foreground">
+                    <span className="flex items-center gap-1.5">
+                      <LoaderCircle className="size-3" />
+                      진행 중인 시험항목 <span className="tabular-nums">{runningItems.length}</span>건
                     </span>
-                    {(jobElapsed !== null || currentElapsed !== null) && (
-                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    {jobElapsed !== null && (
+                      <span className="flex items-center gap-1 font-normal">
                         <Clock className="size-3" />
-                        {jobElapsed !== null && `작업 시작 후 ${formatElapsedMinutes(jobElapsed)}`}
-                        {jobElapsed !== null && currentElapsed !== null && " · "}
-                        {currentElapsed !== null && `현재 항목 ${formatElapsedMinutes(currentElapsed)}`}
+                        작업 시작 후 {formatElapsedMinutes(jobElapsed)}
                       </span>
                     )}
-                  </div>
+                  </p>
+                  <ul className="mt-1.5 flex flex-col gap-1">
+                    {runningItems.map(it => (
+                      <li key={it.id} className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-sm font-semibold text-foreground">{it.testItemName}</span>
+                        {it.startedAt && (
+                          <span className="text-xs tabular-nums text-muted-foreground">
+                            {formatElapsedMinutes(minutesSince(it.startedAt))} 경과
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
                   <p className="mt-1 text-xs leading-normal text-muted-foreground">
-                    미완료 항목 중 순번이 가장 빠른 항목입니다. ({currentIdx + 1}번째 / 총 {total}개)
+                    시험자가 직접 시작한 항목입니다. (완료 {cleared} / 총 {total}개)
                   </p>
                 </section>
               ) : detail.items.length > 0 && cleared === total ? (
@@ -238,6 +248,14 @@ export function JobDetailModal({
                   <p className="flex items-center gap-1.5 text-sm font-semibold text-blue-800 dark:text-blue-200">
                     <CheckCircle2 className="size-4" />
                     모든 시험항목이 완료되었습니다.
+                  </p>
+                </section>
+              ) : detail.status === IN_PROGRESS_STATUS && detail.items.length > 0 ? (
+                /* 순번으로 추론하지 않으므로 "아직 아무것도 시작 안 함"이 실제로 존재한다.
+                   빈칸으로 두면 화면이 고장난 것처럼 보여 상태를 그대로 적어 준다. */
+                <section className="rounded-md border border-dashed bg-muted/40 p-3">
+                  <p className="text-xs leading-normal text-muted-foreground">
+                    아직 시작한 시험항목이 없습니다. 시험자가 시작할 항목을 직접 고릅니다.
                   </p>
                 </section>
               ) : null}
@@ -270,7 +288,7 @@ export function JobDetailModal({
                 <ul className="flex flex-col gap-1.5">
                   {detail.items.map((it, idx) => {
                     const done = it.status === "cleared"
-                    const isCurrent = it.id === detail.currentItemId
+                    const isCurrent = runningIds.has(it.id)
                     return (
                       <li
                         key={it.id}
