@@ -6,6 +6,7 @@ import {
   generateJti,
 } from '@backend/lib/auth'
 import { buildAuthCookies, clearSessionCookies, REFRESH_COOKIE } from '@backend/lib/auth-cookies'
+import { toAuthUser } from '@backend/lib/authUser'
 import {
   findUserById,
   isRefreshTokenValid,
@@ -53,16 +54,10 @@ export async function POST(req: NextRequest) {
     for (const c of buildAuthCookies(access, refresh)) headers.append('Set-Cookie', c)
 
     return new Response(
-      JSON.stringify({
-        user: {
-          id:          user.id,
-          username:    user.username,
-          displayName: user.displayName,
-          avatarUrl:   user.avatarUrl,
-          role:        user.role,
-          customerNo:  user.customerNo,
-        },
-      }),
+      // ⚠️ 여기서 손으로 조립하지 말 것. auth-context 의 refresh() 는 이 응답으로
+      // user 를 **통째로 교체**하고, 창 포커스마다 돈다. 필드가 하나라도 빠지면 화면이
+      // 그 값에 매달린 UI 를 조용히 잃는다(testerId 누락 → 월간 그리드 [+] 실종).
+      JSON.stringify({ user: await toAuthUser(user) }),
       { status: 200, headers },
     )
   } catch (err) {

@@ -6,6 +6,7 @@ import {
   verifyPassword,
 } from '@backend/lib/auth'
 import { buildAuthCookies } from '@backend/lib/auth-cookies'
+import { toAuthUser } from '@backend/lib/authUser'
 import {
   findUserByUsername,
   storeRefreshToken,
@@ -51,15 +52,9 @@ export async function POST(req: NextRequest) {
     for (const c of buildAuthCookies(access, refresh)) headers.append('Set-Cookie', c)
 
     return new Response(
-      JSON.stringify({
-        user: {
-          id:          user.id,
-          username:    user.username,
-          displayName: user.displayName,
-          avatarUrl:   user.avatarUrl,
-          role:        user.role,
-        },
-      }),
+      // /me · /refresh 와 같은 객체를 내려보낸다 — 로그인 직후에만 testerId 가 비어
+      // 화면이 반쪽으로 뜨는 일이 없도록.
+      JSON.stringify({ user: await toAuthUser(user) }),
       { status: 200, headers },
     )
   } catch (err) {
