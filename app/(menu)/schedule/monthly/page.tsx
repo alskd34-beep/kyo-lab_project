@@ -1,12 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import {
-  fetchPctMonthlyFromServer,
-  clearPctMonthlySnapshot,
-  clearPctMonthlyOnServer,
-  type PctMonthlyAssignment,
-} from '@frontend/lib/pct-schedule-bridge'
+import { clearPctMonthlySnapshot } from '@frontend/lib/pct-schedule-bridge'
 import { Card } from '@frontend/components/ui/card'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@frontend/components/ui/table'
 import { Button } from '@frontend/components/ui/button'
@@ -69,6 +64,7 @@ interface Tester {
   id: number | string
   name: string
   employee_no: string
+  is_active?: boolean
 }
 
 interface MonthlyResponse {
@@ -119,23 +115,9 @@ function dayOfWeek(dateStr: string): number {
 
 const DOW_KOR = ['일', '월', '화', '수', '목', '금', '토']
 
-// 셀 색상 — 여기 색은 장식이 아니라 뜻이다(출처·긴급·듀오). PCT 출처는 점선 테두리 + 앰버 톤.
-// 긴급은 출처와 무관하게 빨강 하나로 둔다 — PCT 여부는 점선 테두리가 이미 말하고 있어
-// rose(다른 빨강)를 하나 더 두면 같은 뜻에 색이 둘이 된다.
+// 셀 색상 — 여기 색은 장식이 아니라 뜻이다(긴급·듀오).
 // 아무 표시도 없는 '예정'은 이 화면의 기본값이라 색을 빼고 중립 톤으로 물러앉힌다.
 function cellStyle(row: ScheduleRow): { bg: string; border: string; label: string } {
-  if (row.source === 'pct') {
-    if (row.is_urgent) return {
-      bg: 'bg-red-200 dark:bg-red-900/60 hover:bg-red-300',
-      border: 'border-red-400 dark:border-red-700 border-dashed',
-      label: 'PCT·긴급',
-    }
-    return {
-      bg: 'bg-amber-200 dark:bg-amber-900/60 hover:bg-amber-300',
-      border: 'border-amber-400 dark:border-amber-700 border-dashed',
-      label: 'PCT',
-    }
-  }
   if (row.is_urgent) return {
     bg: 'bg-red-200 dark:bg-red-900/60 hover:bg-red-300',
     border: 'border-red-300 dark:border-red-800',
@@ -193,25 +175,20 @@ export default function MonthlySchedulePage() {
   const [sideError, setSideError] = useState<string | null>(null)
   const [sideTarget, setSideTarget] = useState<SideWorkDialogTarget | null>(null)
 
-  // PCT 스냅샷 — 서버(DB) 영속본만 읽는다.
-  const [pctSnapshot, setPctSnapshot] = useState<PctMonthlyAssignment[]>([])
-  const [pctGeneratedAt, setPctGeneratedAt] = useState<string | null>(null)
-
+  // PCT 스냅샷 오버레이를 걷어냈다.
+  //
+  // 이 화면이 **사람마다 다르게 보이던** 원인이었다. 서버 영속본이 없으면 그 브라우저의
+  // localStorage 를 읽었고, AI 스케줄을 돌린 관리자 브라우저에만 예전 빌드가 남긴 스냅샷이
+  // 있어서 관리자에게만 행이 얹혔다. 폴백만 막는 것으로는 부족하다 — 브라우저 로컬 상태가
+  // 화면에 닿는 **경로 자체를** 없애야 다시 갈라지지 않는다.
+  //
+  // 스냅샷을 만드는 코드는 이미 전부 사라졌고(save·persist 호출부 0곳), 월간 스케줄의
+  // 정본은 72a38c8 부터 pct_orders + qc_jobs 다. 화면은 서버가 준 것만 그린다.
   useEffect(() => {
-    // localStorage 폴백을 걷어냈다. 그 폴백 때문에 **같은 달을 봐도 사람마다 화면이
-    // 달랐다** — AI 스케줄을 돌린 관리자 브라우저에만 스냅샷이 남아 있어서, 관리자는
-    // 보이는 행을 시험자는 볼 수 없었다. 스냅샷을 만드는 코드는 이미 전부 사라졌고
-    // (savePctMonthlySnapshot·persistPctMonthlyToServer 호출부 0곳) 월간 스케줄의 정본은
-    // pct_orders + qc_jobs 다. 화면은 모두에게 같은 서버 데이터 하나만 본다.
-    let aborted = false
-    void (async () => {
-      const snap = await fetchPctMonthlyFromServer()
-      if (aborted) return
-      setPctSnapshot(snap?.assignments ?? [])
-      setPctGeneratedAt(snap?.generatedAt ?? null)
-    })()
-    return () => { aborted = true }
-  }, [month])
+    // 남아 있는 키를 한 번 청소한다. 읽지 않으니 해는 없지만, 남겨 두면 다음 사람이
+    // "왜 내 브라우저에만 이 데이터가 있지?" 를 다시 추적하게 된다.
+    clearPctMonthlySnapshot()
+  }, [])
 
   useEffect(() => {
     let aborted = false
@@ -230,69 +207,10 @@ export default function MonthlySchedulePage() {
     return () => { aborted = true }
   }, [month])
 
-  // PCT 항목을 ScheduleRow 형태로 변환 (해당 월만)
-  const pctSchedules: ScheduleRow[] = useMemo(() => {
-    const inMonth = (a: PctMonthlyAssignment) =>
-      a.dates && a.dates.length ? a.dates.some(d => d.startsWith(month)) : a.scheduledDate.startsWith(month)
-    return pctSnapshot
-      .filter(inMonth)
-      .map(a => ({
-        id:             `pct-${a.key}`,
-        tester_id:      `pct-${a.testerName}`,
-        batch_id:       `pct-${a.productCode}-${a.batchNo}`,
-        batch_no:       a.batchNo,
-        product_code:   a.productCode,
-        // 개별항목 분산 배정은 [개별] 품목명 - 시험항목명 으로 구분 표기
-        product_name:   a.assignmentType === 'INDIVIDUAL_ITEM' && a.testItemName
-                          ? `[개별] ${a.productName} - ${a.testItemName}`
-                          : a.productName,
-        test_items:     a.testItems,
-        scheduled_date: a.scheduledDate,
-        dates:          a.dates,
-        workdays:       a.workdays,
-        avg_hours:      a.avgHours,
-        is_urgent:      a.isUrgent,
-        is_duo:         !!a.isDuo,
-        duo_partner_id: a.duoPartner ?? null,
-        status:         'pct',
-        note:           [
-          `[PCT] ${a.batchNo}`,
-          a.method ? `방법: ${a.method}` : '',
-          `시험항목: ${a.testItems.join(', ')}`,
-          a.isDuo && a.duoPartner ? `듀오: ${a.testerName}+${a.duoPartner}` : '',
-          a.stabilityLinks?.length
-            ? `🧪 안정성 동시: ${a.stabilityLinks.map(s => `${s.productName || s.productCode}${s.testType ? `(${s.testType})` : ''}`).join(', ')}`
-            : '',
-          a.note || '',
-        ].filter(Boolean).join('\n'),
-        source:         'pct',
-      }))
-  }, [pctSnapshot, month])
-
-  // PCT에서 등장한 시험자 이름을 DB testers와 매칭. DB에 같은 이름 있으면 그 id 사용,
-  // 없으면 가상 id ('pct-{name}')로 신규 행 추가.
-  const mergedTesters: Tester[] = useMemo(() => {
-    const dbTesters = data?.testers ?? []
-    const dbByName = new Map(dbTesters.map(t => [t.name, t]))
-    const out: Tester[] = [...dbTesters]
-    const pctNames = new Set(pctSnapshot.map(a => a.testerName))
-    for (const name of pctNames) {
-      if (!dbByName.has(name)) {
-        out.push({ id: `pct-${name}`, name, employee_no: '—' })
-      }
-    }
-    return out
-  }, [data, pctSnapshot])
-
-  // PCT 항목의 tester_id를 DB 매칭으로 보정 (이름이 같으면 DB의 numeric id 사용)
-  const pctSchedulesMerged: ScheduleRow[] = useMemo(() => {
-    const dbByName = new Map((data?.testers ?? []).map(t => [t.name, t.id]))
-    return pctSchedules.map(s => {
-      const name = String(s.tester_id).replace(/^pct-/, '')
-      const dbId = dbByName.get(name)
-      return dbId != null ? { ...s, tester_id: dbId } : s
-    })
-  }, [pctSchedules, data])
+  // 시험자 목록은 서버가 준 것이 전부다. 예전에는 PCT 스냅샷에만 있는 이름을 가상 행
+  // (`pct-{이름}`)으로 덧붙였는데, 그 행은 붙일 시험자 레코드가 없어 부업무도 못 남기는
+  // 반쪽짜리였고 스냅샷이 있는 브라우저에서만 나타났다.
+  const mergedTesters: Tester[] = useMemo(() => data?.testers ?? [], [data])
 
   const days = useMemo(() => getDaysInMonth(month), [month])
 
@@ -362,18 +280,12 @@ export default function MonthlySchedulePage() {
     [dbTesterIds, isAdmin, myTesterId],
   )
 
-  // DB + PCT 합친 전체 스케줄.
-  // DB(pct_orders 정본)와 PCT 스냅샷은 같은 배정을 각자 담을 수 있다 — 스냅샷은 AI 스케줄
-  // 화면에서 [스케줄 생성]을 누른 시점의 사본이기 때문이다. 같은 품목·제조번호·담당자면
-  // 한 배정이므로 정본 쪽만 남긴다. 안 그러면 같은 일이 셀에 두 번 쌓인다.
-  const allSchedules: ScheduleRow[] = useMemo(() => {
-    const dbRows: ScheduleRow[] = (data?.schedules ?? []).map(r => ({ ...r, source: 'db' as const }))
-    const dbKeys = new Set(dbRows.map(r => `${r.product_code ?? ''}::${r.batch_no ?? ''}::${r.tester_id}`))
-    const pctOnly = pctSchedulesMerged.filter(
-      r => !dbKeys.has(`${r.product_code ?? ''}::${r.batch_no ?? ''}::${r.tester_id}`),
-    )
-    return [...dbRows, ...pctOnly]
-  }, [data, pctSchedulesMerged])
+  // 화면에 그리는 전체 스케줄 — 서버 정본(pct_orders + qc_jobs)이 전부다.
+  // 브라우저에 있던 사본을 여기 섞지 않는다. 그 병합이 곧 "사람마다 다른 화면"이었다.
+  const allSchedules: ScheduleRow[] = useMemo(
+    () => (data?.schedules ?? []).map(r => ({ ...r, source: 'db' as const })),
+    [data],
+  )
 
   // 시험자별 + 날짜별 셀에 들어갈 row들 인덱스
   // key = `${tester_id}::${YYYY-MM-DD}`
@@ -403,36 +315,37 @@ export default function MonthlySchedulePage() {
     return m
   }, [allSchedules, month])
 
-  // 데이터가 있는 시험자만 표시 (DB + PCT 모두 포함)
-  // 배정이 하나도 없어도 (1) 부업무를 남긴 사람과 (2) 로그인한 본인은 행을 낸다.
-  // 본인 행이 없으면 기록할 칸 자체가 없어 "자기 칸을 눌러 남긴다"가 성립하지 않고,
-  // 배정이 비는 달일수록 오히려 부업무가 많다.
+  // 행 목록은 **보는 사람과 무관**하다 — 재직 중인 시험자 전원.
+  //
+  // 예전에는 "데이터가 있는 사람 + 로그인한 본인"이었다. 그래서 배정이 없는 달이면
+  // 시험자에게는 자기 행이 하나 더 보이고 관리자에게는 안 보였다. 같은 달을 봐도 화면이
+  // 갈리는 두 번째 원인이었다.
+  //
+  // 본인 행을 끼워 넣던 이유(부업무를 남길 칸이 필요하다)는 전원을 세우면 저절로 풀린다.
+  // 퇴직자는 빼되, 그 달에 배정이나 부업무가 남아 있으면 세운다 — 한 일을 감추면 안 된다.
   const visibleTesters = useMemo(() => {
-    const usedIds = new Set<number | string>(allSchedules.map(s => s.tester_id))
-    for (const log of sideLogs) usedIds.add(log.testerId)
-    if (myTesterId) usedIds.add(myTesterId)
+    const withData = new Set<number | string>(allSchedules.map(s => s.tester_id))
+    for (const log of sideLogs) withData.add(log.testerId)
     return mergedTesters
-      .filter(t => usedIds.has(t.id))
+      .filter(t => t.is_active !== false || withData.has(t.id))
       .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
-  }, [allSchedules, mergedTesters, sideLogs, myTesterId])
+  }, [allSchedules, mergedTesters, sideLogs])
 
-  // 요약 통계 (DB + PCT)
+  // 요약 통계
   const stats = useMemo(() => {
-    const pctCount = pctSchedulesMerged.length
     const mine = myTesterId ? sideLogs.filter(l => l.testerId === myTesterId) : []
     return {
       total:   allSchedules.length,
       urgent:  allSchedules.filter(s => s.is_urgent).length,
       duo:     allSchedules.filter(s => s.is_duo).length,
       testers: visibleTesters.length,
-      pct:     pctCount,
       // 부업무는 건수와 시간을 함께 본다 — 건수만 보면 30분짜리와 종일짜리가 같아진다.
       sideCount:   sideLogs.length,
       sideMinutes: sideLogs.reduce((sum, l) => sum + l.minutes, 0),
       mySideCount:   mine.length,
       mySideMinutes: mine.reduce((sum, l) => sum + l.minutes, 0),
     }
-  }, [allSchedules, pctSchedulesMerged, visibleTesters, sideLogs, myTesterId])
+  }, [allSchedules, visibleTesters, sideLogs, myTesterId])
 
   // ─── Monday 스타일 보드 데이터 (주간 / 개인별 탭) ─────────────────────────────
   const testerNameById = useMemo(() => {
@@ -513,13 +426,6 @@ export default function MonthlySchedulePage() {
   // 개인별 보드는 그룹 자체가 담당자이므로 담당자 컬럼 제외
   const personalColumns: ColumnDef[] = weeklyColumns.filter(c => c.key !== '담당자')
 
-  function handleClearPct() {
-    clearPctMonthlySnapshot()
-    void clearPctMonthlyOnServer() // 서버(DB) 영속본도 함께 삭제
-    setPctSnapshot([])
-    setPctGeneratedAt(null)
-  }
-
   return (
     /* 이 화면은 세로로 길다(시험자 × 날짜 + 범례). 바깥 레이아웃이 overflow-hidden 이라
        스크롤 컨테이너를 여기서 만들지 않으면 아래쪽 내용에 아예 닿을 수 없다. */
@@ -544,26 +450,6 @@ export default function MonthlySchedulePage() {
             </p>
           ) : null}
         </header>
-
-        {/* PCT 데이터 알림 — 알림 한 줄에 카드를 또 씌우지 않는다 */}
-        {pctSnapshot.length > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-md border border-blue-200 bg-blue-50/70 px-3 py-2.5 dark:border-blue-900 dark:bg-blue-950/30">
-            <p className="min-w-0 text-xs leading-normal break-keep text-blue-900 dark:text-blue-100">
-              <span className="font-semibold">PCT 생산관리 배정 표시 중</span>
-              <span className="px-1 text-blue-300 dark:text-blue-800">·</span>
-              <span className="tabular-nums">전체 {pctSnapshot.length}건 · 이번 달 {pctSchedulesMerged.length}건</span>
-              {pctGeneratedAt && (
-                <>
-                  <span className="px-1 text-blue-300 dark:text-blue-800">·</span>
-                  <span className="tabular-nums">생성 {new Date(pctGeneratedAt).toLocaleString('ko-KR')}</span>
-                </>
-              )}
-            </p>
-            <Button onClick={handleClearPct} variant="outline" size="sm">
-              PCT 데이터 지우기
-            </Button>
-          </div>
-        )}
 
         {/* 월 이동 — 조회조건 한 줄에 카드를 씌우지 않는다(테두리 겹 줄이기).
             375px 에서는 버튼 넷과 월 선택 입력이 세 줄로 접혀 131px 을 먹었다.

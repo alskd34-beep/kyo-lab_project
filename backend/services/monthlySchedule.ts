@@ -61,6 +61,8 @@ export interface MonthlyTester {
   id: string
   name: string
   employee_no: string
+  /** 재직 여부. 월간 그리드가 "누구의 행을 낼지"를 이 값으로 정한다. */
+  is_active: boolean
 }
 
 export interface MonthlyScheduleResult {
@@ -109,7 +111,7 @@ export async function getMonthlySchedule(month: string): Promise<MonthlySchedule
 
   const [orders, testerRes, holidays] = await Promise.all([
     listOrders(),
-    selectAll(supabaseAdmin, 'testers', 'id, name, employee_no'),
+    selectAll(supabaseAdmin, 'testers', 'id, name, employee_no, is_active'),
     getHolidaySet(),
   ])
   if (testerRes.error) throw new Error(`시험자 조회 실패: ${testerRes.error.message}`)
