@@ -91,9 +91,13 @@ const LOCKED_IMMUTABLE_FIELDS = [
  * 어느 쪽도 성립하지 않으므로 작업 시작 후에는 2인 배정 전환을 통째로 막는다.
  */
 const STARTED_IMMUTABLE_FIELDS = [
-  // 이미 시작했으면 실제 착수일(qc_jobs.work_start_date)이 계획을 이긴다 — 계획만 고쳐도
-  // 달력이 바뀌지 않으므로 고칠 수 있다고 보여 주는 쪽이 거짓말이다.
-  'packagingDate', 'dueDate', 'plannedStartDate', 'isUrgent', 'method',
+  // plannedStartDate 는 **여기 넣지 않는다.** 넣었다가 되돌린 이유를 남긴다:
+  // 배정 다이얼로그는 담당자와 착수 예정일을 한 패치로 보낸다. 이 목록에 넣으면 작업이
+  // 하나라도 시작된 오더에서 그 패치가 통째로 거부돼, 예전에는 성공하던 배정까지 실패한다
+  // (2인 배정에서 담당자1이 이미 시작한 오더에 담당자2를 붙이는 경우 등).
+  // 시작 후에는 실제 착수일(qc_jobs.work_start_date)이 달력에서 계획을 이기므로 이 값은
+  // 어차피 무시된다 — 무시되는 값을 쓰게 두는 쪽이, 되는 배정을 막는 쪽보다 낫다.
+  'packagingDate', 'dueDate', 'isUrgent', 'method',
   'productCode', 'productName', 'batchNo', 'isDualAssignment',
 ] as const
 
