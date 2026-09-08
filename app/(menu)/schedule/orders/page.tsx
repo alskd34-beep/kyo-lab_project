@@ -15,8 +15,9 @@ import { ManagementDrawer } from "@frontend/components/common/management-drawer"
 import { AssigneeDetailModal } from "@frontend/components/schedule/assignee-detail-modal"
 import { useConfirmMessage } from "@frontend/components/common/confirm-message"
 import {
-  LeaveChip, LeaveConflictNotice, bulkConflictSummary, conflictsFor, useTesterAbsences,
+  LeaveChip, LeaveConflictNotice, conflictsFor, useTesterAbsences,
 } from "@frontend/components/schedule/leave-warning"
+import { useLeaveReschedule } from "@frontend/components/schedule/leave-reschedule-dialog"
 import { OrderTestItemsSection } from "@frontend/components/schedule/order-test-items-section"
 import { TesterAvatar, TesterOptionLabel, primeTesterProfileCache } from "@frontend/lib/tester-profiles"
 import { Button } from "@frontend/components/ui/button"
@@ -61,6 +62,8 @@ interface OrderRow {
   validationType: string | null
   packagingDate: string | null
   dueDate: string | null
+  /** 관리자가 정한 착수 예정일(0042). 휴가를 피해 옮긴 날 · null = 미지정 */
+  plannedStartDate: string | null
   isUrgent: boolean
   method: string
   status: string
@@ -249,9 +252,10 @@ function YearPicker({ year, years, onChange }: { year: string; years: string[]; 
 export default function OrdersPage() {
   const { user } = useAuth()
   const isAdmin = user?.role === "admin"
-  const { requestConfirm } = useConfirmMessage()
   // 담당자 선택 시 휴가 겹침을 경고하기 위한 부재 목록 (배정을 막지는 않는다)
   const { absences } = useTesterAbsences()
+  // 휴가와 겹칠 때 「그대로 배정 / 날짜를 정해 배정 / 취소」 를 묻는다
+  const { request: requestLeaveReschedule, node: leaveRescheduleDialog } = useLeaveReschedule()
 
   const [rows, setRows] = useState<OrderRow[]>([])
   const [testers, setTesters] = useState<Tester[]>([])
@@ -376,7 +380,10 @@ export default function OrdersPage() {
       return
     }
 
-    // 휴가·출장과 겹치는 배정은 막지 않고 확인만 받는다(현장 예외 허용).
+    // 휴가·출장과 겹치는 배정은 막지 않는다(현장 예외 허용). 다만 「그대로/취소」 둘만
+    // 주면 실제로 하고 싶은 일 — "월요일이 휴가니 화요일부터" — 를 할 수가 없다.
+    // 착수 예정일을 정해 배정하는 선택지를 함께 준다.
+    let plannedStartDate: string | null = null
     if (testerId) {
       const conflicted = targets
         .map(r => ({
@@ -386,21 +393,11 @@ export default function OrdersPage() {
         .filter(i => i.conflicts.length > 0)
       if (conflicted.length > 0) {
         const testerName = testers.find(t => t.id === testerId)?.name ?? "담당자"
-        const ok = await requestConfirm({
-          title: "휴가 기간과 겹칩니다. 그대로 배정할까요?",
-          description: (
-            <span className="block">
-              {testerName} 담당자의 휴가·출장 일정과 겹치는 오더가 {conflicted.length}건 있습니다.
-              그대로 배정하면 관리자 알림이 남습니다.
-              <span className="mt-2 block whitespace-pre-line rounded-md border bg-muted/50 p-2 font-mono text-xs leading-normal">
-                {bulkConflictSummary(conflicted)}
-              </span>
-            </span>
-          ),
-          confirmLabel: "그대로 배정",
-          variant: "warning",
+        const resolution = await requestLeaveReschedule({
+          testerId, testerName, items: conflicted, absences,
         })
-        if (!ok) return
+        if (!resolution) return                       // 취소
+        if (resolution.kind === "shift") plannedStartDate = resolution.date
       }
     }
 
@@ -410,7 +407,12 @@ export default function OrdersPage() {
         const res = await fetch("/api/pct-orders", {
           method: "PATCH", credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id, patch: { assigneeTesterId: testerId }, reason: opts.reason }),
+          body: JSON.stringify({
+            id,
+            // 날짜를 고른 경우에만 함께 보낸다 — 안 고른 배정까지 기존 계획을 덮어쓰면 안 된다.
+            patch: { assigneeTesterId: testerId, ...(plannedStartDate ? { plannedStartDate } : {}) },
+            reason: opts.reason,
+          }),
         })
         return { id, ok: res.ok }
       }))
@@ -1225,6 +1227,9 @@ export default function OrdersPage() {
         </div>
       )}
 
+      {/* 휴가 겹침 처리 다이얼로그 — 요청이 있을 때만 렌더된다(useLeaveReschedule) */}
+      {leaveRescheduleDialog}
+
       {createOpen && (
         <CreateModal
           testers={testers}
@@ -1518,7 +1523,7 @@ function CreateModal({ testers, absences, onClose, onCreated }: {
   const uid = useId()
   const [form, setForm] = useState({
     productCode: "", productName: "", batchNo: "", dosageForm: "",
-    packagingDate: "", dueDate: "", isUrgent: false,
+    packagingDate: "", dueDate: "", plannedStartDate: "", isUrgent: false,
     method: "전항목", status: "대기", assigneeTesterId: "", note: "",
   })
   const [saving, setSaving] = useState(false)
@@ -1567,10 +1572,10 @@ function CreateModal({ testers, absences, onClose, onCreated }: {
   const leaveConflicts = useMemo(
     () => conflictsFor(
       form.assigneeTesterId || null,
-      { packagingDate: form.packagingDate || null, dueDate: form.dueDate || null },
+      { packagingDate: form.packagingDate || null, dueDate: form.dueDate || null, plannedStartDate: form.plannedStartDate || null },
       absences,
     ),
-    [form.assigneeTesterId, form.packagingDate, form.dueDate, absences],
+    [form.assigneeTesterId, form.packagingDate, form.dueDate, form.plannedStartDate, absences],
   )
   const assigneeName = testers.find(t => t.id === form.assigneeTesterId)?.name ?? "선택한"
 
@@ -1602,6 +1607,7 @@ function CreateModal({ testers, absences, onClose, onCreated }: {
           batchNo: form.batchNo.trim(),
           dosageForm: form.dosageForm.trim() || null,
           packagingDate: form.packagingDate || null,
+        plannedStartDate: form.plannedStartDate || null,
           dueDate: form.dueDate || null,
           isUrgent: form.isUrgent,
           method: form.method,
@@ -1684,6 +1690,11 @@ function CreateModal({ testers, absences, onClose, onCreated }: {
         <Field label="제형"><input value={form.dosageForm} onChange={e => setForm({ ...form, dosageForm: e.target.value })} placeholder="예: 내용고형제 (선택)" className={inputCls} /></Field>
         <Field label="포장일"><DateField noLabel value={form.packagingDate} onChange={v => setForm({ ...form, packagingDate: v })} /></Field>
         <Field label="완료예정일"><DateField noLabel value={form.dueDate} onChange={v => setForm({ ...form, dueDate: v })} /></Field>
+        {/* 휴가를 피해 배정할 때 정해지는 값. 여기서 확인·수정·해제할 수 있어야 배정
+            다이얼로그가 일방통행이 되지 않는다. 비우면 포장일·납기 추정으로 돌아간다. */}
+        <Field label="착수 예정일">
+          <DateField noLabel value={form.plannedStartDate} onChange={v => setForm({ ...form, plannedStartDate: v })} placeholder="미지정 (포장일·납기로 추정)" />
+        </Field>
         <Field label="긴급">
           <Select value={form.isUrgent ? "긴급" : "일반"} onValueChange={v => setForm({ ...form, isUrgent: v === "긴급" })}>
             <SelectTrigger className="!h-9 w-full px-3"><SelectValue /></SelectTrigger>
@@ -1759,7 +1770,7 @@ function CreateModal({ testers, absences, onClose, onCreated }: {
                   <LeaveChip
                     conflicts={conflictsFor(
                       t.id,
-                      { packagingDate: form.packagingDate || null, dueDate: form.dueDate || null },
+                      { packagingDate: form.packagingDate || null, dueDate: form.dueDate || null, plannedStartDate: form.plannedStartDate || null },
                       absences,
                     )}
                   />
@@ -1809,6 +1820,7 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
     batchNo: order.batchNo ?? "",
     dosageForm: order.dosageForm ?? "",
     packagingDate: order.packagingDate ?? "",
+    plannedStartDate: order.plannedStartDate ?? "",
     dueDate: order.dueDate ?? "",
     isUrgent: order.isUrgent,
     method: order.method,
@@ -1835,18 +1847,18 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
   const leaveConflicts = useMemo(
     () => conflictsFor(
       form.assigneeTesterId || null,
-      { packagingDate: form.packagingDate || null, dueDate: form.dueDate || null },
+      { packagingDate: form.packagingDate || null, dueDate: form.dueDate || null, plannedStartDate: form.plannedStartDate || null },
       absences,
     ),
-    [form.assigneeTesterId, form.packagingDate, form.dueDate, absences],
+    [form.assigneeTesterId, form.packagingDate, form.dueDate, form.plannedStartDate, absences],
   )
   const leaveConflicts2 = useMemo(
     () => conflictsFor(
       form.assigneeTesterId2 || null,
-      { packagingDate: form.packagingDate || null, dueDate: form.dueDate || null },
+      { packagingDate: form.packagingDate || null, dueDate: form.dueDate || null, plannedStartDate: form.plannedStartDate || null },
       absences,
     ),
-    [form.assigneeTesterId2, form.packagingDate, form.dueDate, absences],
+    [form.assigneeTesterId2, form.packagingDate, form.dueDate, form.plannedStartDate, absences],
   )
   const assigneeName = testers.find(t => t.id === form.assigneeTesterId)?.name ?? "선택한"
   const assigneeName2 = testers.find(t => t.id === form.assigneeTesterId2)?.name ?? "선택한"
@@ -1859,6 +1871,7 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
   // "" !== null 이 항상 참이 되어 비고만 고쳐도 매번 팝업이 뜬다(자동생성 오더는 흔한 케이스).
   const datesChanged =
     (form.packagingDate || null) !== (order.packagingDate ?? null) ||
+    (form.plannedStartDate || null) !== (order.plannedStartDate ?? null) ||
     (form.dueDate || null) !== (order.dueDate ?? null)
 
   // 2인 배정 체크 토글 — 원래부터 2인 배정이던 오더를 끌 때만 되돌림 확인을 받는다
@@ -1907,6 +1920,7 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
       const patch: Record<string, string | boolean | null> = {
         dosageForm: form.dosageForm.trim() || null,
         packagingDate: form.packagingDate || null,
+        plannedStartDate: form.plannedStartDate || null,
         dueDate: form.dueDate || null,
         isUrgent: form.isUrgent,
         method: form.method,
@@ -2051,7 +2065,7 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
                   <LeaveChip
                     conflicts={conflictsFor(
                       t.id,
-                      { packagingDate: form.packagingDate || null, dueDate: form.dueDate || null },
+                      { packagingDate: form.packagingDate || null, dueDate: form.dueDate || null, plannedStartDate: form.plannedStartDate || null },
                       absences,
                     )}
                   />
@@ -2079,7 +2093,7 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
                         <LeaveChip
                           conflicts={conflictsFor(
                             t.id,
-                            { packagingDate: form.packagingDate || null, dueDate: form.dueDate || null },
+                            { packagingDate: form.packagingDate || null, dueDate: form.dueDate || null, plannedStartDate: form.plannedStartDate || null },
                             absences,
                           )}
                         />

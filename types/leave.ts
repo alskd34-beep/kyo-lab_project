@@ -34,6 +34,11 @@ export interface TesterAbsence {
 export interface OrderDates {
   packagingDate: string | null
   dueDate: string | null
+  /**
+   * 관리자가 정한 착수 예정일(0042). 있으면 이 날이 시험 구간의 시작이다.
+   * "월요일이 휴가니 화요일부터" 를 담는 자리 — 없으면 예전처럼 포장일·오늘로 추정한다.
+   */
+  plannedStartDate?: string | null
 }
 
 export interface DateWindow {
@@ -53,14 +58,25 @@ export function isHardLeave(type: string): boolean {
  * 오더의 시험 수행 구간 [from, to].
  *
  * 시험은 포장 이후 ~ 완료예정일 사이에 수행된다.
- *   from : 포장일이 미래면 포장일, 아니면 오늘 (이미 지난 포장일은 시험 시점과 무관)
+ *   from : 착수 예정일(관리자 지정) → 없으면 포장일이 미래면 포장일 → 아니면 오늘
+ *          (이미 지난 포장일은 시험 시점과 무관)
  *   to   : 완료예정일 → 없으면 포장일 → 없으면 from
+ *
+ * 착수 예정일이 최우선인 것이 이 함수의 핵심이다. 관리자가 "월요일은 휴가니 화요일부터"
+ * 라고 정하면 구간이 화요일부터 시작해 월요일 휴가와 더 이상 겹치지 않는다. 그 지정이
+ * 없을 때만 예전처럼 포장일·오늘로 추정한다.
+ *
+ * 지난 날짜를 착수 예정일로 지정해 둔 오더는 오늘로 당긴다 — 이미 지나간 계획으로
+ * 구간을 잡으면 오늘 이후의 휴가를 놓친다.
  *
  * 납기가 지나 구간이 뒤집히면 to 를 from 에 맞춰 하루 구간으로 만든다.
  * (pctAssign.leaveWindow 가 전체 오더를 묶어 잡는 구간과 같은 사고를 오더 1건에 적용한 것)
  */
 export function orderTestWindow(order: OrderDates, today: string): DateWindow {
-  const from = order.packagingDate && order.packagingDate > today ? order.packagingDate : today
+  const planned = order.plannedStartDate
+  const from = planned
+    ? (planned > today ? planned : today)
+    : (order.packagingDate && order.packagingDate > today ? order.packagingDate : today)
   const rawTo = order.dueDate ?? order.packagingDate ?? from
   return { from, to: rawTo < from ? from : rawTo }
 }

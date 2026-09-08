@@ -11,8 +11,9 @@
  *
  * 한 배정이 달력의 **어느 날짜들**을 차지하는가:
  *   1. QC 작업이 시작됐으면 `qc_jobs.work_start_date` 부터 (실제 착수일이 가장 정확하다)
- *   2. 아니면 `packaging_date` **다음** 근무일부터 (시험은 포장이 끝나야 시작한다)
- *   3. 포장일이 없으면 `due_date` 에서 거꾸로 (납기를 맞추는 최소 일정)
+ *   2. 관리자가 정한 `planned_start_date` 부터 (휴가를 피해 옮긴 날 — 0042)
+ *   3. 아니면 `packaging_date` **다음** 근무일부터 (시험은 포장이 끝나야 시작한다)
+ *   4. 포장일이 없으면 `due_date` 에서 거꾸로 (납기를 맞추는 최소 일정)
  * 길이는 `product_workload.avg_workdays`(공수, DAY)이고 주말·공휴일은 건너뛴다.
  *
  * 2인 배정(`is_dual_assignment`)은 담당자1·담당자2 **양쪽 행**에 각각 놓는다.
@@ -100,7 +101,11 @@ function assignedDates(
   order: PctOrderRow, jobStartDate: string | null, holidays: Set<string>,
 ): string[] {
   const workdays = Math.max(1, order.workdays ?? DEFAULT_WORKDAYS)
+  // 실제 착수일이 관리자 계획을 이긴다 — 계획은 시작 전까지만 유효하다.
   if (jobStartDate) return workingDaysFromInclusive(jobStartDate, workdays, holidays)
+  // 관리자가 정한 착수 예정일(0042). 휴가를 피해 옮긴 날짜가 달력에도 그대로 나와야
+  // 경고와 화면이 같은 말을 한다.
+  if (order.plannedStartDate) return workingDaysFromInclusive(order.plannedStartDate, workdays, holidays)
   if (order.packagingDate) return workingDaysAfter(order.packagingDate, workdays, holidays)
   if (order.dueDate) return workingDaysBefore(order.dueDate, workdays, holidays)
   return []

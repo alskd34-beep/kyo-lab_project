@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json() as {
       productCode?: string; productName?: string; batchNo?: string
       dosageForm?: string | null; validationType?: string | null
-      packagingDate?: string | null; dueDate?: string | null
+      packagingDate?: string | null; dueDate?: string | null; plannedStartDate?: string | null
       isUrgent?: boolean; method?: string; status?: string
       assigneeTesterId?: string | null; note?: string | null
       /** method='개별항목' 일 때 배정할 시험항목 */
@@ -52,6 +52,7 @@ export async function POST(req: NextRequest) {
       validationType: body.validationType ?? null,
       packagingDate: body.packagingDate ?? null,
       dueDate: body.dueDate ?? null,
+      plannedStartDate: body.plannedStartDate ?? null,
       isUrgent: body.isUrgent ?? false,
       method: body.method,
       status: body.status,

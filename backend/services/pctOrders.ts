@@ -23,6 +23,8 @@ export interface PctOrderRow {
   validationType: string | null
   packagingDate: string | null
   dueDate: string | null
+  /** 관리자가 정한 착수 예정일(0042). null = 미지정(포장일·납기로 추정) */
+  plannedStartDate: string | null
   isUrgent: boolean
   method: string
   status: string
@@ -47,7 +49,7 @@ export interface PctOrderRow {
 // 수정 가능 필드. 자동 적재 오더는 품목코드·품목명·제조번호를 서버에서 보호한다.
 const EDITABLE_FIELDS = [
   'productCode', 'productName', 'batchNo', 'dosageForm', 'validationType',
-  'packagingDate', 'dueDate', 'isUrgent', 'method', 'status', 'note', 'assigneeTesterId',
+  'packagingDate', 'dueDate', 'plannedStartDate', 'isUrgent', 'method', 'status', 'note', 'assigneeTesterId',
   'isDualAssignment', 'assigneeTesterId2',
 ] as const
 type EditableField = (typeof EDITABLE_FIELDS)[number]
@@ -66,7 +68,8 @@ const AUTO_IMMUTABLE_FIELDS = ['productCode', 'productName', 'batchNo', 'validat
  * 2인 배정(isDualAssignment/assigneeTesterId2)도 담당자 배정의 일부라 같이 잠근다.
  */
 const LOCKED_IMMUTABLE_FIELDS = [
-  'assigneeTesterId', 'packagingDate', 'dueDate', 'isUrgent', 'method',
+  // plannedStartDate 도 엔진·달력이 읽는 일정 입력이다 — 열어 두면 확정이 확정이 아니다.
+  'assigneeTesterId', 'packagingDate', 'dueDate', 'plannedStartDate', 'isUrgent', 'method',
   'isDualAssignment', 'assigneeTesterId2',
 ] as const
 
@@ -88,7 +91,9 @@ const LOCKED_IMMUTABLE_FIELDS = [
  * 어느 쪽도 성립하지 않으므로 작업 시작 후에는 2인 배정 전환을 통째로 막는다.
  */
 const STARTED_IMMUTABLE_FIELDS = [
-  'packagingDate', 'dueDate', 'isUrgent', 'method',
+  // 이미 시작했으면 실제 착수일(qc_jobs.work_start_date)이 계획을 이긴다 — 계획만 고쳐도
+  // 달력이 바뀌지 않으므로 고칠 수 있다고 보여 주는 쪽이 거짓말이다.
+  'packagingDate', 'dueDate', 'plannedStartDate', 'isUrgent', 'method',
   'productCode', 'productName', 'batchNo', 'isDualAssignment',
 ] as const
 
@@ -101,6 +106,7 @@ const FIELD_LABEL: Record<EditableField, string> = {
   validationType: '구분',
   packagingDate: '포장일',
   dueDate: '완료예정일',
+  plannedStartDate: '착수 예정일',
   isUrgent: '긴급여부',
   method: '진행방법',
   status: '상태',
@@ -121,6 +127,7 @@ const FIELD_TO_COL: Record<EditableField, string> = {
   validationType: 'validation_type',
   packagingDate: 'packaging_date',
   dueDate: 'due_date',
+  plannedStartDate: 'planned_start_date',
   isUrgent: 'is_urgent',
   method: 'method',
   status: 'status',
@@ -227,6 +234,8 @@ export async function listOrders(filters: {
     validationType: (o.validation_type as string) ?? null,
     packagingDate: (o.packaging_date as string) ?? null,
     dueDate: (o.due_date as string) ?? null,
+    // 0042 미적용 DB 에서는 키 자체가 없다 — select('*') 라 조회는 깨지지 않고 null 이 된다.
+    plannedStartDate: (o.planned_start_date as string) ?? null,
     isUrgent: !!o.is_urgent,
     method: o.method as string,
     status: o.status as string,
@@ -261,6 +270,7 @@ export async function createOrder(input: {
   validationType?: string | null
   packagingDate?: string | null
   dueDate?: string | null
+  plannedStartDate?: string | null
   isUrgent?: boolean
   method?: string
   status?: string
@@ -291,6 +301,7 @@ export async function createOrder(input: {
       ...(input.validationType?.trim() ? { validation_type: input.validationType.trim().toUpperCase() } : {}),
       packaging_date:     input.packagingDate || null,
       due_date:           input.dueDate || null,
+      ...(input.plannedStartDate ? { planned_start_date: input.plannedStartDate } : {}),
       is_urgent:          input.isUrgent ?? false,
       method:             method,
       status:             input.status || PENDING_STATUS,
@@ -327,6 +338,7 @@ export async function createOrder(input: {
     order: {
       packagingDate: (o.packaging_date as string) ?? null,
       dueDate:       (o.due_date as string) ?? null,
+      plannedStartDate: (o.planned_start_date as string) ?? null,
     },
     productName: name,
     batchNo:     batch,
@@ -347,6 +359,8 @@ export async function createOrder(input: {
     validationType: (o.validation_type as string) ?? null,
     packagingDate: (o.packaging_date as string) ?? null,
     dueDate: (o.due_date as string) ?? null,
+    // 0042 미적용 DB 에서는 키 자체가 없다 — select('*') 라 조회는 깨지지 않고 null 이 된다.
+    plannedStartDate: (o.planned_start_date as string) ?? null,
     isUrgent: !!o.is_urgent,
     method: o.method as string,
     status: o.status as string,
@@ -605,7 +619,7 @@ export async function updateOrderWithReason(
   // 날짜만 바뀌어도(담당자는 그대로) 휴가 경고가 돌아야 한다 — 화면(EditModal)이 담당자
   // 미변경 시에도 "그대로 저장하면 관리자 알림이 남습니다" 라고 약속하기 때문이다. 여기서
   // 안 돌리면 화면이 없는 안전망을 있다고 믿게 만드는 셈이 된다.
-  const datesChanged = changed.has('packagingDate') || changed.has('dueDate')
+  const datesChanged = changed.has('packagingDate') || changed.has('dueDate') || changed.has('plannedStartDate')
 
   for (const slotField of ['assigneeTesterId', 'assigneeTesterId2'] as const) {
     const assigneeEdit = edits.find(e => e.field === slotField)
@@ -634,6 +648,9 @@ export async function updateOrderWithReason(
         // 'packaging_date' in dbPatch 로 판단한다 — 날짜를 비우는 수정(null)도 패치값이 이겨야 한다.
         packagingDate: pickPatched(dbPatch, currentRow, 'packaging_date'),
         dueDate:       pickPatched(dbPatch, currentRow, 'due_date'),
+        // 착수 예정일을 바꾸는 수정이 곧 "휴가를 피해 날짜를 옮기는" 동작이다 —
+        // 판정에 넣지 않으면 옮겨 놓고도 같은 경고 알림이 다시 쌓인다.
+        plannedStartDate: pickPatched(dbPatch, currentRow, 'planned_start_date'),
       },
       productName: (currentRow.product_name as string) ?? '',
       batchNo:     (currentRow.batch_no as string) ?? '',
