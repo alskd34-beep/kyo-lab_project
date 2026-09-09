@@ -18,6 +18,7 @@ import {
   LeaveChip, LeaveConflictNotice, conflictsFor, useTesterAbsences,
 } from "@frontend/components/schedule/leave-warning"
 import { useLeaveReschedule } from "@frontend/components/schedule/leave-reschedule-dialog"
+import { ConcurrentGroupDialog } from "@frontend/components/schedule/concurrent-group-dialog"
 import { OrderTestItemsSection } from "@frontend/components/schedule/order-test-items-section"
 import { TesterAvatar, TesterOptionLabel, primeTesterProfileCache } from "@frontend/lib/tester-profiles"
 import { Button } from "@frontend/components/ui/button"
@@ -94,6 +95,18 @@ function assignableTesters(testers: Tester[], keepId?: string | null): Tester[] 
 interface EditRow {
   id: string; field: string; oldValue: string | null; newValue: string | null
   reason: string; editedAt: string; editedBy: string | null; editedByName: string | null
+}
+
+/** /api/concurrent-groups 의 행 (오더 단위 동시분석 그룹) */
+interface ConcurrentGroup {
+  id: string
+  groupKey: string
+  label: string | null
+  testStartDate: string | null
+  groupLock: boolean
+  source: "auto" | "manual"
+  note: string | null
+  items: { orderId: string; productCode: string; productName: string; batchNo: string }[]
 }
 
 // 화면에 렌더링할 그룹(주차/담당자/상태 공통 형태)
@@ -253,6 +266,7 @@ export default function OrdersPage() {
   const { user } = useAuth()
   const isAdmin = user?.role === "admin"
   // 담당자 선택 시 휴가 겹침을 경고하기 위한 부재 목록 (배정을 막지는 않는다)
+  const { requestConfirm } = useConfirmMessage()
   const { absences } = useTesterAbsences()
   // 휴가와 겹칠 때 「그대로 배정 / 날짜를 정해 배정 / 취소」 를 묻는다
   const { request: requestLeaveReschedule, node: leaveRescheduleDialog } = useLeaveReschedule()
@@ -278,6 +292,10 @@ export default function OrdersPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [bulkTester, setBulkTester] = useState("")
   const [families, setFamilies] = useState<{ id: string; name: string; codes: string[] }[]>([])
+  // 동시분석 그룹(오더 단위). 품목군(families)은 '함께 시험 가능한 품목' 마스터이고,
+  // 이쪽은 '이 오더들을 실제로 함께 돌린다' 는 실행 단위다 — 둘을 섞지 않는다.
+  const [groups, setGroups] = useState<ConcurrentGroup[]>([])
+  const [groupDialogOpen, setGroupDialogOpen] = useState(false)
   const [famCollapsed, setFamCollapsed] = useState<Set<string>>(new Set())
   // 자동배정 직후 반차와 겹친 배정 목록 (닫으면 사라지는 확인용 배너)
   const [halfDayNotices, setHalfDayNotices] = useState<HalfDayNotice[]>([])
@@ -285,19 +303,23 @@ export default function OrdersPage() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [oRes, tRes, fRes] = await Promise.all([
+      const [oRes, tRes, fRes, gRes] = await Promise.all([
         fetch("/api/pct-orders", { credentials: "include" }),
         fetch(`/api/testers`, { credentials: "include" }),
         fetch(`/api/concurrent-product-families`, { credentials: "include" }),
+        // 동시분석 그룹(오더 단위). 품목군(families)과 다르다 — 이쪽이 실제 실행 단위다.
+        fetch(`/api/concurrent-groups`, { credentials: "include" }),
       ])
       const oData = await oRes.json()
       const tData = await tRes.json()
       const fData = await fRes.json().catch(() => ({ rows: [] }))
+      const gData = await gRes.json().catch(() => ({ rows: [] }))
       primeTesterProfileCache(tData.rows ?? [])
       setRows(oData.rows ?? [])
       setTesters(tData.rows ?? [])
       setFamilies((fData.rows ?? []).map((f: { id: string; name: string; members: { productCode: string }[] }) =>
         ({ id: f.id, name: f.name, codes: f.members.map(m => m.productCode) })))
+      setGroups((gData.rows ?? gData.groups ?? []) as ConcurrentGroup[])
     } catch {
       setMsg("목록을 불러오지 못했습니다.")
     } finally {
@@ -363,7 +385,24 @@ export default function OrdersPage() {
     testerId: string | null,
     opts: { busyKey: string; reason: string; onlyAssigned?: boolean },
   ) => {
-    const eligible = Array.from(selected)
+    // 동시분석 그룹은 한 사람이 함께 돌리는 묶음이다. 선택에 일부만 들어 있으면 나머지가
+    // 다른 담당자에게 남아 그룹이 쪼개진다 — 그러면 묶은 의미가 사라지므로 먼저 묻는다.
+    const workingIds = new Set(selected)
+    if (testerId && selectionGroups.partial.length > 0) {
+      const missingCount = selectionGroups.partial.reduce((n, p) => n + p.missing.length, 0)
+      const names = selectionGroups.partial
+        .map(p => p.group.label ?? p.group.items[0]?.productName ?? "그룹")
+        .join(", ")
+      const ok = await requestConfirm({
+        title: "동시분석 그룹의 나머지도 함께 배정할까요?",
+        description: `선택에 그룹 일부만 들어 있습니다 (${names}). 나머지 ${missingCount}건을 함께 배정하지 않으면 같은 묶음이 다른 담당자로 갈라집니다.`,
+        confirmLabel: `함께 배정 (+${missingCount}건)`,
+        variant: "warning",
+      })
+      if (ok) for (const p of selectionGroups.partial) for (const id of p.missing) workingIds.add(id)
+    }
+
+    const eligible = Array.from(workingIds)
       .map(id => rows.find(x => x.id === id))
       .filter((r): r is OrderRow => !!r && !r.locked && (!opts.onlyAssigned || !!r.assigneeTesterId))
     // 2인 배정 오더는 서버가 "담당자 2명을 모두 선택해야 합니다"로 거절한다(정상 방어).
@@ -492,6 +531,31 @@ export default function OrdersPage() {
     for (const row of searchRows) counts.set(row.status, (counts.get(row.status) ?? 0) + 1)
     return counts
   }, [searchRows])
+
+  /** 오더 id → 그 오더가 속한 동시분석 그룹 */
+  const groupByOrder = useMemo(() => {
+    const m = new Map<string, ConcurrentGroup>()
+    for (const g of groups) for (const it of g.items) m.set(it.orderId, g)
+    return m
+  }, [groups])
+
+  /**
+   * 선택이 어떤 그룹을 건드리는가.
+   *  - partial : 선택에 일부만 든 그룹 → 배정할 때 "나머지도 함께?" 를 물어야 한다
+   *  - exact   : 선택이 어떤 그룹과 정확히 겹침 → 해체를 제안할 수 있다
+   */
+  const selectionGroups = useMemo(() => {
+    const touched = new Map<string, ConcurrentGroup>()
+    for (const id of selected) { const g = groupByOrder.get(id); if (g) touched.set(g.id, g) }
+    const partial: { group: ConcurrentGroup; missing: string[] }[] = []
+    let exact: ConcurrentGroup | null = null
+    for (const g of touched.values()) {
+      const missing = g.items.map(i => i.orderId).filter(id => !selected.has(id))
+      if (missing.length > 0) partial.push({ group: g, missing })
+      else if (touched.size === 1 && selected.size === g.items.length) exact = g
+    }
+    return { partial, exact }
+  }, [selected, groupByOrder])
 
   // ─── 주차별 그룹 (정렬: 이번주 최상단 → 최신순) ────────────────────────────
   const weekGroups = useMemo(() => {
@@ -742,6 +806,25 @@ export default function OrdersPage() {
           <div className="min-w-0 flex-1">
             <div className="flex items-start gap-2">
               {indented && <span aria-hidden="true" className="text-muted-foreground/60">↳</span>}
+              {/* 동시분석 배지 — 이 오더가 어떤 묶음에 들어 있는지. 관리자가 묶은 것과
+                  규칙이 자동으로 묶은 것을 구분해 보여준다(잘못 묶인 그룹의 첫 단서다). */}
+              {(() => {
+                const g = groupByOrder.get(r.id)
+                if (!g || g.items.length < 2) return null
+                return (
+                  <span
+                    className={cn(
+                      "inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 text-xs leading-normal font-medium",
+                      g.source === "manual"
+                        ? "border-primary/40 bg-primary/10 text-primary"
+                        : "border-border text-muted-foreground",
+                    )}
+                    title={`${g.source === "manual" ? "관리자가 묶은" : "자동"} 동시분석 그룹 · ${g.items.length}건${g.note ? ` · ${g.note}` : ""}`}
+                  >
+                    <Layers className="size-3" />동시 {g.items.length}
+                  </span>
+                )
+              })()}
               <p className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground sm:text-[1.05rem]" title={r.productName}>
                 {r.productName}
               </p>
@@ -1230,6 +1313,16 @@ export default function OrdersPage() {
       {/* 휴가 겹침 처리 다이얼로그 — 요청이 있을 때만 렌더된다(useLeaveReschedule) */}
       {leaveRescheduleDialog}
 
+      <ConcurrentGroupDialog
+        open={groupDialogOpen}
+        orderIds={Array.from(selected)}
+        dissolvable={selectionGroups.exact
+          ? { id: selectionGroups.exact.id, label: selectionGroups.exact.label, size: selectionGroups.exact.items.length }
+          : null}
+        onClose={() => setGroupDialogOpen(false)}
+        onDone={(msg) => { setGroupDialogOpen(false); setSelected(new Set()); flash(msg); void load() }}
+      />
+
       {createOpen && (
         <CreateModal
           testers={testers}
@@ -1319,6 +1412,23 @@ export default function OrdersPage() {
                     </Button>
                   </>
                 )}
+              </div>
+
+              <span className="hidden h-8 w-px shrink-0 bg-background/15 sm:block" />
+
+              {/* 동시분석 묶기 — 배정·확정과 달리 오더의 '구조' 를 바꾸는 작업이라 구획을 나눈다.
+                  실제 판정(경고)은 다이얼로그가 서버에 물어본다. */}
+              <div className="flex min-w-0 shrink-0 items-center justify-center">
+                <Button
+                  size="default"
+                  variant="outline"
+                  onClick={() => setGroupDialogOpen(true)}
+                  disabled={busy !== null || selected.size < 2}
+                  title={selected.size < 2 ? "오더를 2건 이상 선택하세요" : "선택한 오더를 함께 시험하는 묶음으로 만듭니다"}
+                  className="w-full border-background/20 bg-transparent text-background hover:bg-background/10 hover:text-background sm:w-auto"
+                >
+                  <Layers />동시분석 묶기
+                </Button>
               </div>
 
               <span className="hidden h-8 w-px shrink-0 bg-background/15 sm:block" />
