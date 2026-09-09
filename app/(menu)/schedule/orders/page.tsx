@@ -1381,7 +1381,10 @@ export default function OrdersPage() {
              한 줄에 Select 1개 + 버튼 4개 + 구분선 2개를 밀어 넣으면 320px 에서는
              바가 화면 밖으로 나가 아무 버튼도 누를 수 없다. 구분선은 가로 배치일 때만 쓴다. */
           <div className="pointer-events-none fixed inset-x-0 bottom-3 z-40 flex justify-center px-3 sm:bottom-5 sm:px-4">
-            <div className="pointer-events-auto relative flex w-full max-w-3xl flex-col gap-2 rounded-md border border-background/10 bg-foreground px-3 py-2.5 text-background shadow-lg sm:flex-row sm:items-center sm:gap-3 sm:px-4">
+            {/* 구획이 넷(요약·배정·묶기·확정)이라 3xl 로는 좁아 버튼이 서로 겹쳤다.
+                폭을 넓히고, 그래도 모자라면 **겹치는 대신 접히도록** sm 이상에서도 wrap 을 켠다.
+                고정 막대에서 겹침은 누를 수 없는 버튼을 만든다 — 접히는 편이 언제나 낫다. */}
+            <div className="pointer-events-auto relative flex w-full max-w-5xl flex-col gap-2 rounded-md border border-background/10 bg-foreground px-3 py-2.5 text-background shadow-lg sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-2 sm:px-4">
               {/* 왼쪽 — 선택 요약. pr-9: 모바일에선 닫기 버튼이 오른쪽 위에 겹쳐 앉는다 */}
               <div className="flex min-w-0 flex-col pr-9 leading-tight sm:flex-1 sm:pr-0">
                 <span className="text-sm font-semibold text-background tabular-nums">{selected.size}건 선택됨</span>
@@ -1435,8 +1438,9 @@ export default function OrdersPage() {
               <span className="hidden h-8 w-px shrink-0 bg-background/15 sm:block" />
 
               {/* 동시분석 묶기 — 배정·확정과 달리 오더의 '구조' 를 바꾸는 작업이라 구획을 나눈다.
+                  버튼 하나뿐이라 flex-1 로 같은 몫을 가져가지 않는다(그러면 배정 구획이 눌린다).
                   실제 판정(경고)은 다이얼로그가 서버에 물어본다. */}
-              <div className="flex min-w-0 shrink-0 items-center justify-center">
+              <div className="flex w-full min-w-0 shrink-0 items-center justify-center sm:w-auto">
                 <Button
                   size="default"
                   variant="outline"
@@ -1448,8 +1452,6 @@ export default function OrdersPage() {
                   <Layers />동시분석 묶기
                 </Button>
               </div>
-
-              <span className="hidden h-8 w-px shrink-0 bg-background/15 sm:block" />
 
               {/* 오른쪽 — 확정 / 확정 해제 */}
               <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:flex-1 sm:flex-nowrap sm:justify-end">
