@@ -806,26 +806,14 @@ export default function OrdersPage() {
           <div className="min-w-0 flex-1">
             <div className="flex items-start gap-2">
               {indented && <span aria-hidden="true" className="text-muted-foreground/60">↳</span>}
-              {/* 동시분석 배지 — 이 오더가 어떤 묶음에 들어 있는지. 관리자가 묶은 것과
-                  규칙이 자동으로 묶은 것을 구분해 보여준다(잘못 묶인 그룹의 첫 단서다). */}
-              {(() => {
-                const g = groupByOrder.get(r.id)
-                if (!g || g.items.length < 2) return null
-                return (
-                  <span
-                    className={cn(
-                      "inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 text-xs leading-normal font-medium",
-                      g.source === "manual"
-                        ? "border-primary/40 bg-primary/10 text-primary"
-                        : "border-border text-muted-foreground",
-                    )}
-                    title={`${g.source === "manual" ? "관리자가 묶은" : "자동"} 동시분석 그룹 · ${g.items.length}건${g.note ? ` · ${g.note}` : ""}`}
-                  >
-                    <Layers className="size-3" />동시 {g.items.length}
-                  </span>
-                )
-              })()}
-              <p className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground sm:text-[1.05rem]" title={r.productName}>
+              {/* 배지 묶음이 shrink-0 이라 폭이 모자라면 **이름만** 줄어든다. truncate 였을 때는
+                  긴급·PV2 까지 붙은 카드에서 "광동…" 만 남아 무슨 품목인지 알 수 없었다.
+                  두 줄까지 쓰게 하면 폭 대신 높이를 쓴다 — 목록에서 품목명은 잘려선 안 되는 값이다.
+                  break-keep: 한국어를 음절 단위로 끊지 않는다. */}
+              <p
+                className="min-w-0 flex-1 text-sm leading-snug font-semibold break-keep text-foreground sm:text-[1.05rem] [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] overflow-hidden"
+                title={r.productName}
+              >
                 {r.productName}
               </p>
               <div className="flex shrink-0 flex-wrap justify-end gap-0.5 sm:gap-1">
@@ -861,6 +849,36 @@ export default function OrdersPage() {
               <span className="font-mono tabular-nums">품목코드 {r.productCode}</span>
               <span aria-hidden="true" className="text-border">·</span>
               <span className="font-mono tabular-nums">제조번호 {r.batchNo}</span>
+              {/* 동시분석 묶음은 이 오더의 **부가정보**이지 상태가 아니다. 품목명 줄에 두면
+                  이름이 쓸 폭을 빼앗아 긴 품목명이 곧바로 잘린다(광동…). 코드·제조번호와
+                  같은 줄에 두면 폭이 남고, 줄이 좁아지면 스스로 아랫줄로 접힌다. */}
+              {(() => {
+                const g = groupByOrder.get(r.id)
+                if (!g || g.items.length < 2) return null
+                const others = g.items.filter(i => i.orderId !== r.id).map(i => i.batchNo)
+                return (
+                  <>
+                    <span aria-hidden="true" className="text-border">·</span>
+                    <span
+                      className={cn(
+                        "inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 font-medium",
+                        g.source === "manual"
+                          ? "border-primary/40 bg-primary/10 text-primary"
+                          : "border-border text-muted-foreground",
+                      )}
+                      /* 몇 건인지보다 "무엇과 함께인지" 가 실제로 필요한 정보다 —
+                         제조번호를 툴팁에 적어 카드를 열지 않고도 알 수 있게 한다. */
+                      title={
+                        `${g.source === "manual" ? "관리자가 묶은" : "자동"} 동시분석 그룹 (${g.items.length}건)` +
+                        (others.length > 0 ? `\n함께: ${others.join(", ")}` : "") +
+                        (g.note ? `\n${g.note}` : "")
+                      }
+                    >
+                      <Layers className="size-3" />동시 {g.items.length}
+                    </span>
+                  </>
+                )
+              })()}
             </div>
           </div>
 
