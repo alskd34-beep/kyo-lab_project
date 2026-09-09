@@ -37,6 +37,10 @@ export interface IngestResult {
   /** 소프트 삭제됐던 오더가 시트에 재등장해 되살아난 건수(배정·확정은 초기화됨) */
   restored: number
   unsynced: number
+  /** 시트에 품목코드가 없어 품목명으로 만들어 넣은 건수 (제조팀이 코드를 채워야 한다) */
+  codeGenerated: number
+  /** 오더로 만들지 못하고 건너뛴 시트 행 — 조용히 사라지지 않게 사유와 함께 남긴다 */
+  skippedRows: Array<{ reason: string; productName: string; batchNo: string }>
   deadlineAlerts: number
   /**
    * 처리에 실패한 건. 예전에는 insert/update 실패를 `if (!error)` 로 전부 삼켜
@@ -155,7 +159,7 @@ function diffChanged(existing: ExistingOrder, row: SheetPctRow, hasValidationCol
 /** 적재 실행 (크론/수동 트리거 공용) */
 export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestResult> {
   const fileId = fileIdOverride || (await resolveSheetFileId())
-  const sheetRows = await fetchPctSheet(fileId)
+  const { rows: sheetRows, skipped: skippedRows } = await fetchPctSheet(fileId)
   void MUTABLE // 문서용(diff는 diffChanged에서 명시 비교)
 
   // ── 기존 오더 로드 (전체 — '삭제' 포함) ─────────────────────────────────────
@@ -200,7 +204,8 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
   const productCodes = new Set((prodRows ?? []).map(p => String(p.product_code)))
 
   const result: IngestResult = {
-    fileId, total: sheetRows.length, created: 0, updated: 0, blocked: 0, deleted: 0, restored: 0, unsynced: 0, deadlineAlerts: 0,
+    fileId, total: sheetRows.length, created: 0, updated: 0, blocked: 0, deleted: 0, restored: 0, unsynced: 0,
+    codeGenerated: 0, skippedRows, deadlineAlerts: 0,
     failures: [],
   }
   const fail = (orderKey: string, stage: IngestResult['failures'][number]['stage'], message: string) => {
@@ -342,6 +347,7 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
   for (const row of sheetRows) {
     const key = keyOf(row.batchNo, row.productCode)
     seen.add(key)
+    if (row.codeGenerated) result.codeGenerated++
 
     // ── 품목마스터 동기화 ────────────────────────────────────────────────────
     let synced = productCodes.has(row.productCode)
@@ -500,6 +506,8 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
     body:
       `신규 ${result.created} · 변경 ${result.updated} · 차단 ${result.blocked} · 삭제 ${result.deleted} · ` +
       `복구 ${result.restored} · 미동기화 ${result.unsynced} · 동시분석그룹 ${groupsCreated}` +
+      (result.codeGenerated > 0 ? ` · 코드 자동생성 ${result.codeGenerated}` : '') +
+      (result.skippedRows.length > 0 ? ` · 건너뜀 ${result.skippedRows.length}` : '') +
       (failed > 0
         ? `
 ⚠ 실패 ${failed}건: ` +
@@ -508,6 +516,35 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
         : ''),
     severity: failed > 0 ? 'critical' : 'info',
   })
+
+  // 품목코드 없이 들어온 행 — 임시 코드로 등록했음을 알린다.
+  // 오더마다 알리지 않고 1건으로 묶는다(복구 알림과 같은 이유).
+  if (result.codeGenerated > 0) {
+    await createNotification({
+      type: 'ingest',
+      title: '품목코드 없는 행을 임시 코드로 등록',
+      body:
+        `제조팀 시트에 품목코드가 비어 있는 행 ${result.codeGenerated}건을 품목명 기준 임시 코드(AUTO-…)로 등록했습니다. ` +
+        `시트에 정식 코드를 채우면 그 오더는 **새 오더로 다시 들어오고, 임시 코드 오더는 삭제됩니다** — ` +
+        `그때 배정·확정은 유지되지 않으니 코드를 먼저 채운 뒤 배정하는 편이 안전합니다.`,
+      severity: 'warning',
+    })
+  }
+
+  // 오더로 만들지 못한 행 — 예전에는 파싱에서 조용히 사라져 흔적이 없었다.
+  if (result.skippedRows.length > 0) {
+    await createNotification({
+      type: 'ingest',
+      title: '적재하지 못한 시트 행',
+      body:
+        `${result.skippedRows.length}건을 오더로 만들지 못했습니다(품목명 또는 제조번호 없음). ` +
+        result.skippedRows.slice(0, 5)
+          .map(r => `${r.productName || '(품목명 없음)'}/${r.batchNo || '(제조번호 없음)'} — ${r.reason}`)
+          .join(', ') +
+        (result.skippedRows.length > 5 ? ` 외 ${result.skippedRows.length - 5}건` : ''),
+      severity: 'warning',
+    })
+  }
 
   // 복구 건은 오더마다 알림을 만들면 첫 실행에 수십 건이 한꺼번에 쌓인다 —
   // 요약 알림 1건으로만 안내한다.
