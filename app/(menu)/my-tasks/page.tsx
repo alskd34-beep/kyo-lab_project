@@ -1,8 +1,8 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import {
-  Play, CheckCircle2, Circle, LoaderCircle, Loader2, AlertTriangle, Clock, XCircle, Undo2,
+  Play, CheckCircle2, Circle, LoaderCircle, Loader2, AlertTriangle, Clock, XCircle, Undo2, Layers,
   ShieldAlert, ClipboardList,
 } from "lucide-react"
 import {
@@ -34,10 +34,23 @@ interface Job {
   id: string; orderId: string; qcNo: string; productName: string; batchNo: string
   workStartDate: string | null; workEndDate: string | null; status: string
   isUrgent: boolean; dueDate: string | null; items: JobItem[]
+  /** 동시분석 그룹 — 같은 그룹의 작업은 카드 하나로 묶어 한 번에 조작한다 */
+  groupId: string | null; groupLabel: string | null; groupSize: number
 }
 interface PendingOrder {
   id: string; productCode: string; productName: string; batchNo: string
   dueDate: string | null; isUrgent: boolean; method: string
+  groupId: string | null; groupLabel: string | null; groupSize: number
+}
+
+/** 그룹 카드의 시험항목 한 줄 — 같은 이름의 항목을 배치들에 걸쳐 합쳐 본다 */
+interface MergedItem {
+  name: string
+  total: number
+  cleared: number
+  inProgress: number
+  /** 진행 중인 것들 중 가장 이른 시작 시각 — "N분 경과" 표시용 */
+  earliestStart: string | null
 }
 
 /** equipmentMaster ReadinessResult (UI 전용 타입) */
@@ -418,6 +431,33 @@ export default function MyTasksPage() {
 
   // 작업을 상태별로 분리
   const activeJobs = jobs.filter(j => ACTIVE_JOB_STATUSES.has(j.status))
+
+  /**
+   * 진행 중 작업을 동시분석 그룹으로 묶는다.
+   * 순서는 원래 목록 순서를 따른다 — 그룹으로 묶었다고 카드가 위아래로 튀면
+   * 어제 보던 자리에서 오늘 못 찾는다.
+   */
+  const activeGroupBlocks = useMemo(() => {
+    const byGroup = new Map<string, Job[]>()
+    for (const j of activeJobs) {
+      if (!j.groupId) continue
+      const a = byGroup.get(j.groupId) ?? []; a.push(j); byGroup.set(j.groupId, a)
+    }
+    const out: ({ kind: "group"; groupId: string; jobs: Job[] } | { kind: "single"; jobs: Job[] })[] = []
+    const done = new Set<string>()
+    for (const j of activeJobs) {
+      const gid = j.groupId
+      const mates = gid ? byGroup.get(gid) ?? [] : []
+      if (gid && mates.length >= 2) {
+        if (done.has(gid)) continue
+        done.add(gid)
+        out.push({ kind: "group", groupId: gid, jobs: mates })
+      } else {
+        out.push({ kind: "single", jobs: [j] })
+      }
+    }
+    return out
+  }, [activeJobs])
   const doneJobs = jobs.filter(j => j.status === CLOSED_STAGE)
 
   const allJobsSelected = activeJobs.length > 0 && selectedJobs.size === activeJobs.length
@@ -684,7 +724,13 @@ export default function MyTasksPage() {
             <p className="py-10 text-center text-sm text-muted-foreground">진행 중인 작업이 없습니다.</p>
           ) : (
             <div className="flex flex-col gap-3">
-              {activeJobs.map(job => renderJobCard(job, true))}
+              {/* 같은 동시분석 그룹의 작업이 2건 이상이면 카드 하나로 묶는다.
+                  1건뿐이면 묶을 것이 없으므로 예전 낱개 카드 그대로 — 렌더 경로를 나눠
+                  기존 화면이 이번 변경에 영향을 받지 않게 한다. */}
+              {activeGroupBlocks.map(b =>
+                b.kind === "group"
+                  ? renderGroupCard(b.groupId, b.jobs)
+                  : renderJobCard(b.jobs[0], true))}
             </div>
           )}
         </section>
@@ -707,6 +753,160 @@ export default function MyTasksPage() {
       </div>
     </>
   )
+
+  /**
+   * 그룹 단위 항목 조작 — 한 번 눌러 그룹 안 내 배치 전부를 처리한다.
+   * 기록은 배치별로 그대로 남는다(서버가 배치마다 개별 기록을 쓴다).
+   */
+  const groupItemAction = async (
+    groupId: string, testItemName: string, action: "start" | "clear" | "cancel",
+  ) => {
+    setBusy(`${groupId}:${testItemName}`)
+    try {
+      const res = await fetch(`/api/qc-jobs/group/${groupId}/items`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ testItemName, action }),
+      })
+      const data = await res.json() as { error?: string; affected?: number; jobs?: number; advanced?: string[] }
+      if (!res.ok) throw new Error(data.error)
+      await load()
+      if (data.advanced && data.advanced.length > 0) {
+        flash(`모든 시험항목 완료 — QC ${data.advanced.join(", ")} 가 "검토전" 으로 넘어갔습니다.`)
+      } else if (action === "clear") {
+        flash(`${data.affected ?? 0}개 배치의 "${testItemName}" 을 완료 처리했습니다.`)
+      }
+    } catch (e) { flash(`처리 실패: ${e instanceof Error ? e.message : ""}`, "error") }
+    finally { setBusy(null) }
+  }
+
+  /**
+   * 그룹 카드 — 같은 동시분석 그룹의 배치들을 하나로 본다.
+   *
+   * 시험자는 3개 배치를 한 시퀀스로 돌리면서 「성상 완료」를 세 번 누르고 있었다.
+   * 여기서는 한 번이다. 다만 **기록은 배치마다 그대로 남는다** — 제조번호별 시험 기록과
+   * 성적서가 분리돼야 한다는 것(GMP 추적성)은 화면 편의와 바꾸지 않는다.
+   */
+  function renderGroupCard(groupId: string, groupJobs: Job[]) {
+    // 같은 이름의 항목을 배치들에 걸쳐 합친다. 배치마다 항목 구성이 다를 수 있어
+    // total 은 "그 이름을 가진 배치 수" 다 — 3건 중 2건에만 있는 항목이 정상적으로 존재한다.
+    const merged = new Map<string, MergedItem>()
+    for (const j of groupJobs) {
+      for (const it of j.items) {
+        const m = merged.get(it.testItemName) ?? { name: it.testItemName, total: 0, cleared: 0, inProgress: 0, earliestStart: null }
+        m.total += 1
+        if (it.status === ITEM_CLEARED) m.cleared += 1
+        if (it.status === ITEM_IN_PROGRESS) {
+          m.inProgress += 1
+          if (it.startedAt && (!m.earliestStart || it.startedAt < m.earliestStart)) m.earliestStart = it.startedAt
+        }
+        merged.set(it.testItemName, m)
+      }
+    }
+    const items = [...merged.values()]
+    const allCleared = items.filter(i => i.cleared === i.total).length
+    const anyDone = groupJobs.every(j => j.status === CLOSED_STAGE)
+    const dd = dDay(groupJobs.map(j => j.dueDate).filter(Boolean).sort()[0] ?? null)
+
+    return (
+      <Card key={`grp-${groupId}`} className="gap-0 overflow-hidden border-primary/30 py-0">
+        <div className="flex flex-col gap-2 border-b bg-primary/5 px-4 py-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            <Badge variant="outline" className="gap-1 border-primary/40 bg-primary/10 text-primary">
+              <Layers className="size-3" />동시분석 {groupJobs.length}건
+            </Badge>
+            <span className="min-w-0 truncate text-sm font-semibold text-foreground">
+              {groupJobs[0].productName}
+            </span>
+            {groupJobs[0].groupLabel && (
+              <span className="truncate text-xs text-muted-foreground">· {groupJobs[0].groupLabel}</span>
+            )}
+            {dd != null && dd <= 7 && !anyDone && (
+              <Badge variant="outline" className="border-red-200 text-red-700 dark:border-red-800 dark:text-red-300">
+                D{dd < 0 ? `+${-dd}` : `-${dd}`}
+              </Badge>
+            )}
+          </div>
+          {/* 어떤 제조번호가 함께 도는지 — 이것이 그룹 카드의 핵심 정보다 */}
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-normal text-muted-foreground">
+            {groupJobs.map(j => (
+              <span key={j.id} className="rounded-md border px-1.5 font-mono tabular-nums">
+                {j.batchNo}
+                <span className={cn("ml-1 font-sans", statusCls(j.status))}>{j.status}</span>
+              </span>
+            ))}
+            {groupJobs[0].groupSize > groupJobs.length && (
+              <span className="text-muted-foreground/70">
+                (그룹 전체 {groupJobs[0].groupSize}건 중 내 몫 {groupJobs.length}건)
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="px-4 py-3">
+          <p className="mb-1 text-xs leading-normal font-semibold text-muted-foreground">
+            시험항목 진행 <span className="tabular-nums text-foreground">{allCleared}/{items.length}</span>
+            <span className="px-1 text-border">·</span>
+            한 번 누르면 <span className="font-medium text-foreground">{groupJobs.length}개 배치</span>에 함께 기록됩니다
+          </p>
+          {items.length === 0 ? (
+            <p className="py-2 text-xs leading-normal text-muted-foreground">등록된 시험항목이 없습니다.</p>
+          ) : (
+            <ul className="flex flex-col divide-y">
+              {items.map(m => {
+                const done = m.cleared === m.total
+                const running = m.inProgress > 0
+                const key = `${groupId}:${m.name}`
+                const itemBusy = busy === key
+                return (
+                  <li key={m.name} className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-0.5 py-1.5">
+                    <div className="flex min-w-0 items-center gap-2">
+                      {done
+                        ? <CheckCircle2 size={16} className="shrink-0 text-blue-600 dark:text-blue-300" />
+                        : running
+                          ? <LoaderCircle size={16} className="shrink-0 animate-spin text-primary" />
+                          : <Circle size={16} className="shrink-0 text-muted-foreground" />}
+                      <span className={cn("min-w-0 truncate text-sm",
+                        done ? "font-medium text-blue-800 dark:text-blue-200" : running ? "font-semibold text-foreground" : "text-foreground")}>
+                        {m.name}
+                      </span>
+                      {/* 배치마다 상태가 다를 수 있다 — 합쳐 보이되 몇 건이 끝났는지는 숨기지 않는다 */}
+                      <span className="shrink-0 text-xs leading-normal tabular-nums text-muted-foreground">
+                        {m.cleared}/{m.total}
+                      </span>
+                      {running && m.earliestStart && (
+                        <span className="shrink-0 text-xs leading-normal tabular-nums text-primary">
+                          {formatElapsedMinutes(minutesSince(m.earliestStart, nowTick))} 경과
+                        </span>
+                      )}
+                    </div>
+                    {done ? (
+                      <span className="shrink-0 text-xs leading-normal text-blue-700 dark:text-blue-300">완료</span>
+                    ) : anyDone ? null : running ? (
+                      <div className="flex shrink-0 items-center gap-1">
+                        <Button variant="ghost" size="icon-sm" title="시작 취소 — 대기로 되돌립니다"
+                          onClick={() => void groupItemAction(groupId, m.name, "cancel")} disabled={busy !== null}>
+                          <Undo2 className="size-3.5" />
+                        </Button>
+                        <Button size="sm" onClick={() => void groupItemAction(groupId, m.name, "clear")} disabled={busy !== null}>
+                          {itemBusy ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}완료
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button variant="outline" size="sm"
+                        onClick={() => void groupItemAction(groupId, m.name, "start")} disabled={busy !== null}>
+                        {itemBusy ? <Loader2 className="animate-spin" /> : <Play />}시작
+                      </Button>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
+      </Card>
+    )
+  }
 
   function renderJobCard(job: Job, selectable = false) {
     const cleared = job.items.filter(i => i.status === ITEM_CLEARED).length

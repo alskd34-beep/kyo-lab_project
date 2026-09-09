@@ -68,6 +68,14 @@ export interface QcJobRow {
   isUrgent: boolean
   dueDate: string | null
   items: JobItemRow[]
+  /**
+   * 이 오더가 속한 동시분석 그룹. 화면이 같은 그룹의 작업을 카드 하나로 묶는다.
+   * ⚠️ 묶이는 것은 **조작**뿐이다 — 시험 기록(qc_job_items)은 배치별로 그대로 남는다.
+   */
+  groupId: string | null
+  groupLabel: string | null
+  /** 그 그룹의 전체 오더 수(내 것이 아닌 것 포함). "3건 중 2건이 내 몫" 을 알리기 위해 */
+  groupSize: number
 }
 export interface PendingOrderRow {
   id: string
@@ -77,6 +85,9 @@ export interface PendingOrderRow {
   dueDate: string | null
   isUrgent: boolean
   method: string
+  groupId: string | null
+  groupLabel: string | null
+  groupSize: number
 }
 
 /**
@@ -208,6 +219,30 @@ export async function listWorkspace(userSub: string): Promise<{ testerLinked: bo
     }
   }
 
+  // 동시분석 그룹 — 화면이 같은 그룹의 작업을 카드 하나로 묶는다.
+  // 0044 미적용이나 테이블 부재에도 화면이 죽지 않게 실패를 삼킨다(묶기는 편의 기능이다).
+  const groupByOrder = new Map<string, { id: string; label: string | null; size: number }>()
+  try {
+    const { data: gItems } = await supabaseAdmin
+      .from('concurrent_analysis_group_items').select('group_id, order_id')
+    const { data: gRows } = await supabaseAdmin
+      .from('concurrent_analysis_groups').select('id, label')
+    const labelOf = new Map((gRows ?? []).map(g => [g.id as string, (g.label as string) ?? null]))
+    const sizeOf = new Map<string, number>()
+    for (const it of gItems ?? []) {
+      const gid = it.group_id as string
+      sizeOf.set(gid, (sizeOf.get(gid) ?? 0) + 1)
+    }
+    for (const it of gItems ?? []) {
+      const gid = it.group_id as string
+      // 혼자 남은 그룹은 묶을 것이 없다 — 화면이 1건짜리 그룹 카드를 그리지 않게 여기서 거른다.
+      if ((sizeOf.get(gid) ?? 0) < 2) continue
+      groupByOrder.set(it.order_id as string, {
+        id: gid, label: labelOf.get(gid) ?? null, size: sizeOf.get(gid) ?? 0,
+      })
+    }
+  } catch { /* 그룹 정보가 없으면 예전처럼 낱개로 보인다 */ }
+
   const jobs: QcJobRow[] = (jobRows ?? []).map(j => {
     const o = orderById.get(j.order_id as string)
     return {
@@ -222,6 +257,9 @@ export async function listWorkspace(userSub: string): Promise<{ testerLinked: bo
       isUrgent: !!o?.is_urgent,
       dueDate: (o?.due_date as string) ?? null,
       items: itemsByJob.get(j.id as string) ?? [],
+      groupId:    groupByOrder.get(j.order_id as string)?.id ?? null,
+      groupLabel: groupByOrder.get(j.order_id as string)?.label ?? null,
+      groupSize:  groupByOrder.get(j.order_id as string)?.size ?? 0,
     }
   })
 
@@ -259,6 +297,9 @@ export async function listWorkspace(userSub: string): Promise<{ testerLinked: bo
       dueDate: (o.due_date as string) ?? null,
       isUrgent: !!o.is_urgent,
       method: o.method as string,
+      groupId:    groupByOrder.get(o.id as string)?.id ?? null,
+      groupLabel: groupByOrder.get(o.id as string)?.label ?? null,
+      groupSize:  groupByOrder.get(o.id as string)?.size ?? 0,
     }))
 
   return { testerLinked: true, pendingOrders, jobs }
@@ -1396,4 +1437,125 @@ async function assertOwner(jobId: string, userSub: string): Promise<void> {
   const { data } = await supabaseAdmin.from('qc_jobs').select('assignee_user_id').eq('id', jobId).maybeSingle()
   if (!data) throw new Error('작업을 찾을 수 없습니다.')
   if (data.assignee_user_id !== userSub) throw new Error('본인 작업만 수정할 수 있습니다.')
+}
+
+// ─── 동시분석 그룹 단위 처리 ──────────────────────────────────────────────────
+/**
+ * 같은 동시분석 그룹의 배치들을 **한 번의 조작**으로 처리한다.
+ *
+ * 시험자는 3개 배치를 한 시퀀스로 돌리면서 「성상 완료」를 세 번 누르고 있었다. 배치가
+ * 늘수록 클릭만 늘고, 그러다 한 배치를 빠뜨리면 기록이 어긋난다.
+ *
+ * ⚠️ 묶이는 것은 **조작뿐**이다. qc_job_items 는 배치별로 그대로 남는다 — 제조번호마다
+ *    시험 기록과 성적서가 분리돼야 한다는 것(GMP 추적성)은 협상 대상이 아니다.
+ *    항목 매칭은 test_item_name 으로 한다. 배치마다 항목 구성이 조금 다를 수 있으므로
+ *    "그 이름을 가진 항목이 있는 작업" 에만 적용하고, 없는 배치는 조용히 건너뛴다.
+ *
+ * 남의 작업은 절대 건드리지 않는다 — 대상 작업을 assignee_user_id 로 먼저 좁힌다.
+ * 관리자라도 여기서는 넓히지 않는다. 이 함수는 "내 손으로 하는 시험" 의 조작이다.
+ */
+export interface GroupItemResult {
+  /** 실제로 처리된 (작업, 항목) 수 */
+  affected: number
+  /** 건드린 작업 수 */
+  jobs: number
+  /** 전 항목 완료로 '검토전' 이 된 작업의 QC번호 */
+  advanced: string[]
+}
+
+/** 그룹에 속한 내 작업들을 찾는다. 그룹이 없거나 내 몫이 없으면 빈 배열. */
+async function myJobsInGroup(groupId: string, userSub: string): Promise<Array<{ id: string; qcNo: string }>> {
+  const { data: items, error: iErr } = await supabaseAdmin
+    .from('concurrent_analysis_group_items').select('order_id').eq('group_id', groupId)
+  if (iErr) throw iErr
+  const orderIds = (items ?? []).map(i => i.order_id as string)
+  if (orderIds.length === 0) return []
+
+  const { data: jobs, error: jErr } = await supabaseAdmin
+    .from('qc_jobs').select('id, qc_no, status')
+    .in('order_id', orderIds)
+    .eq('assignee_user_id', userSub)
+  if (jErr) throw jErr
+  // 검토·승인 단계로 넘어간 작업은 항목을 더 이상 건드리지 않는다(clearItem 과 같은 규칙).
+  return (jobs ?? [])
+    .filter(j => SELF_SERVICE_STATUSES.has(j.status as string))
+    .map(j => ({ id: j.id as string, qcNo: j.qc_no as string }))
+}
+
+/**
+ * 그룹 내 내 작업들에서 같은 이름의 시험항목을 한꺼번에 시작/완료한다.
+ * 이미 그 상태인 항목은 건너뛴다 — 다시 눌러도 시간이 덮어써지지 않는다.
+ */
+export async function applyGroupItemAction(
+  groupId: string, testItemName: string, action: 'start' | 'clear' | 'cancel', userSub: string,
+): Promise<GroupItemResult> {
+  const jobs = await myJobsInGroup(groupId, userSub)
+  if (jobs.length === 0) throw new Error('이 그룹에 진행 중인 내 작업이 없습니다.')
+
+  const { data: rows, error } = await supabaseAdmin
+    .from('qc_job_items')
+    .select('id, qc_job_id, status')
+    .in('qc_job_id', jobs.map(j => j.id))
+    .eq('test_item_name', testItemName)
+  if (error) throw error
+
+  // 이미 목표 상태인 것은 제외한다. 두 번 눌러 started_at 이 덮어써지거나
+  // 완료 시각이 다시 찍히는 일을 막는다(개별 경로와 같은 규칙).
+  const targets = (rows ?? []).filter(r => {
+    const st = r.status as string
+    if (action === 'start')  return st === ITEM_PENDING
+    if (action === 'cancel') return st === ITEM_IN_PROGRESS
+    return st !== ITEM_CLEARED
+  })
+
+  const advanced: string[] = []
+  let affected = 0
+  const touchedJobs = new Set<string>()
+  for (const r of targets) {
+    const jobId = r.qc_job_id as string
+    // 개별 경로(startItem/clearItem/cancelItemStart)를 그대로 재사용한다.
+    // 소요시간 적재·알림·전체완료 전환 규칙을 여기서 다시 쓰면 언젠가 갈라진다.
+    if (action === 'start') await startItem(jobId, r.id as string, userSub)
+    else if (action === 'cancel') await cancelItemStart(jobId, r.id as string, userSub)
+    else {
+      const res = await clearItem(jobId, r.id as string, userSub)
+      if (res.statusChangedTo) advanced.push(jobs.find(j => j.id === jobId)?.qcNo ?? '')
+    }
+    affected++
+    touchedJobs.add(jobId)
+  }
+  return { affected, jobs: touchedJobs.size, advanced: advanced.filter(Boolean) }
+}
+
+/**
+ * 그룹 안에서 아직 시작하지 않은 내 오더를 한꺼번에 시작한다.
+ * 장비 검증(startJob)은 오더마다 그대로 돈다 — 한 건이 막히면 그 건만 실패로 돌려준다.
+ */
+export async function startGroupJobs(
+  groupId: string, userSub: string,
+): Promise<{ started: Array<{ orderId: string; qcNo: string }>; failed: Array<{ orderId: string; message: string }> }> {
+  const { data: items, error } = await supabaseAdmin
+    .from('concurrent_analysis_group_items').select('order_id').eq('group_id', groupId)
+  if (error) throw error
+  const orderIds = (items ?? []).map(i => i.order_id as string)
+
+  // 이미 내 작업이 있는 오더는 건너뛴다.
+  const { data: mine } = await supabaseAdmin
+    .from('qc_jobs').select('order_id').in('order_id', orderIds).eq('assignee_user_id', userSub)
+  const already = new Set((mine ?? []).map(j => j.order_id as string))
+
+  const started: Array<{ orderId: string; qcNo: string }> = []
+  const failed: Array<{ orderId: string; message: string }> = []
+  for (const orderId of orderIds) {
+    if (already.has(orderId)) continue
+    try {
+      const r = await startJob(orderId, userSub)
+      started.push({ orderId, qcNo: r.qcNo })
+    } catch (e) {
+      // 내 배정이 아닌 오더는 그룹에 있어도 시작 대상이 아니다 — 실패로 보고하지 않는다.
+      const msg = e instanceof Error ? e.message : '시작 실패'
+      if (!msg.includes('본인에게 배정된')) failed.push({ orderId, message: msg })
+    }
+  }
+  return { started, failed }
 }
