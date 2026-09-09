@@ -38,6 +38,10 @@ export interface GroupRow {
   label: string | null
   testStartDate: string | null
   groupLock: boolean
+  /** 'auto'=규칙 자동 생성 · 'manual'=관리자가 직접 묶음 */
+  source: 'auto' | 'manual'
+  /** 왜 이렇게 묶었는지 (수동 그룹) */
+  note: string | null
   items: GroupItem[]
 }
 
@@ -233,7 +237,10 @@ async function loadFamilyByCodeRaw(): Promise<Map<string, string>> {
 export async function listGroups(): Promise<GroupRow[]> {
   const { data: groups, error } = await supabaseAdmin
     .from('concurrent_analysis_groups')
-    .select('id, group_key, label, test_start_date, group_lock')
+    // select('*') 로 읽는다. source·note 는 0044 에서 붙는 컬럼이라, 이름을 명시하면
+    // 마이그레이션 적용 전에는 42703 으로 목록 전체가 500 이 된다(AI 스케줄 화면이 깨진다).
+    // '*' 면 없는 컬럼은 그냥 빠지고 아래 ?? 기본값이 받는다.
+    .select('*')
     .order('test_start_date', { ascending: true, nullsFirst: false })
   if (error) throw error
   const groupRows = (groups ?? []) as Record<string, unknown>[]
@@ -266,6 +273,9 @@ export async function listGroups(): Promise<GroupRow[]> {
     label:         (g.label as string) ?? null,
     testStartDate: (g.test_start_date as string) ?? null,
     groupLock:     !!g.group_lock,
+    // 0044 미적용 DB 에서는 키가 없다 — 자동으로 취급해 화면이 깨지지 않게 한다.
+    source:        (g.source as 'auto' | 'manual') ?? 'auto',
+    note:          (g.note as string) ?? null,
     items:         itemsByGroup.get(g.id as string) ?? [],
   }))
 }
@@ -359,4 +369,238 @@ export async function setGroupLock(id: string, lock: boolean): Promise<void> {
     .update({ group_lock: lock })
     .eq('id', id)
   if (error) throw error
+}
+
+// ─── 관리자 수동 그룹 (0044) ──────────────────────────────────────────────────
+/**
+ * 개별로 들어온 의뢰를 관리자가 직접 묶는다.
+ *
+ * 자동 규칙은 품목코드·품목명 유사도로만 판단해서, "같은 품목인데 포장일이 하루 달라
+ * 갈라진" 경우를 사람이 다시 합칠 방법이 없었다. 그 판단을 시스템에 담는다.
+ *
+ * ⚠️ 그룹은 **함께 수행한다** 는 실행 단위일 뿐이다. 제조번호마다 시험 기록·성적서는
+ *    그대로 분리된다(GMP 추적성) — qc_jobs / qc_job_items 는 오더별로 남는다.
+ *
+ * 보존은 group_lock=true 로 한다. rebuildGroups 가 잠긴 그룹과 그 멤버를 재구성
+ * 대상에서 이미 빼므로, 새 보존 장치를 만들지 않는다(같은 뜻을 두 곳에 두지 않는다).
+ */
+
+/** 묶기 전 경고 — 막지는 않는다. 관리자의 판단이 규칙보다 우선한다는 것이 이 기능의 취지다. */
+export interface GroupWarning {
+  level: 'warn' | 'block'
+  message: string
+}
+
+export interface GroupCandidate {
+  orderId: string
+  productCode: string
+  productName: string
+  batchNo: string
+  packagingDate: string | null
+  dueDate: string | null
+  status: string
+  /** 이미 다른 그룹에 속해 있으면 그 그룹 id */
+  currentGroupId: string | null
+  /** QC 작업이 이미 시작됐는가 */
+  hasJob: boolean
+}
+
+/** 그룹 후보 오더들의 현재 상태를 한 번에 읽는다(검증·생성 공용). */
+async function loadCandidates(orderIds: string[]): Promise<GroupCandidate[]> {
+  if (orderIds.length === 0) return []
+  const [ordersRes, itemsRes, jobsRes] = await Promise.all([
+    supabaseAdmin.from('pct_orders')
+      .select('id, product_code, product_name, batch_no, packaging_date, due_date, status')
+      .in('id', orderIds),
+    supabaseAdmin.from('concurrent_analysis_group_items').select('order_id, group_id').in('order_id', orderIds),
+    supabaseAdmin.from('qc_jobs').select('order_id').in('order_id', orderIds),
+  ])
+  if (ordersRes.error) throw ordersRes.error
+  if (itemsRes.error) throw itemsRes.error
+  if (jobsRes.error) throw jobsRes.error
+
+  const groupOf = new Map((itemsRes.data ?? []).map(i => [i.order_id as string, i.group_id as string]))
+  const withJob = new Set((jobsRes.data ?? []).map(j => j.order_id as string))
+  return (ordersRes.data ?? []).map(o => ({
+    orderId:       o.id as string,
+    productCode:   (o.product_code as string) ?? '',
+    productName:   (o.product_name as string) ?? '',
+    batchNo:       (o.batch_no as string) ?? '',
+    packagingDate: (o.packaging_date as string) ?? null,
+    dueDate:       (o.due_date as string) ?? null,
+    status:        o.status as string,
+    currentGroupId: groupOf.get(o.id as string) ?? null,
+    hasJob:        withJob.has(o.id as string),
+  }))
+}
+
+/**
+ * 묶기 검증. 관리자 판단을 막지 않는 것이 원칙이라 대부분 'warn' 이다.
+ * 'block' 은 데이터가 성립하지 않는 경우뿐 — 오더가 없거나, 삭제됐거나, 2건 미만.
+ */
+export function validateGrouping(candidates: GroupCandidate[], requestedIds: string[]): GroupWarning[] {
+  const out: GroupWarning[] = []
+  const missing = requestedIds.filter(id => !candidates.some(c => c.orderId === id))
+  if (missing.length > 0) out.push({ level: 'block', message: `오더 ${missing.length}건을 찾을 수 없습니다.` })
+
+  const alive = candidates.filter(c => c.status !== DELETED_STATUS)
+  const deleted = candidates.length - alive.length
+  if (deleted > 0) out.push({ level: 'block', message: `삭제된 오더 ${deleted}건은 묶을 수 없습니다.` })
+  if (alive.length < 2) out.push({ level: 'block', message: '동시분석 그룹은 오더 2건 이상이어야 합니다.' })
+  if (out.some(w => w.level === 'block')) return out
+
+  // 품목코드가 섞이면 알린다. 막지는 않는다 — 같은 품목군(예: 경옥고 25001/25008/25009)을
+  // 코드가 다르다는 이유로 못 묶으면 이 기능이 쓸모가 없다.
+  const codes = [...new Set(alive.map(c => c.productCode))]
+  if (codes.length > 1) {
+    out.push({ level: 'warn', message: `품목코드가 ${codes.length}종 섞여 있습니다 (${codes.join(', ')}). 함께 시험할 수 있는지 확인하세요.` })
+  }
+  const names = [...new Set(alive.map(c => c.productName))]
+  if (names.length > 1) {
+    out.push({ level: 'warn', message: `품목명이 ${names.length}종 섞여 있습니다 (${names.slice(0, 3).join(', ')}${names.length > 3 ? ' 외' : ''}).` })
+  }
+
+  // 포장일이 크게 벌어지면 "함께 시험" 이 성립하지 않는다. 하루 이틀 차이는 이 기능이
+  // 노리는 정상 상황이라 조용히 통과시키고, 그 이상만 알린다.
+  const packs = alive.map(c => c.packagingDate).filter(Boolean).sort() as string[]
+  if (packs.length >= 2) {
+    const gap = Math.round(
+      (new Date(packs[packs.length - 1]).getTime() - new Date(packs[0]).getTime()) / 86400000,
+    )
+    if (gap > 3) out.push({ level: 'warn', message: `포장일이 ${gap}일 벌어져 있습니다 (${packs[0]} ~ ${packs[packs.length - 1]}).` })
+  }
+  const noPack = alive.filter(c => !c.packagingDate).length
+  if (noPack > 0) out.push({ level: 'warn', message: `포장일이 없는 오더 ${noPack}건이 있어 시험 시작일 계산에서 빠집니다.` })
+
+  const started = alive.filter(c => c.hasJob)
+  if (started.length > 0) {
+    out.push({
+      level: 'warn',
+      message: `이미 시험이 시작된 오더 ${started.length}건이 포함됩니다 (${started.map(c => c.batchNo).join(', ')}). 지금 묶어도 이미 진행된 부분은 합쳐지지 않습니다.`,
+    })
+  }
+  const moved = alive.filter(c => c.currentGroupId)
+  if (moved.length > 0) {
+    out.push({ level: 'warn', message: `다른 그룹에 속한 오더 ${moved.length}건을 옮겨 옵니다.` })
+  }
+  return out
+}
+
+/** 검증만 수행(쓰기 없음) — 화면이 묶기 전에 보여준다 */
+export async function previewGrouping(orderIds: string[]): Promise<{
+  candidates: GroupCandidate[]; warnings: GroupWarning[]
+}> {
+  const candidates = await loadCandidates(orderIds)
+  return { candidates, warnings: validateGrouping(candidates, orderIds) }
+}
+
+/** 시험 시작일 = 그룹 내 최대 포장일 + 1일 (자동 그룹과 같은 규칙) */
+function startDateOf(candidates: GroupCandidate[]): string | null {
+  const packs = candidates.map(c => c.packagingDate).filter(Boolean).sort() as string[]
+  if (packs.length === 0) return null
+  const d = new Date(packs[packs.length - 1] + 'T00:00:00Z')
+  d.setUTCDate(d.getUTCDate() + 1)
+  return d.toISOString().slice(0, 10)
+}
+
+/** 오더를 기존 그룹에서 떼어낸다. unique(order_id) 때문에 옮기기 전에 반드시 필요하다. */
+async function detachOrders(orderIds: string[]): Promise<void> {
+  if (orderIds.length === 0) return
+  const { error } = await supabaseAdmin
+    .from('concurrent_analysis_group_items').delete().in('order_id', orderIds)
+  if (error) throw error
+}
+
+/** 멤버가 0건이 된 그룹은 남겨 두지 않는다 — 빈 그룹은 화면에서 유령 행이 된다. */
+async function purgeEmptyGroups(): Promise<void> {
+  const { data: groups } = await supabaseAdmin.from('concurrent_analysis_groups').select('id')
+  const { data: items } = await supabaseAdmin.from('concurrent_analysis_group_items').select('group_id')
+  const used = new Set((items ?? []).map(i => i.group_id as string))
+  const empty = (groups ?? []).map(g => g.id as string).filter(id => !used.has(id))
+  if (empty.length === 0) return
+  await supabaseAdmin.from('concurrent_analysis_groups').delete().in('id', empty)
+}
+
+export async function createManualGroup(
+  orderIds: string[], opts: { label?: string | null; note?: string | null }, userId: string | null,
+): Promise<{ groupId: string; warnings: GroupWarning[] }> {
+  const candidates = await loadCandidates(orderIds)
+  const warnings = validateGrouping(candidates, orderIds)
+  const blocked = warnings.filter(w => w.level === 'block')
+  if (blocked.length > 0) throw new Error(blocked.map(b => b.message).join(' '))
+
+  const alive = candidates.filter(c => c.status !== DELETED_STATUS)
+  await detachOrders(alive.map(c => c.orderId))
+
+  // 키는 결정적으로: 그룹 내 최소 order_id 앞 8자리. 자동 그룹과 구분되게 접두사를 다르게 둔다.
+  const minId = alive.map(c => c.orderId).sort()[0]
+  const { data: groupRow, error: insErr } = await supabaseAdmin
+    .from('concurrent_analysis_groups')
+    .insert({
+      group_key:       `mgrp-${minId.slice(0, 8)}`,
+      label:           opts.label?.trim() || null,
+      note:            opts.note?.trim() || null,
+      test_start_date: startDateOf(alive),
+      // 수동 그룹은 자동 재생성이 지우면 안 된다. 잠금이 그 역할을 이미 한다.
+      group_lock:      true,
+      source:          'manual',
+      created_by:      userId,
+    })
+    .select('id').single()
+  if (insErr) throw insErr
+  const groupId = (groupRow as Record<string, unknown>).id as string
+
+  const { error: itemErr } = await supabaseAdmin
+    .from('concurrent_analysis_group_items')
+    .insert(alive.map(c => ({ group_id: groupId, order_id: c.orderId, packaging_complete_date: c.packagingDate })))
+  if (itemErr) throw itemErr
+
+  await purgeEmptyGroups()
+  return { groupId, warnings: warnings.filter(w => w.level === 'warn') }
+}
+
+/** 기존 그룹에 오더를 더한다(다른 그룹에 있었으면 옮겨 온다). */
+export async function addGroupMembers(groupId: string, orderIds: string[]): Promise<number> {
+  const candidates = (await loadCandidates(orderIds)).filter(c => c.status !== DELETED_STATUS)
+  if (candidates.length === 0) return 0
+  await detachOrders(candidates.map(c => c.orderId))
+  const { error } = await supabaseAdmin
+    .from('concurrent_analysis_group_items')
+    .insert(candidates.map(c => ({ group_id: groupId, order_id: c.orderId, packaging_complete_date: c.packagingDate })))
+  if (error) throw error
+  await refreshGroupStartDate(groupId)
+  await purgeEmptyGroups()
+  return candidates.length
+}
+
+/** 그룹에서 오더를 뺀다. 남은 멤버가 1건 이하가 되면 그룹을 해체한다(1건짜리 동시분석은 뜻이 없다). */
+export async function removeGroupMembers(groupId: string, orderIds: string[]): Promise<{ removed: number; dissolved: boolean }> {
+  const { error } = await supabaseAdmin
+    .from('concurrent_analysis_group_items').delete().eq('group_id', groupId).in('order_id', orderIds)
+  if (error) throw error
+  const { count } = await supabaseAdmin
+    .from('concurrent_analysis_group_items').select('id', { count: 'exact', head: true }).eq('group_id', groupId)
+  if ((count ?? 0) <= 1) {
+    await supabaseAdmin.from('concurrent_analysis_groups').delete().eq('id', groupId)
+    return { removed: orderIds.length, dissolved: true }
+  }
+  await refreshGroupStartDate(groupId)
+  return { removed: orderIds.length, dissolved: false }
+}
+
+/** 그룹 해체 — 멤버는 on delete cascade 로 함께 사라진다(오더 자체는 그대로). */
+export async function dissolveGroup(groupId: string): Promise<void> {
+  const { error } = await supabaseAdmin.from('concurrent_analysis_groups').delete().eq('id', groupId)
+  if (error) throw error
+}
+
+/** 멤버가 바뀌면 시험 시작일도 다시 잡는다 — 안 하면 화면이 옛 날짜를 계속 말한다. */
+async function refreshGroupStartDate(groupId: string): Promise<void> {
+  const { data } = await supabaseAdmin
+    .from('concurrent_analysis_group_items').select('order_id').eq('group_id', groupId)
+  const ids = (data ?? []).map(i => i.order_id as string)
+  if (ids.length === 0) return
+  const candidates = await loadCandidates(ids)
+  await supabaseAdmin.from('concurrent_analysis_groups')
+    .update({ test_start_date: startDateOf(candidates) }).eq('id', groupId)
 }
