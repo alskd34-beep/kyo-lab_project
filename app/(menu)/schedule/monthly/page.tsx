@@ -25,6 +25,7 @@ import {
   UserSquare,
   Gauge,
   Plus,
+  Repeat,
 } from 'lucide-react'
 import { useAuth } from '@frontend/lib/auth-context'
 import { formatMinutes } from '@frontend/lib/workload-format'
@@ -33,6 +34,7 @@ import {
   SideWorkDialog,
   type SideWorkDialogTarget,
 } from '@frontend/components/schedule/side-work-dialog'
+import { RecurringSideWorkDialog } from '@frontend/components/schedule/recurring-side-work-dialog'
 import { MobileFilterPanel } from '@frontend/components/common/mobile-filter-panel'
 import MondayBoard, { type BoardGroup, type ColumnDef } from '@frontend/components/board/MondayBoard'
 
@@ -174,6 +176,8 @@ export default function MonthlySchedulePage() {
   // 한 줄 안내만 띄우고 나머지는 그대로 보여준다.
   const [sideError, setSideError] = useState<string | null>(null)
   const [sideTarget, setSideTarget] = useState<SideWorkDialogTarget | null>(null)
+  // 매일 하는 부업무를 기간만큼 한 번에 넣는다 — 날마다 손으로 적지 않게
+  const [recurringOpen, setRecurringOpen] = useState(false)
 
   // PCT 스냅샷 오버레이를 걷어냈다.
   //
@@ -626,6 +630,18 @@ export default function MonthlySchedulePage() {
                       오늘 부업무 기록
                     </Button>
                   )}
+                  {/* 매일 반복되는 일은 하루씩 넣지 않는다 — 기간을 한 번에 채운다 */}
+                  {myTesterId && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
+                      onClick={() => setRecurringOpen(true)}
+                    >
+                      <Repeat size={14} />
+                      반복 부업무
+                    </Button>
+                  )}
                 </div>
               </div>
               <div className="min-w-0">
@@ -853,6 +869,17 @@ export default function MonthlySchedulePage() {
 
         {/* ── 부업무 기록 ────────────────────────────────────────────────────
             누른 칸의 시험자·날짜가 그대로 넘어가므로 다이얼로그는 '무엇을 했는지'만 묻는다. */}
+        {/* 반복 부업무 — 기간의 근무일을 한 번에 채운다 */}
+        {myTesterId && (
+          <RecurringSideWorkDialog
+            open={recurringOpen}
+            categories={sideCategories}
+            testerName={mergedTesters.find(t => String(t.id) === myTesterId)?.name ?? (user?.displayName ?? '나')}
+            onClose={() => setRecurringOpen(false)}
+            onCreated={() => { setRecurringOpen(false); void loadSideWork() }}
+          />
+        )}
+
         {sideTarget && (
           <SideWorkDialog
             target={sideTarget}

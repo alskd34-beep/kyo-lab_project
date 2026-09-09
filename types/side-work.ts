@@ -51,6 +51,7 @@ export interface SideWorkLogInput {
  * 반일(4시간)·종일(8시간)은 이 회사 근무시간(8시간) 기준이다.
  */
 export const MINUTE_PRESETS: readonly { minutes: number; label: string }[] = [
+  { minutes: 10,  label: '10분' },
   { minutes: 30,  label: '30분' },
   { minutes: 60,  label: '1시간' },
   { minutes: 120, label: '2시간' },

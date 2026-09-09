@@ -15,6 +15,10 @@ import { supabaseAdmin } from '@backend/lib/supabase'
 import { describeSchemaError } from '@backend/lib/schemaError'
 import { getTesterId } from '@backend/lib/testerLink'
 import { MAX_MINUTES_PER_LOG, type SideWorkCategory, type SideWorkLog } from '@shared/side-work'
+import { getHolidaySet } from '@backend/services/holidays'
+import { testerAbsences } from '@backend/services/operatorSchedule'
+import { expandRange, isWeekend } from '@shared/workdays'
+import { leaveTypeLabel } from '@shared/leave'
 
 const FEATURE = '부업무 기록'
 const MIGRATION = '0041_side_work.sql'
@@ -347,4 +351,201 @@ export async function aggregateSideWork(from: string, to: string): Promise<SideW
   }
 
   return { byTester, byCategory, byDate, totalMinutes, totalCount: logs.length }
+}
+
+// ─── 반복 부업무 ──────────────────────────────────────────────────────────────
+/**
+ * 매일 반복되는 부업무(문서작성·시험실 정리 등)를 기간 단위로 한 번에 넣는다.
+ *
+ * 규칙을 저장해 화면에서 가상으로 그리지 않고 **실제 기록을 미리 만든다.** 리포트·통계가
+ * 전부 side_work_logs 를 직접 읽기 때문에, 가상 항목은 소비처마다 규칙을 알아야 하고
+ * 한 곳만 빠뜨려도 숫자가 갈린다. 실제 행이면 수정·삭제·집계가 기존 경로로 그대로 된다.
+ * 한 번에 지울 수 있게 series_id 로 묶는다(0043).
+ *
+ * 건너뛰는 날은 **미리 보여준다** — 넣고 나서 "왜 15일이 아니라 11일이지?" 를 묻게 하면
+ * 편해지려고 만든 기능이 오히려 확인 부담이 된다.
+ */
+
+/** 한 번에 만들 수 있는 최대 일수 — 실수로 몇 년치를 만드는 것을 막는다 */
+const MAX_RECURRING_DAYS = 200
+
+export interface RecurringInput {
+  /** 관리자만 유효. 시험자는 무시되고 본인으로 저장된다 */
+  testerId?: string
+  from: string
+  to: string
+  categoryId: string
+  title: string
+  minutes: number
+  note?: string | null
+  /** 넣을 요일 (0=일 … 6=토). 비어 있으면 모든 요일 */
+  weekdays?: number[]
+  /** 주말 제외 (기본 true) */
+  skipWeekends?: boolean
+  /** 공휴일 제외 (기본 true) */
+  skipHolidays?: boolean
+  /** 본인 휴가·출장일 제외 (기본 true) — 부재일에 부업무가 쌓이면 리포트가 사실이 아니게 된다 */
+  skipAbsences?: boolean
+}
+
+export interface RecurringPlan {
+  /** 실제로 만들 날짜 */
+  dates: string[]
+  /** 건너뛴 날과 사유 — 화면이 그대로 보여준다 */
+  skipped: Array<{ date: string; reason: string }>
+  totalMinutes: number
+}
+
+/** 입력 검증 + 대상 시험자 확정. 미리보기와 생성이 같은 규칙을 쓰도록 한 곳에 둔다. */
+async function resolveRecurring(
+  input: RecurringInput, actor: SideWorkActor,
+): Promise<{ testerId: string; plan: RecurringPlan }> {
+  if (!input.categoryId) throw new Error('부업무 분류를 선택해 주세요.')
+  if (!input.title?.trim()) throw new Error('부업무 내용을 입력해 주세요.')
+  if (!input.from || !input.to) throw new Error('시작일과 종료일을 선택해 주세요.')
+  if (input.from > input.to) throw new Error('종료일이 시작일보다 빠릅니다.')
+  if (!Number.isFinite(input.minutes) || input.minutes <= 0) {
+    throw new Error('소요시간은 1분 이상이어야 합니다.')
+  }
+  if (input.minutes > MAX_MINUTES_PER_LOG) {
+    throw new Error('한 건의 소요시간은 24시간(1440분)을 넘을 수 없습니다.')
+  }
+
+  const testerId = actor.role === 'admin' ? (input.testerId ?? actor.testerId) : actor.testerId
+  if (!testerId) {
+    throw new Error(
+      actor.role === 'admin'
+        ? '기록할 시험자를 지정해 주세요.'
+        : '이 계정에 연결된 시험자가 없어 기록할 수 없습니다. 관리자에게 문의해 주세요.',
+    )
+  }
+
+  const all = expandRange(input.from, input.to)
+  if (all.length === 0) throw new Error('기간이 올바르지 않습니다.')
+  if (all.length > MAX_RECURRING_DAYS) {
+    throw new Error(`한 번에 ${MAX_RECURRING_DAYS}일까지만 만들 수 있습니다. 기간을 나눠 주세요.`)
+  }
+
+  const skipWeekends = input.skipWeekends ?? true
+  const skipHolidays = input.skipHolidays ?? true
+  const skipAbsences = input.skipAbsences ?? true
+  const weekdays = input.weekdays?.length ? new Set(input.weekdays) : null
+
+  // 공휴일·부재는 기간에 걸친 것만 읽는다. 실패해도 등록 자체를 막지 않는다 —
+  // 건너뛰기는 편의이지 안전장치가 아니고, 여기서 던지면 아무것도 못 넣게 된다.
+  const holidays = skipHolidays
+    ? await getHolidaySet(Number(input.from.slice(0, 4))).catch(() => new Set<string>())
+    : new Set<string>()
+  // 연말에 걸친 기간은 다음 해 공휴일도 필요하다.
+  if (skipHolidays && input.to.slice(0, 4) !== input.from.slice(0, 4)) {
+    const next = await getHolidaySet(Number(input.to.slice(0, 4))).catch(() => new Set<string>())
+    for (const d of next) holidays.add(d)
+  }
+  const absences = skipAbsences
+    ? (await testerAbsences(input.from, input.to).catch(() => []))
+        .filter(a => a.testerId === testerId)
+    : []
+
+  // 같은 내용이 그날 이미 있으면 넣지 않는다 — 반복 등록을 두 번 눌러도 두 배가 되지 않고,
+  // 손으로 미리 적어 둔 날도 덮어쓰지 않는다.
+  const { data: existingRows, error: exErr } = await supabaseAdmin
+    .from('side_work_logs')
+    .select('work_date, title, category_id')
+    .eq('tester_id', testerId)
+    .gte('work_date', input.from)
+    .lte('work_date', input.to)
+  if (exErr) throw schemaError(exErr)
+  const title = input.title.trim()
+  const existing = new Set(
+    (existingRows ?? [])
+      .filter(r => r.category_id === input.categoryId && String(r.title ?? '').trim() === title)
+      .map(r => r.work_date as string),
+  )
+
+  const dates: string[] = []
+  const skipped: Array<{ date: string; reason: string }> = []
+  for (const d of all) {
+    const dow = new Date(d + 'T00:00:00Z').getUTCDay()
+    if (weekdays && !weekdays.has(dow)) {
+      // 요일 필터에 걸린 날이 마침 주말이면 '주말'이라고 말한다. 기본 선택이 월~금이라
+      // 그대로 두면 흔한 경우가 전부 '선택한 요일 아님' 으로 나와 읽는 사람이 갸웃한다.
+      skipped.push({ date: d, reason: isWeekend(d) ? '주말' : '선택한 요일 아님' })
+      continue
+    }
+    // 요일을 직접 고른 경우(토요일 근무 등) 그 선택이 이깁니다 — skipWeekends 는
+    // 요일을 고르지 않았을 때의 기본값 역할만 한다.
+    if (skipWeekends && !weekdays && isWeekend(d)) { skipped.push({ date: d, reason: '주말' }); continue }
+    if (holidays.has(d)) { skipped.push({ date: d, reason: '공휴일' }); continue }
+    const absent = absences.find(a => a.from <= d && a.to >= d)
+    if (absent) { skipped.push({ date: d, reason: leaveTypeLabel(absent.type) }); continue }
+    if (existing.has(d)) { skipped.push({ date: d, reason: '같은 기록 있음' }); continue }
+    dates.push(d)
+  }
+
+  return { testerId, plan: { dates, skipped, totalMinutes: dates.length * input.minutes } }
+}
+
+/** 미리보기 — 아무것도 쓰지 않는다. 화면이 "며칠 · 총 몇 시간" 과 건너뛴 날을 보여준다. */
+export async function previewRecurring(
+  input: RecurringInput, actor: SideWorkActor,
+): Promise<RecurringPlan> {
+  const { plan } = await resolveRecurring(input, actor)
+  return plan
+}
+
+/** 실제 생성. 미리보기와 같은 함수로 날짜를 정하므로 화면에 보인 것과 어긋나지 않는다. */
+export async function createRecurring(
+  input: RecurringInput, actor: SideWorkActor,
+): Promise<RecurringPlan & { seriesId: string; created: number }> {
+  const { testerId, plan } = await resolveRecurring(input, actor)
+  if (plan.dates.length === 0) {
+    throw new Error('만들 날짜가 없습니다. 기간이나 건너뛰기 조건을 확인해 주세요.')
+  }
+
+  const seriesId = crypto.randomUUID()
+  const { error } = await supabaseAdmin.from('side_work_logs').insert(
+    plan.dates.map(d => ({
+      tester_id:   testerId,
+      user_id:     actor.userId,
+      work_date:   d,
+      category_id: input.categoryId,
+      title:       input.title.trim(),
+      minutes:     input.minutes,
+      note:        input.note?.trim() || null,
+      series_id:   seriesId,
+    })),
+  )
+  if (error) {
+    if (error.code === '23503') throw new Error('선택한 부업무 분류를 찾을 수 없습니다. 새로고침 후 다시 시도해 주세요.')
+    throw describeSchemaError(error, '반복 부업무', '0043_side_work_series.sql')
+  }
+  return { ...plan, seriesId, created: plan.dates.length }
+}
+
+/**
+ * 반복으로 만든 묶음을 통째로 지운다.
+ *
+ * 이미 지난 날의 기록까지 지우면 "그날 한 일" 이 사라진다. 그래서 기본은 **오늘 이후**만
+ * 지운다(from 을 주면 그 날짜부터). 지난 기록까지 정리하려면 호출부가 from 을 명시한다.
+ */
+export async function deleteSeries(
+  seriesId: string, actor: SideWorkActor, from?: string,
+): Promise<number> {
+  const { data: owned, error: oErr } = await supabaseAdmin
+    .from('side_work_logs').select('tester_id').eq('series_id', seriesId).limit(1).maybeSingle()
+  if (oErr) throw schemaError(oErr)
+  if (!owned) return 0
+  if (actor.role !== 'admin') {
+    if (!actor.testerId || owned.tester_id !== actor.testerId) {
+      throw new Error('본인 기록만 변경할 수 있습니다.')
+    }
+  }
+
+  const cutoff = from ?? new Date().toISOString().slice(0, 10)
+  const { data, error } = await supabaseAdmin
+    .from('side_work_logs').delete()
+    .eq('series_id', seriesId).gte('work_date', cutoff)
+    .select('id')
+  if (error) throw schemaError(error)
+  return (data ?? []).length
 }
