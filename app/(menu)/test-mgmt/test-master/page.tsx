@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useId, useMemo, useState } from "react"
+import { formatMinutes } from "@frontend/lib/workload-format"
 import { CellStack } from "@frontend/components/ui/table-cell-stack"
 import {
   ClipboardList,
@@ -54,6 +55,7 @@ interface TestItemRow {
   id: string
   name: string
   category: string
+  estimatedMinutes: number | null
   estimatedHours: number | null
   requiresDuo: boolean
   isActive: boolean
@@ -63,7 +65,8 @@ interface TestItemRow {
 interface FormState {
   name: string
   category: Category
-  estimatedHours: string
+  estimatedValue: string
+  estimatedUnit: "min" | "hour"
   requiresDuo: boolean
   isActive: boolean
 }
@@ -71,7 +74,8 @@ interface FormState {
 const EMPTY_FORM: FormState = {
   name: "",
   category: "기타",
-  estimatedHours: "",
+  estimatedValue: "",
+  estimatedUnit: "min" as "min" | "hour",
   requiresDuo: false,
   isActive: true,
 }
@@ -81,12 +85,22 @@ type CategoryFilter = "all" | Category
 /** 활성 상태 필터 값. */
 type StatusFilter = "all" | "active" | "inactive"
 
-type SortField = "name" | "category" | "estimatedHours" | "requiresDuo" | "isActive"
+/**
+ * 분 → 입력 폼의 (값, 단위). 60분 단위로 떨어지면 시간으로 되돌린다.
+ * 2시간짜리를 "120분" 으로 보여주면 읽는 사람이 매번 나눗셈을 한다.
+ */
+function splitMinutes(min: number | null): { estimatedValue: string; estimatedUnit: "min" | "hour" } {
+  if (min == null) return { estimatedValue: "", estimatedUnit: "min" }
+  if (min >= 60 && min % 60 === 0) return { estimatedValue: String(min / 60), estimatedUnit: "hour" }
+  return { estimatedValue: String(min), estimatedUnit: "min" }
+}
+
+type SortField = "name" | "category" | "estimatedMinutes" | "requiresDuo" | "isActive"
 
 const SORT_COLUMNS: SortColumnDef<SortField>[] = [
   sortCol("name", "시험항목명"),
   sortCol("category", "대분류"),
-  sortCol("estimatedHours", "예상시간"),
+  sortCol("estimatedMinutes", "예상시간"),
   {
     key: "attrs",
     label: "2인시험",
@@ -173,9 +187,9 @@ export default function TestMasterPage() {
       }
       if (groupDiff !== 0) return groupDiff
 
-      if (sortField === "estimatedHours") {
-        const ah = a.estimatedHours ?? -1
-        const bh = b.estimatedHours ?? -1
+      if (sortField === "estimatedMinutes") {
+        const ah = a.estimatedMinutes ?? -1
+        const bh = b.estimatedMinutes ?? -1
         const diff = (ah - bh) * mul
         return diff !== 0 ? diff : byName(a, b)
       }
@@ -201,12 +215,14 @@ export default function TestMasterPage() {
   const summary = useMemo(() => {
     const active = rows.filter((row) => row.isActive).length
     const duo = rows.filter((row) => row.requiresDuo && row.isActive).length
-    const estimated = rows.filter((row) => row.estimatedHours != null)
-    const avgHours = estimated.length
-      ? estimated.reduce((sum, row) => sum + (row.estimatedHours ?? 0), 0) /
-        estimated.length
+    const estimated = rows.filter((row) => row.estimatedMinutes != null)
+    const avgMinutes = estimated.length
+      ? Math.round(
+          estimated.reduce((sum, row) => sum + (row.estimatedMinutes ?? 0), 0) /
+            estimated.length,
+        )
       : 0
-    return { active, duo, avgHours }
+    return { active, duo, avgMinutes }
   }, [rows])
 
   const filterActive =
@@ -244,8 +260,9 @@ export default function TestMasterPage() {
       category: (CATEGORIES.includes(row.category as Category)
         ? row.category
         : "기타") as Category,
-      estimatedHours:
-        row.estimatedHours != null ? String(row.estimatedHours) : "",
+      // 60분 단위로 떨어지면 시간으로 보여준다 — 2시간짜리를 "120분" 으로 보여주면
+      // 읽는 사람이 매번 나눗셈을 한다.
+      ...splitMinutes(row.estimatedMinutes),
       requiresDuo: row.requiresDuo,
       isActive: row.isActive,
     })
@@ -265,10 +282,11 @@ export default function TestMasterPage() {
       return
     }
 
-    const estimatedHours =
-      form.estimatedHours.trim() === "" ? null : Number(form.estimatedHours)
-    if (estimatedHours !== null && Number.isNaN(estimatedHours)) {
-      setError("예상시간은 숫자로 입력하세요.")
+    const raw = form.estimatedValue.trim()
+    const estimatedMinutes =
+      raw === "" ? null : Math.round(Number(raw) * (form.estimatedUnit === "hour" ? 60 : 1))
+    if (estimatedMinutes !== null && (Number.isNaN(estimatedMinutes) || estimatedMinutes <= 0)) {
+      setError("예상시간은 0보다 큰 숫자로 입력하세요.")
       return
     }
 
@@ -278,7 +296,7 @@ export default function TestMasterPage() {
         await patchItem(editTarget.id, {
           name: form.name.trim(),
           category: form.category,
-          estimatedHours,
+          estimatedMinutes,
           requiresDuo: form.requiresDuo,
           isActive: form.isActive,
         })
@@ -289,7 +307,7 @@ export default function TestMasterPage() {
           body: JSON.stringify({
             name: form.name.trim(),
             category: form.category,
-            estimatedHours,
+            estimatedMinutes,
             requiresDuo: form.requiresDuo,
           }),
         })
@@ -338,7 +356,7 @@ export default function TestMasterPage() {
         stats={[
           { label: "활성", value: `${summary.active}건`, tone: "blue" },
           { label: "2인시험", value: `${summary.duo}건` },
-          { label: "평균 예상시간", value: `${summary.avgHours.toFixed(1)}h` },
+          { label: "평균 예상시간", value: formatMinutes(summary.avgMinutes, "—") },
         ]}
         actions={(
           <Button onClick={openAddDialog} size="lg">
@@ -470,7 +488,7 @@ export default function TestMasterPage() {
               <div className="mt-2 border-t pt-2 text-xs leading-normal break-keep text-muted-foreground">
                 예상시간{" "}
                 <span className="tabular-nums text-foreground">
-                  {row.estimatedHours != null ? `${row.estimatedHours}h` : "—"}
+                  {formatMinutes(row.estimatedMinutes, "—")}
                 </span>
                 <span className="px-1 text-border">·</span>
                 2인시험 <span className="text-foreground">{row.requiresDuo ? "필요" : "미사용"}</span>
@@ -524,7 +542,7 @@ export default function TestMasterPage() {
                     <CategoryBadge category={row.category} />
                   </TableCell>
                   <TableCell className="px-3 py-2 text-xs tabular-nums text-muted-foreground">
-                    {row.estimatedHours != null ? `${row.estimatedHours}` : "—"}
+                    {formatMinutes(row.estimatedMinutes, "—")}
                   </TableCell>
                   <TableCell className="px-3 py-2">
                     <CellStack
@@ -614,22 +632,55 @@ export default function TestMasterPage() {
                     </Select>
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <label htmlFor={`${uid}-hours`} className="text-xs font-medium text-muted-foreground">
-                      예상시간 (h)
+                    <label htmlFor={`${uid}-est`} className="text-xs font-medium text-muted-foreground">
+                      예상시간
                     </label>
-                    <Input
-                      id={`${uid}-hours`}
-                      type="number"
-                      min={0}
-                      value={form.estimatedHours}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          estimatedHours: e.target.value,
-                        }))
-                      }
-                      placeholder="예) 2"
-                    />
+                    {/* 예전에는 시간(h) 정수 입력이라 **1시간 미만을 넣을 수 없었다.**
+                        성상 확인처럼 10분이면 끝나는 항목을 1시간으로 적으면 부하와 일정이
+                        통째로 부풀려진다. 숫자와 단위를 나눠 받아 10분도 2시간도 자연스럽게
+                        적게 한다. 저장은 분 하나로 통일한다(0045). */}
+                    <div className="flex items-center gap-1.5">
+                      <Input
+                        id={`${uid}-est`}
+                        type="number"
+                        min={1}
+                        step={1}
+                        inputMode="numeric"
+                        value={form.estimatedValue}
+                        onChange={(e) =>
+                          setForm((prev) => ({ ...prev, estimatedValue: e.target.value }))
+                        }
+                        placeholder={form.estimatedUnit === "hour" ? "예) 2" : "예) 10"}
+                        className="flex-1"
+                      />
+                      <Select
+                        value={form.estimatedUnit}
+                        onValueChange={(v) =>
+                          setForm((prev) => ({ ...prev, estimatedUnit: v as "min" | "hour" }))
+                        }
+                      >
+                        <SelectTrigger className="!h-9 w-24 px-3"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="min">분</SelectItem>
+                          <SelectItem value="hour">시간</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {/* 입력한 값이 실제로 몇 분으로 저장되는지 바로 보여준다 */}
+                    {form.estimatedValue.trim() !== "" && Number(form.estimatedValue) > 0 && (() => {
+                      const mins = Math.round(Number(form.estimatedValue) * (form.estimatedUnit === "hour" ? 60 : 1))
+                      return (
+                        <span className={cn(
+                          "text-xs leading-normal break-keep",
+                          mins > 1440 ? "text-amber-700 dark:text-amber-300" : "text-muted-foreground",
+                        )}>
+                          = {formatMinutes(mins)} 로 저장됩니다
+                          {/* 막지는 않는다 — MT(52시간)처럼 배양·방치 대기가 섞인 항목이 실제로 있다.
+                              다만 사람이 붙어 있는 시간으로 오해하기 쉬워 한 줄 덧붙인다. */}
+                          {mins > 1440 && " · 하루를 넘습니다. 대기시간이 섞였는지 확인해 주세요"}
+                        </span>
+                      )
+                    })()}
                   </div>
                 </div>
               </section>

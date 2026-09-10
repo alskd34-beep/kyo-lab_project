@@ -35,7 +35,9 @@ export async function POST(req: NextRequest) {
     const row = await createTestItem({
       name: body.name,
       category: body.category,
-      estimatedHours: body.estimatedHours,
+      // 예상시간은 분이 기준이다(0045). 옛 클라이언트가 시간을 보내면 분으로 환산해 받는다.
+      estimatedMinutes: body.estimatedMinutes
+        ?? (body.estimatedHours != null ? Math.round(Number(body.estimatedHours) * 60) : null),
       requiresDuo: body.requiresDuo,
     })
     return Response.json({ row }, { status: 201 })
