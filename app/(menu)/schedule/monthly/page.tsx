@@ -218,6 +218,39 @@ export default function MonthlySchedulePage() {
 
   const days = useMemo(() => getDaysInMonth(month), [month])
 
+  /**
+   * 그리드에 실제로 그릴 날짜.
+   *
+   * 한 달을 통째로 펼치면 열이 31칸이라 가로로 한참 밀어야 오늘이 나온다. 기본은 2주만
+   * 보여주고, 더 봐야 할 때 [월간] 으로 편다. 데이터는 늘 한 달치를 읽는다 —
+   * 창을 옮길 때마다 다시 부르면 화면이 깜빡이고, 한 달치는 어차피 작다.
+   */
+  const [rangeMode, setRangeMode] = useState<"biweek" | "month">("biweek")
+  const [weekOffset, setWeekOffset] = useState(0)
+  const BIWEEK = 14
+
+  // 달을 바꾸면 창을 처음으로 되돌린다 — 9월 말을 보다 10월로 넘어갔는데 10월 말이
+  // 나오면 "이 달 초는 어디 갔지" 가 된다.
+  useEffect(() => { setWeekOffset(0) }, [month])
+
+  const visibleDays = useMemo(() => {
+    if (rangeMode === "month" || days.length <= BIWEEK) return days
+    // 이번 달이면 오늘이 든 주부터, 다른 달이면 1일부터 시작한다.
+    const todayIdx = days.indexOf(todayISO())
+    const anchor = todayIdx >= 0 ? Math.max(0, todayIdx - new Date(todayISO() + "T00:00:00Z").getUTCDay() + 1) : 0
+    const maxStart = Math.max(0, days.length - BIWEEK)
+    const start = Math.min(Math.max(0, anchor + weekOffset * 7), maxStart)
+    return days.slice(start, start + BIWEEK)
+  }, [days, rangeMode, weekOffset])
+
+  /** 주 단위로 창을 옮길 수 있는가 — 끝에 닿으면 버튼을 죽인다 */
+  const canShift = (dir: -1 | 1) => {
+    if (rangeMode === "month" || days.length <= BIWEEK) return false
+    const first = visibleDays[0]
+    const last = visibleDays[visibleDays.length - 1]
+    return dir === -1 ? first !== days[0] : last !== days[days.length - 1]
+  }
+
   // ── 부업무 조회 ────────────────────────────────────────────────────────────
   const loadSideWork = useCallback(async () => {
     if (days.length === 0) return
@@ -477,6 +510,42 @@ export default function MonthlySchedulePage() {
           <Button variant="outline" size="sm" onClick={() => setMonth(thisMonth())}>
             이번 달
           </Button>
+          {/* 보기 범위 — 기본 2주. 한 달을 통째로 펼치면 열이 31칸이라 가로로 한참 밀어야
+              오늘이 나온다. 더 봐야 할 때만 [월간] 으로 편다. */}
+          <div className="inline-flex h-9 w-fit items-center gap-0.5 rounded-md bg-muted p-0.5 text-muted-foreground">
+            {([["biweek", "2주"], ["month", "월간"]] as const).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                aria-pressed={rangeMode === key}
+                onClick={() => setRangeMode(key)}
+                className={cn(
+                  "h-8 shrink-0 rounded-md px-3 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                  rangeMode === key ? "bg-card text-foreground shadow-sm" : "hover:text-foreground",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* 2주 창 이동 — 달 안에서만 움직인다. 달을 넘기는 것은 위의 월 이동이 한다. */}
+          {rangeMode === "biweek" && days.length > BIWEEK && (
+            <div className="inline-flex items-center gap-1">
+              <Button variant="outline" size="icon-sm" aria-label="이전 주"
+                onClick={() => setWeekOffset(o => o - 1)} disabled={!canShift(-1)}>
+                <ChevronLeft className="size-3.5" />
+              </Button>
+              <span className={`min-w-28 text-center text-xs leading-normal tabular-nums ${TXT_MUTED}`}>
+                {visibleDays[0]?.slice(5).replace("-", "/")} ~ {visibleDays[visibleDays.length - 1]?.slice(5).replace("-", "/")}
+              </span>
+              <Button variant="outline" size="icon-sm" aria-label="다음 주"
+                onClick={() => setWeekOffset(o => o + 1)} disabled={!canShift(1)}>
+                <ChevronRight className="size-3.5" />
+              </Button>
+            </div>
+          )}
+
           <input
             type="month"
             value={month}
@@ -601,7 +670,7 @@ export default function MonthlySchedulePage() {
                 <h2 className={`text-sm font-semibold ${TXT_PRIMARY}`}>월간 그리드</h2>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                   <p className={`text-xs leading-normal break-keep tabular-nums ${TXT_MUTED}`}>
-                    시험자 {visibleTesters.length}명 × {days.length}일
+                    시험자 {visibleTesters.length}명 × {visibleDays.length}일
                     {myTesterId && stats.mySideCount > 0 && (
                       <>
                         <span className="px-1 text-border">·</span>
@@ -665,7 +734,7 @@ export default function MonthlySchedulePage() {
                           >
                             시험자
                           </TableHead>
-                          {days.map(d => {
+                          {visibleDays.map(d => {
                             const dow = dayOfWeek(d)
                             const isWeekend = dow === 0 || dow === 6
                             return (
@@ -702,7 +771,7 @@ export default function MonthlySchedulePage() {
                                 )}
                               </div>
                             </TableCell>
-                            {days.map(d => {
+                            {visibleDays.map(d => {
                               const k = `${t.id}::${d}`
                               const rows = cellMap.get(k) ?? []
                               const side = sideByCell.get(k) ?? []
