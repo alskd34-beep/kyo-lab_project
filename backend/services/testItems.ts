@@ -35,6 +35,23 @@ function mapRow(r: Record<string, unknown>): TestItemRow {
   }
 }
 
+
+/**
+ * 0045(estimated_minutes) 적용 여부. 미적용 DB 에서 그 컬럼을 patch 에 넣으면 PGRST204 로
+ * **저장 자체가 실패한다** — 읽기는 select('*') 로 막았지만 쓰기는 컬럼명을 적어야 한다.
+ * 프로세스당 한 번만 확인하고 기억한다(스키마가 도중에 바뀌면 재시작하면 된다).
+ */
+let hasMinutesColumn: boolean | null = null
+async function supportsEstimatedMinutes(): Promise<boolean> {
+  if (hasMinutesColumn !== null) return hasMinutesColumn
+  const { error } = await supabase.from('test_items').select('estimated_minutes').limit(1)
+  hasMinutesColumn = !error
+  if (error) {
+    console.warn('[test-items] estimated_minutes 컬럼이 없어 시간(h) 컬럼만 갱신합니다 — 0045 적용 필요')
+  }
+  return hasMinutesColumn
+}
+
 export async function listTestItems(): Promise<TestItemRow[]> {
   const { data, error } = await supabase
     .from('test_items')
@@ -74,7 +91,8 @@ export async function createTestItem(input: {
       category:       input.category ?? '기타',
       // 분이 기준이고 시간은 함께 채워 둔다 — 챗봇 컨텍스트(qthinkAgent·chat)가 아직
       // estimated_hours 를 읽는다. 한쪽만 갱신하면 그 조회가 조용히 빈다.
-      estimated_minutes: input.estimatedMinutes ?? null,
+      // 0045 미적용 DB 에서는 분 컬럼을 빼고 보낸다(넣으면 저장 자체가 실패한다).
+      ...(await supportsEstimatedMinutes() ? { estimated_minutes: input.estimatedMinutes ?? null } : {}),
       estimated_hours: input.estimatedMinutes != null
         ? Math.round((input.estimatedMinutes / 60) * 100) / 100
         : null,
@@ -108,7 +126,7 @@ export async function updateTestItem(
   if (input.name            !== undefined) patch.name            = input.name
   if (input.category        !== undefined) patch.category        = input.category
   if (input.estimatedMinutes !== undefined) {
-    patch.estimated_minutes = input.estimatedMinutes
+    if (await supportsEstimatedMinutes()) patch.estimated_minutes = input.estimatedMinutes
     patch.estimated_hours = input.estimatedMinutes != null
       ? Math.round((input.estimatedMinutes / 60) * 100) / 100
       : null
