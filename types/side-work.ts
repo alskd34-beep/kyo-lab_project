@@ -150,6 +150,12 @@ export interface OperationReport {
   concurrent: {
     groups: number
     groupsWithActual: number
+    /** 실현 가능한 그룹 수 — 담당자가 하나이고 공수가 비슷한 묶음 */
+    realizableGroups: number
+    /** 대표 지표: 실현 가능한 그룹만의 계획 절감(일) */
+    realizableSavedDays: number
+    /** 장부에만 있는 절감(일) — 담당자가 갈렸거나 공수가 크게 다른 묶음 */
+    atRiskSavedDays: number
     /** 계획 — 따로 했을 때 총 공수(일) */
     soloDays: number
     /** 계획 — 함께 했을 때 공수(일) */
@@ -175,6 +181,10 @@ export interface OperationReport {
       testerNames: string[]
       savedDays: number
       savedMinutes: number
+      /** 이 절감이 실제로 실현될 수 있는가 */
+      realizable: boolean
+      /** 실현 불가 사유 */
+      atRisk: string[]
     }>
   }
 }

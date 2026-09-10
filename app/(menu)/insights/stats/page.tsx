@@ -573,12 +573,19 @@ export default function OperationAnalysisPage() {
                     {" → 함께 "}
                     <span className="font-semibold tabular-nums">{report.concurrent.concurrentDays}일</span>
                   </p>
+                  {/* 대표값은 **실현 가능한** 절감이다. 담당자가 갈렸거나 공수가 크게 다른
+                      묶음까지 더해 "81일 줄였다" 고 말하면 사실이 아니다. */}
                   <p className="mt-0.5 text-lg font-semibold tabular-nums text-blue-700 dark:text-blue-300">
-                    {report.concurrent.savedDays}일 절감
+                    {report.concurrent.realizableSavedDays}일 절감
                     <span className="ml-1.5 text-sm font-normal text-muted-foreground">
-                      ({report.concurrent.savedDaysRatio}%)
+                      (실현 가능 {report.concurrent.realizableGroups}/{report.concurrent.groups}묶음)
                     </span>
                   </p>
+                  {report.concurrent.atRiskSavedDays > 0 && (
+                    <p className="mt-0.5 text-xs leading-normal break-keep text-amber-700 dark:text-amber-300">
+                      {report.concurrent.atRiskSavedDays}일은 지금 구성으로는 실현되지 않습니다 — 아래 목록의 사유를 확인하세요.
+                    </p>
+                  )}
                 </div>
                 {/* 실적 */}
                 <div className="rounded-md border bg-muted/30 p-3">
@@ -618,16 +625,26 @@ export default function OperationAnalysisPage() {
                           <span className="shrink-0 text-muted-foreground">· {t.testerNames.join(", ")}</span>
                         )}
                       </span>
-                      <span className="shrink-0 tabular-nums text-blue-700 dark:text-blue-300">
+                      <span className={cn(
+                        "shrink-0 tabular-nums",
+                        t.realizable ? "text-blue-700 dark:text-blue-300" : "text-muted-foreground line-through",
+                      )}>
                         −{t.savedDays}일
-                        {t.savedMinutes > 0 && <span className="text-muted-foreground"> / −{fmtMin(t.savedMinutes)}</span>}
+                        {t.savedMinutes > 0 && <span className="text-muted-foreground no-underline"> / −{fmtMin(t.savedMinutes)}</span>}
                       </span>
+                      {/* 실현 불가는 사유를 그 자리에 적는다 — 숫자만 지워 놓으면 왜인지 찾으러
+                          다른 화면을 열어야 한다. */}
+                      {!t.realizable && (
+                        <span className="w-full text-xs leading-normal break-keep text-amber-700 dark:text-amber-300">
+                          ⚠ {t.atRisk.join(" · ")}
+                        </span>
+                      )}
                     </li>
                   ))}
                 </ul>
               )}
               <p className="text-xs leading-normal break-keep text-muted-foreground">
-                담당자가 둘 이상인 묶음은 계획 절감이 실제로 실현되지 않습니다 — 동시분석은 한 사람이 함께 돌릴 때 이득이 납니다.
+                동시분석은 한 사람이 한 시퀀스에 얹을 때 이득이 납니다. 담당자를 합치거나 묶음을 나누면 위 숫자가 달라집니다.
               </p>
             </section>
           )}

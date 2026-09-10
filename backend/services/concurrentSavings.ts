@@ -68,6 +68,19 @@ export interface GroupSaving {
   savedMinutes: number
   /** 완료된 항목이 있어 실적을 말할 수 있는가 */
   hasActual: boolean
+
+  /**
+   * 이 절감이 **실제로 실현될 수 있는가**.
+   *
+   * 동시분석은 한 사람이 한 시퀀스에 얹을 때 이득이 난다. 담당자가 갈렸으면 각자 따로
+   * 돌리므로 계획 절감은 장부상 숫자일 뿐이다. 공수가 크게 다른 품목이 섞인 그룹도
+   * 마찬가지다 — 5일짜리와 14일짜리를 함께 돌린다는 전제 자체가 성립하지 않는다.
+   *
+   * 실현 불가를 절감에 섞어 보고하면 "동시분석으로 81일 줄였다" 가 사실이 아니게 된다.
+   */
+  realizable: boolean
+  /** 실현 불가 사유. 실현 가능하면 빈 배열 */
+  atRisk: string[]
 }
 
 /** 구간 합집합(분). 겹치는 시간을 한 번만 센다. */
@@ -185,6 +198,26 @@ export async function listGroupSavings(opts: { from?: string; to?: string } = {}
     const sumMinutes = intervals.reduce((s, i) => s + i.minutes, 0)
     const spanMinutes = unionMinutes(intervals)
 
+    // ── 실현 가능성 판정 ────────────────────────────────────────────────────
+    const assignees = [...new Set(members.map(m => m.testerName).filter((n): n is string => !!n))]
+    const unassigned = members.filter(m => !m.testerName).length
+    const atRisk: string[] = []
+    if (assignees.length > 1) {
+      atRisk.push(`담당자가 ${assignees.length}명으로 갈림 (${assignees.join(', ')})`)
+    }
+    if (unassigned > 0 && assignees.length > 0) {
+      atRisk.push(`미배정 ${unassigned}건이 섞임`)
+    }
+    if (assignees.length === 0) {
+      atRisk.push('전원 미배정 — 아직 누가 할지 정해지지 않음')
+    }
+    // 공수가 2배 넘게 벌어지면 "함께 돌린다" 는 전제가 흔들린다. 짧은 쪽이 끝나도
+    // 긴 쪽을 기다려야 하므로, 묶어서 얻는 것보다 잃는 것이 커질 수 있다.
+    if (days.length >= 2) {
+      const lo = Math.min(...days), hi = Math.max(...days)
+      if (lo > 0 && hi / lo >= 2) atRisk.push(`공수가 ${lo}일~${hi}일로 크게 다름`)
+    }
+
     out.push({
       groupId: gid,
       groupKey: g.group_key as string,
@@ -199,6 +232,8 @@ export async function listGroupSavings(opts: { from?: string; to?: string } = {}
       spanMinutes,
       savedMinutes: Math.max(0, sumMinutes - spanMinutes),
       hasActual: intervals.length > 0,
+      realizable: atRisk.length === 0,
+      atRisk,
     })
   }
   // 절감이 큰 순 — 리포트에서 먼저 보여야 할 것이 위로 온다
@@ -210,6 +245,15 @@ export interface SavingsSummary {
   groups: number
   /** 실적을 말할 수 있는 그룹 수 */
   groupsWithActual: number
+  /** 실현 가능한 그룹 수 (담당자 하나 · 공수가 비슷) */
+  realizableGroups: number
+  /**
+   * 실현 가능한 그룹만의 계획 절감(일). 대표 지표는 이 값이다.
+   * savedDays 는 전체 합이라 실현 불가까지 포함한다 — 둘을 함께 줘야 오해가 없다.
+   */
+  realizableSavedDays: number
+  /** 실현되지 않는 계획 절감(일) — 장부에만 있는 숫자 */
+  atRiskSavedDays: number
   soloDays: number
   concurrentDays: number
   savedDays: number
@@ -229,9 +273,13 @@ export function summarizeSavings(rows: readonly GroupSaving[]): SavingsSummary {
   const sum = rows.reduce((s, r) => s + r.sumMinutes, 0)
   const span = rows.reduce((s, r) => s + r.spanMinutes, 0)
   const r1 = (n: number) => Math.round(n * 10) / 10
+  const realizable = rows.filter(r => r.realizable)
   return {
     groups: rows.length,
     groupsWithActual: rows.filter(r => r.hasActual).length,
+    realizableGroups: realizable.length,
+    realizableSavedDays: r1(realizable.reduce((s2, r) => s2 + r.savedDays, 0)),
+    atRiskSavedDays: r1(rows.filter(r => !r.realizable).reduce((s2, r) => s2 + r.savedDays, 0)),
     soloDays: r1(solo),
     concurrentDays: r1(conc),
     savedDays: r1(solo - conc),

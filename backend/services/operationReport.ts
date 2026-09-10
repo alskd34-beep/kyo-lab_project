@@ -244,12 +244,15 @@ export async function getOperationReport(params: { from: string; to: string }): 
         testerNames: [...new Set(r.members.map(m => m.testerName).filter((n): n is string => !!n))],
         savedDays: r.savedDays,
         savedMinutes: r.savedMinutes,
+        realizable: r.realizable,
+        atRisk: r.atRisk,
       })),
     }
   } catch (err) {
     console.error('[operation-report] 동시분석 절감 계산 실패', err)
     concurrent = {
-      groups: 0, groupsWithActual: 0, soloDays: 0, concurrentDays: 0, savedDays: 0,
+      groups: 0, groupsWithActual: 0, realizableGroups: 0, realizableSavedDays: 0,
+      atRiskSavedDays: 0, soloDays: 0, concurrentDays: 0, savedDays: 0,
       savedDaysRatio: 0, sumMinutes: 0, spanMinutes: 0, savedMinutes: 0,
       savedMinutesRatio: 0, workdaysMissing: 0, top: [],
     }
