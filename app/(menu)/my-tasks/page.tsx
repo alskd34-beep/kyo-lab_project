@@ -6,7 +6,8 @@ import {
   ShieldAlert, ClipboardList,
 } from "lucide-react"
 import {
-  ACTIVE_JOB_STATUSES, CLOSED_STAGE, ITEM_CLEARED, ITEM_IN_PROGRESS, stageStyle,
+  ACTIVE_JOB_STATUSES, CLOSED_STAGE, ITEM_CLEARED, ITEM_IN_PROGRESS,
+  SELF_EDITABLE_JOB_STATUSES, stageStyle,
 } from "@shared/qc-status"
 import { useAuth } from "@frontend/lib/auth-context"
 import { cn } from "@frontend/lib/utils"
@@ -438,16 +439,20 @@ export default function MyTasksPage() {
    * 어제 보던 자리에서 오늘 못 찾는다.
    */
   const activeGroupBlocks = useMemo(() => {
+    // 그룹으로 묶는 대상은 **서버가 실제로 조작하는 작업**뿐이다(진행중·지연).
+    // 검토전 이후로 넘어간 작업까지 세면 카드는 "1/2" 라고 말하는데 서버는 1건만 처리해,
+    // 눌러도 아무 일이 없는 것처럼 보인다. 화면과 서버가 같은 목록을 봐야 한다.
     const byGroup = new Map<string, Job[]>()
     for (const j of activeJobs) {
-      if (!j.groupId) continue
+      if (!j.groupId || !SELF_EDITABLE_JOB_STATUSES.has(j.status)) continue
       const a = byGroup.get(j.groupId) ?? []; a.push(j); byGroup.set(j.groupId, a)
     }
     const out: ({ kind: "group"; groupId: string; jobs: Job[] } | { kind: "single"; jobs: Job[] })[] = []
     const done = new Set<string>()
     for (const j of activeJobs) {
       const gid = j.groupId
-      const mates = gid ? byGroup.get(gid) ?? [] : []
+      // 조작 불가 상태(검토전·검토중·승인전)의 작업은 그룹에 넣지 않고 낱개 카드로 남긴다.
+      const mates = gid && SELF_EDITABLE_JOB_STATUSES.has(j.status) ? byGroup.get(gid) ?? [] : []
       if (gid && mates.length >= 2) {
         if (done.has(gid)) continue
         done.add(gid)
@@ -939,6 +944,16 @@ export default function MyTasksPage() {
             </div>
             <p className="mt-0.5 truncate text-sm font-semibold text-foreground">
               {job.productName} <span className="font-mono text-xs font-normal text-muted-foreground">/ {job.batchNo}</span>
+              {/* 동시분석 묶음인데 지금은 함께 조작할 수 없는 경우(나머지가 검토 단계로 넘어감).
+                  묶음 표시를 통째로 지우면 "어제는 한 카드였는데" 가 되므로 사실만 남긴다. */}
+              {job.groupId && job.groupSize > 1 && (
+                <span
+                  className="ml-1.5 inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 align-middle text-xs leading-normal font-medium text-muted-foreground"
+                  title={`동시분석 ${job.groupSize}건 묶음 · 지금 함께 진행할 수 있는 배치가 없어 따로 표시됩니다`}
+                >
+                  <Layers className="size-3" />동시 {job.groupSize}
+                </span>
+              )}
             </p>
             </div>
           </div>

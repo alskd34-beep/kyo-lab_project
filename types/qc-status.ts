@@ -104,6 +104,18 @@ export const OPEN_STATUSES: ReadonlySet<string> = new Set<string>([
   PENDING_STATUS, '진행중', '검토전', '검토중', '승인전', DELAYED_STATUS,
 ])
 
+/**
+ * 담당자가 **시험항목을 직접 만질 수 있는** 작업 상태.
+ *
+ * 검토·승인 단계로 넘어간 작업의 항목은 서버가 거절한다(qcJobs.clearItem). 화면이 이
+ * 기준을 모르면 눌러도 아무 일이 없는 버튼을 그리게 된다 — 실제로 동시분석 그룹 카드가
+ * '검토전' 작업까지 세어 "1/2" 에서 멈춘 것처럼 보이는 버그가 났다. 서버와 화면이 같은
+ * 목록을 본다.
+ */
+export const SELF_EDITABLE_JOB_STATUSES: ReadonlySet<string> = new Set<string>([
+  '진행중', DELAYED_STATUS,
+])
+
 /** 작업자가 손에 들고 있는(활성) 작업 상태 */
 export const ACTIVE_JOB_STATUSES: ReadonlySet<string> = new Set<string>([
   '진행중', '검토전', '검토중', '승인전', DELAYED_STATUS,

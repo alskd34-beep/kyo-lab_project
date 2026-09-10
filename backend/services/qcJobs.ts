@@ -36,6 +36,7 @@ import {
   PENDING_STATUS,
   REVIEWING_STATUS,
   REVIEW_READY_STATUS,
+  SELF_EDITABLE_JOB_STATUSES,
   STAGE_ACTION_LABEL,
   canAdvanceByAdmin,
   isJobStage,
@@ -1302,8 +1303,11 @@ export async function clearItem(
 /**
  * 담당 시험자가 직접 바꿀 수 있는 상태.
  * 검토·승인 단계는 관리자만 advanceJobStage 로 넘길 수 있어야 워크플로가 의미를 갖는다.
+ *
+ * 목록은 @shared/qc-status 가 단일 기준이다 — 화면(동시분석 그룹 카드)도 같은 목록을
+ * 봐야 "눌러도 아무 일이 없는 버튼" 이 생기지 않는다.
  */
-const SELF_SERVICE_STATUSES = new Set<string>([IN_PROGRESS_STATUS, DELAYED_STATUS])
+const SELF_SERVICE_STATUSES = SELF_EDITABLE_JOB_STATUSES
 
 /** 작업 상태 변경(담당자) — 오더 상태 동기화 + 감독관 알림.
  *  최종 단계(승인완료)면 work_end_date를 오늘로 설정(이미 설정된 경우 유지).
