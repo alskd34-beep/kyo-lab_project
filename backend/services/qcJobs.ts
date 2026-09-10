@@ -819,7 +819,12 @@ export async function startJob(orderId: string, userSub: string): Promise<{ jobI
   //  - 개별항목: 오더 생성 시 고른 항목만 (pct_order_test_items)
   //  - 전항목  : 품목에 등록된 시험항목 전체 (product_test_items)
   // 작업을 만든 뒤에 실패하면 QC번호만 소모된 빈 작업이 남으므로 순서가 중요하다.
-  const plannedItems: Array<{ test_item_name: string; sequence_order: number }> = []
+  // test_item_id 를 함께 적는다. 예전에는 이름만 넣어서 이 컬럼이 **한 건도** 채워지지
+  // 않았고(51/51 null), 시험항목 실적 통계는 이름 문자열로만 마스터와 이어야 했다.
+  // 마스터에서 항목 이름을 한 번 고치면 그 지점에서 실적이 조용히 끊긴다.
+  const plannedItems: Array<{
+    test_item_name: string; sequence_order: number; test_item_id?: string | null
+  }> = []
   if (isDual) {
     // 2인 배정은 슬롯이 유일한 기준이다 — method(전항목/개별항목) 값은 보지 않는다.
     const selected = await activeItemsForSlot(orderId, order.product_code, mySlot)
@@ -829,6 +834,7 @@ export async function startJob(orderId: string, userSub: string): Promise<{ jobI
     selected.forEach((it, idx) => plannedItems.push({
       test_item_name: it.testItemName,
       sequence_order: it.sequenceOrder ?? idx,
+      test_item_id: it.testItemId ?? null,
     }))
   } else if (order.method === METHOD_PARTIAL) {
     const selected = await listOrderTestItems(orderId)
@@ -840,18 +846,20 @@ export async function startJob(orderId: string, userSub: string): Promise<{ jobI
     selected.forEach((it, idx) => plannedItems.push({
       test_item_name: it.testItemName,
       sequence_order: it.sequenceOrder ?? idx,
+      test_item_id: it.testItemId ?? null,
     }))
   } else {
     const { data: prod } = await supabaseAdmin.from('products').select('id').eq('product_code', order.product_code).maybeSingle()
     if (prod?.id) {
       const { data: pti } = await supabaseAdmin
         .from('product_test_items')
-        .select('sequence_order, test_items!inner(name)')
+        .select('test_item_id, sequence_order, test_items!inner(name)')
         .eq('product_id', prod.id)
         .order('sequence_order', { ascending: true })
       ;(pti ?? []).forEach((r, idx) => plannedItems.push({
         test_item_name: (r as unknown as { test_items: { name: string } }).test_items.name,
         sequence_order: (r.sequence_order as number) ?? idx,
+        test_item_id: (r.test_item_id as string | null) ?? null,
       }))
     }
   }

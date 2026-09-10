@@ -39,6 +39,8 @@ export async function POST(req: NextRequest) {
       estimatedMinutes: body.estimatedMinutes
         ?? (body.estimatedHours != null ? Math.round(Number(body.estimatedHours) * 60) : null),
       requiresDuo: body.requiresDuo,
+      // 새 항목의 예상시간은 정의상 가정치라 출처를 받지 않아도 'assumed' 가 된다(0046).
+      isTimeboxed: body.isTimeboxed === true,
     })
     return Response.json({ row }, { status: 201 })
   } catch (err) {
