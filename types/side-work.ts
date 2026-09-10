@@ -82,7 +82,13 @@ export interface OperationReportTesterRow {
   completedJobs: number
   /** 진행(완료 처리)한 시험항목 수 */
   testItems: number
-  /** 시험항목 실소요 분 합계 */
+  /**
+   * 이 시험자가 시험에 **실제로 쓴** 분.
+   *
+   * 항목 소요의 단순 합이 아니라 구간 합집합이다. 동시분석하면 여러 항목이 같은 시계
+   * 시간을 공유하는데 항목마다 자기 구간을 재므로, 단순 합은 그 시간을 여러 번 센다
+   * (실측: 3배치 동시 시 3.00배). 사람이 하루에 쓸 수 있는 시간은 하나뿐이다.
+   */
   testMinutes: number
   /** 부업무 분 합계 */
   sideMinutes: number
@@ -135,4 +141,40 @@ export interface OperationReport {
   byCategory: OperationReportCategoryRow[]
   byTestItem: OperationReportItemRow[]
   daily: OperationReportDailyRow[]
+  /**
+   * 동시분석 효과 — 단일 분석 대비 얼마나 줄었는가.
+   *
+   * 계획(공수, 일)과 실적(소요, 분)을 따로 둔다. 한 축으로 뭉치면 "계획이 좋았는지" 와
+   * "실행이 좋았는지" 를 구분할 수 없다. 절감은 저장하지 않고 매번 계산한다(파생값).
+   */
+  concurrent: {
+    groups: number
+    groupsWithActual: number
+    /** 계획 — 따로 했을 때 총 공수(일) */
+    soloDays: number
+    /** 계획 — 함께 했을 때 공수(일) */
+    concurrentDays: number
+    savedDays: number
+    savedDaysRatio: number
+    /** 실적 — 항목 소요의 단순 합(분) */
+    sumMinutes: number
+    /** 실적 — 실제로 쓴 시간(분) */
+    spanMinutes: number
+    savedMinutes: number
+    savedMinutesRatio: number
+    /** 공수 미등록으로 계획 계산에서 빠진 멤버 수 — 값의 신뢰도를 함께 말한다 */
+    workdaysMissing: number
+    /** 절감이 큰 순 상위 그룹 */
+    top: Array<{
+      groupKey: string
+      label: string | null
+      source: 'auto' | 'manual'
+      members: number
+      productName: string
+      batchNos: string[]
+      testerNames: string[]
+      savedDays: number
+      savedMinutes: number
+    }>
+  }
 }

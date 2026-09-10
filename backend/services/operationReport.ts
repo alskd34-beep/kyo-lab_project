@@ -24,6 +24,7 @@ import { supabaseAdmin } from '@backend/lib/supabase'
 import { getHolidaySet } from '@backend/services/holidays'
 import { aggregateSideWork } from '@backend/services/sideWork'
 import { expandRange, isNonWorkingDay } from '@backend/lib/workdays'
+import { listGroupSavings, summarizeSavings, unionMinutes } from '@backend/services/concurrentSavings'
 import { CLOSED_STAGE } from '@shared/qc-status'
 import {
   WORK_MINUTES_PER_DAY,
@@ -70,13 +71,13 @@ export async function getOperationReport(params: { from: string; to: string }): 
   // ── 시험업무 실적: 이 기간에 완료된 시험항목 ───────────────────────────────
   const { data: itemsRaw, error: itemErr } = await supabaseAdmin
     .from('qc_job_items')
-    .select('qc_job_id, test_item_name, elapsed_minutes, cleared_at')
+    .select('qc_job_id, test_item_name, elapsed_minutes, cleared_at, started_at')
     .gte('cleared_at', kstDayStart(from))
     .lte('cleared_at', kstDayEnd(to))
   if (itemErr) throw itemErr
   const items = (itemsRaw ?? []) as unknown as Array<{
     qc_job_id: string; test_item_name: string
-    elapsed_minutes: number | null; cleared_at: string
+    elapsed_minutes: number | null; cleared_at: string; started_at: string | null
   }>
 
   // ── 완료 작업 수: 운영평가 화면과 같은 기준(승인완료 + 종료일이 기간 안) ────
@@ -109,26 +110,51 @@ export async function getOperationReport(params: { from: string; to: string }): 
   const byTestItemMap = new Map<string, { count: number; minutes: number }>()
   const testMinutesByDate = new Map<string, number>()
 
+  // 시험자별 실제 구간 — 동시분석은 같은 시계 시간을 공유하므로 **합집합**으로 센다.
+  // ⚠️ 합집합은 반드시 **시험자별**이다. 전체를 한꺼번에 합치면 두 사람이 같은 시간에 한
+  //    일이 한 사람 몫으로 줄어든다. 사람 단위로 합집합을 내고 그 결과를 더한다.
+  const spansByTester = new Map<string, Array<{ start: number; end: number }>>()
+  const UNASSIGNED = '(미배정)'
+
   for (const it of items) {
     const testerId = testerByJob.get(it.qc_job_id)
     // 소요가 안 찍힌 항목(0030 이전 완료분)은 시간 합계에서는 빠지지만 '진행 항목 수'에는 남는다.
     // 건수까지 빼면 "일은 했는데 한 적 없는 사람"이 되어 두 지표가 서로를 부정한다.
     const minutes = it.elapsed_minutes ?? 0
 
-    if (testerId) {
-      const s = bump(testerId)
-      s.items += 1
-      s.minutes += minutes
-    }
+    if (testerId) bump(testerId).items += 1
 
+    // 항목별 집계는 **합**을 그대로 쓴다. 여기서 묻는 것은 "이 항목 하나가 얼마나 걸리나"
+    // 이지 "그 사람이 몇 시간을 썼나" 가 아니다. 동시에 돌렸어도 항목 하나의 소요는 그
+    // 항목의 소요다 — 여기에 합집합을 쓰면 항목 평균이 배치 수만큼 깎인다.
     const name = it.test_item_name || '(이름 없음)'
     const agg = byTestItemMap.get(name) ?? { count: 0, minutes: 0 }
     agg.count += 1
     agg.minutes += minutes
     byTestItemMap.set(name, agg)
 
-    const d = toKstDate(it.cleared_at)
-    testMinutesByDate.set(d, (testMinutesByDate.get(d) ?? 0) + minutes)
+    // 구간: started_at 이 없는 옛 항목은 완료 시각에서 소요만큼 거슬러 올라간다
+    // (0040 backfill·concurrentSavings 와 같은 규칙 — 다른 가정을 쓰면 값이 갈린다).
+    const end = new Date(it.cleared_at).getTime()
+    const start = it.started_at ? new Date(it.started_at).getTime() : end - minutes * 60000
+    const key = testerId ?? UNASSIGNED
+    const arr = spansByTester.get(key) ?? []
+    arr.push({ start, end })
+    spansByTester.set(key, arr)
+  }
+
+  // 사람별 합집합 → 시험시간. 그리고 같은 구간을 날짜로 잘라 일별 막대를 만든다.
+  for (const [testerId, spans] of spansByTester) {
+    if (testerId !== UNASSIGNED) bump(testerId).minutes = unionMinutes(spans)
+    for (const day of expandRange(from, to)) {
+      const dayStart = new Date(kstDayStart(day)).getTime()
+      const dayEnd = new Date(kstDayEnd(day)).getTime()
+      const clipped = spans
+        .map(s => ({ start: Math.max(s.start, dayStart), end: Math.min(s.end, dayEnd) }))
+        .filter(s => s.end > s.start)
+      if (clipped.length === 0) continue
+      testMinutesByDate.set(day, (testMinutesByDate.get(day) ?? 0) + unionMinutes(clipped))
+    }
   }
 
   for (const j of closedJobs) {
@@ -198,6 +224,37 @@ export async function getOperationReport(params: { from: string; to: string }): 
   const totalJobs        = byTester.reduce((s, r) => s + r.completedJobs, 0)
   const grandTotal       = totalTestMinutes + side.totalMinutes
 
+  // ── 동시분석 효과 ──────────────────────────────────────────────────────────
+  // 위에서 시험시간을 합집합으로 센 것과 같은 사실의 다른 얼굴이다. 리포트는 "얼마를
+  // 썼나" 를, 여기는 "따로 했으면 얼마였나" 를 말한다. 조회 실패가 리포트 전체를 죽이지
+  // 않게 감싼다 — 동시분석은 부가 지표이고, 본문은 그것 없이도 성립한다.
+  let concurrent: OperationReport['concurrent']
+  try {
+    const savingRows = await listGroupSavings({ from, to })
+    const sum = summarizeSavings(savingRows)
+    concurrent = {
+      ...sum,
+      top: savingRows.slice(0, 8).map(r => ({
+        groupKey: r.groupKey,
+        label: r.label,
+        source: r.source,
+        members: r.members.length,
+        productName: r.members[0]?.productName ?? '',
+        batchNos: r.members.map(m => m.batchNo),
+        testerNames: [...new Set(r.members.map(m => m.testerName).filter((n): n is string => !!n))],
+        savedDays: r.savedDays,
+        savedMinutes: r.savedMinutes,
+      })),
+    }
+  } catch (err) {
+    console.error('[operation-report] 동시분석 절감 계산 실패', err)
+    concurrent = {
+      groups: 0, groupsWithActual: 0, soloDays: 0, concurrentDays: 0, savedDays: 0,
+      savedDaysRatio: 0, sumMinutes: 0, spanMinutes: 0, savedMinutes: 0,
+      savedMinutesRatio: 0, workdaysMissing: 0, top: [],
+    }
+  }
+
   return {
     period: { from, to, workingDays },
     totals: {
@@ -213,5 +270,6 @@ export async function getOperationReport(params: { from: string; to: string }): 
     byCategory,
     byTestItem,
     daily,
+    concurrent,
   }
 }

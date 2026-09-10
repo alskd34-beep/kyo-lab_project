@@ -25,7 +25,7 @@ import {
 } from "recharts"
 import {
   AlertCircle, CalendarDays, CheckCircle2, ChartColumn, Clock, FlaskConical,
-  Loader2, Percent, RefreshCw, Wrench,
+  Layers, Loader2, Percent, RefreshCw, Wrench,
 } from "lucide-react"
 import type { OperationReport } from "@shared/side-work"
 import { cn } from "@frontend/lib/utils"
@@ -101,6 +101,8 @@ const ratioTextClass = (r: number | null) =>
   : "text-foreground"
 
 const fmtPct = (v: number | null) => (v == null ? "—" : `${v}%`)
+/** 분 → "1시간 20분". 동시분석 절감처럼 시간·분이 섞이는 값에 쓴다 */
+const fmtMin = (v: number) => formatMinutes(v, "0분")
 const fmtDay = (v: number | null) => (v == null ? "—" : `${v}일`)
 
 // ─── 정렬 ─────────────────────────────────────────────────────────────────────
@@ -541,6 +543,94 @@ export default function OperationAnalysisPage() {
               </Table>
             </div>
           </section>
+
+          {/* ── 동시분석 효과 ────────────────────────────────────────────────
+              같은 사실의 다른 얼굴이다. 위 표는 "얼마를 썼나" 를, 여기는 "따로 했으면
+              얼마였나" 를 말한다. 계획(공수)과 실적(시간)을 한 줄에 뭉치지 않는다 —
+              계획이 좋았는지와 실행이 좋았는지는 다른 질문이다. */}
+          {report?.concurrent && report.concurrent.groups > 0 && (
+            <section className="flex shrink-0 flex-col gap-2 rounded-md border bg-card p-4">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                  <Layers className="size-4 text-primary" />동시분석 효과
+                </h2>
+                <span className="text-xs leading-normal break-keep text-muted-foreground">
+                  묶음 {report.concurrent.groups}개 · 실적 집계 가능 {report.concurrent.groupsWithActual}개
+                  {report.concurrent.workdaysMissing > 0 && (
+                    <span className="text-amber-700 dark:text-amber-300">
+                      {" · 공수 미등록 "}{report.concurrent.workdaysMissing}건은 계획 절감에서 빠짐
+                    </span>
+                  )}
+                </span>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                {/* 계획 */}
+                <div className="rounded-md border bg-muted/30 p-3">
+                  <p className="text-xs font-medium text-muted-foreground">계획 — 공수</p>
+                  <p className="mt-1 text-sm text-foreground">
+                    따로 <span className="font-semibold tabular-nums">{report.concurrent.soloDays}일</span>
+                    {" → 함께 "}
+                    <span className="font-semibold tabular-nums">{report.concurrent.concurrentDays}일</span>
+                  </p>
+                  <p className="mt-0.5 text-lg font-semibold tabular-nums text-blue-700 dark:text-blue-300">
+                    {report.concurrent.savedDays}일 절감
+                    <span className="ml-1.5 text-sm font-normal text-muted-foreground">
+                      ({report.concurrent.savedDaysRatio}%)
+                    </span>
+                  </p>
+                </div>
+                {/* 실적 */}
+                <div className="rounded-md border bg-muted/30 p-3">
+                  <p className="text-xs font-medium text-muted-foreground">실적 — 실제 소요</p>
+                  <p className="mt-1 text-sm text-foreground">
+                    따로였다면 <span className="font-semibold tabular-nums">{fmtMin(report.concurrent.sumMinutes)}</span>
+                    {" → 실제 "}
+                    <span className="font-semibold tabular-nums">{fmtMin(report.concurrent.spanMinutes)}</span>
+                  </p>
+                  <p className="mt-0.5 text-lg font-semibold tabular-nums text-blue-700 dark:text-blue-300">
+                    {fmtMin(report.concurrent.savedMinutes)} 절감
+                    <span className="ml-1.5 text-sm font-normal text-muted-foreground">
+                      ({report.concurrent.savedMinutesRatio}%)
+                    </span>
+                  </p>
+                </div>
+              </div>
+
+              {report.concurrent.top.length > 0 && (
+                <ul className="flex flex-col divide-y border-t pt-1">
+                  {report.concurrent.top.map(t => (
+                    <li key={t.groupKey} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 py-1.5 text-xs leading-normal">
+                      <span className="flex min-w-0 items-baseline gap-1.5">
+                        <span className={cn(
+                          "shrink-0 rounded-md border px-1 font-medium",
+                          t.source === "manual"
+                            ? "border-primary/40 bg-primary/10 text-primary"
+                            : "border-border text-muted-foreground",
+                        )}>
+                          {t.source === "manual" ? "수동" : "자동"} {t.members}건
+                        </span>
+                        <span className="min-w-0 truncate font-medium text-foreground">{t.label ?? t.productName}</span>
+                        <span className="hidden shrink-0 font-mono text-muted-foreground sm:inline">
+                          {t.batchNos.slice(0, 3).join(", ")}{t.batchNos.length > 3 ? " …" : ""}
+                        </span>
+                        {t.testerNames.length > 0 && (
+                          <span className="shrink-0 text-muted-foreground">· {t.testerNames.join(", ")}</span>
+                        )}
+                      </span>
+                      <span className="shrink-0 tabular-nums text-blue-700 dark:text-blue-300">
+                        −{t.savedDays}일
+                        {t.savedMinutes > 0 && <span className="text-muted-foreground"> / −{fmtMin(t.savedMinutes)}</span>}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="text-xs leading-normal break-keep text-muted-foreground">
+                담당자가 둘 이상인 묶음은 계획 절감이 실제로 실현되지 않습니다 — 동시분석은 한 사람이 함께 돌릴 때 이득이 납니다.
+              </p>
+            </section>
+          )}
 
           {/* ── 탭 ───────────────────────────────────────────────────────────
               표가 답을 주고, 탭은 그 답의 배경을 보여준다. 두 계열을 한 화면에
