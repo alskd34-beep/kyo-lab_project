@@ -98,6 +98,26 @@ Four different providers are in use. Keep this table accurate — it was wrong b
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->
 
+## 착수 전 의도 문서 (intent.md) — AI-Native SDLC
+코드를 쓰기 전에 **무엇을 왜 만드는지** `intent/YYYY-MM-DD-슬러그.md` 로 먼저 남긴다.
+- **작성**: 직접 쓰지 않고 `/intent <하고 싶은 일>` 로 인터뷰를 받는다(`.claude/commands/intent.md`).
+- **전체 가이드**: `docs/ai-native-sdlc.md` · **템플릿**: `intent/TEMPLATE.md`
+- **섹션 5개만**: `Problem` · `Proposed outcome` · `Affected users and systems` · `Constraints` · `Open questions`.
+  머리에 `Author` / `Status`. `Open questions` 가 비어 있으면 잘못 쓰인 것이다.
+- **"어떻게"는 쓰지 않는다** — 기술 선택·구현 방법·파일명·함수명은 플랜 모드의 몫이다.
+  구현 방법을 미리 못 박으면 코드베이스를 읽은 뒤에야 보이는 더 나은 방법이 막힌다.
+- **`Affected users and systems` 필수 항목**(이 프로젝트 특성): 역할(관리자/시험자/둘 다) ·
+  건드리는 Supabase 테이블 · 확정(LOCK)·작업 시작 상태와의 관계 · 크론(`instrumentation.ts`) 영향 여부.
+- **Status**: `draft` → `approved` → `completed` (폐기는 `abandoned`, **삭제 금지**).
+  `approved` 시점에 intent 를 먼저 커밋하고, `completed` 는 **코드와 같은 커밋**에서 바꾼다(문서가 낡지 않게).
+- **단계는 3개로 줄여 쓴다**(1인 개발): intent 필수 → `spec.md` 생략 → `plan.md` 는 플랜 모드 승인으로 대체.
+  단, **마이그레이션 동반 · 권한/인증 규칙 · 확정(LOCK)·상태 전이 규칙**을 건드리면 `intent/<이름>-spec.md` 를 같이 둔다.
+- **intent 없이 바로 한다**: 오타·문구·색 수정, 동작 규칙이 안 바뀌는 버그 수정, 겉보기 동작 그대로인 리팩터링.
+- **intent 가 반드시 필요하다**: 새 화면·새 메뉴, 새 테이블·마이그레이션, 권한 규칙 변경,
+  상태 전이·확정 규칙 변경, 외부 연동 추가(슬랙·구글시트·AI 공급자), 크론·자동 실행 추가.
+- **중복 금지**: intent 는 "앞으로 만들 변경 하나", `docs/PRD-current-system.md` 는 "이미 만들어진 시스템 전체"다.
+  intent 에 시스템 전체 설명을 늘려 쓰지 말고, 완료 후 전체 설명이 달라졌으면 PRD 를 갱신한다.
+
 ## UX Preferences
 - 별도 요청이 없으면 데이터 수정 작업은 인라인 편집보다 모달/Dialog를 기본 UX로 사용한다.
 

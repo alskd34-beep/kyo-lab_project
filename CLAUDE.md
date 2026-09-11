@@ -8,6 +8,14 @@
 전체 요구사항과 구현 현황은 **[.claude/commands/qc-schedule-process.md](./.claude/commands/qc-schedule-process.md)** (슬래시 커맨드 `/qc-schedule-process`) 및 **[docs/qc-schedule-status.md](./docs/qc-schedule-status.md)** 를 기준으로 한다.
 현재 시스템 전체의 as-built PRD는 **[docs/PRD-current-system.md](./docs/PRD-current-system.md)**, 단계별 동작 흐름은 **[docs/WORKFLOW-current-system.md](./docs/WORKFLOW-current-system.md)** 를 참고한다.
 
+## 착수 전 의도 문서 (intent.md)
+코드를 쓰기 전에 **무엇을 왜 만드는지** `intent/YYYY-MM-DD-슬러그.md` 로 먼저 남긴다.
+작성은 직접 쓰지 않고 `/intent <하고 싶은 일>` 로 인터뷰를 받는다(`.claude/commands/intent.md`).
+intent 에 **"어떻게"(기술 선택·구현 방법)는 쓰지 않는다** — 플랜 모드의 몫이다.
+- **어떤 변경에 필수이고 어떤 변경에 생략인지, Status 흐름, `spec.md` 예외 등 세부 규칙은
+  [AGENTS.md](./AGENTS.md) 의 「착수 전 의도 문서 (intent.md)」 절이 단일 기준**이다(여기에 다시 적지 않는다).
+- 전체 가이드 **[docs/ai-native-sdlc.md](./docs/ai-native-sdlc.md)** · 템플릿 `intent/TEMPLATE.md`.
+
 ## 핵심 작업 규칙 (AGENTS.md 요약)
 - 3계층 분리: 페이지/컴포넌트(frontend) → API 라우트 핸들러(`app/api`, thin) → 서비스(`backend/services`, 로직+Supabase).
 - DB 컬럼은 snake_case, 앱/도메인 레이어는 camelCase. 서비스가 `mapRow`로 매핑.
