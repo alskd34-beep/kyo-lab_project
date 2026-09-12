@@ -109,18 +109,74 @@ interface ConcurrentGroup {
   items: { orderId: string; productCode: string; productName: string; batchNo: string }[]
 }
 
+/**
+ * 그룹 대표의 품목명.
+ *
+ * 대표 = 그룹 내 최소 order id — 자동배정(pctAssign.groupOrders)이 엔진에 태우는 그 대표와
+ * 같은 기준이다. "이 오더가 왜 이 사람에게 갔는지" 를 되짚을 때 실제로 배정을 끌고 간 건이다.
+ */
+function groupRepName(g: ConcurrentGroup): string {
+  let rep = g.items[0]
+  if (!rep) return ""
+  for (const it of g.items) if (it.orderId < rep.orderId) rep = it
+  return rep.productName
+}
+
+/**
+ * 화면에서 그룹을 부르는 이름.
+ *
+ * 자동 그룹에는 label 이 없고 group_key(grp-xxxxxxxx)는 사람이 읽을 수도 검색할 수도 없다.
+ * 대표 품목명 + 건수로 만들어 쓴다 — DB 에는 쓰지 않는다(그룹 생성 규칙을 건드리지 않는다).
+ * 관리자가 직접 묶은 수동 그룹은 label 이 있으므로 그것을 우선한다.
+ */
+function groupDisplayName(g: ConcurrentGroup | undefined): string {
+  if (!g) return ""
+  if (g.label) return g.label
+  const rep = groupRepName(g)
+  return g.items.length > 1 ? `${rep} 외 ${g.items.length - 1}건` : rep
+}
+
+/**
+ * 카드 칩의 툴팁.
+ *
+ * 몇 건인지보다 "무엇과 함께 도는지" 가 실제로 필요한 정보다 — 함께 묶인 제조번호를 적어
+ * 카드를 열지 않고도 알 수 있게 한다.
+ */
+function groupTooltip(g: ConcurrentGroup, selfOrderId: string): string {
+  const lines = [
+    `동시분석 실행 그룹 ${groupDisplayName(g)} (${g.items.length}건)`,
+    `시험시작일 ${g.testStartDate ?? "미정"}`,
+  ]
+  if (g.groupLock) lines.push("잠긴 그룹 — 재적재해도 구성이 바뀌지 않습니다")
+  const others = g.items.filter(i => i.orderId !== selfOrderId).map(i => i.batchNo)
+  if (others.length > 0) lines.push(`함께: ${others.join(", ")}`)
+  if (g.note) lines.push(g.note)
+  return lines.join("\n")
+}
+
+/** 시험시작일 짧은 표기 (2026-09-15 → 9/15) */
+function shortDate(iso: string | null): string {
+  if (!iso) return "미정"
+  const [, m, d] = iso.split("-")
+  return m && d ? `${Number(m)}/${Number(d)}` : iso
+}
+
 // 화면에 렌더링할 그룹(주차/담당자/상태 공통 형태)
 interface RenderGroup {
   key: string; label: string; color: string; rows: OrderRow[]; meta: string; isThisWeek?: boolean; assigneeTesterId?: string | null
   /** 담당자별 그룹에서, 이 그룹에 "담당자2 자격"으로 들어온 오더 id (카드에 배지 표시용) */
   secondaryIds?: Set<string>
+  /** [동시분석] 탭에서만 — 이 섹션이 곧 하나의 실행 그룹이다 */
+  concurrent?: ConcurrentGroup
 }
 
-type TabId = "week" | "assignee" | "status"
+type TabId = "week" | "assignee" | "status" | "concurrent"
 const TABS: { id: TabId; label: string; icon: typeof CalendarDays }[] = [
   { id: "week", label: "주차별", icon: CalendarDays },
   { id: "assignee", label: "담당자별", icon: Users },
   { id: "status", label: "상태별", icon: ListChecks },
+  // 실행 그룹을 단위로 훑는 탭. 담당자별·상태별에서 한 그룹이 여러 섹션으로 갈리는 것을 여기서 푼다.
+  { id: "concurrent", label: "동시분석", icon: Layers },
 ]
 
 // 오더 상태 = 대기 + 작업 단계(진행중→검토전→검토중→승인전→승인완료) + 지연 (types/qc-status.ts)
@@ -291,35 +347,35 @@ export default function OrdersPage() {
   const collapseInited = useRef(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [bulkTester, setBulkTester] = useState("")
-  const [families, setFamilies] = useState<{ id: string; name: string; codes: string[] }[]>([])
-  // 동시분석 그룹(오더 단위). 품목군(families)은 '함께 시험 가능한 품목' 마스터이고,
-  // 이쪽은 '이 오더들을 실제로 함께 돌린다' 는 실행 단위다 — 둘을 섞지 않는다.
+  // 동시분석 실행 그룹(오더 단위) — '이 오더들을 실제로 함께 돌린다' 는 배정의 실행 단위다.
+  // 품목군(concurrent_product_families)은 그룹을 만드는 입력 중 하나지 결과가 아니라 화면에서 다루지 않는다.
   const [groups, setGroups] = useState<ConcurrentGroup[]>([])
+  // 그룹 조회 실패 — 배정 근거가 소리 없이 사라지면 안 되므로 배너로 알린다(오더 목록은 그대로 보여 준다)
+  const [groupsError, setGroupsError] = useState(false)
   const [groupDialogOpen, setGroupDialogOpen] = useState(false)
-  const [famCollapsed, setFamCollapsed] = useState<Set<string>>(new Set())
+  // 지목한 실행 그룹 — 화면을 보는 동안만 유지하고 저장하지 않는다(사람마다 다른 화면이 보이면 안 된다)
+  const [focusedGroupId, setFocusedGroupId] = useState<string | null>(null)
   // 자동배정 직후 반차와 겹친 배정 목록 (닫으면 사라지는 확인용 배너)
   const [halfDayNotices, setHalfDayNotices] = useState<HalfDayNotice[]>([])
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [oRes, tRes, fRes, gRes] = await Promise.all([
+      const [oRes, tRes, gRes] = await Promise.all([
         fetch("/api/pct-orders", { credentials: "include" }),
         fetch(`/api/testers`, { credentials: "include" }),
-        fetch(`/api/concurrent-product-families`, { credentials: "include" }),
-        // 동시분석 그룹(오더 단위). 품목군(families)과 다르다 — 이쪽이 실제 실행 단위다.
-        fetch(`/api/concurrent-groups`, { credentials: "include" }),
+        // 동시분석 실행 그룹. 여기서만 실패를 따로 받는다 — 그룹 하나 때문에 오더 목록까지 못 쓰게
+        // 만들지 않되, 조용히 빈 배열이 되어 배정 근거가 사라지는 것도 막는다.
+        fetch(`/api/concurrent-groups`, { credentials: "include" }).catch(() => null),
       ])
       const oData = await oRes.json()
       const tData = await tRes.json()
-      const fData = await fRes.json().catch(() => ({ rows: [] }))
-      const gData = await gRes.json().catch(() => ({ rows: [] }))
+      const gData = gRes?.ok ? await gRes.json().catch(() => null) : null
       primeTesterProfileCache(tData.rows ?? [])
       setRows(oData.rows ?? [])
       setTesters(tData.rows ?? [])
-      setFamilies((fData.rows ?? []).map((f: { id: string; name: string; members: { productCode: string }[] }) =>
-        ({ id: f.id, name: f.name, codes: f.members.map(m => m.productCode) })))
-      setGroups((gData.rows ?? gData.groups ?? []) as ConcurrentGroup[])
+      setGroups((gData?.rows ?? gData?.groups ?? []) as ConcurrentGroup[])
+      setGroupsError(gData === null)
     } catch {
       setMsg("목록을 불러오지 못했습니다.")
     } finally {
@@ -507,7 +563,30 @@ export default function OrdersPage() {
 
   const unsyncedCount = rows.filter(r => r.source === "auto" && !r.productSynced).length
 
-  // ─── 이름 검색 (품목명·담당자·품목코드·제조번호) ──────────────────────────
+  /**
+   * 오더 id → 그 오더가 속한 동시분석 실행 그룹.
+   *
+   * **멤버 2건 이상인 그룹만** 담는다. rebuildGroups 는 단일 멤버 그룹까지 그대로 저장하므로
+   * 거르지 않으면 거의 모든 카드에 배지가 붙어 아무 뜻도 없어진다. 단독 실행은 배정 판단에
+   * 쓸 정보가 없으므로 "그룹 정보가 없는 오더" 와 같이 취급한다.
+   */
+  const groupByOrder = useMemo(() => {
+    const m = new Map<string, ConcurrentGroup>()
+    for (const g of groups) {
+      if (g.items.length < 2) continue
+      for (const it of g.items) m.set(it.orderId, g)
+    }
+    return m
+  }, [groups])
+
+  // 지목한 그룹의 실체. 재적재로 그룹이 사라졌는데 id 만 남으면 모든 카드가 가라앉으므로,
+  // 목록에 실제로 있는 그룹일 때만 지목 상태로 친다.
+  const focusedGroup = useMemo(
+    () => (focusedGroupId ? (groups.find(g => g.id === focusedGroupId) ?? null) : null),
+    [focusedGroupId, groups],
+  )
+
+  // ─── 이름 검색 (품목명·담당자·품목코드·제조번호·동시분석 그룹명) ──────────
   const searchRows = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return rows
@@ -517,9 +596,11 @@ export default function OrdersPage() {
       r.batchNo.toLowerCase().includes(q) ||
       (r.assigneeName ?? "").toLowerCase().includes(q) ||
       // 'PV1' 처럼 구분으로 찾는 경우 — 시트 값이 대문자라 소문자로 쳐도 걸리게 한다
-      (r.validationType ?? "").toLowerCase().includes(q)
+      (r.validationType ?? "").toLowerCase().includes(q) ||
+      // 카드에 보이는 그룹 이름("경옥고 외 2건")으로도 찾을 수 있어야 한다
+      groupDisplayName(groupByOrder.get(r.id)).toLowerCase().includes(q)
     )
-  }, [rows, search])
+  }, [rows, search, groupByOrder])
 
   const filteredRows = useMemo(
     () => statusFilter ? searchRows.filter(r => r.status === statusFilter) : searchRows,
@@ -531,13 +612,6 @@ export default function OrdersPage() {
     for (const row of searchRows) counts.set(row.status, (counts.get(row.status) ?? 0) + 1)
     return counts
   }, [searchRows])
-
-  /** 오더 id → 그 오더가 속한 동시분석 그룹 */
-  const groupByOrder = useMemo(() => {
-    const m = new Map<string, ConcurrentGroup>()
-    for (const g of groups) for (const it of g.items) m.set(it.orderId, g)
-    return m
-  }, [groups])
 
   /**
    * 선택이 어떤 그룹을 건드리는가.
@@ -656,6 +730,36 @@ export default function OrdersPage() {
           return an - bn || a.label.localeCompare(b.label, "ko")
         })
     }
+    if (tab === "concurrent") {
+      // 섹션 하나 = 실행 그룹 하나. 다른 탭과 같은 scopedRows 를 쓰므로 담당자·상태·기간·검색이
+      // 그대로 걸린 채로 본다. 2건 이상인 그룹만 나열한다 — 1건짜리까지 늘어놓는 것이
+      // 기존 동시분석 그룹 화면의 문제였다.
+      const inScope = new Map<string, OrderRow[]>()
+      for (const r of scopedRows) {
+        const g = groupByOrder.get(r.id)
+        if (g) pushTo(inScope, g.id, r)
+      }
+      return groups
+        .filter(g => g.items.length >= 2 && inScope.has(g.id))
+        .map(g => {
+          const rs = inScope.get(g.id)!
+          return {
+            key: `cg:${g.id}`,
+            label: groupDisplayName(g),
+            color: DOT_NEUTRAL,
+            rows: rs,
+            // 필터에 걸려 일부만 보이면 분모가 그것을 말해 준다(그룹이 쪼개져 있음을 드러낸다)
+            meta: `시작 ${shortDate(g.testStartDate)} · ${rs.length}/${g.items.length}건`,
+            concurrent: g,
+          }
+        })
+        .sort((a, b) => {
+          // 시험시작일 빠른 순(미정은 뒤) — listGroups 의 정렬과 같다
+          const ad = a.concurrent.testStartDate ?? "9999-99-99"
+          const bd = b.concurrent.testStartDate ?? "9999-99-99"
+          return ad.localeCompare(bd) || a.label.localeCompare(b.label, "ko")
+        })
+    }
     // status
     const m = new Map<string, OrderRow[]>()
     for (const r of scopedRows) pushTo(m, r.status, r)
@@ -669,7 +773,7 @@ export default function OrdersPage() {
         const ia = order.indexOf(a.label); const ib = order.indexOf(b.label)
         return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib)
       })
-  }, [tab, scopedWeekGroups, scopedRows])
+  }, [tab, scopedWeekGroups, scopedRows, groups, groupByOrder])
 
   const toggleGroup = (key: string) =>
     setCollapsed(prev => {
@@ -684,69 +788,36 @@ export default function OrdersPage() {
     else setCollapsed(new Set(renderGroups.map(g => g.key)))
   }
 
-  // 품목코드 → 동시분석 품목군 {id, name}
-  const familyByCode = useMemo(() => {
-    const m = new Map<string, { id: string; name: string }>()
-    for (const f of families) for (const c of f.codes) m.set(c, { id: f.id, name: f.name })
-    return m
-  }, [families])
-
-  const toggleFamily = (key: string) =>
-    setFamCollapsed(prev => {
-      const next = new Set(prev)
-      next.has(key) ? next.delete(key) : next.add(key)
-      return next
-    })
-
-  // 그룹 내 행을 동시분석 품목군 트리로 묶는다.
-  // 같은 품목군이 2건 이상이면 family 노드(접기 가능), 그 외는 단독 행.
-  type RowItem =
-    | { type: "single"; row: OrderRow }
-    | { type: "family"; familyId: string; familyName: string; rows: OrderRow[] }
-  const buildRowTree = (groupKey: string, rows: OrderRow[]): RowItem[] => {
-    const famRows = new Map<string, OrderRow[]>()
-    for (const r of rows) {
-      const fam = familyByCode.get(r.productCode)
-      if (fam) {
-        const arr = famRows.get(fam.id) ?? []; arr.push(r); famRows.set(fam.id, arr)
-      }
-    }
-    // 한국어(ㄱㄴㄷ) 정렬 헬퍼 — 미배정(빈 담당자)은 맨 뒤로
+  /**
+   * 카드 격자에 늘어놓을 순서: 담당자 → 그룹 → 품목명.
+   *
+   * 2·3 순위를 같은 그룹 멤버가 공유하므로 **같은 그룹 오더는 반드시 붙어서** 보인다.
+   * 1순위를 담당자로 두는 것은 담당자별로 훑는 기존 사용 방식을 깨지 않기 위해서다 —
+   * 그래서 담당자가 다른 같은 그룹은 여전히 떨어진다([동시분석] 탭이 그것을 맡는다).
+   */
+  const sortRowsForGrid = (rows: OrderRow[]): OrderRow[] => {
     const byKo = (a: string, b: string) => a.localeCompare(b, "ko")
+    // 미배정(빈 담당자)은 맨 뒤로
     const asgKey = (s: string | null) => s || "￿"
-    // 묶음 내부 행은 품목명 ㄱㄴㄷ 정렬
-    for (const arr of famRows.values()) arr.sort((a, b) => byKo(a.productName, b.productName))
-
-    // 묶음(그룹)을 위에, 개별 행을 그 다음에. 각 구간 내부는 담당자 → 품목명 순.
-    type Sortable = { item: RowItem; assignee: string; name: string }
-    const familyItems: Sortable[] = []
-    const singleItems: Sortable[] = []
-    const emitted = new Set<string>()
-    for (const r of rows) {
-      const fam = familyByCode.get(r.productCode)
-      const group = fam ? famRows.get(fam.id)! : null
-      if (fam && group && group.length >= 2) {
-        if (emitted.has(fam.id)) continue
-        emitted.add(fam.id)
-        // 묶음은 보통 한 담당자에게 배정됨 → 대표 담당자 기준 정렬
-        const repAssignee = group.find(x => x.assigneeName)?.assigneeName ?? null
-        familyItems.push({
-          item: { type: "family", familyId: `${groupKey}::${fam.id}`, familyName: fam.name, rows: group },
-          assignee: asgKey(repAssignee),
-          name: group[0].productName,
-        })
-      } else {
-        singleItems.push({ item: { type: "single", row: r }, assignee: asgKey(r.assigneeName), name: r.productName })
-      }
-    }
-    const byAssigneeThenName = (a: Sortable, b: Sortable) => byKo(a.assignee, b.assignee) || byKo(a.name, b.name)
-    familyItems.sort(byAssigneeThenName)
-    singleItems.sort(byAssigneeThenName)
-    return [...familyItems, ...singleItems].map(x => x.item)
+    return [...rows].sort((a, b) => {
+      const ga = groupByOrder.get(a.id)
+      const gb = groupByOrder.get(b.id)
+      return (
+        byKo(asgKey(a.assigneeName), asgKey(b.assigneeName)) ||
+        // 그룹이면 대표 품목명으로 자리를 잡는다 — 멤버 전원이 같은 자리를 갖는다
+        byKo(ga ? groupRepName(ga) : a.productName, gb ? groupRepName(gb) : b.productName) ||
+        // 대표 이름이 같은 서로 다른 그룹이 섞이지 않게 한다
+        (ga?.id ?? "").localeCompare(gb?.id ?? "") ||
+        byKo(a.productName, b.productName)
+      )
+    })
   }
 
-  // 단일 오더 행 렌더 (트리 들여쓰기 옵션, 담당자별 그룹에서 "담당자2 자격"으로 들어온 카드 여부)
-  const renderOrderCard = (r: OrderRow, indented = false, asSecondary = false) => {
+  // 단일 오더 행 렌더 (담당자별 그룹에서 "담당자2 자격"으로 들어온 카드 여부)
+  const renderOrderCard = (r: OrderRow, asSecondary = false) => {
+    const group = groupByOrder.get(r.id)
+    const focused = !!group && group.id === focusedGroup?.id
+    const dimmed = focusedGroup !== null && !focused
     const dueSoon = isDueSoon(r.dueDate, r.status)
     const unassignedReason = !r.assigneeName ? getAutoUnassignedReason(r.note) : null
     const assigneeAvatarUrl = r.assigneeTesterId
@@ -782,6 +853,10 @@ export default function OrdersPage() {
              앰버로 두면 기한임박(앰버)과 겹쳐 급한 건과 확정 건을 못 가른다. */
           r.locked && "border-blue-200 bg-blue-50/40 dark:border-blue-800 dark:bg-blue-950/40",
           selected.has(r.id) && "border-primary/40 bg-primary/5 ring-1 ring-primary/20",
+          /* 그룹을 지목했을 때 — 나머지를 지우거나 접지 않고 가라앉히기만 한다.
+             보고 있던 자리에서 그대로 판별되게 하는 것이 목적이다. */
+          focused && "border-primary ring-2 ring-primary",
+          dimmed && "opacity-45",
         )}
       >
         {/* 1번째 구역(체크박스·제목)은 클릭을 흘리지 않는다 — 체크박스를 누르다 수정 패널이 열리는 오작동 방지 */}
@@ -805,7 +880,6 @@ export default function OrdersPage() {
 
           <div className="min-w-0 flex-1">
             <div className="flex items-start gap-2">
-              {indented && <span aria-hidden="true" className="text-muted-foreground/60">↳</span>}
               {/* 배지 묶음이 shrink-0 이라 폭이 모자라면 **이름만** 줄어든다. truncate 였을 때는
                   긴급·PV2 까지 붙은 카드에서 "광동…" 만 남아 무슨 품목인지 알 수 없었다.
                   두 줄까지 쓰게 하면 폭 대신 높이를 쓴다 — 목록에서 품목명은 잘려선 안 되는 값이다.
@@ -849,36 +923,38 @@ export default function OrdersPage() {
               <span className="font-mono tabular-nums">품목코드 {r.productCode}</span>
               <span aria-hidden="true" className="text-border">·</span>
               <span className="font-mono tabular-nums">제조번호 {r.batchNo}</span>
-              {/* 동시분석 묶음은 이 오더의 **부가정보**이지 상태가 아니다. 품목명 줄에 두면
+              {/* 실행 그룹은 이 오더의 **부가정보**이지 상태가 아니다. 품목명 줄에 두면
                   이름이 쓸 폭을 빼앗아 긴 품목명이 곧바로 잘린다(광동…). 코드·제조번호와
-                  같은 줄에 두면 폭이 남고, 줄이 좁아지면 스스로 아랫줄로 접힌다. */}
-              {(() => {
-                const g = groupByOrder.get(r.id)
-                if (!g || g.items.length < 2) return null
-                const others = g.items.filter(i => i.orderId !== r.id).map(i => i.batchNo)
-                return (
-                  <>
-                    <span aria-hidden="true" className="text-border">·</span>
-                    <span
-                      className={cn(
-                        "inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 font-medium",
-                        g.source === "manual"
-                          ? "border-primary/40 bg-primary/10 text-primary"
-                          : "border-border text-muted-foreground",
-                      )}
-                      /* 몇 건인지보다 "무엇과 함께인지" 가 실제로 필요한 정보다 —
-                         제조번호를 툴팁에 적어 카드를 열지 않고도 알 수 있게 한다. */
-                      title={
-                        `${g.source === "manual" ? "관리자가 묶은" : "자동"} 동시분석 그룹 (${g.items.length}건)` +
-                        (others.length > 0 ? `\n함께: ${others.join(", ")}` : "") +
-                        (g.note ? `\n${g.note}` : "")
-                      }
-                    >
-                      <Layers className="size-3" />동시 {g.items.length}
-                    </span>
-                  </>
-                )
-              })()}
+                  같은 줄에 두면 폭이 남고, 줄이 좁아지면 스스로 아랫줄로 접힌다.
+                  눌러서 그 그룹을 지목한다 — 이 구역은 이미 클릭을 흘리지 않으므로(위 stopPropagation)
+                  수정 패널이 함께 열리지 않는다. */}
+              {group && (
+                <>
+                  <span aria-hidden="true" className="text-border">·</span>
+                  <button
+                    type="button"
+                    aria-pressed={focused}
+                    onClick={() => setFocusedGroupId(prev => (prev === group.id ? null : group.id))}
+                    className={cn(
+                      "inline-flex min-w-0 max-w-full items-center gap-1 rounded-md border px-1.5 font-medium transition-colors",
+                      "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                      focused
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border text-muted-foreground hover:border-primary/40 hover:text-primary",
+                    )}
+                    /* 몇 건인지보다 "무엇과 함께인지" 가 실제로 필요한 정보다 —
+                       제조번호를 툴팁에 적어 카드를 열지 않고도 알 수 있게 한다. */
+                    title={groupTooltip(group, r.id)}
+                  >
+                    <Layers className="size-3 shrink-0" />
+                    <span className="min-w-0 truncate">{groupDisplayName(group)}</span>
+                    <span className="shrink-0 tabular-nums">· 시작 {shortDate(group.testStartDate)}</span>
+                    {/* 잠긴 그룹은 재적재 때 삭제·재구성 대상에서 빠져 옛 구성이 남는다 —
+                        왜 이 그룹만 안 바뀌는지 화면에서 알 수 있어야 한다. */}
+                    {group.groupLock && <Lock className="size-2.5 shrink-0" />}
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
@@ -982,6 +1058,7 @@ export default function OrdersPage() {
     tab === "week"
       ? (viewMode === "recent" && weekGroups.length > 5 ? `최근 5주 (전체 ${weekGroups.length}주차)` : `${scopedWeekGroups.length}주차`)
       : tab === "assignee" ? `${renderGroups.length}명`
+      : tab === "concurrent" ? `${renderGroups.length}개 그룹`
       : `${renderGroups.length}개 상태`
 
   return (
@@ -1033,6 +1110,20 @@ export default function OrdersPage() {
 
       {msg && (
         <div className="shrink-0 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium break-keep text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300">{msg}</div>
+      )}
+
+      {/* 동시분석 그룹을 못 읽었을 때 — 조용히 빈 배열이 되면 "왜 이 사람에게 갔는지" 의 근거가
+          소리 없이 사라진다. 오더 목록은 정상 표시하고, 사라진 것이 무엇인지만 알린다. */}
+      {groupsError && (
+        <div className="shrink-0 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm break-keep text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+          <p className="flex items-center gap-1.5 font-semibold">
+            <AlertCircle className="size-3.5 shrink-0" />
+            동시분석 정보를 불러오지 못했습니다.
+          </p>
+          <p className="mt-0.5 text-xs leading-normal">
+            오더 목록은 그대로 보여 줍니다. 카드의 동시분석 그룹 표시와 [동시분석] 탭만 비어 있습니다.
+          </p>
+        </div>
       )}
 
       {/* 반차 겹침 배정 확인 — 연차·출장은 자동배정에서 제외되지만 반차는 근무일이라 배정된다 */}
@@ -1179,7 +1270,7 @@ export default function OrdersPage() {
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="품목명·담당자·코드·제조번호"
+            placeholder="품목명·담당자·코드·제조번호·동시분석"
             aria-label="오더 검색"
             className="h-9 w-full rounded-md border border-input bg-background pl-8 pr-7 text-sm text-foreground shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none sm:w-56"
           />
@@ -1200,6 +1291,30 @@ export default function OrdersPage() {
       </div>
 
       </MobileFilterPanel>
+
+      {/* 그룹 지목 중 — 무엇을 보고 있는지와 빠져나가는 길을 한 줄로 둔다.
+          지목 상태는 화면을 보는 동안만 유지하고 저장하지 않는다. */}
+      {focusedGroup && (
+        <div className="flex shrink-0 items-center gap-2 rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-sm break-keep text-primary">
+          <Layers className="size-3.5 shrink-0" />
+          <span className="min-w-0 flex-1">
+            동시분석 그룹 <strong>{groupDisplayName(focusedGroup)}</strong> 강조 중
+            <span className="px-1 text-primary/50">·</span>
+            <span className="tabular-nums">{focusedGroup.items.length}건</span>
+            <span className="px-1 text-primary/50">·</span>
+            <span className="tabular-nums">시험시작 {focusedGroup.testStartDate ?? "미정"}</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setFocusedGroupId(null)}
+            title="강조 해제"
+            aria-label="강조 해제"
+            className="shrink-0 rounded-md p-1 transition-colors hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          >
+            <X className="size-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* 그룹 카드 — 조회조건 아래 아코디언만 스크롤 */}
       {loading ? (
@@ -1244,7 +1359,12 @@ export default function OrdersPage() {
         </Card>
       ) : renderGroups.length === 0 ? (
         <Card className="min-h-0 flex-1 items-center px-4 py-10 text-center text-sm break-keep text-muted-foreground">
-          {search.trim() ? `"${search.trim()}" 검색 결과가 없습니다.` : "해당 기간에 표시할 오더가 없습니다."}
+          {search.trim()
+            ? `"${search.trim()}" 검색 결과가 없습니다.`
+            : tab === "concurrent"
+              // 이 탭은 2건 이상인 실행 그룹만 나열한다 — 오더가 있어도 묶인 것이 없으면 빈 화면이다
+              ? "이 조건에 함께 시험하는 오더 묶음이 없습니다."
+              : "해당 기간에 표시할 오더가 없습니다."}
         </Card>
       ) : (
         <div className="relative min-h-0 flex-1 basis-0">
@@ -1265,9 +1385,14 @@ export default function OrdersPage() {
                 >
                   {tab === "assignee" && g.label !== "미배정"
                     ? <TesterAvatar testerId={g.assigneeTesterId} name={g.label} size="md" />
-                    : <span className={cn("size-2 shrink-0 rounded-full", g.color)} />}
+                    : <span className={cn("size-2 shrink-0 rounded-full",
+                        g.concurrent && g.concurrent.id === focusedGroup?.id ? DOT_CURRENT : g.color)} />}
                   <span className="inline-flex min-w-0 items-center text-sm font-semibold text-foreground">
                     <span className="min-w-0 truncate tabular-nums">{g.label}</span>
+                    {/* 잠긴 그룹은 재적재해도 구성이 바뀌지 않는다 — 그 사실을 머리줄에서 바로 알린다 */}
+                    {g.concurrent?.groupLock && (
+                      <Lock className="ml-1.5 size-3 shrink-0 text-muted-foreground" aria-label="잠긴 그룹" />
+                    )}
                     {g.isThisWeek && <Badge className="ml-2 shrink-0">이번주</Badge>}
                   </span>
                   <span className="h-px flex-1 bg-border" />
@@ -1279,37 +1404,7 @@ export default function OrdersPage() {
 
                 {!isCollapsed && (
                   <div className="grid w-full justify-start grid-cols-[repeat(auto-fit,minmax(min(100%,300px),400px))] gap-2 p-0.5">
-                    {buildRowTree(g.key, g.rows).map(item => {
-                      if (item.type === "single") return renderOrderCard(item.row, false, g.secondaryIds?.has(item.row.id))
-                      const fc = famCollapsed.has(item.familyId)
-                      return (
-                        /* 테두리를 가진 층은 안쪽 오더 카드 하나뿐이어야 한다 —
-                           묶음은 옅은 바탕과 머리줄로만 구분한다(카드 안 카드 방지). */
-                        <div key={item.familyId} className="min-w-0 rounded-md bg-primary/5 p-2.5 xl:col-span-2">
-                          <button
-                            type="button"
-                            aria-expanded={!fc}
-                            onClick={() => toggleFamily(item.familyId)}
-                            className="flex w-full items-center gap-2 rounded-md text-left transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                          >
-                            {fc
-                              ? <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-                              : <ChevronDown className="size-4 shrink-0 text-muted-foreground" />}
-                            <Layers className="size-3.5 shrink-0 text-primary" />
-                            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">{item.familyName}</span>
-                            {/* 제목 옆 배지로 되풀이하지 않는다 — 건수는 부가정보다 */}
-                            <span className="shrink-0 text-xs leading-normal text-muted-foreground tabular-nums">
-                              동시분석 {item.rows.length}건
-                            </span>
-                          </button>
-                          {!fc && (
-                            <div className="mt-2 grid w-full justify-start grid-cols-[repeat(auto-fit,minmax(min(100%,300px),400px))] gap-2 border-t border-primary/15 pt-2">
-                              {item.rows.map(r => renderOrderCard(r, true, g.secondaryIds?.has(r.id)))}
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
+                    {sortRowsForGrid(g.rows).map(r => renderOrderCard(r, g.secondaryIds?.has(r.id)))}
                   </div>
                 )}
               </section>

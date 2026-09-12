@@ -1,5 +1,5 @@
 # Intent: AI 스케줄 화면에서 동시분석 실행 그룹을 드러낸다
-Author: kyo (개발) · Status: approved
+Author: kyo (개발) · Status: completed
 
 ## Problem
 AI 스케줄 화면(`/schedule/orders`)에서 동시분석이 한눈에 들어오지 않는다.
