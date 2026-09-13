@@ -953,6 +953,80 @@ export async function startJob(orderId: string, userSub: string): Promise<{ jobI
   return { jobId, qcNo, ...(warnings ? { warnings } : {}) }
 }
 
+/** cancelJobStart 결과 — orderStatusAfter 가 PENDING_STATUS 가 아니면 2인 배정 상대 작업이 남아 오더가 유지된 것이다 */
+export type CancelJobStartResult = {
+  qcNo: string
+  orderId: string
+  orderStatusBefore: string
+  orderStatusAfter: string
+  warning?: string
+}
+
+/**
+ * 작업 시작 취소 — 잘못 누른 [작업 시작] 을 되돌린다.
+ *
+ * 되돌리기는 **qc_jobs 행 삭제(원복)** 다. 새 상태값을 두지 않는다 — 취소 대상은 "지금 실행 흔적이
+ * 없는 작업" 뿐이라 보존할 실적이 없다. 상세 규칙: intent/2026-09-13-tester-cancel-job-start-spec.md
+ *
+ * 검사·감사 기록·삭제·오더 상태 결정은 전부 DB 함수 cancel_job_start(0047) 가 **한 트랜잭션**으로 한다.
+ * 여러 번 나눈 Supabase 호출로는 "검사 뒤 들어온 항목 실적이 삭제와 함께 사라지는" 경합과
+ * "감사 기록만 남거나 감사 기록만 사라지는" 부분 실패를 막을 수 없기 때문이다(GMP/ALCOA+).
+ * 이 함수는 사유 검사 + 함수 호출 + 오류 번역 + 커밋 뒤 알림만 한다.
+ *
+ * ⚠️ 함수가 없을 때 비원자 경로로 폴백하지 않는다 — 폴백은 위 경합을 조용히 되살린다.
+ */
+export async function cancelJobStart(
+  jobId: string, userSub: string, reason: unknown,
+): Promise<CancelJobStartResult> {
+  if (typeof reason !== 'string') throw new Error('시작 취소 사유를 입력해 주세요.')
+  const note = reason.trim()
+  if (note.length < 2) {
+    throw new Error('시작 취소 사유를 2자 이상 입력해 주세요.')
+  }
+
+  // 사용자 id 는 로그인 토큰에서 온 값이다 — 함수는 이 값을 믿으므로 실행 권한은 service_role 뿐이다.
+  const { data, error } = await supabaseAdmin.rpc('cancel_job_start', {
+    p_job_id: jobId, p_user_id: userSub, p_reason: note,
+  })
+  if (error) {
+    // 함수가 던진 업무 거절(한국어 메시지)
+    if (error.code === 'P0001') throw new Error(error.message)
+    if (error.code === 'PGRST202' || error.code === '42883') {
+      throw new Error('시작 취소 기능의 DB 설치(0047 마이그레이션)가 아직 적용되지 않았습니다. 관리자에게 문의하세요.')
+    }
+    throw error
+  }
+
+  const res = data as {
+    qcNo: string; orderId: string; productName: string | null; batchNo: string | null
+    orderStatusBefore: string; orderStatusAfter: string
+  }
+
+  // ── 여기부터는 취소가 커밋된 뒤다. 알림 실패는 취소를 되돌리지 않고 경고로 돌려준다 ──
+  // 기존 "작업 시작" 알림은 지우지 않는다(두 건이 짝을 이뤄 정정 사건이 된다).
+  // 작업 행은 이미 지워졌으므로 related_qc_job_id 는 비운다(FK).
+  let warning: string | undefined
+  try {
+    await createNotification({
+      type: 'status_changed',
+      title: '작업 시작 취소',
+      body: `${res.productName ?? ''} / ${res.batchNo ?? ''} — QC ${res.qcNo} 작업 시작이 취소되었습니다. (사유: ${note})`,
+      relatedOrderId: res.orderId, relatedQcJobId: null, severity: 'warning',
+    })
+  } catch (err) {
+    console.error('[qcJobs.cancelJobStart] 취소 알림 생성 실패 — 취소와 감사 기록은 반영됨:', jobId, err)
+    warning = '작업 시작은 취소됐지만 관리자 알림 생성에 실패했습니다.'
+  }
+
+  return {
+    qcNo: res.qcNo,
+    orderId: res.orderId,
+    orderStatusBefore: res.orderStatusBefore,
+    orderStatusAfter: res.orderStatusAfter,
+    ...(warning ? { warning } : {}),
+  }
+}
+
 /** 시작/종료일 수정 */
 export async function updateJobDates(jobId: string, userSub: string, dates: { workStartDate?: string | null; workEndDate?: string | null }): Promise<void> {
   await assertOwner(jobId, userSub)

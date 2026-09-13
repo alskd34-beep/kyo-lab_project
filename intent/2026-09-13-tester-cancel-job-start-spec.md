@@ -1,5 +1,5 @@
 # Spec: 시험자 작업 시작 취소 — 상태 전이 규칙
-Author: kyo (개발) · Status: approved
+Author: kyo (개발) · Status: completed
 관련 intent: [2026-09-13-tester-cancel-job-start.md](./2026-09-13-tester-cancel-job-start.md)
 설계 근거: 레드팀 분석(작업 시작 취소 설계, 2026-09-13) · 레드팀 diff 검토(차단 7건, 2026-09-14)
 

@@ -6,16 +6,21 @@ import {
   ShieldAlert, ClipboardList,
 } from "lucide-react"
 import {
-  ACTIVE_JOB_STATUSES, CLOSED_STAGE, ITEM_CLEARED, ITEM_IN_PROGRESS,
+  ACTIVE_JOB_STATUSES, CLOSED_STAGE, IN_PROGRESS_STATUS, ITEM_CLEARED, ITEM_IN_PROGRESS, ITEM_PENDING, PENDING_STATUS,
   SELF_EDITABLE_JOB_STATUSES, stageStyle,
 } from "@shared/qc-status"
 import { useAuth } from "@frontend/lib/auth-context"
+import { api, errorMessage } from "@frontend/lib/api-client"
 import { cn } from "@frontend/lib/utils"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import { DateField } from "@frontend/components/ui/date-field"
 import { Badge } from "@frontend/components/ui/badge"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
+import { Input } from "@frontend/components/ui/input"
+import {
+  Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@frontend/components/ui/dialog"
 import { ManagementDrawer } from "@frontend/components/common/management-drawer"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@frontend/components/ui/select"
 import { formatElapsedMinutes, formatItemElapsed } from "@frontend/lib/elapsed-format"
@@ -91,6 +96,119 @@ function dDay(due: string | null): number | null {
 /** 기준 시각(now) 이후 경과 분. now 를 인자로 받아야 1분 타이머가 다시 그릴 때 값이 따라온다. */
 function minutesSince(iso: string, now: number): number {
   return Math.max(0, Math.round((now - new Date(iso).getTime()) / 60000))
+}
+
+/**
+ * 작업 시작을 되돌릴 수 있는 작업인가 — 버튼 노출용 보조 판정.
+ * 최종 판정은 서버(cancelJobStart)가 한다. '진행중' 이고, 시험항목이 1건 이상이며
+ * 전부 한 번도 시작·완료되지 않은 작업만 해당한다.
+ */
+function canCancelStart(job: Job): boolean {
+  if (job.status !== IN_PROGRESS_STATUS || job.items.length === 0) return false
+  return job.items.every(it =>
+    it.status === ITEM_PENDING
+    && it.startedAt == null && it.clearedAt == null
+    && it.elapsedMinutes == null && it.elapsedTotalMinutes == null)
+}
+
+const CANCEL_REASON_OTHER = "기타"
+const CANCEL_REASONS = ["잘못 눌렀습니다", "시험 준비가 안 됐습니다", CANCEL_REASON_OTHER]
+
+/** 작업 시작 취소 확인 모달 — 사유를 골라야 취소할 수 있다 */
+function CancelStartDialog({
+  job,
+  onDone,
+  onFailed,
+  onClose,
+}: {
+  job: Job
+  onDone: (message: string, type: "info" | "error") => void
+  /** 요청 실패 뒤 목록을 다시 읽는다. 대상 작업이 목록에서 사라졌으면(응답만 유실된 경우) 모달이 닫힌다 */
+  onFailed: () => Promise<void>
+  onClose: () => void
+}) {
+  const [choice, setChoice] = useState<string>(CANCEL_REASONS[0])
+  const [custom, setCustom] = useState("")
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const reason = choice === CANCEL_REASON_OTHER ? custom.trim() : choice
+  const reasonOk = reason.length >= 2
+
+  const submit = async () => {
+    if (!reasonOk) { setError("사유를 2자 이상 입력해 주세요."); return }
+    setSubmitting(true)
+    setError(null)
+    try {
+      const res = await api.post<{
+        ok: true; qcNo: string; orderStatusBefore: string; orderStatusAfter: string; warning?: string
+      }>(`/api/qc-jobs/${job.id}/cancel-start`, { reason })
+      // 성공 문구는 서버가 확정한 오더 상태로 가른다 — 2인 배정 상대 작업이 남으면 오더는 그대로다.
+      const done = res.orderStatusAfter === PENDING_STATUS
+        ? `QC ${res.qcNo} 작업 시작을 취소했습니다. 오더가 시작 대기로 돌아갔습니다.`
+        : `QC ${res.qcNo} 내 작업 시작을 취소했습니다. 함께 배정된 담당자의 작업이 있어 오더는 '${res.orderStatusAfter}'로 유지됩니다.`
+      if (res.warning) onDone(`${done} ${res.warning}`, "error")
+      else onDone(done, "info")
+    } catch (e) {
+      // 모달을 닫지 않는다 — 사유를 다시 입력하지 않고 재확인할 수 있게 한다.
+      // 서버는 취소했는데 응답만 유실됐을 수 있으므로 목록을 한 번 다시 읽는다.
+      setError(errorMessage(e))
+      setSubmitting(false)
+      await onFailed()
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={next => { if (!next && !submitting) onClose() }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>작업 시작 취소</DialogTitle>
+          <DialogDescription className="text-xs leading-normal break-keep">
+            <span className="font-mono">QC {job.qcNo}</span> · {job.productName} / <span className="font-mono">{job.batchNo}</span>
+          </DialogDescription>
+        </DialogHeader>
+        <DialogBody className="space-y-3">
+          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-normal break-keep text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+            내 작업 기록과 QC번호가 삭제됩니다. 다른 담당자 작업이 없으면 오더가 &apos;시작 대기&apos;로 돌아갑니다.
+            취소 사실과 사유는 오더 수정 이력에 남습니다.
+          </p>
+          <fieldset className="space-y-1.5">
+            <legend className="mb-1 text-xs font-medium text-muted-foreground">취소 사유</legend>
+            {CANCEL_REASONS.map(r => (
+              <label key={r} className="flex min-h-8 cursor-pointer items-center gap-2 text-sm text-foreground">
+                <input
+                  type="radio"
+                  name="cancel-start-reason"
+                  className="size-4 accent-primary"
+                  checked={choice === r}
+                  onChange={() => { setChoice(r); setError(null) }}
+                  disabled={submitting}
+                />
+                {r}
+              </label>
+            ))}
+            {choice === CANCEL_REASON_OTHER && (
+              <Input
+                autoFocus
+                value={custom}
+                onChange={e => { setCustom(e.target.value); setError(null) }}
+                placeholder="사유를 직접 입력하세요 (2자 이상)"
+                disabled={submitting}
+              />
+            )}
+          </fieldset>
+          {error && <p className="text-xs leading-normal break-keep text-destructive">{error}</p>}
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={submitting}>닫기</Button>
+          <Button variant="destructive" onClick={() => void submit()} disabled={submitting || !reasonOk}>
+            {submitting ? <Loader2 className="animate-spin" /> : <Undo2 />}
+            시작 취소
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
 }
 
 /** 장비 준비상태 모달 */
@@ -230,15 +348,21 @@ export default function MyTasksPage() {
     result: ReadinessResult
   } | null>(null)
   const [startingFromModal, setStartingFromModal] = useState(false)
+  /** 작업 시작 취소 모달 대상 */
+  const [cancelTarget, setCancelTarget] = useState<Job | null>(null)
 
-  const load = useCallback(async () => {
+  /** 목록을 다시 읽고, 읽은 작업 목록을 돌려준다(시작 취소 실패 뒤 대상이 남아 있는지 확인용) */
+  /** 목록을 다시 읽는다. 응답이 실패면 null — 빈 목록과 구분해야 "작업이 사라졌다" 고 오판하지 않는다 */
+  const load = useCallback(async (): Promise<Job[] | null> => {
     setLoading(true)
     try {
       const res = await fetch("/api/qc-jobs", { credentials: "include" })
       const data = await res.json()
+      const nextJobs: Job[] = data.jobs ?? []
       setLinked(data.testerLinked ?? false)
       setPending(data.pendingOrders ?? [])
-      setJobs(data.jobs ?? [])
+      setJobs(nextJobs)
+      return res.ok && Array.isArray(data.jobs) ? nextJobs : null
     } finally { setLoading(false) }
   }, [])
   useEffect(() => { void load() }, [load])
@@ -580,6 +704,30 @@ export default function MyTasksPage() {
           confirming={startingFromModal}
         />
       )}
+      {cancelTarget && (
+        <CancelStartDialog
+          job={cancelTarget}
+          onClose={() => setCancelTarget(null)}
+          onDone={(m, type) => {
+            setCancelTarget(null)
+            flash(m, type)
+            void load()
+          }}
+          onFailed={async () => {
+            const targetId = cancelTarget.id
+            try {
+              const nextJobs = await load()
+              // 재조회 자체가 실패했으면(401·500) 판단하지 않는다 — 취소되지 않은 작업의 모달을 닫으면 안 된다.
+              if (nextJobs && !nextJobs.some(j => j.id === targetId)) {
+                setCancelTarget(null)
+                flash("목록을 새로 불러왔습니다. 작업이 이미 취소됐는지 확인해 주세요.", "info")
+              }
+            } catch {
+              // 재조회 실패는 무시한다 — 모달의 원래 오류 메시지를 그대로 둔다.
+            }
+          }}
+        />
+      )}
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4 md:p-6">
         {/* 화면 이름을 되풀이하는 부제 대신, 지금 무엇이 몇 건인지를 적는다 */}
@@ -835,9 +983,23 @@ export default function MyTasksPage() {
           {/* 어떤 제조번호가 함께 도는지 — 이것이 그룹 카드의 핵심 정보다 */}
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-normal text-muted-foreground">
             {groupJobs.map(j => (
-              <span key={j.id} className="rounded-md border px-1.5 font-mono tabular-nums">
+              <span key={j.id} className="inline-flex items-center rounded-md border px-1.5 font-mono tabular-nums">
                 {j.batchNo}
                 <span className={cn("ml-1 font-sans", statusCls(j.status))}>{j.status}</span>
+                {/* 시작 취소는 배치(작업) 하나씩만 — 그룹 전체로 번지지 않는다 */}
+                {canCancelStart(j) && (
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    className="ml-0.5"
+                    title={`QC ${j.qcNo} 작업 시작 취소`}
+                    aria-label={`QC ${j.qcNo} 작업 시작 취소`}
+                    onClick={() => setCancelTarget(j)}
+                    disabled={busy !== null}
+                  >
+                    <Undo2 className="size-3" />
+                  </Button>
+                )}
               </span>
             ))}
             {groupJobs[0].groupSize > groupJobs.length && (
@@ -1010,6 +1172,19 @@ export default function MyTasksPage() {
                 <span className={cn('size-1.5 rounded-full', stageStyle(job.status).dot)} />
                 {job.status}
               </span>
+            )}
+            {/* 잘못 누른 [작업 시작] 되돌리기 — 항목을 하나도 시작하지 않은 진행중 작업에만 보인다 */}
+            {selectable && canCancelStart(job) && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                title="작업 시작 취소 — 내 작업 기록과 QC번호가 삭제됩니다. 다른 담당자 작업이 없으면 오더가 시작 대기로 돌아갑니다."
+                onClick={() => setCancelTarget(job)}
+                disabled={busy !== null}
+              >
+                <Undo2 />시작 취소
+              </Button>
             )}
           </div>
         </div>

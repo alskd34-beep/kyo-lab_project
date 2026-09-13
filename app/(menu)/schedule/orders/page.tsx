@@ -204,6 +204,7 @@ const FIELD_LABEL: Record<string, string> = {
   method: "진행방법", status: "상태", note: "비고", assigneeTesterId: "담당자",
   isDualAssignment: "2인 배정", assigneeTesterId2: "담당자2",
   testItemAssignee: "항목 담당자",
+  jobStart: "작업 시작",
 }
 
 const AUTO_UNASSIGNED_NOTE_PREFIX = "자동배정 미배정 사유:"

@@ -1,5 +1,5 @@
 # Intent: 시험자가 잘못 누른 [작업 시작]을 스스로 되돌린다
-Author: kyo (개발) · Status: approved
+Author: kyo (개발) · Status: completed
 
 ## Problem
 시험자 화면(할 일 / 관리자에게는 내 작업)에서 [작업 시작]을 누르면 오더가 곧바로 `대기 → 진행중`으로
