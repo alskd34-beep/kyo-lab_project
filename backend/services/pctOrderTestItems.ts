@@ -9,6 +9,7 @@
  */
 
 import { supabaseAdmin } from '@backend/lib/supabase'
+import { rpcWithDeadlockRetry } from '@backend/lib/rpcRetry'
 import { describeSchemaError } from '@backend/lib/schemaError'
 import { isAssigneeSlot, PRIMARY_ASSIGNEE_SLOT, type AssigneeSlot } from '@shared/assignment'
 import { translateAssignmentRpcError } from '@backend/services/orderAssignees'
@@ -337,7 +338,7 @@ export async function removeItem(orderId: string, testItemName: string): Promise
 export async function setAssigneeSlot(
   orderId: string, testItemName: string, slot: AssigneeSlot, changedBy?: string | null,
 ): Promise<void> {
-  const { error } = await supabaseAdmin.rpc('set_order_test_item_slot', {
+  const { error } = await rpcWithDeadlockRetry('set_order_test_item_slot', {
     p_order_id: orderId,
     p_test_item_name: testItemName,
     p_slot: slot,

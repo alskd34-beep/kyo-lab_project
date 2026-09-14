@@ -17,6 +17,7 @@
  */
 
 import { supabaseAdmin } from '@backend/lib/supabase'
+import { rpcWithDeadlockRetry } from '@backend/lib/rpcRetry'
 import { selectAll } from '@backend/lib/supabasePage'
 import { describeSchemaError } from '@backend/lib/schemaError'
 import {
@@ -266,7 +267,7 @@ export async function setOrderAssignees(
 ): Promise<SetOrderAssigneesResult> {
   const note = requireReason(reason)
   const payload = normalizeAssigneeInput(assignees)
-  const { data, error } = await supabaseAdmin.rpc('set_order_assignees', {
+  const { data, error } = await rpcWithDeadlockRetry('set_order_assignees', {
     p_order_id: orderId,
     p_assignees: payload.map(a => ({ slot: a.slot, testerId: a.testerId })),
     p_user_id: userId,
@@ -287,7 +288,7 @@ export async function setOrderPrimaryAssignee(
   reason: string,
 ): Promise<SetPrimaryAssigneeResult> {
   const note = requireReason(reason)
-  const { data, error } = await supabaseAdmin.rpc('set_order_primary_assignee', {
+  const { data, error } = await rpcWithDeadlockRetry('set_order_primary_assignee', {
     p_order_id: orderId,
     p_tester_id: testerId,
     p_user_id: userId,

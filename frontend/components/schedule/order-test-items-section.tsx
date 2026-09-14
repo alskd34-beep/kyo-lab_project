@@ -11,12 +11,14 @@
  *   GET    /api/pct-orders/[id]/test-items  → 품목 기준 전체(제외분 포함)
  *   PATCH  … { testItemName, excluded, reason? }  제외/복구
  *   PATCH  … { testItemName, assigneeSlot }       병렬 배정 담당자 배분(오더에 있는 슬롯만, 작업 시작 전만)
+ *   GET    …/reassign                             작업 시작 뒤 항목별 담당자 변경 가능 여부(F2)
+ *   POST   …/reassign                             항목별 담당자 변경(F2 — 모달 ItemReassignDialog)
  *   POST   … { testItemId?, testItemName }        이 오더에만 추가
  *   DELETE … { testItemName }                     추가분 삭제(기준분은 제외 처리)
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Check, ListChecks, Loader2, Lock, Plus, Search, Trash2 } from "lucide-react"
+import { ArrowRightLeft, Check, ListChecks, Loader2, Lock, Plus, Search, Trash2 } from "lucide-react"
 import { api, errorMessage } from "@frontend/lib/api-client"
 import { cn } from "@frontend/lib/utils"
 import { Badge } from "@frontend/components/ui/badge"
@@ -29,6 +31,8 @@ import { Skeleton } from "@frontend/components/ui/skeleton"
 import {
   Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@frontend/components/ui/dialog"
+import { ItemReassignDialog } from "@frontend/components/common/item-reassign-dialog"
+import type { ItemReassignContext } from "@shared/item-reassign"
 
 /** GET /api/pct-orders/[id]/test-items 의 행 */
 export interface OrderTestItemDetailRow {
@@ -58,7 +62,7 @@ function assigneeOptionLabel(a: SectionAssignee | undefined, slot: number): stri
 
 export function OrderTestItemsSection({
   orderId, productName, canEdit, locked,
-  parallel = false, assignees = [], jobStarted = false, onRowsChange,
+  parallel = false, assignees = [], jobStarted = false, canReassign = false, onRowsChange,
 }: {
   orderId: string
   productName: string
@@ -82,6 +86,11 @@ export function OrderTestItemsSection({
    * 눌러도 에러만 나는 컨트롤을 남겨두지 않도록 화면에서도 잠근다. 진행 중 이동은 항목별 담당자 변경으로 한다.
    */
   jobStarted?: boolean
+  /**
+   * 작업 시작 뒤 항목별 [담당자 변경](F2)을 보여 줄지 — 관리자면 true. LOCK 이어도 허용한다
+   * (LOCK 은 일정 자동변경 금지이지 실행 금지가 아니다). 병렬 배정·작업 시작 오더에서만 쓰인다.
+   */
+  canReassign?: boolean
   /** 항목 목록을 읽거나 다시 읽을 때마다 부른다 — 담당자 행 삭제 가능 여부(활성 항목 수) 판정용 */
   onRowsChange?: (rows: OrderTestItemDetailRow[]) => void
 }) {
@@ -90,6 +99,26 @@ export function OrderTestItemsSection({
   const [busyNames, setBusyNames] = useState<Set<string>>(() => new Set())
   const [reasonDrafts, setReasonDrafts] = useState<Record<string, string>>({})
   const [pickerOpen, setPickerOpen] = useState(false)
+  // 진행 중 담당자 변경(F2) — 항목별 가능 여부와 모달 대상
+  const reassignEnabled = parallel && jobStarted && canReassign
+  const [reassignCtx, setReassignCtx] = useState<ItemReassignContext | null>(null)
+  const [reassignTarget, setReassignTarget] = useState<OrderTestItemDetailRow | null>(null)
+  const [notice, setNotice] = useState<{ text: string; type: "info" | "error" } | null>(null)
+  /** 담당자 변경 정보 조회 실패 — 섹션 공용 오류(err)를 덮지 않게 따로 둔다 */
+  const [reassignErr, setReassignErr] = useState<string | null>(null)
+
+  const loadReassign = useCallback(async () => {
+    if (!reassignEnabled) return
+    try {
+      setReassignCtx(await api.get<ItemReassignContext>(`/api/pct-orders/${orderId}/test-items/reassign`))
+      setReassignErr(null)
+    } catch (e) {
+      setReassignCtx(null)
+      setReassignErr(errorMessage(e, "항목별 담당자 변경 정보를 불러오지 못했습니다."))
+    }
+  }, [orderId, reassignEnabled])
+
+  useEffect(() => { void loadReassign() }, [loadReassign])
 
   const load = useCallback(async () => {
     try {
@@ -181,6 +210,10 @@ export function OrderTestItemsSection({
     return m
   }, [rows])
   const assigneeBySlot = useMemo(() => new Map(assignees.map(a => [a.slot as number, a])), [assignees])
+  const reassignByName = useMemo(
+    () => new Map((reassignCtx?.items ?? []).map(i => [i.testItemName, i])),
+    [reassignCtx],
+  )
 
   return (
     <section className="mt-4 rounded-md border bg-muted/20 p-3">
@@ -218,12 +251,25 @@ export function OrderTestItemsSection({
         </p>
       )}
 
-      {/* 배분이 잠긴 이유를 알려준다 — 컨트롤이 그냥 잠기면 관리자는 고장으로 읽는다 */}
-      {parallel && canEdit && jobStarted && !locked && (
+      {/* 배분이 잠긴 이유와 대신 쓸 길을 알려준다 — 컨트롤이 그냥 잠기면 관리자는 고장으로 읽는다 */}
+      {reassignEnabled && (
         <p className="mt-2 flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs leading-normal break-keep text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
           <Lock className="size-3 shrink-0" />
-          이미 작업이 시작되어 일괄 배분은 잠겼습니다. 진행 중 담당자 변경은 항목별로 합니다.
+          이미 작업이 시작되어 일괄 배분은 잠겼습니다. 항목마다 [담당자 변경] 으로 같은 오더의 다른 담당자에게 넘기세요.
+          시작·완료·검토 기록이 있는 항목은 옮길 수 없습니다.
         </p>
+      )}
+
+      {notice && (
+        <p className={cn(
+          "mt-2 rounded-md border px-2.5 py-2 text-xs leading-normal break-keep",
+          notice.type === "error"
+            ? "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
+            : "border-blue-200 bg-blue-50 text-blue-900 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200",
+        )}>{notice.text}</p>
+      )}
+      {reassignEnabled && reassignErr && (
+        <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-2.5 py-2 text-xs leading-normal text-red-600 dark:border-red-800 dark:bg-red-950 dark:text-red-300">{reassignErr}</p>
       )}
 
       {err && (
@@ -286,9 +332,33 @@ export function OrderTestItemsSection({
                       <p className="mt-1 text-xs leading-normal text-muted-foreground">사유: {row.excludedReason}</p>
                     ) : null)}
                   </div>
-                  {/* 병렬 배정 — 항목별 담당자 선택(오더에 저장된 슬롯만).
-                      읽기 전용(canEdit=false)이면 배지로만, 작업이 이미 시작됐으면 셀렉트를 잠근다 */}
-                  {parallel && (canEdit ? (
+                  {/* 병렬 배정 — 작업 시작 뒤(관리자)에는 현재 담당자 배지 + 항목별 [담당자 변경](F2).
+                      작업 시작 전에는 항목별 담당자 선택(오더에 저장된 슬롯만), 읽기 전용이면 배지로만 */}
+                  {parallel && reassignEnabled ? (
+                    <div className="mt-0.5 flex shrink-0 items-center gap-1">
+                      <Badge variant="outline">
+                        {assigneeOptionLabel(assigneeBySlot.get(row.assigneeSlot), row.assigneeSlot)}
+                      </Badge>
+                      {!row.isExcluded && (() => {
+                        const state = reassignByName.get(row.testItemName)
+                        const block = !reassignCtx
+                          ? (reassignErr ?? "담당자 변경 정보를 불러오는 중입니다.")
+                          : state?.blockReason ?? null
+                        return (
+                          <Button
+                            type="button" variant="outline" size="sm"
+                            className="h-7 px-2 text-xs"
+                            disabled={busy || !!block}
+                            title={block ?? "같은 오더의 다른 담당자에게 이 항목을 넘깁니다"}
+                            aria-label={`${row.testItemName} 담당자 변경`}
+                            onClick={() => { setNotice(null); setReassignTarget(row) }}
+                          >
+                            <ArrowRightLeft className="size-3" />담당자 변경
+                          </Button>
+                        )
+                      })()}
+                    </div>
+                  ) : parallel && (canEdit ? (
                     <Select
                       value={String(row.assigneeSlot)}
                       disabled={busy || jobStarted || row.isExcluded}
@@ -333,6 +403,23 @@ export function OrderTestItemsSection({
             )
           })}
         </ul>
+      )}
+
+      {reassignTarget && (
+        <ItemReassignDialog
+          orderId={orderId}
+          testItemName={reassignTarget.testItemName}
+          fromSlot={reassignTarget.assigneeSlot}
+          mode="admin"
+          onClose={() => setReassignTarget(null)}
+          onDone={(message, type) => {
+            setReassignTarget(null)
+            setNotice({ text: message, type })
+            void load()
+            void loadReassign()
+          }}
+          onFailed={async () => { await Promise.all([load(), loadReassign()]) }}
+        />
       )}
 
       {pickerOpen && (

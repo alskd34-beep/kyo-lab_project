@@ -31,6 +31,20 @@
 - **LOCK/IN_PROGRESS 변경 차단** — `pctIngest`: 진행중/검토중/완료/지연(및 영문 LOCKED/IN_PROGRESS/REVIEW/COMPLETED) 상태 오더는 시트 변경 자동 미반영. 변경 전/후 값을 `pct_order_edits`(field/old_value/new_value)에 기록 + 감독관 경고 알림. `IngestResult.blocked` 카운트 추가.
 - **동시분석 그룹 자동 재생성** — `ingestPctSheet` 말미에서 `rebuildGroups()` 자동 호출(잠긴 그룹 보존). 적재 요약 알림에 그룹 수 포함.
 
+## ✅ 추가 완료 (2026-09-15, 진행 중 시험항목 담당자 변경 — `0050_item_reassign.sql`)
+규칙 전문: `intent/2026-09-15-in-progress-item-reassign.md` · `-spec.md`
+- **무엇**: 작업이 시작된 병렬 배정 오더에서 흔적 없는(시작·완료·검토 기록 0) 시험항목 하나를 **같은 오더의 다른 담당자**에게 넘긴다.
+  관리자 = 오더 수정 서랍 시험항목의 [담당자 변경](LOCK 오더도 허용) / 시험자 = 할 일 낱개 진행 카드의 [넘기기](자기 항목만). 사유 선택지 필수.
+- **쓰기는 DB 함수 하나**: `reassign_job_item(order, 항목명, 기대 슬롯, 받는 슬롯, user, reason)` — (A 작업 有/無) × (B 작업 有/無) 네 경우
+  (행 이동 / A 행 삭제 / B 작업에 대기 항목 추가 / 배분만)·스냅샷 슬롯·`pct_order_edits(testItemAssignee, "항목: 이름(QC번호|미시작)")`·
+  A·B `recompute_job_stage` 가 한 트랜잭션. 잠금 `qc_jobs → pct_orders → pct_order_assignees → pct_order_test_items → qc_job_items`. service_role 전용.
+- **거절**: 진행 중·완료·검토 기록 항목, 제외 항목, 받는 작업 승인전 이후, 마지막 항목, 그 사이 담당자가 바뀐 경우(기대 슬롯), 작업 0건 오더(일괄 배분을 쓴다).
+- **커밋 뒤**: 오더 상태 동기화 → 단계 전환 알림(F1) → 받는 사람 앱 알림 `시험항목 인계`. `reassignment_history` 에는 넣지 않는다.
+- **항목 시작·시작 취소·완료(개별·그룹)** 는 조건부 update 로 바뀌어 0행이면 "작업 상태가 바뀌었습니다. 새로고침 후 다시 확인해 주세요." 로 실패 응답(예전엔 거짓 성공).
+- **경합 대응**: 쓰기 DB 함수(0047~0050)는 교착(40P01)이면 서버가 한 번 재시도(`backend/lib/rpcRetry.ts`). 병렬 배정 `startJob` 은 체크리스트를 만든 직후
+  스냅샷을 다시 읽어 누락 항목 추가·흔적 0 인 남의 항목 삭제로 맞춘다(동시 이동의 누락·중복 수렴). 동시분석 그룹 일괄 조작은 상태가 바뀐 배치만 건너뛴다.
+- ⚠️ 알려진 한계: 사후 조정도 트랜잭션이 아니라, 조정 도중 또 커밋되는 이동이나 조정 전에 시작된 넘어간 항목은 수렴하지 않는다(서버 로그 경고).
+
 ## ✅ 추가 완료 (2026-09-15, 병렬 배정 — 2인 배정 대체)
 한 오더를 담당자 **최대 5명**이 시험항목을 나눠 수행한다. 화면 이름 「2인 배정」 → **「병렬 배정」**. — `0049_parallel_assignment.sql`
 규칙 전문: `intent/2026-09-15-parallel-assignment.md` · `-spec.md`

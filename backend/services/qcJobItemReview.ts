@@ -13,6 +13,7 @@
  */
 
 import { supabaseAdmin } from '@backend/lib/supabase'
+import { rpcWithDeadlockRetry } from '@backend/lib/rpcRetry'
 import {
   ITEM_REVIEW_ACTION_LABEL,
   isItemReviewAction,
@@ -78,7 +79,7 @@ export async function reviewJobItem(
   if (ownerErr) throw translateItemReviewRpcError(ownerErr)
   if (!owner || (owner.qc_job_id as string) !== jobId) throw new Error('시험항목을 찾을 수 없습니다.')
 
-  const { data, error } = await supabaseAdmin.rpc('item_review_action', {
+  const { data, error } = await rpcWithDeadlockRetry('item_review_action', {
     p_item_id: itemId, p_user_id: userSub, p_action: action, p_reason: note,
   })
   if (error) throw translateItemReviewRpcError(error)
@@ -98,7 +99,7 @@ export async function bulkReviewJobItems(
 ): Promise<BulkReviewResult> {
   if (!isItemReviewBulkAction(action)) throw new Error('알 수 없는 검토 동작입니다.')
 
-  const { data, error } = await supabaseAdmin.rpc('item_review_bulk_action', {
+  const { data, error } = await rpcWithDeadlockRetry('item_review_bulk_action', {
     p_job_id: jobId, p_user_id: userSub, p_action: action,
   })
   if (error) throw translateItemReviewRpcError(error, '작업을 찾을 수 없습니다.')

@@ -2480,7 +2480,7 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
                 </Button>
                 {order.hasJob && (
                   <p className="mt-1 text-xs leading-normal break-keep text-muted-foreground">
-                    작업이 시작된 오더에 추가한 담당자는 시험항목 없이 시작하고, 항목별 담당자 변경으로 넘겨받습니다.
+                    작업이 시작된 오더에 추가한 담당자는 시험항목 없이 시작합니다. 저장한 뒤 아래 시험항목의 [담당자 변경] 으로 넘겨받습니다.
                   </p>
                 )}
               </li>
@@ -2527,6 +2527,7 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
         parallel={order.isParallel}
         assignees={sectionAssignees}
         jobStarted={order.hasJob}
+        canReassign={isAdmin}
         onRowsChange={setItemRows}
       />
 

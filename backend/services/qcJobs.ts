@@ -8,6 +8,7 @@
  */
 
 import { supabaseAdmin } from '@backend/lib/supabase'
+import { rpcWithDeadlockRetry } from '@backend/lib/rpcRetry'
 import { generateQcNo } from '@backend/lib/qcNumber'
 import { kstToday } from '@backend/lib/kstDate'
 import { describeSchemaError } from '@backend/lib/schemaError'
@@ -60,6 +61,12 @@ export const ITEM_REVIEW_MIGRATION = '0048_item_review.sql'
 export const ITEM_REVIEW_INSTALL_MESSAGE =
   '시험항목 검토 기능의 DB 설치(0048 마이그레이션)가 아직 적용되지 않았습니다. 관리자에게 문의하세요.'
 
+/**
+ * 항목 시작·시작 취소·완료의 조건부 update 가 0행일 때(F2-6) — 확인한 뒤 쓰기 전에 그 항목이 다른 담당자에게
+ * 넘어갔거나(F2 reassign_job_item) 상태가 바뀐 경우. 예전에는 0행인데도 성공으로 응답했다.
+ */
+export const ITEM_STATE_CHANGED_MESSAGE = '작업 상태가 바뀌었습니다. 새로고침 후 다시 확인해 주세요.'
+
 export interface JobItemRow {
   id: string
   testItemName: string
@@ -102,7 +109,7 @@ export function isSchemaMissingError(err: { code?: string } | null | undefined):
  * 한 번 더 읽어 화면이 죽지 않게 하고, 무엇을 적용해야 하는지 `reviewSetupError` 로 알린다.
  * (읽기 경로의 대체일 뿐이다 — 검토 쓰기 동작과 시험자 항목 조작은 미적용이면 거절한다)
  */
-async function loadJobItems(
+export async function loadJobItems(
   jobIds: string[],
 ): Promise<{ byJob: Map<string, JobItemRow[]>; reviewSetupError: string | null }> {
   const byJob = new Map<string, JobItemRow[]>()
@@ -172,6 +179,10 @@ export interface QcJobRow {
   groupLabel: string | null
   /** 그 그룹의 전체 오더 수(내 것이 아닌 것 포함). "3건 중 2건이 내 몫" 을 알리기 위해 */
   groupSize: number
+  /** 병렬 배정 오더(담당자 2명 이상)인가 — 할 일 화면의 [넘기기](F2) 노출 판정 */
+  isParallel: boolean
+  /** 이 오더에서 내 담당자 번호(1~5). 담당자 구성에서 빠졌으면 null */
+  mySlot: number | null
 }
 export interface PendingOrderRow {
   id: string
@@ -343,6 +354,8 @@ export async function listWorkspace(userSub: string): Promise<{
       groupId:    groupByOrder.get(j.order_id as string)?.id ?? null,
       groupLabel: groupByOrder.get(j.order_id as string)?.label ?? null,
       groupSize:  groupByOrder.get(j.order_id as string)?.size ?? 0,
+      isParallel: isParallelOrder(j.order_id as string),
+      mySlot:     mySlotOf(j.order_id as string),
     }
   })
 
@@ -994,6 +1007,18 @@ export async function startJob(orderId: string, userSub: string): Promise<{ jobI
     }
   }
 
+  // 병렬 배정: 체크리스트를 만든 **뒤** 스냅샷을 다시 읽어 맞춘다(리뷰 F2 M2 — 항목 담당자 변경과의 경합).
+  // 계획을 읽은 뒤 작업 행을 넣기 전 사이에 reassign_job_item 이 커밋되면(그 함수의 오더 잠금이 이 insert 를
+  // 커밋 뒤까지 붙잡아 두므로 겹치면 반드시) 낡은 계획이 적용돼 항목이 누락되거나 두 체크리스트에 중복된다.
+  // 실패해도 작업 시작은 되돌리지 않는다(서버 로그만) — 다음 시작·관리자 점검에서 확인한다.
+  if (isParallel) {
+    try {
+      await reconcileParallelChecklist(jobId, orderId, mySlot)
+    } catch (err) {
+      console.error('[qcJobs.startJob] 체크리스트 사후 조정 실패 — 작업은 시작됨:', jobId, err)
+    }
+  }
+
   // 오더 상태 진행중
   const { error: ordErr } = await supabaseAdmin
     .from('pct_orders').update({ status: IN_PROGRESS_STATUS }).eq('id', orderId)
@@ -1023,6 +1048,87 @@ export async function startJob(orderId: string, userSub: string): Promise<{ jobI
   })
 
   return { jobId, qcNo, ...(warnings ? { warnings } : {}) }
+}
+
+/**
+ * 병렬 배정 작업의 체크리스트를 스냅샷(pct_order_test_items)에 맞춘다 — startJob 직후 사후 조정(리뷰 F2 M2).
+ *
+ *  · 스냅샷상 내 슬롯의 활성 항목인데 내 작업에 없다 → pending 행 추가.
+ *    단, 같은 오더의 **다른 작업**에 그 이름이 있으면 추가하지 않고 경고만 남긴다(중복 시험 방지).
+ *  · 내 작업에 있는데 스냅샷상 내 슬롯의 활성 항목이 아니다 → **실행 흔적 0·검토 흔적 0** 일 때만 조건부 삭제.
+ *    흔적이 있으면 절대 지우지 않고 서버 로그로 경고한다(GMP — 실측 기록 보존).
+ *
+ * 멱등: 몇 번 불러도 같은 결과로 수렴한다. 트랜잭션이 아니므로 조정 도중 커밋되는 다른 담당자 변경까지는 잡지 못한다
+ * (spec F2-5 의 남는 창). 삭제는 조건부라 그 사이 시작된 항목을 지우지 않는다.
+ */
+async function reconcileParallelChecklist(jobId: string, orderId: string, mySlot: number): Promise<void> {
+  const [{ data: snap, error: sErr }, { data: jobs, error: jErr }] = await Promise.all([
+    supabaseAdmin.from('pct_order_test_items')
+      .select('test_item_id, test_item_name, sequence_order, is_excluded, assignee_slot')
+      .eq('order_id', orderId),
+    supabaseAdmin.from('qc_jobs').select('id').eq('order_id', orderId),
+  ])
+  if (sErr) throw sErr
+  if (jErr) throw jErr
+  const jobIds = (jobs ?? []).map(j => j.id as string)
+
+  const { data: rows, error: iErr } = await supabaseAdmin
+    .from('qc_job_items')
+    .select('id, qc_job_id, test_item_name, status, started_at, cleared_at, elapsed_minutes, elapsed_total_minutes, review_status')
+    .in('qc_job_id', jobIds.length ? jobIds : [jobId])
+  if (iErr) throw iErr
+
+  const mine = new Map<string, Record<string, unknown>>()
+  for (const s of snap ?? []) {
+    if (s.is_excluded === true || Number(s.assignee_slot) !== mySlot) continue
+    mine.set(s.test_item_name as string, s)
+  }
+  const myRows = (rows ?? []).filter(r => r.qc_job_id === jobId)
+  const otherNames = new Set((rows ?? []).filter(r => r.qc_job_id !== jobId).map(r => r.test_item_name as string))
+  const myNames = new Set(myRows.map(r => r.test_item_name as string))
+
+  // ① 빠진 항목 추가
+  const toAdd: Record<string, unknown>[] = []
+  for (const [name, s] of mine) {
+    if (myNames.has(name)) continue
+    if (otherNames.has(name)) {
+      console.warn('[qcJobs.reconcile] 내 슬롯 항목이 다른 담당자 작업에 있어 추가하지 않았습니다(관리자 확인 필요):', { orderId, jobId, name })
+      continue
+    }
+    toAdd.push({
+      qc_job_id: jobId,
+      test_item_id: (s.test_item_id as string | null) ?? null,
+      test_item_name: name,
+      sequence_order: (s.sequence_order as number) ?? 0,
+    })
+  }
+  if (toAdd.length > 0) {
+    const { error } = await supabaseAdmin.from('qc_job_items').insert(toAdd)
+    if (error) throw error
+    console.warn('[qcJobs.reconcile] 시작 중 넘겨받은 항목을 체크리스트에 추가했습니다:', { orderId, jobId, names: toAdd.map(r => r.test_item_name) })
+  }
+
+  // ② 내 슬롯이 아닌 항목 제거 — 흔적 0·검토 흔적 0 만, 조건부 delete
+  for (const r of myRows) {
+    const name = r.test_item_name as string
+    if (mine.has(name)) continue
+    const untouched = r.status === ITEM_PENDING
+      && r.started_at == null && r.cleared_at == null
+      && r.elapsed_minutes == null && r.elapsed_total_minutes == null
+      && (r.review_status ?? ITEM_REVIEW_NONE) === ITEM_REVIEW_NONE
+    if (!untouched) {
+      console.warn('[qcJobs.reconcile] 스냅샷상 내 몫이 아닌데 기록이 있는 항목 — 지우지 않습니다(관리자 확인 필요):', { orderId, jobId, name })
+      continue
+    }
+    const { error } = await supabaseAdmin
+      .from('qc_job_items').delete()
+      .eq('id', r.id as string).eq('qc_job_id', jobId)
+      .eq('status', ITEM_PENDING).is('started_at', null).is('cleared_at', null)
+      .is('elapsed_minutes', null).is('elapsed_total_minutes', null)
+      .eq('review_status', ITEM_REVIEW_NONE)
+    if (error) throw error
+    console.warn('[qcJobs.reconcile] 시작 중 다른 담당자에게 넘어간 항목을 체크리스트에서 뺐습니다:', { orderId, jobId, name })
+  }
 }
 
 /** cancelJobStart 결과 — orderStatusAfter 가 PENDING_STATUS 가 아니면 병렬 배정 동료의 작업이 남아 오더가 유지된 것이다 */
@@ -1057,7 +1163,7 @@ export async function cancelJobStart(
   }
 
   // 사용자 id 는 로그인 토큰에서 온 값이다 — 함수는 이 값을 믿으므로 실행 권한은 service_role 뿐이다.
-  const { data, error } = await supabaseAdmin.rpc('cancel_job_start', {
+  const { data, error } = await rpcWithDeadlockRetry('cancel_job_start', {
     p_job_id: jobId, p_user_id: userSub, p_reason: note,
   })
   if (error) {
@@ -1254,7 +1360,7 @@ export function translateItemReviewRpcError(
 export async function recomputeJobStage(
   jobId: string, actorUserId: string | null, note: string,
 ): Promise<StageRecomputeResult> {
-  const { data, error } = await supabaseAdmin.rpc('recompute_job_stage', {
+  const { data, error } = await rpcWithDeadlockRetry('recompute_job_stage', {
     p_job_id: jobId, p_actor: actorUserId, p_note: note,
   })
   if (error) throw translateItemReviewRpcError(error, '작업을 찾을 수 없습니다.')
@@ -1461,7 +1567,8 @@ async function loadItemForEdit(jobId: string, itemId: string, userSub: string) {
     }
     throw itemErr
   }
-  if (!item) throw new Error('시험항목을 찾을 수 없습니다.')
+  // 그 작업에 없는 항목 = 옛 화면에서 조작했는데 그 사이 다른 담당자에게 넘어갔거나 작업이 바뀐 경우(L2 — 결정 문구로 통일)
+  if (!item) throw new Error(ITEM_STATE_CHANGED_MESSAGE)
   if (hasReviewTrace(item.review_status as string)) {
     throw new Error('검토가 시작된 시험항목은 변경할 수 없습니다.')
   }
@@ -1478,20 +1585,24 @@ export async function startItem(
   jobId: string, itemId: string, userSub: string,
 ): Promise<{ startedAt: string }> {
   const { item } = await loadItemForEdit(jobId, itemId, userSub)
-  if (item.status === ITEM_CLEARED) throw new Error('이미 완료된 시험항목입니다.')
+  // 화면은 완료 항목에 이 버튼을 보이지 않는다 — 옛 화면·다른 탭에서 이미 완료된 경우(L2)
+  if (item.status === ITEM_CLEARED) throw new Error(ITEM_STATE_CHANGED_MESSAGE)
   // 이미 진행 중이면 시작 시각을 다시 쓰지 않는다 — 두 번 눌러 소요시간이 깎이면 안 된다.
   if (item.status === ITEM_IN_PROGRESS && item.started_at) {
     return { startedAt: item.started_at as string }
   }
 
   const now = new Date().toISOString()
-  const { error } = await supabaseAdmin
+  // 조건부 update(F2-6): 읽은 뒤 그 사이 항목이 다른 담당자에게 넘어갔거나(qc_job_id 불일치) 상태가 바뀌었으면 0행이다.
+  const { data: updated, error } = await supabaseAdmin
     .from('qc_job_items')
     .update({ status: ITEM_IN_PROGRESS, started_at: now })
-    .eq('id', itemId).eq('qc_job_id', jobId)
+    .eq('id', itemId).eq('qc_job_id', jobId).eq('status', item.status as string)
+    .select('id')
   // 23514 = 검토 흔적 CHECK(0048) — 확인 뒤 그 사이 항목이 완료·검토된 경합
-  if (error?.code === '23514') throw new Error('작업 상태가 바뀌었습니다. 새로고침 후 다시 확인해 주세요.')
+  if (error?.code === '23514') throw new Error(ITEM_STATE_CHANGED_MESSAGE)
   if (error) throw error
+  if (!updated || updated.length === 0) throw new Error(ITEM_STATE_CHANGED_MESSAGE)
   return { startedAt: now }
 }
 
@@ -1501,15 +1612,18 @@ export async function cancelItemStart(
 ): Promise<void> {
   const { item } = await loadItemForEdit(jobId, itemId, userSub)
   if (item.status === ITEM_CLEARED) {
-    throw new Error('이미 완료된 시험항목은 시작을 취소할 수 없습니다.')
+    throw new Error(ITEM_STATE_CHANGED_MESSAGE)
   }
-  const { error } = await supabaseAdmin
+  // 조건부 update(F2-6) — 0행이면 그 사이 넘어갔거나 상태가 바뀐 것이다(거짓 성공 금지)
+  const { data: updated, error } = await supabaseAdmin
     .from('qc_job_items')
     .update({ status: ITEM_PENDING, started_at: null })
-    .eq('id', itemId).eq('qc_job_id', jobId)
+    .eq('id', itemId).eq('qc_job_id', jobId).eq('status', item.status as string)
+    .select('id')
   // 23514 = 검토 흔적 CHECK(0048) — 확인 뒤 그 사이 항목이 완료·검토된 경합
-  if (error?.code === '23514') throw new Error('작업 상태가 바뀌었습니다. 새로고침 후 다시 확인해 주세요.')
+  if (error?.code === '23514') throw new Error(ITEM_STATE_CHANGED_MESSAGE)
   if (error) throw error
+  if (!updated || updated.length === 0) throw new Error(ITEM_STATE_CHANGED_MESSAGE)
 }
 
 /** 항목 클리어 — 시간 적재 + 감독관 알림 + 작업 단계 재도출(recompute_job_stage)
@@ -1527,7 +1641,8 @@ export async function clearItem(
   jobId: string, itemId: string, userSub: string,
 ): Promise<{ allCleared: boolean; statusChangedTo: string | null; stageSyncFailed?: boolean }> {
   const { job, item } = await loadItemForEdit(jobId, itemId, userSub)
-  if (item.status === ITEM_CLEARED) throw new Error('이미 완료된 시험항목입니다.')
+  // 화면은 완료 항목에 이 버튼을 보이지 않는다 — 옛 화면·다른 탭에서 이미 완료된 경우(L2)
+  if (item.status === ITEM_CLEARED) throw new Error(ITEM_STATE_CHANGED_MESSAGE)
   const now = new Date()
 
   // 작업 시작 시각 — 0030 이전에 만들어진 작업은 work_started_at 이 비어 있어 created_at 으로 대체
@@ -1550,7 +1665,7 @@ export async function clearItem(
   const elapsedTotal = minutesSince(jobStartedAt)
   const elapsed = minutesSince(itemStartedAt)
 
-  const { error } = await supabaseAdmin
+  const { data: updated, error } = await supabaseAdmin
     .from('qc_job_items')
     .update({
       status: ITEM_CLEARED,
@@ -1561,16 +1676,16 @@ export async function clearItem(
       elapsed_minutes: elapsed,
       elapsed_total_minutes: elapsedTotal,
     })
-    .eq('id', itemId).eq('qc_job_id', jobId)
+    // 조건부 update(F2-6) — 읽은 뒤 넘어갔거나 상태가 바뀐 항목에 완료 기록을 쓰지 않고, 0행이면 실패로 응답한다
+    .eq('id', itemId).eq('qc_job_id', jobId).eq('status', item.status as string)
+    .select('id')
+  if (error?.code === '23514') throw new Error(ITEM_STATE_CHANGED_MESSAGE)
   if (error) throw error
+  if (!updated || updated.length === 0) throw new Error(ITEM_STATE_CHANGED_MESSAGE)
 
-  await createNotification({
-    type: 'item_cleared',
-    title: '시험항목 완료',
-    body: `시험항목 "${item.test_item_name}" 완료 (작업 시작 후 ${elapsedTotal}분, 항목 소요 ${elapsed}분)`,
-    relatedOrderId: (job?.order_id as string) ?? null,
-    relatedQcJobId: jobId, severity: 'info',
-  })
+  // ── 여기부터는 항목 완료가 커밋된 뒤다. 이 뒤의 어떤 실패도 실패 응답으로 바꾸지 않는다(리뷰 F2 M1) ──
+  // 순서: 단계 재도출 → 단계 전환 알림 → 항목 완료 알림(마지막). 알림 insert 는 FK 검사로 pct_orders → qc_jobs 를
+  // 공유 잠금해 reassign_job_item·cancel_job_start 와 교착할 수 있다 — 알림이 중단돼도 재도출은 이미 끝나 있어야 한다.
 
   // 작업 단계 재도출 — 항목 완료는 기존 TS 경로를 유지하고 커밋 뒤 DB 함수를 부른다(F1-5).
   // 실패해도 항목 완료는 이미 커밋됐다. 함수는 재실행 안전이라 다음 항목 이벤트 때 단계가 맞춰진다.
@@ -1584,6 +1699,18 @@ export async function clearItem(
     console.error('[qcJobs.clearItem] 작업 단계 재도출 실패 — 항목 완료는 반영됨:', jobId, err)
   }
   await notifyStageRecomputed(stage)
+
+  try {
+    await createNotification({
+      type: 'item_cleared',
+      title: '시험항목 완료',
+      body: `시험항목 "${item.test_item_name}" 완료 (작업 시작 후 ${elapsedTotal}분, 항목 소요 ${elapsed}분)`,
+      relatedOrderId: (job?.order_id as string) ?? null,
+      relatedQcJobId: jobId, severity: 'info',
+    })
+  } catch (err) {
+    console.error('[qcJobs.clearItem] 항목 완료 알림 생성 실패 — 항목 완료·단계 재도출은 반영됨:', jobId, err)
+  }
 
   const { count: remaining, error: cntErr } = await supabaseAdmin
     .from('qc_job_items')
@@ -1807,6 +1934,8 @@ async function assertOwner(jobId: string, userSub: string): Promise<void> {
 export interface GroupItemResult {
   /** 실제로 처리된 (작업, 항목) 수 */
   affected: number
+  /** 읽은 뒤 그 사이 상태가 바뀌었거나 다른 담당자에게 넘어가 건너뛴 (작업, 항목) 수 — 리뷰 F2 M3 */
+  skipped: number
   /** 건드린 작업 수 */
   jobs: number
   /** 이번 항목 완료로 **도출된 작업 단계가 바뀐** 작업의 QC번호(대개 전 항목 완료 → '검토전') */
@@ -1860,21 +1989,30 @@ export async function applyGroupItemAction(
 
   const advanced: string[] = []
   let affected = 0
+  let skipped = 0
   const touchedJobs = new Set<string>()
   for (const r of targets) {
     const jobId = r.qc_job_id as string
     // 개별 경로(startItem/clearItem/cancelItemStart)를 그대로 재사용한다.
     // 소요시간 적재·알림·전체완료 전환 규칙을 여기서 다시 쓰면 언젠가 갈라진다.
-    if (action === 'start') await startItem(jobId, r.id as string, userSub)
-    else if (action === 'cancel') await cancelItemStart(jobId, r.id as string, userSub)
-    else {
-      const res = await clearItem(jobId, r.id as string, userSub)
-      if (res.statusChangedTo) advanced.push(jobs.find(j => j.id === jobId)?.qcNo ?? '')
+    // 개별 경로는 조건부 update 가 0행이면(그 사이 상태가 바뀌었거나 넘어감) ITEM_STATE_CHANGED_MESSAGE 로 던진다(F2-6).
+    // 그룹 조작에서는 그 배치만 **건너뛰고 계속** 처리한다 — 앞 배치만 기록되고 뒤 배치가 멈추면 다시 누를 때
+    // 배치마다 완료 시각이 달라진다(리뷰 F2 M3). 권한·DB 오류 등 진짜 오류는 그대로 실패한다.
+    try {
+      if (action === 'start') await startItem(jobId, r.id as string, userSub)
+      else if (action === 'cancel') await cancelItemStart(jobId, r.id as string, userSub)
+      else {
+        const res = await clearItem(jobId, r.id as string, userSub)
+        if (res.statusChangedTo) advanced.push(jobs.find(j => j.id === jobId)?.qcNo ?? '')
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message === ITEM_STATE_CHANGED_MESSAGE) { skipped++; continue }
+      throw err
     }
     affected++
     touchedJobs.add(jobId)
   }
-  return { affected, jobs: touchedJobs.size, advanced: advanced.filter(Boolean) }
+  return { affected, skipped, jobs: touchedJobs.size, advanced: advanced.filter(Boolean) }
 }
 
 /**

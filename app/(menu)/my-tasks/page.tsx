@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   Play, CheckCircle2, Circle, LoaderCircle, Loader2, AlertTriangle, Clock, XCircle, Undo2, Layers,
-  ShieldAlert, ClipboardList,
+  ShieldAlert, ClipboardList, ArrowRightLeft,
 } from "lucide-react"
 import {
   ACTIVE_JOB_STATUSES, CLOSED_STAGE, IN_PROGRESS_STATUS, ITEM_CLEARED, ITEM_EDITABLE_JOB_STATUSES, ITEM_IN_PROGRESS,
@@ -11,6 +11,7 @@ import {
   hasReviewTrace, stageStyle,
 } from "@shared/qc-status"
 import { ItemReviewBadge } from "@frontend/components/common/job-item-review"
+import { ItemReassignDialog } from "@frontend/components/common/item-reassign-dialog"
 import { useAuth } from "@frontend/lib/auth-context"
 import { api, errorMessage } from "@frontend/lib/api-client"
 import { cn } from "@frontend/lib/utils"
@@ -50,6 +51,10 @@ interface Job {
   isUrgent: boolean; dueDate: string | null; items: JobItem[]
   /** 동시분석 그룹 — 같은 그룹의 작업은 카드 하나로 묶어 한 번에 조작한다 */
   groupId: string | null; groupLabel: string | null; groupSize: number
+  /** 병렬 배정 오더(담당자 2명 이상)인가 — [넘기기] 노출 판정 */
+  isParallel?: boolean
+  /** 이 오더에서 내 담당자 번호 */
+  mySlot?: number | null
 }
 interface PendingOrder {
   id: string; productCode: string; productName: string; batchNo: string
@@ -120,6 +125,20 @@ function canCancelStart(job: Job): boolean {
     it.status === ITEM_PENDING
     && it.startedAt == null && it.clearedAt == null
     && it.elapsedMinutes == null && it.elapsedTotalMinutes == null)
+}
+
+/**
+ * 시험항목을 같은 오더의 다른 담당자에게 넘길 수 있는가(F2) — 버튼 노출용 보조 판정.
+ * 최종 판정은 서버(reassign_job_item)가 한다. 병렬 배정 오더이고, 내 작업이 항목 조작 단계이며,
+ * 항목에 시작·완료·검토 흔적이 없고, 넘긴 뒤에도 내 작업에 항목이 1개 이상 남을 때만.
+ */
+function canHandOver(job: Job, it: JobItem): boolean {
+  if (!job.isParallel || job.mySlot == null) return false
+  if (!ITEM_EDITABLE_JOB_STATUSES.has(job.status) || job.items.length < 2) return false
+  return it.status === ITEM_PENDING
+    && it.startedAt == null && it.clearedAt == null
+    && it.elapsedMinutes == null && it.elapsedTotalMinutes == null
+    && !hasReviewTrace(it.reviewStatus)
 }
 
 const CANCEL_REASON_OTHER = "기타"
@@ -363,6 +382,8 @@ export default function MyTasksPage() {
   const [startingFromModal, setStartingFromModal] = useState(false)
   /** 작업 시작 취소 모달 대상 */
   const [cancelTarget, setCancelTarget] = useState<Job | null>(null)
+  /** 시험항목 넘기기 모달 대상(F2) */
+  const [handOverTarget, setHandOverTarget] = useState<{ job: Job; item: JobItem } | null>(null)
 
   /** 목록을 다시 읽고, 읽은 작업 목록을 돌려준다(시작 취소 실패 뒤 대상이 남아 있는지 확인용) */
   /** 목록을 다시 읽는다. 응답이 실패면 null — 빈 목록과 구분해야 "작업이 사라졌다" 고 오판하지 않는다 */
@@ -549,7 +570,11 @@ export default function MyTasksPage() {
       } else if (data.statusChangedTo) {
         flash(`시험항목 완료 — 작업 단계가 "${data.statusChangedTo}" 로 자동 변경되었습니다.`)
       }
-    } catch (e) { flash(`처리 실패: ${e instanceof Error ? e.message : ""}`, "error") }
+    } catch (e) {
+      flash(`처리 실패: ${e instanceof Error ? e.message : ""}`, "error")
+      // 그 사이 항목이 다른 담당자에게 넘어갔거나 상태가 바뀐 경우(F2-6) 옛 화면에 머물지 않게 다시 읽는다
+      void load().catch(() => null)
+    }
     finally { setBusy(null) }
   }
 
@@ -567,18 +592,25 @@ export default function MyTasksPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ testItemName, action }),
       })
-      const data = await res.json() as { error?: string; affected?: number; jobs?: number; advanced?: string[] }
+      const data = await res.json() as { error?: string; affected?: number; skipped?: number; jobs?: number; advanced?: string[] }
       if (!res.ok) throw new Error(data.error)
       await load()
-      // 0건은 성공이 아니라 "바뀐 것이 없음" 이다. 조용히 넘기면 버튼이 죽은 것과 구별되지 않는다.
-      if ((data.affected ?? 0) === 0) {
+      // 그 사이 상태가 바뀌었거나 다른 담당자에게 넘어간 배치는 서버가 건너뛰고 나머지를 처리한다(리뷰 F2 M3)
+      if ((data.skipped ?? 0) > 0) {
+        flash(`${data.affected ?? 0}개 배치 처리, ${data.skipped}개는 이미 상태가 바뀌어 건너뛰었습니다.`, "error")
+      } else if ((data.affected ?? 0) === 0) {
+        // 0건은 성공이 아니라 "바뀐 것이 없음" 이다. 조용히 넘기면 버튼이 죽은 것과 구별되지 않는다.
         flash(`"${testItemName}" 에 처리할 배치가 없습니다. 목록을 새로 불러왔습니다.`, "error")
       } else if (data.advanced && data.advanced.length > 0) {
         flash(`시험항목 완료 — QC ${data.advanced.join(", ")} 작업 단계가 자동으로 변경되었습니다.`)
       } else if (action === "clear") {
         flash(`${data.affected}개 배치의 "${testItemName}" 을 완료 처리했습니다.`)
       }
-    } catch (e) { flash(`처리 실패: ${e instanceof Error ? e.message : ""}`, "error") }
+    } catch (e) {
+      flash(`처리 실패: ${e instanceof Error ? e.message : ""}`, "error")
+      // 그 사이 항목이 다른 담당자에게 넘어갔거나 상태가 바뀐 경우(F2-6) 옛 화면에 머물지 않게 다시 읽는다
+      void load().catch(() => null)
+    }
     finally { setBusy(null) }
   }
 
@@ -781,6 +813,22 @@ export default function MyTasksPage() {
               // 재조회 실패는 무시한다 — 모달의 원래 오류 메시지를 그대로 둔다.
             }
           }}
+        />
+      )}
+
+      {handOverTarget && handOverTarget.job.mySlot != null && (
+        <ItemReassignDialog
+          orderId={handOverTarget.job.orderId}
+          testItemName={handOverTarget.item.testItemName}
+          fromSlot={handOverTarget.job.mySlot}
+          mode="tester"
+          onClose={() => setHandOverTarget(null)}
+          onDone={(m, type) => {
+            setHandOverTarget(null)
+            flash(m, type)
+            void load()
+          }}
+          onFailed={async () => { await load().catch(() => null) }}
         />
       )}
 
@@ -1318,14 +1366,28 @@ export default function MyTasksPage() {
                         </Button>
                       </div>
                     ) : (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => void itemAction(job.id, it.id, "start")}
-                        disabled={busy !== null}
-                      >
-                        {itemBusy ? <Loader2 className="animate-spin" /> : <Play />}시작
-                      </Button>
+                      <div className="flex shrink-0 items-center gap-1">
+                        {/* 넘기기(F2) — 낱개 진행 카드에서만. 동시분석 그룹 카드는 배치별 기록이라 그룹 단위 이동을 두지 않는다 */}
+                        {selectable && canHandOver(job, it) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            title="같은 오더의 다른 담당자에게 이 시험항목을 넘깁니다"
+                            onClick={() => setHandOverTarget({ job, item: it })}
+                            disabled={busy !== null}
+                          >
+                            <ArrowRightLeft />넘기기
+                          </Button>
+                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void itemAction(job.id, it.id, "start")}
+                          disabled={busy !== null}
+                        >
+                          {itemBusy ? <Loader2 className="animate-spin" /> : <Play />}시작
+                        </Button>
+                      </div>
                     )}
                   </li>
                 )

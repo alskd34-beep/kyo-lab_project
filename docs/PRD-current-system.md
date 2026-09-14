@@ -103,7 +103,7 @@ qc_jobs + qc_job_items 생성 (QC번호 채번 qcNumber.ts)
 | 화면(사이드바 라벨) | 경로 | 권한 | 상태 | 내용 |
 |------|------|------|------|------|
 | 월간 스케줄 | `/schedule/monthly` | 전체 | ✅ | 월간 그리드·주간·개인별 탭, 제조번호/개별항목 표기 |
-| **AI 스케줄**(오더 배정) | `/schedule/orders` | admin | ✅ | pct_orders 목록(상태/검색/필터), AI 자동배정, 수동·**일괄 담당자 배정(미확정 건)**, 확정·LOCK 토글, 재배정 이력 + **적재 이력 모달**(생산계획 가져오기 diff 상세). 오더 수정 서랍에서 **병렬 배정**(담당자 1~5, 항목별 배분) — 2026-09-15, `0049` |
+| **AI 스케줄**(오더 배정) | `/schedule/orders` | admin | ✅ | pct_orders 목록(상태/검색/필터), AI 자동배정, 수동·**일괄 담당자 배정(미확정 건)**, 확정·LOCK 토글, 재배정 이력 + **적재 이력 모달**(생산계획 가져오기 diff 상세). 오더 수정 서랍에서 **병렬 배정**(담당자 1~5, 항목별 배분) — 2026-09-15, `0049` · 작업 시작 뒤 항목별 **담당자 변경** — 2026-09-15, `0050` |
 | 휴가 캘린더 | `/schedule/vacation` | 전체 | ✅ | Monday 스타일 연속 막대·빠른 등록·상세 드로어 + 기간 가용성 "가능 품목 제안", 공휴일 음영 표시 |
 | 공휴일 캘린더 | `/schedule/holidays` | admin | ✅ | 공휴일 관리(수동) + **공공데이터 API 수집**(§9), 배정 엔진이 비근무일로 건너뜀 |
 | 재배정 이력 | `/schedule/reassignments` | admin | ✅ | **AI 스케줄 이력 통합 타임라인**(수정·재배정·자동적재 3소스) + 날짜범위 필터, 시험자별/품목별 통계 |
@@ -187,6 +187,11 @@ qc_jobs + qc_job_items 생성 (QC번호 채번 qcNumber.ts)
 - **병렬 배정**(2026-09-15, `0049`): `pct_order_assignees`(order_id, slot 1~5, tester_id) — 슬롯 1 = 대표(`pct_orders.assignee_tester_id` 미러), 행 ≥ 2 = 병렬 배정.
   `pct_order_test_items.assignee_slot`(1~5)이 항목 담당 번호. 쓰기는 DB 함수 `set_order_assignees`·`set_order_primary_assignee` 만(한 트랜잭션·감사 포함).
   담당자별 작업은 `qc_jobs (order_id, assignee_tester_id)` 부분 유니크로 사람당 1건. 구 `is_dual_assignment`·`assignee_tester_id_2` 는 이중 기록만(읽지 않음).
+- **진행 중 시험항목 담당자 변경**(2026-09-15, `0050`): 작업이 시작된 병렬 배정 오더에서 **시작·완료·검토 기록이 없는** 시험항목 하나를 같은 오더의 다른 담당자(슬롯)에게 넘긴다.
+  관리자는 오더 수정 서랍 시험항목의 [담당자 변경](LOCK 오더 포함), 시험자는 할 일 낱개 진행 카드의 [넘기기](자기 항목만, 넘겨도 1개 이상 남을 때) → 모달(받는 담당자·사유 선택지).
+  DB 함수 `reassign_job_item(order, 항목명, 기대 슬롯, 받는 슬롯, user, reason)` 한 트랜잭션이 네 경우(행 이동·A 행 삭제·B 작업에 추가·배분만)와 스냅샷 슬롯·
+  `pct_order_edits(testItemAssignee, 이름+QC번호)` 감사·A·B 작업 단계 재도출(`recompute_job_stage`)을 함께 처리하고, 커밋 뒤 오더 상태 동기화·받는 사람 앱 알림(`시험항목 인계`).
+  항목 시작·시작 취소·완료는 조건부 update 로 바뀌어 그 사이 넘어간 항목에 0행이면 실패로 응답한다. 규칙: `intent/2026-09-15-in-progress-item-reassign-spec.md`.
 - **스케줄 부가**: `operator_schedule`(휴가), `equipment_reservation`(예약), `reassignment_history`(재배정), 동시분석 그룹, `concurrent_product_families`/`concurrent_product_family_members`(동시분석 품목군 마스터, product_code unique), `holidays`/`public_holidays`(source api|manual), `equipment_master`.
 - **마이그레이션**: **0001~0024**. ⚠️ 라이브 DB가 일부 마이그레이션과 불일치 — 특히 **0021~0024는 수동 적용 대상**(Supabase 대시보드 SQL Editor, idempotent). 0011/0014~0018·0020도 수동 적용 필요분 존재(graceful 폴백 내장).
 
