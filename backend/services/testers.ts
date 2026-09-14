@@ -221,7 +221,14 @@ export async function updateTester(
 
 export async function deleteTester(id: string): Promise<void> {
   const { error } = await supabase.from('testers').delete().eq('id', id)
-  if (error) throw error
+  if (error) {
+    // 담당자 슬롯(pct_order_assignees, 0049)의 FK 는 on delete restrict 다 — 시험자 하드 삭제로
+    // 배정이 조용히 사라지지 않게 막는다. 1인·병렬 배정 공통 문구(F3-6).
+    if ((error as { code?: string }).code === '23503' && /pct_order_assignees/.test(error.message ?? '')) {
+      throw new Error('배정된 오더가 있어 삭제할 수 없습니다. 비활성화하세요.')
+    }
+    throw error
+  }
 }
 
 /**

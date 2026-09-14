@@ -17,6 +17,7 @@ import {
 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@frontend/components/ui/select'
 import { JOB_STAGES, OPEN_STATUSES, stageStyle } from "@shared/qc-status"
+import { PARALLEL_BADGE_LABEL, assigneeSlotLabel } from "@shared/assignment"
 import { cn } from "@frontend/lib/utils"
 import { TesterAvatar } from "@frontend/lib/tester-profiles"
 import {
@@ -40,8 +41,9 @@ interface OrderRow {
   status: string
   assigneeTesterId: string | null
   assigneeName: string | null
-  isDualAssignment: boolean
-  assigneeTesterId2: string | null
+  /** 병렬 배정(0049) 담당자 목록 — 슬롯 오름차순 */
+  assignees: { slot: number; testerId: string }[]
+  isParallel: boolean
   workdays: number | null
   locked: boolean
 }
@@ -115,15 +117,18 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
     return m
   }, [families])
 
-  // 이 담당자의 과제 (담당자1 또는 2인 배정의 담당자2로 맡은 것 · 상태 필터 반영)
+  // 이 담당자의 과제 (담당자 1 또는 병렬 배정의 담당자 2~5 로 맡은 것 · 상태 필터 반영)
   const myRows = useMemo(() => {
     let rows = allRows.filter(r =>
-      r.assigneeTesterId === testerId || (r.isDualAssignment && r.assigneeTesterId2 === testerId))
+      r.assigneeTesterId === testerId || (r.assignees ?? []).some(a => a.testerId === testerId))
     if (statusFilter) rows = rows.filter(r => r.status === statusFilter)
     return rows
   }, [allRows, testerId, statusFilter])
-  // 담당자2로서 맡은 행인지 (배지 표시용)
-  const isSecondaryRow = (r: OrderRow) => r.assigneeTesterId !== testerId && r.isDualAssignment && r.assigneeTesterId2 === testerId
+  // 병렬 배정의 담당자 2~5 로서 맡은 행이면 그 담당자 번호 (배지 표시용), 아니면 null
+  const secondarySlotOf = (r: OrderRow): number | null => {
+    const mine = (r.assignees ?? []).find(a => a.testerId === testerId)
+    return mine && mine.slot !== 1 ? mine.slot : null
+  }
 
   // 동시분석 계열별 그룹 (계열 없으면 품목코드 단위)
   const groups = useMemo(() => {
@@ -256,7 +261,7 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
                           </div>
                           <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-normal text-muted-foreground">
                             <StatusBadge status={r.status} />
-                            {isSecondaryRow(r) && <Assignee2Badge />}
+                            {secondarySlotOf(r) !== null && <SecondaryAssigneeBadge slot={secondarySlotOf(r)!} />}
                             {r.isUrgent && (
                               <span className="inline-flex shrink-0 items-center rounded-md bg-red-50 px-2 py-0.5 text-xs leading-normal font-semibold text-red-600 dark:bg-red-950 dark:text-red-300">
                                 긴급
@@ -285,7 +290,7 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
                               <td className="px-3 py-2.5 font-medium text-foreground">
                                 <span className="inline-flex items-center gap-1.5">
                                   {r.productName}
-                                  {isSecondaryRow(r) && <Assignee2Badge />}
+                                  {secondarySlotOf(r) !== null && <SecondaryAssigneeBadge slot={secondarySlotOf(r)!} />}
                                 </span>
                               </td>
                               <td className="px-3 py-2.5 font-mono text-xs text-blue-600 dark:text-blue-300">{r.productCode}</td>
@@ -395,7 +400,7 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
                         <div className="min-w-0">
                           <p className="flex items-center gap-1.5 text-xs leading-normal font-semibold text-foreground">
                             <span className="truncate">{r.productName} (제조 {r.batchNo})</span>
-                            {isSecondaryRow(r) && <Assignee2Badge />}
+                            {secondarySlotOf(r) !== null && <SecondaryAssigneeBadge slot={secondarySlotOf(r)!} />}
                             {r.isUrgent && <span className="shrink-0 rounded-md bg-red-50 px-1.5 py-0.5 text-xs leading-normal font-semibold text-red-600 dark:bg-red-950 dark:text-red-300">긴급</span>}
                           </p>
                           <p className="mt-0.5 text-xs leading-normal text-muted-foreground">완료예정 {r.dueDate ?? "-"} · 공수 {r.workdays ?? "-"}일</p>
@@ -444,11 +449,14 @@ function MiniStat({ label, value, tone }: { label: string; value: string; tone?:
     </div>
   )
 }
-/** 2인 배정 오더에서 이 담당자가 담당자2로 맡은 행임을 표시 (1인 배정 오더에는 절대 렌더되지 않음) */
-function Assignee2Badge() {
+/** 병렬 배정 오더에서 이 담당자가 담당자 2~5 로 맡은 행임을 표시 (1인 배정 오더에는 절대 렌더되지 않음) */
+function SecondaryAssigneeBadge({ slot }: { slot: number }) {
   return (
-    <span className="inline-flex shrink-0 items-center rounded-md bg-blue-50 px-1.5 py-0.5 text-xs leading-normal font-semibold text-blue-700 dark:bg-blue-950 dark:text-blue-300">
-      담당자2
+    <span
+      className="inline-flex shrink-0 items-center rounded-md bg-blue-50 px-1.5 py-0.5 text-xs leading-normal font-semibold text-blue-700 dark:bg-blue-950 dark:text-blue-300"
+      title={PARALLEL_BADGE_LABEL + " 배정"}
+    >
+      {PARALLEL_BADGE_LABEL} · {assigneeSlotLabel(slot)}
     </span>
   )
 }

@@ -103,7 +103,7 @@ qc_jobs + qc_job_items 생성 (QC번호 채번 qcNumber.ts)
 | 화면(사이드바 라벨) | 경로 | 권한 | 상태 | 내용 |
 |------|------|------|------|------|
 | 월간 스케줄 | `/schedule/monthly` | 전체 | ✅ | 월간 그리드·주간·개인별 탭, 제조번호/개별항목 표기 |
-| **AI 스케줄**(오더 배정) | `/schedule/orders` | admin | ✅ | pct_orders 목록(상태/검색/필터), AI 자동배정, 수동·**일괄 담당자 배정(미확정 건)**, 확정·LOCK 토글, 재배정 이력 + **적재 이력 모달**(생산계획 가져오기 diff 상세) |
+| **AI 스케줄**(오더 배정) | `/schedule/orders` | admin | ✅ | pct_orders 목록(상태/검색/필터), AI 자동배정, 수동·**일괄 담당자 배정(미확정 건)**, 확정·LOCK 토글, 재배정 이력 + **적재 이력 모달**(생산계획 가져오기 diff 상세). 오더 수정 서랍에서 **병렬 배정**(담당자 1~5, 항목별 배분) — 2026-09-15, `0049` |
 | 휴가 캘린더 | `/schedule/vacation` | 전체 | ✅ | Monday 스타일 연속 막대·빠른 등록·상세 드로어 + 기간 가용성 "가능 품목 제안", 공휴일 음영 표시 |
 | 공휴일 캘린더 | `/schedule/holidays` | admin | ✅ | 공휴일 관리(수동) + **공공데이터 API 수집**(§9), 배정 엔진이 비근무일로 건너뜀 |
 | 재배정 이력 | `/schedule/reassignments` | admin | ✅ | **AI 스케줄 이력 통합 타임라인**(수정·재배정·자동적재 3소스) + 날짜범위 필터, 시험자별/품목별 통계 |
@@ -169,6 +169,7 @@ qc_jobs + qc_job_items 생성 (QC번호 채번 qcNumber.ts)
 - **긴급**: 공수 ≤3DAY 품목만 허용(`emergencyAllowed`).
 - **향정신성**(자이렌정·아디펙스정): 강지윤·김정호 배정 제외 + 관리자 알림.
 - **개별 중금속**: 금요일 주차 순환(박성호→이영남→정예찬), 공수 1DAY 고정(`isoWeekIndex`).
+- **병렬 배정과의 관계**: AI 자동배정은 대표 담당자(슬롯 1)만 채우고 병렬 배정을 만들지 않으며, 병렬 배정 오더(담당자 2명 이상)는 대상에서 뺀다. 현재 부하·고난도 가중은 담당자 N명 모두 센다. (엔진의 solo/duo 조 = `can_duo` 자격 개념은 병렬 배정과 별개)
 - **동시분석 그룹**: 동일/유사 품목을 한 시험자에게 묶어 1회 공수로 배정(대표 오더만 엔진 투입, 멤버 전파). 시작일 = MAX(포장완료일)+1일. 그룹핑은 **동시분석 품목군 마스터(`concurrent_product_families`) 우선 + 유사명/AI 규칙 보완**.
 - **개별항목 분산**: 키워드 품목(`INDIVIDUAL_ITEM_PRODUCT_KEYWORDS`)은 시험항목 단위로 여러 시험자에 분산.
 - **휴가 제외 + 가능 품목 제안**: 휴가/출장 기간 시험자는 배정 후보 제외. `leaveSuggestions.ts`가 남은 인원 역량으로 대기 오더를 가능/휴가로불가(복귀시가능)/자격자없음 으로 분류해 휴가 캘린더에서 제안.
@@ -183,6 +184,9 @@ qc_jobs + qc_job_items 생성 (QC번호 채번 qcNumber.ts)
 - **시험자/역량**: `testers`(employee_no, can_solo/can_duo), `test_capabilities`, `tester_capability_matrix`(Y/N/X/O).
 - **사용자/인증**: `users`(role admin|tester, tester_id 1:1, customer_no 시리얼), `auth_refresh_tokens`.
 - **PCT 워크플로우**: `pct_orders`(+locked/locked_by/at), `pct_ingest_log`, `pct_order_edits`(field/old_value/new_value/reason), `qc_jobs`, `qc_job_items`, `notifications`, `app_settings`.
+- **병렬 배정**(2026-09-15, `0049`): `pct_order_assignees`(order_id, slot 1~5, tester_id) — 슬롯 1 = 대표(`pct_orders.assignee_tester_id` 미러), 행 ≥ 2 = 병렬 배정.
+  `pct_order_test_items.assignee_slot`(1~5)이 항목 담당 번호. 쓰기는 DB 함수 `set_order_assignees`·`set_order_primary_assignee` 만(한 트랜잭션·감사 포함).
+  담당자별 작업은 `qc_jobs (order_id, assignee_tester_id)` 부분 유니크로 사람당 1건. 구 `is_dual_assignment`·`assignee_tester_id_2` 는 이중 기록만(읽지 않음).
 - **스케줄 부가**: `operator_schedule`(휴가), `equipment_reservation`(예약), `reassignment_history`(재배정), 동시분석 그룹, `concurrent_product_families`/`concurrent_product_family_members`(동시분석 품목군 마스터, product_code unique), `holidays`/`public_holidays`(source api|manual), `equipment_master`.
 - **마이그레이션**: **0001~0024**. ⚠️ 라이브 DB가 일부 마이그레이션과 불일치 — 특히 **0021~0024는 수동 적용 대상**(Supabase 대시보드 SQL Editor, idempotent). 0011/0014~0018·0020도 수동 적용 필요분 존재(graceful 폴백 내장).
 

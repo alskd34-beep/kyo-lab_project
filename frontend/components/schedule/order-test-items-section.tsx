@@ -10,6 +10,7 @@
  *
  *   GET    /api/pct-orders/[id]/test-items  → 품목 기준 전체(제외분 포함)
  *   PATCH  … { testItemName, excluded, reason? }  제외/복구
+ *   PATCH  … { testItemName, assigneeSlot }       병렬 배정 담당자 배분(오더에 있는 슬롯만, 작업 시작 전만)
  *   POST   … { testItemId?, testItemName }        이 오더에만 추가
  *   DELETE … { testItemName }                     추가분 삭제(기준분은 제외 처리)
  */
@@ -19,6 +20,10 @@ import { Check, ListChecks, Loader2, Lock, Plus, Search, Trash2 } from "lucide-r
 import { api, errorMessage } from "@frontend/lib/api-client"
 import { cn } from "@frontend/lib/utils"
 import { Badge } from "@frontend/components/ui/badge"
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@frontend/components/ui/select"
+import { assigneeSlotLabel, type AssigneeSlot } from "@shared/assignment"
 import { Button } from "@frontend/components/ui/button"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import {
@@ -33,8 +38,8 @@ export interface OrderTestItemDetailRow {
   isExcluded: boolean
   excludedReason: string | null
   source: "product" | "manual"
-  /** 2인 배정 오더에서 이 항목을 누가 맡는지 — 1=담당자1, 2=담당자2. 2인 배정이 아니면 항상 1이고 화면에 쓰지 않는다 */
-  assigneeSlot: 1 | 2
+  /** 병렬 배정 오더에서 이 항목을 맡는 담당자 번호(1~5). 병렬 배정이 아니면 항상 1이고 화면에 쓰지 않는다 */
+  assigneeSlot: AssigneeSlot
 }
 
 interface TestItemMasterRow { id: string; name: string; category: string }
@@ -43,9 +48,17 @@ const reasonInputCls =
   "mt-1.5 h-8 w-full rounded-md border border-input bg-background px-2.5 text-xs text-foreground shadow-xs " +
   "placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
 
+/** 배분 셀렉트에 보이는 담당자 1명 — 서버에 저장된 슬롯만 넘긴다 */
+export interface SectionAssignee { slot: AssigneeSlot; name: string | null }
+
+/** `담당자 N · 이름` */
+function assigneeOptionLabel(a: SectionAssignee | undefined, slot: number): string {
+  return a?.name ? `${assigneeSlotLabel(slot)} · ${a.name}` : assigneeSlotLabel(slot)
+}
+
 export function OrderTestItemsSection({
   orderId, productName, canEdit, locked,
-  dual = false, assignee1Name = null, assignee2Name = null, jobStarted = false,
+  parallel = false, assignees = [], jobStarted = false, onRowsChange,
 }: {
   orderId: string
   productName: string
@@ -54,21 +67,23 @@ export function OrderTestItemsSection({
   /** 확정(LOCK) 여부 — 안내 문구를 다르게 보여준다 */
   locked: boolean
   /**
-   * 2인 배정 오더인지 — 서버에 이미 저장된 값(order.isDualAssignment)을 그대로 넘긴다.
-   * false 면(기본값) 이 섹션은 예전과 픽셀 단위로 동일하게 렌더한다.
+   * 병렬 배정 오더인지 — 서버에 이미 저장된 값(order.isParallel)을 그대로 넘긴다.
+   * false 면(기본값) 이 섹션은 담당자 배분 컨트롤 없이 렌더한다.
    * (체크박스만 켜고 아직 저장 전인 상태는 여기 해당하지 않는다 — 그때는 서버가 아직 1인
    *  배정이라 슬롯 PATCH 가 400 을 내므로, 그 안내는 이 컴포넌트 밖(EditModal)에서 보여준다.)
    */
-  dual?: boolean
-  assignee1Name?: string | null
-  assignee2Name?: string | null
+  parallel?: boolean
+  /** 서버에 저장된 담당자 슬롯(번호 순) — 배분 셀렉트의 선택지. 이름은 편집 중인 값을 넘겨도 된다 */
+  assignees?: SectionAssignee[]
   /**
    * 이 오더에 QC 작업이 하나라도 시작됐는지.
-   * 체크리스트는 작업 시작 시점의 배분으로 굳으므로, 시작 후 슬롯을 옮기면 항목이
+   * 체크리스트는 작업 시작 시점의 배분으로 굳으므로, 시작 후 일괄 배분으로 슬롯을 옮기면 항목이
    * 중복되거나 아무 체크리스트에도 없이 사라진다. 서버도 막지만(setAssigneeSlot),
-   * 눌러도 에러만 나는 버튼을 남겨두지 않도록 화면에서도 잠근다.
+   * 눌러도 에러만 나는 컨트롤을 남겨두지 않도록 화면에서도 잠근다. 진행 중 이동은 항목별 담당자 변경으로 한다.
    */
   jobStarted?: boolean
+  /** 항목 목록을 읽거나 다시 읽을 때마다 부른다 — 담당자 행 삭제 가능 여부(활성 항목 수) 판정용 */
+  onRowsChange?: (rows: OrderTestItemDetailRow[]) => void
 }) {
   const [rows, setRows] = useState<OrderTestItemDetailRow[] | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -80,11 +95,14 @@ export function OrderTestItemsSection({
     try {
       const data = await api.get<{ rows: OrderTestItemDetailRow[] }>(`/api/pct-orders/${orderId}/test-items`)
       setRows(data.rows ?? [])
+      onRowsChange?.(data.rows ?? [])
       setErr(null)
     } catch (e) {
       setRows([])
       setErr(errorMessage(e, "시험항목을 불러오지 못했습니다."))
     }
+    // onRowsChange 는 부모의 setState 라 안정적이다 — 의존성에 넣으면 인라인 함수일 때 무한 재조회된다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderId])
 
   useEffect(() => { void load() }, [load])
@@ -132,8 +150,8 @@ export function OrderTestItemsSection({
       testItemName: row.testItemName,
     }))
 
-  /** 2인 배정 오더에서 항목 하나를 담당자1/2 중 누구에게 줄지 바꾼다 */
-  const setSlot = (row: OrderTestItemDetailRow, slot: 1 | 2) => {
+  /** 병렬 배정 오더에서 항목 하나를 어느 담당자(슬롯)에게 줄지 바꾼다 */
+  const setSlot = (row: OrderTestItemDetailRow, slot: AssigneeSlot) => {
     if (row.assigneeSlot === slot) return
     void run(row.testItemName, () => api.patch(`/api/pct-orders/${orderId}/test-items`, {
       testItemName: row.testItemName, assigneeSlot: slot,
@@ -156,9 +174,13 @@ export function OrderTestItemsSection({
 
   const total = rows?.length ?? 0
   const activeCount = useMemo(() => (rows ?? []).filter(r => !r.isExcluded).length, [rows])
-  // 2인 배정 요약 — 제외한 항목은 누구의 몫도 아니므로 세지 않는다
-  const slot1Count = useMemo(() => (rows ?? []).filter(r => !r.isExcluded && r.assigneeSlot === 1).length, [rows])
-  const slot2Count = useMemo(() => (rows ?? []).filter(r => !r.isExcluded && r.assigneeSlot === 2).length, [rows])
+  // 병렬 배정 요약 — 담당자별 활성 항목 수. 제외한 항목은 누구의 몫도 아니므로 세지 않는다
+  const slotCounts = useMemo(() => {
+    const m = new Map<number, number>()
+    for (const r of rows ?? []) if (!r.isExcluded) m.set(r.assigneeSlot, (m.get(r.assigneeSlot) ?? 0) + 1)
+    return m
+  }, [rows])
+  const assigneeBySlot = useMemo(() => new Map(assignees.map(a => [a.slot as number, a])), [assignees])
 
   return (
     <section className="mt-4 rounded-md border bg-muted/20 p-3">
@@ -171,12 +193,12 @@ export function OrderTestItemsSection({
               {total}개 중 {activeCount}개 진행
             </Badge>
           )}
-          {/* 2인 배정 — 담당자별로 몇 개씩 맡았는지 요약(제외 항목은 제외하고 센다) */}
-          {dual && rows !== null && (
-            <Badge variant="outline" className="tabular-nums">
-              {assignee1Name ?? "담당자1"} {slot1Count}개 · {assignee2Name ?? "담당자2"} {slot2Count}개
+          {/* 병렬 배정 — 담당자별로 몇 개씩 맡았는지 요약(제외 항목은 제외하고 센다) */}
+          {parallel && rows !== null && assignees.map(a => (
+            <Badge key={a.slot} variant="outline" className="tabular-nums">
+              {assigneeOptionLabel(a, a.slot)} {slotCounts.get(a.slot) ?? 0}개
             </Badge>
-          )}
+          ))}
         </div>
         {canEdit && (
           <Button type="button" variant="outline" size="sm" onClick={() => setPickerOpen(true)}>
@@ -196,11 +218,11 @@ export function OrderTestItemsSection({
         </p>
       )}
 
-      {/* 배분이 잠긴 이유를 알려준다 — 버튼이 그냥 사라지면 관리자는 고장으로 읽는다 */}
-      {dual && canEdit && jobStarted && !locked && (
+      {/* 배분이 잠긴 이유를 알려준다 — 컨트롤이 그냥 잠기면 관리자는 고장으로 읽는다 */}
+      {parallel && canEdit && jobStarted && !locked && (
         <p className="mt-2 flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs leading-normal break-keep text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
           <Lock className="size-3 shrink-0" />
-          이미 작업이 시작되어 담당자 배분이 확정되었습니다. 시작 시점의 배분으로 각자의 체크리스트가 만들어졌기 때문에 지금 옮기면 항목이 누락되거나 중복됩니다.
+          이미 작업이 시작되어 일괄 배분은 잠겼습니다. 진행 중 담당자 변경은 항목별로 합니다.
         </p>
       )}
 
@@ -264,42 +286,34 @@ export function OrderTestItemsSection({
                       <p className="mt-1 text-xs leading-normal text-muted-foreground">사유: {row.excludedReason}</p>
                     ) : null)}
                   </div>
-                  {/* 2인 배정 — 항목별 담당자 2택.
-                      읽기 전용(canEdit=false)이거나 작업이 이미 시작돼 배분이 굳었으면 배지로만 보여준다 */}
-                  {dual && (canEdit && !jobStarted ? (
-                    <div
-                      role="group"
-                      aria-label={`${row.testItemName} 담당자 배정`}
-                      className="mt-0.5 flex shrink-0 items-center gap-0.5 rounded-md bg-muted p-0.5"
+                  {/* 병렬 배정 — 항목별 담당자 선택(오더에 저장된 슬롯만).
+                      읽기 전용(canEdit=false)이면 배지로만, 작업이 이미 시작됐으면 셀렉트를 잠근다 */}
+                  {parallel && (canEdit ? (
+                    <Select
+                      value={String(row.assigneeSlot)}
+                      disabled={busy || jobStarted || row.isExcluded}
+                      onValueChange={v => setSlot(row, Number(v) as AssigneeSlot)}
                     >
-                      <button
-                        type="button"
-                        disabled={busy}
-                        aria-pressed={row.assigneeSlot === 1}
-                        onClick={() => setSlot(row, 1)}
-                        className={cn(
-                          "h-7 rounded-md px-2 text-xs font-medium whitespace-nowrap transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-                          row.assigneeSlot === 1 ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-                        )}
+                      <SelectTrigger
+                        className="!h-7 mt-0.5 w-auto max-w-[11rem] shrink-0 px-2 text-xs"
+                        aria-label={`${row.testItemName} 담당자 배정`}
+                        title={jobStarted ? "진행 중 담당자 변경은 항목별로 합니다" : undefined}
                       >
-                        {assignee1Name ?? "담당자1"}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        aria-pressed={row.assigneeSlot === 2}
-                        onClick={() => setSlot(row, 2)}
-                        className={cn(
-                          "h-7 rounded-md px-2 text-xs font-medium whitespace-nowrap transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-                          row.assigneeSlot === 2 ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {/* 저장된 슬롯에 없는 번호(비정상)라도 현재 값은 보이게 남긴다 */}
+                        {!assigneeBySlot.has(row.assigneeSlot) && (
+                          <SelectItem value={String(row.assigneeSlot)}>{assigneeSlotLabel(row.assigneeSlot)}</SelectItem>
                         )}
-                      >
-                        {assignee2Name ?? "담당자2"}
-                      </button>
-                    </div>
+                        {assignees.map(a => (
+                          <SelectItem key={a.slot} value={String(a.slot)}>{assigneeOptionLabel(a, a.slot)}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   ) : (
                     <Badge variant="outline" className="mt-0.5 shrink-0">
-                      {row.assigneeSlot === 2 ? (assignee2Name ?? "담당자2") : (assignee1Name ?? "담당자1")}
+                      {assigneeOptionLabel(assigneeBySlot.get(row.assigneeSlot), row.assigneeSlot)}
                     </Badge>
                   ))}
                   {busy ? (

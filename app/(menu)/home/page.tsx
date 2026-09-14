@@ -64,6 +64,8 @@ interface PctOrderApiRow {
   status: string
   isUrgent?: boolean
   assigneeTesterId: string | null
+  /** 병렬 배정(0049) 담당자 목록 — 담당자 1~5 전원이 부하 카드에 올라간다 */
+  assignees?: { slot: number; testerId: string }[]
 }
 
 interface UpcomingRow {
@@ -172,27 +174,31 @@ function buildTesterLoads(orders: PctOrderApiRow[], testerRows: TesterApiRow[]):
   const byTester = new Map<string, { active: TesterWorkItem[]; pending: TesterWorkItem[] }>()
 
   for (const order of orders) {
-    const testerId = order.assigneeTesterId
-    if (!testerId || !OPEN_STATUSES.has(order.status)) continue
+    if (!OPEN_STATUSES.has(order.status)) continue
     if (order.status !== PENDING_STATUS && !ACTIVE_JOB_STATUSES.has(order.status)) continue
+    // [병렬 배정] 담당자 1~5 모두의 카드에 올린다 — 대표만 올리면 병렬 담당자의 부하가 0으로 보인다.
+    const testerIds = order.assignees && order.assignees.length > 0
+      ? order.assignees.map(a => a.testerId)
+      : (order.assigneeTesterId ? [order.assigneeTesterId] : [])
+    for (const testerId of testerIds) {
+      let bucket = byTester.get(testerId)
+      if (!bucket) {
+        bucket = { active: [], pending: [] }
+        byTester.set(testerId, bucket)
+      }
 
-    let bucket = byTester.get(testerId)
-    if (!bucket) {
-      bucket = { active: [], pending: [] }
-      byTester.set(testerId, bucket)
+      const item: TesterWorkItem = {
+        id: order.id,
+        productName: order.productName,
+        batchNo: order.batchNo,
+        status: order.status,
+        dueDate: order.dueDate,
+        dDay: calcDday(order.dueDate),
+        isUrgent: Boolean(order.isUrgent),
+      }
+      if (order.status === PENDING_STATUS) bucket.pending.push(item)
+      else bucket.active.push(item)
     }
-
-    const item: TesterWorkItem = {
-      id: order.id,
-      productName: order.productName,
-      batchNo: order.batchNo,
-      status: order.status,
-      dueDate: order.dueDate,
-      dDay: calcDday(order.dueDate),
-      isUrgent: Boolean(order.isUrgent),
-    }
-    if (order.status === PENDING_STATUS) bucket.pending.push(item)
-    else bucket.active.push(item)
   }
 
   // 일이 많은 시험자를 앞으로 — 한눈에 부하가 읽히게.

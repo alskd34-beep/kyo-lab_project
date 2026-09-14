@@ -336,6 +336,10 @@ export default function TestersPage() {
         setTesters((prev) => prev.filter((tester) => tester.id !== selected.id))
         setMatrix((prev) => prev.filter((row) => row.testerId !== selected.id))
         setDeleteOpen(false)
+      } else {
+        // 배정된 오더가 있으면 서버가 거절한다(병렬 배정 0049 — 담당자 슬롯 FK restrict). 조용히 닫지 않고 이유를 보인다.
+        const json = await res.json().catch(() => ({}))
+        setError(json.error ?? "삭제하지 못했습니다.")
       }
     } finally {
       setSaving(false)
@@ -1267,6 +1271,12 @@ export default function TestersPage() {
               {selected?.employeeNo}
             </p>
           </div>
+
+          {error && (
+            <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs leading-normal break-keep text-destructive">
+              {error}
+            </p>
+          )}
 
           <DialogFooter>
             <Button

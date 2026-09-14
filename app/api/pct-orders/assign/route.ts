@@ -17,7 +17,9 @@ export const runtime = 'nodejs'
  * 5xx 알람이 오탐으로 가득 찼다.
  */
 function errorStatus(msg: string): number {
-  if (msg.includes('확정(LOCK)') || msg.includes('이미 시작')) return 409
+  if (msg.includes('DB 설치') || msg.includes('아직 DB에 반영')) return 503
+  // 병렬 배정(0049) — 병렬 담당자가 남은 오더의 대표 해제·이미 병렬 담당자인 사람을 대표로 넣기·시작한 담당자 교체
+  if (msg.includes('확정(LOCK)') || msg.includes('이미 시작') || msg.includes('작업을 시작한') || msg.includes('병렬 담당자')) return 409
   if (msg.includes('비활성') || msg.includes('필수') || msg.includes('허용되지 않는')) return 400
   if (msg.includes('찾을 수 없습니다')) return 404
   return 500

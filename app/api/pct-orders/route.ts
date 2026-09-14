@@ -2,7 +2,8 @@
  * [BACKEND] PCT 오더
  *   GET   /api/pct-orders?status=&assigneeTesterId=&includeDeleted=  — 목록 (인증)
  *   POST  /api/pct-orders  { ...오더필드 }                          — 수동 오더 생성 (admin)
- *   PATCH /api/pct-orders  { id, patch, reason }                     — 사유 필수 수정 (admin)
+ *   PATCH /api/pct-orders  { id, patch, reason, assignees? }         — 사유 필수 수정 (admin)
+ *         assignees: [{ slot: 1~5, testerId }] 병렬 배정 담당자 구성(빈 배열 = 미배정). 없으면 구성은 그대로.
  */
 
 import { NextRequest } from 'next/server'
@@ -65,6 +66,7 @@ export async function POST(req: NextRequest) {
           testItemName: (i.testItemName ?? '').trim(),
           sequenceOrder: idx,
         })),
+      createdBy: auth.payload.sub ?? null,
     })
     return Response.json({ row }, { status: 201 })
   } catch (err) {
@@ -81,11 +83,15 @@ export async function PATCH(req: NextRequest) {
       id?: string
       patch?: Record<string, string | boolean | null>
       reason?: string
+      /** 병렬 배정 담당자 구성 — 형식 검증·규칙 판정은 서비스와 DB 함수(0049)가 한다 */
+      assignees?: unknown
     }
     if (!body.id || !body.patch) {
       return Response.json({ error: 'id와 patch는 필수입니다.' }, { status: 400 })
     }
-    await updateOrderWithReason(body.id, body.patch, body.reason ?? '', auth.payload.sub ?? null)
+    await updateOrderWithReason(body.id, body.patch, body.reason ?? '', auth.payload.sub ?? null, {
+      assignees: body.assignees,
+    })
     return Response.json({ ok: true })
   } catch (err) {
     const msg = err instanceof Error ? err.message : '서버 오류'

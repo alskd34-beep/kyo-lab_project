@@ -47,7 +47,16 @@ const FIELD_LABEL: Record<string, string> = {
   status: '상태',
   note: '비고',
   assigneeTesterId: '담당자',
+  // 병렬 배정(0049) 담당자 구성 — 새 기록
+  assignees: '담당자 구성',
+  testItemAssignee: '항목 담당자',
+  // 옛 2인 배정 기록(0037) — 저장 키는 그대로 두고 표시 라벨만 바꾼다(GMP: 과거 기록 변조 금지)
+  isDualAssignment: '병렬 배정',
+  assigneeTesterId2: '담당자 2',
 }
+
+/** 값이 시험자 id 인 이력 필드 — 이름으로 바꿔 보인다 */
+const TESTER_ID_FIELDS = new Set(['assigneeTesterId', 'assigneeTesterId2'])
 
 const INGEST_LABEL: Record<string, string> = {
   new: '자동 적재 신규',
@@ -59,8 +68,9 @@ const INGEST_LABEL: Record<string, string> = {
 
 function displayEditValue(field: string, value: string | null, testerNames: Map<string, string>): string | null {
   if (value == null || value === '') return null
-  if (field === 'assigneeTesterId') return testerNames.get(value) ?? value
+  if (TESTER_ID_FIELDS.has(field)) return testerNames.get(value) ?? value
   if (field === 'isUrgent') return value === 'true' ? '긴급' : '일반'
+  if (field === 'isDualAssignment') return value === 'true' ? '병렬 배정' : '1인 배정'
   return value
 }
 
@@ -195,7 +205,7 @@ export async function listAiScheduleHistory(
     ...reassignRaw.map(row => row.changed_by as string | null),
   ].filter(Boolean) as string[]))
   const testerIds = Array.from(new Set([
-    ...editRaw.flatMap(row => row.field === 'assigneeTesterId' ? [row.old_value, row.new_value] : []),
+    ...editRaw.flatMap(row => TESTER_ID_FIELDS.has(row.field as string) ? [row.old_value, row.new_value] : []),
     ...reassignRaw.flatMap(row => [row.before_user, row.after_user]),
   ].filter(Boolean) as string[]))
 

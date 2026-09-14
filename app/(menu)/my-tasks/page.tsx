@@ -154,7 +154,7 @@ function CancelStartDialog({
       const res = await api.post<{
         ok: true; qcNo: string; orderStatusBefore: string; orderStatusAfter: string; warning?: string
       }>(`/api/qc-jobs/${job.id}/cancel-start`, { reason })
-      // 성공 문구는 서버가 확정한 오더 상태로 가른다 — 2인 배정 상대 작업이 남으면 오더는 그대로다.
+      // 성공 문구는 서버가 확정한 오더 상태로 가른다 — 병렬 배정 동료의 작업이 남으면 오더는 그대로다.
       const done = res.orderStatusAfter === PENDING_STATUS
         ? `QC ${res.qcNo} 작업 시작을 취소했습니다. 오더가 시작 대기로 돌아갔습니다.`
         : `QC ${res.qcNo} 내 작업 시작을 취소했습니다. 함께 배정된 담당자의 작업이 있어 오더는 '${res.orderStatusAfter}'로 유지됩니다.`

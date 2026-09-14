@@ -2,7 +2,7 @@
 
 프로세스 정의: `.claude/commands/qc-schedule-process.md` (`/qc-schedule-process`)
 현재 시스템 전체 PRD(as-built): [`docs/PRD-current-system.md`](./PRD-current-system.md)
-최종 갱신: 2026-09-08
+최종 갱신: 2026-09-15
 
 ## ✅ 완료 (PCT 1차 구현)
 - 구글시트 자동 적재(9시/14시 크론) + 신규/수정/삭제 diff 감지 — `backend/services/pctIngest.ts`, `instrumentation.ts`
@@ -31,7 +31,29 @@
 - **LOCK/IN_PROGRESS 변경 차단** — `pctIngest`: 진행중/검토중/완료/지연(및 영문 LOCKED/IN_PROGRESS/REVIEW/COMPLETED) 상태 오더는 시트 변경 자동 미반영. 변경 전/후 값을 `pct_order_edits`(field/old_value/new_value)에 기록 + 감독관 경고 알림. `IngestResult.blocked` 카운트 추가.
 - **동시분석 그룹 자동 재생성** — `ingestPctSheet` 말미에서 `rebuildGroups()` 자동 호출(잠긴 그룹 보존). 적재 요약 알림에 그룹 수 포함.
 
-## ✅ 추가 완료 (2026-08-29, 2인 배정)
+## ✅ 추가 완료 (2026-09-15, 병렬 배정 — 2인 배정 대체)
+한 오더를 담당자 **최대 5명**이 시험항목을 나눠 수행한다. 화면 이름 「2인 배정」 → **「병렬 배정」**. — `0049_parallel_assignment.sql`
+규칙 전문: `intent/2026-09-15-parallel-assignment.md` · `-spec.md`
+- **데이터 모델**: 신규 `pct_order_assignees(order_id, slot 1~5, tester_id)` — PK(order_id, slot), unique(order_id, tester_id),
+  tester FK `on delete restrict`, RLS enable+force. 슬롯 1 = 대표이며 `pct_orders.assignee_tester_id` 에 **미러**(영구 유지).
+  병렬 여부는 플래그 없이 **행 수 ≥ 2** 로 파생. 슬롯 번호는 빼도 당기지 않는다(구멍 허용). `pct_order_test_items.assignee_slot` 은 1~5.
+  상수 `MAX_PARALLEL_ASSIGNEES = 5`(`types/assignment.ts`) ↔ SQL check 숫자 짝.
+- **쓰기는 DB 함수 세 개만**: `set_order_assignees(order, [{slot,testerId}], user, reason)`(병렬 구성) ·
+  `set_order_primary_assignee(order, tester|null, user, reason)`(대표만 — AI 자동배정·수동 배정·해제·시트 복구·그룹 전파·수동 오더 생성) ·
+  `set_order_test_item_slot(order, 항목명, slot, user)`(작업 시작 전 항목 배분 — 담당자 삭제와 직렬화).
+  슬롯·미러·구 컬럼(`is_dual_assignment`·`assignee_tester_id_2` 이중 기록)·삭제 슬롯 항목 되돌림·`pct_order_edits` 감사가 한 트랜잭션. service_role 전용.
+- **작업 시작 후 구성 변경**: 추가는 허용(새 담당자는 항목 0개로 시작), 삭제는 그 담당자 작업 없음 + 활성 항목 0개일 때만,
+  시작한 담당자 교체·해제 금지, 담당자 1 삭제 불가. 일괄 항목 배분 이동은 작업 1건이라도 있으면 계속 금지(진행 중 이동은 항목별 경로).
+- **N명 일반화**: 할 일·작업자 현황(동료 전원 열람)·오더 상태 동기화(`countActiveBySlot` 1회)·월간 스케줄(담당자별 행, `is_parallel`/`co_assignee_ids`)·
+  관리자 대시보드(보유 DAY 균등 분할)·홈 부하 카드·AI 부하/고난도 가중·챗봇/Q-Think 담당 표시·슬랙 문구·재배정 이력 라벨.
+- **AI 자동배정은 병렬 배정을 만들지 않고**, 명시 `orderIds` 경로에서도 병렬 오더를 제외한다.
+- **시험자 하드 삭제**: 배정된 오더가 있으면 "배정된 오더가 있어 삭제할 수 없습니다. 비활성화하세요." 로 거절.
+- ⚠️ **배포 순서**: SQL 0048 → **0049** → 0050 적용 → 앱 배포 → 0049 파일 끝 「배포 직후 재동기화」 주석 블록 **즉시** 1회 실행(그 전엔 담당자 변경 금지).
+  **F2(0050, 항목별 담당자 변경)와 반드시 같은 릴리스.** 0049 적용 전 점검 ③(담당자1 없는 2인 오더)은 필수.
+  미적용 환경에서 담당자 구성 변경은 설치 안내로 거절되고, 새 테이블을 읽는 화면은 0049 실행 안내를 보인다.
+- 구 2인 컬럼(`is_dual_assignment`·`assignee_tester_id_2`)·0037/0038 제약 드롭은 이번 릴리스에 없다(열린 질문).
+
+## ✅ 추가 완료 (2026-08-29, 2인 배정) — ⚠️ 2026-09-15 병렬 배정(0049)으로 대체됨. 아래는 당시 기록
 품목코드 1개·제조번호 1개인 오더 하나를 담당자 **2명**이 시험항목을 나눠 수행한다. — `0037_dual_assignment.sql`
 - **데이터 모델**: `pct_orders.is_dual_assignment` + `assignee_tester_id_2`, `pct_order_test_items.assignee_slot`(1=담당자1 / 2=담당자2).
   항목의 담당자를 사람(tester_id)이 아니라 **슬롯 번호**로 저장한다 — 담당자를 교체해도 항목 배분이 깨지지 않고,

@@ -13,6 +13,7 @@ import { Skeleton } from "@frontend/components/ui/skeleton"
 import { MobileFilterPanel } from "@frontend/components/common/mobile-filter-panel"
 import { JobDetailModal } from "@frontend/components/product-test/job-detail-modal"
 import { TesterAvatar } from "@frontend/lib/tester-profiles"
+import { PARALLEL_BADGE_LABEL } from "@shared/assignment"
 import {
   WorkerStageLane, type OverviewJob, type WorkerRow,
 } from "@frontend/components/product-test/worker-stage-lane"
@@ -23,7 +24,7 @@ interface Overview {
     delayed: number; completedToday: number; completedTotal: number
   }
   workers: WorkerRow[]
-  /** 'admin' = 전체 시험자, 'tester' = 본인 + 2인 배정 상대(공유 오더 한정) */
+  /** 'admin' = 전체 시험자, 'tester' = 본인 + 병렬 배정 동료(공유 오더 한정) */
   scope?: "admin" | "tester"
 }
 
@@ -149,10 +150,10 @@ export default function ProdStatusPage() {
 
   const selectedWorker = workers.find(w => w.testerId === selectedTesterId) ?? workers[0]
 
-  /** 시험자 시점 — 본인과 2인 배정 상대만 담긴 응답이다 */
+  /** 시험자 시점 — 본인과 병렬 배정 동료만 담긴 응답이다 */
   const isTesterScope = data?.scope === "tester"
-  const partnerCount = (data?.workers ?? []).filter(w => w.isPartner).length
-  /** 시험자 시점의 지표는 **본인 숫자**여야 한다. 상대의 공유 작업까지 합치면
+  const coAssigneeCount = (data?.workers ?? []).filter(w => w.isCoAssignee).length
+  /** 시험자 시점의 지표는 **본인 숫자**여야 한다. 동료의 공유 작업까지 합치면
       "내 진행은 1건인데 지표는 2건" 이 되어 화면이 자기 얘기를 하지 않는다. */
   const selfRow = (data?.workers ?? []).find(w => w.isSelf) ?? null
   const selfCompletedToday =
@@ -174,7 +175,7 @@ export default function ProdStatusPage() {
   /** 조회 옵션 막대에 남길 한 줄 — 어떤 보기로 몇 명을 보고 있는지 */
   const filterSummary = [
     VIEW_TABS.find(t => t.key === view)?.label ?? "",
-    isTesterScope ? (partnerCount > 0 ? `나 + 상대 ${partnerCount}명` : "내 작업") : `작업자 ${workers.length}명`,
+    isTesterScope ? (coAssigneeCount > 0 ? `나 + 동료 ${coAssigneeCount}명` : "내 작업") : `작업자 ${workers.length}명`,
     view === "completed" ? `완료 ${completedShown}건` : null,
     search.trim() ? `"${search.trim()}"` : null,
   ].filter(Boolean).join(" · ")
@@ -191,12 +192,12 @@ export default function ProdStatusPage() {
   }> = [
     {
       label: isTesterScope ? "함께 작업" : "작업 중 인원",
-      value: isTesterScope ? partnerCount : (totals?.workingTesters ?? 0),
+      value: isTesterScope ? coAssigneeCount : (totals?.workingTesters ?? 0),
       valueCls: "text-foreground", icon: Users,
       foot: (
         <span className="text-xs leading-normal break-keep tabular-nums text-muted-foreground">
           {isTesterScope
-            ? "2인 배정 상대"
+            ? "병렬 배정 동료"
             : `전체 ${data?.workers.filter(w => w.isActive).length ?? 0}명 중`}
         </span>
       ),
@@ -250,7 +251,7 @@ export default function ProdStatusPage() {
             "작업자를 고르면 …" 안내문은 375px 에서 두 줄을 먹으며 목록을 밀어냈다. */}
         <p className="hidden text-xs leading-normal break-keep text-muted-foreground sm:block">
           {isTesterScope
-            ? <>2인 배정 상대 <span className="font-semibold tabular-nums text-foreground">{partnerCount}</span>명</>
+            ? <>병렬 배정 동료 <span className="font-semibold tabular-nums text-foreground">{coAssigneeCount}</span>명</>
             : <>작업자 <span className="font-semibold tabular-nums text-foreground">{workers.length}</span>명</>}
           {view === "completed" && (
             <>
@@ -260,9 +261,9 @@ export default function ProdStatusPage() {
           )}
           <span className="px-1 text-border">·</span>
           {isTesterScope
-            ? (partnerCount > 0
-                ? "본인 현황과, 2인 배정으로 함께 맡은 상대의 해당 작업만 표시됩니다"
-                : "본인 현황입니다. 2인 배정 작업이 생기면 상대 현황도 함께 표시됩니다")
+            ? (coAssigneeCount > 0
+                ? "본인 현황과, 병렬 배정으로 함께 맡은 동료의 해당 작업만 표시됩니다"
+                : "본인 현황입니다. 병렬 배정 작업이 생기면 동료 현황도 함께 표시됩니다")
             : view === "completed"
               ? "승인완료된 작업을 작업자·기간별로 봅니다 (작업자당 최근 50건까지)"
               : "작업자를 고르면 보유 작업이 지금 서 있는 단계 위에 표시됩니다"}
@@ -350,7 +351,7 @@ export default function ProdStatusPage() {
             </div>
           )}
 
-          {/* 시험자 시점에는 본인과 상대 몇 명뿐이라 검색이 자리만 차지한다 */}
+          {/* 시험자 시점에는 본인과 동료 몇 명뿐이라 검색이 자리만 차지한다 */}
           {!isTesterScope && (
             <div className="relative w-full sm:ml-auto sm:w-72">
               <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -428,12 +429,12 @@ export default function ProdStatusPage() {
                   <div className="min-w-0">
                     <span className="flex min-w-0 items-center gap-1">
                       <span className="min-w-0 truncate text-sm font-medium text-foreground">{w.name}</span>
-                      {/* 상대 행은 "함께 맡은 오더만" 담고 있다 — 전체 업무로 오해하지 않게 이름 옆에 밝힌다 */}
+                      {/* 동료 행은 "함께 맡은 오더만" 담고 있다 — 전체 업무로 오해하지 않게 이름 옆에 밝힌다 */}
                       {w.isSelf && (
                         <span className="shrink-0 rounded-md border border-blue-200 bg-blue-50 px-1 text-xs leading-normal font-semibold text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300">나</span>
                       )}
-                      {w.isPartner && (
-                        <span className="shrink-0 rounded-md border px-1 text-xs leading-normal font-medium text-muted-foreground">2인</span>
+                      {w.isCoAssignee && (
+                        <span className="shrink-0 rounded-md border px-1 text-xs leading-normal font-medium text-muted-foreground">{PARALLEL_BADGE_LABEL}</span>
                       )}
                     </span>
                     <span className="block truncate font-mono text-xs leading-normal tabular-nums text-muted-foreground">
@@ -448,11 +449,11 @@ export default function ProdStatusPage() {
               최소 폭을 강제하던 임시 방편은 걷어냈다. overflow-x-auto 는 md 근처에서
               레일이 빠듯할 때를 대비해 남겨 둔다(밀려도 이 상자 안에서만). */}
           <div className="min-h-0 min-w-0 overflow-x-auto overflow-y-auto">
-            {/* 상대 행을 열었을 때 이 목록이 상대의 전부가 아님을 밝힌다.
+            {/* 동료 행을 열었을 때 이 목록이 동료의 전부가 아님을 밝힌다.
                 밝히지 않으면 "저 사람 일이 이것뿐인가" 로 읽힌다. */}
-            {selectedWorker?.isPartner && (
+            {selectedWorker?.isCoAssignee && (
               <p className="mb-2 rounded-md border border-dashed bg-muted/40 px-3 py-2 text-xs leading-normal break-keep text-muted-foreground">
-                2인 배정으로 <span className="font-medium text-foreground">함께 맡은 작업</span>만 표시됩니다. {selectedWorker.name} 님의 다른 업무는 포함되지 않습니다.
+                병렬 배정으로 <span className="font-medium text-foreground">함께 맡은 작업</span>만 표시됩니다. {selectedWorker.name} 님의 다른 업무는 포함되지 않습니다.
               </p>
             )}
             {selectedWorker && (

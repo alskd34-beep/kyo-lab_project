@@ -14,7 +14,10 @@ import { kstToday, kstDateAfter } from '@backend/lib/kstDate'
 import { fetchPctSheet, type SheetPctRow } from '@backend/lib/googleSheet'
 import { createNotification } from '@backend/services/notifications'
 import { rebuildGroups } from '@backend/services/concurrentGroups'
-import { resetAssigneeSlots } from '@backend/services/pctOrderTestItems'
+import {
+  assigneesOfOrderForWrite, setOrderAssignees, setOrderPrimaryAssignee,
+} from '@backend/services/orderAssignees'
+import { PRIMARY_ASSIGNEE_SLOT, assigneeSlotLabel } from '@shared/assignment'
 import { logReassignment } from '@backend/services/reassignmentHistory'
 import { syncOrderStatusFromJobs } from '@backend/services/qcJobs'
 import {
@@ -133,8 +136,6 @@ interface ExistingOrder {
   status: string
   ingest_state: string | null
   assignee_tester_id: string | null
-  assignee_tester_id_2: string | null
-  is_dual_assignment: boolean
   /** 0015 미적용 환경에서는 이 키 자체가 없다(undefined) — hasLockedColumn 참고 */
   locked?: boolean
   /** 0039 미적용 환경에서는 이 키 자체가 없다(undefined) — hasValidationColumn 참고 */
@@ -219,13 +220,13 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
 
   /**
    * 소프트 삭제됐던 오더가 자연키로 시트에 재등장 — 복구한다.
-   * 트랜잭션이 없으므로 순서가 중요하다: **실패해도 덜 나쁜 쪽부터** 진행한다.
+   * 단계 사이에는 트랜잭션이 없으므로 순서가 중요하다: **실패해도 덜 나쁜 쪽부터** 진행한다.
    *
-   * 슬롯(assignee_slot)을 오더 UPDATE보다 먼저 되돌리는 이유: 오더를 먼저
-   * is_dual_assignment=false 로 바꾼 뒤 슬롯 되돌리기가 실패하면, assignee_slot=2
-   * 항목이 남아 아무 담당자에게도 보이지 않는 유령 항목이 된다. 슬롯을 먼저 되돌리면
-   * 최악의 경우도 "슬롯은 1로 돌아왔는데 오더 상태 갱신만 실패"라 재시도(다음 적재
-   * 회차)로 스스로 복구된다.
+   * 담당자 비우기(병렬 담당자 → 대표)는 오더 UPDATE(상태 '대기' 복구)보다 **먼저** 한다.
+   * 담당자 구성·미러·구 컬럼·항목 슬롯 되돌림·감사는 각 단계가 DB 함수(0049) 한 트랜잭션이라
+   * 서로 어긋나지 않는다. 담당자 비우기가 실패하면 오더는 여전히 '삭제' 상태로 남아
+   * 다음 적재 회차가 복구를 다시 시도한다(상태만 복구되고 옛 담당자가 남는 쪽보다 낫다).
+   * LOCK 된 오더는 함수가 담당자 변경을 거절하므로, 복구가 어차피 풀 확정 표시를 먼저 푼다.
    */
   async function restoreOrder(existing: ExistingOrder, row: SheetPctRow, key: string, synced: boolean): Promise<boolean> {
     // 1) qc_jobs 존재 여부 — 정상 흐름에서는 삭제 대상이 '대기' 상태뿐이라 있을 수
@@ -278,22 +279,38 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
     }
 
     // ── 정상 케이스: 배정·확정 초기화 후 '대기'로 복구 ───────────────────────
-    // 슬롯 먼저(위 주석 참고)
+    // ① 확정(LOCK) 해제 — 담당자 변경 함수는 LOCK 오더를 거절한다. 삭제 상태 오더라 해제해도 화면 영향이 없다.
+    if (hasLockedColumn && existing.locked) {
+      const { error: unlockErr } = await supabaseAdmin
+        .from('pct_orders').update(withLocked({}, false)).eq('id', existing.id)
+      if (unlockErr) {
+        fail(key, 'restored', `확정 해제 실패: ${unlockErr.message}`)
+        return false
+      }
+    }
+
+    // ② 담당자 비우기 — 병렬 담당자(슬롯 2~5)를 먼저 빼고(항목은 슬롯 1 로 되돌림), 대표를 비운다.
+    //    둘 다 DB 함수 한 트랜잭션(슬롯·미러·구 컬럼·감사). 비원자 폴백 없음.
+    const RESTORE_REASON = '생산계획 시트 재등장으로 자동 복구 — 담당자·확정 초기화'
+    let clearedSlots: Array<{ slot: number; testerId: string }> = []
     try {
-      await resetAssigneeSlots(existing.id, null)
+      const slots = await assigneesOfOrderForWrite(existing.id)
+      clearedSlots = slots
+      const primary = slots.find(a => a.slot === PRIMARY_ASSIGNEE_SLOT)
+      if (primary && slots.length > 1) {
+        await setOrderAssignees(existing.id, [{ slot: PRIMARY_ASSIGNEE_SLOT, testerId: primary.testerId }], null, RESTORE_REASON)
+      }
+      if (primary || existing.assignee_tester_id) {
+        await setOrderPrimaryAssignee(existing.id, null, null, RESTORE_REASON)
+      }
     } catch (err) {
-      fail(key, 'restored', `배정 슬롯 초기화 실패: ${err instanceof Error ? err.message : String(err)}`)
+      fail(key, 'restored', `담당자 초기화 실패: ${err instanceof Error ? err.message : String(err)}`)
       return false
     }
 
-    // is_dual_assignment=false 와 assignee_tester_id_2=null 을 다른 문장으로 나누면
-    // 그 사이 순간 0038 의 chk_pct_orders_dual_off_no_second 위반(23514)이 날 수 있다
-    // — 반드시 한 UPDATE 문에 함께 담는다.
+    // ③ 오더 복구 — 담당자 컬럼은 여기서 쓰지 않는다(위 DB 함수가 이미 비웠다).
     const { error } = await supabaseAdmin.from('pct_orders').update(withLocked(withValidation({
       status: PENDING_STATUS,
-      assignee_tester_id: null,
-      assignee_tester_id_2: null,
-      is_dual_assignment: false,
       deleted_at: null,
       ingest_state: 'restored',
       last_seen_at: nowIso,
@@ -324,20 +341,17 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
     if (editErr) {
       console.error(`[pct-ingest] 복구 이력(pct_order_edits) 기록 실패 — 복구 자체는 반영됨 (${key}):`, editErr.message)
     }
-    for (const [slotLabel, before] of [
-      ['담당자1', existing.assignee_tester_id],
-      ['담당자2', existing.assignee_tester_id_2],
-    ] as const) {
-      if (!before) continue
+    // 비운 담당자마다(담당자 1~5) 재배정 이력 1건
+    for (const { slot, testerId } of clearedSlots) {
       try {
         await logReassignment({
           orderId: existing.id,
-          beforeUser: before,
+          beforeUser: testerId,
           afterUser: null,
           reason: '적재 자동 복구 — 배정 초기화',
         })
       } catch (err) {
-        console.error(`[pct-ingest] 재배정 이력 기록 실패(${slotLabel}) — 복구 자체는 반영됨 (${key}):`, err)
+        console.error(`[pct-ingest] 재배정 이력 기록 실패(${assigneeSlotLabel(slot)}) — 복구 자체는 반영됨 (${key}):`, err)
       }
     }
 

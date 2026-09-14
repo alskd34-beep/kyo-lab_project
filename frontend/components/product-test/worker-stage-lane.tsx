@@ -36,8 +36,8 @@ export interface WorkerRow {
   isActive: boolean
   /** 시험자 본인 화면에서 "나"인 행 (관리자 화면에는 없다) */
   isSelf?: boolean
-  /** 2인 배정 상대 — 이 행은 함께 배정된 오더에 한정된 현황이다 */
-  isPartner?: boolean
+  /** 병렬 배정 동료 — 이 행은 함께 배정된 오더에 한정된 현황이다 */
+  isCoAssignee?: boolean
   pendingCount: number
   inProgress: number
   reviewing: number

@@ -15,6 +15,7 @@
 
 import { supabaseAdmin } from '@backend/lib/supabase'
 import { selectAll } from '@backend/lib/supabasePage'
+import { loadAssigneesByOrder } from '@backend/services/orderAssignees'
 import {
   CLOSED_STAGE,
   DELAYED_STATUS,
@@ -50,10 +51,12 @@ export async function getQcDashboard(): Promise<QcDashboard> {
   // 1) 오더 (삭제 제외)
   const { data: orderData, error: orderErr } = await supabaseAdmin
     .from('pct_orders')
-    .select('id, status, assignee_tester_id, is_dual_assignment, assignee_tester_id_2, product_code, product_name, is_urgent, product_synced, ingest_state')
+    .select('id, status, assignee_tester_id, product_code, product_name, is_urgent, product_synced, ingest_state')
     .neq('status', DELETED_STATUS)
   if (orderErr) throw orderErr
   const orders = (orderData ?? []) as Record<string, unknown>[]
+  // 담당자 구성(0049) — 보유 DAY·난이도 분포를 담당자 N명에게 나눈다. 미적용이면 설치 안내 오류.
+  const assigneeMap = await loadAssigneesByOrder()
 
   // 2) 매핑: product_workload(공수 DAY) + products(난이도)
   const codes = [...new Set(orders.map(o => o.product_code as string).filter(Boolean))]
@@ -102,6 +105,7 @@ export async function getQcDashboard(): Promise<QcDashboard> {
 
   for (const o of orders) {
     const status = o.status as string
+    // 미배정 판정은 대표 미러(assignee_tester_id = 슬롯 1)로 한다
     const assignee = (o.assignee_tester_id as string) ?? null
     const code = o.product_code as string
     const name = o.product_name as string
@@ -117,13 +121,12 @@ export async function getQcDashboard(): Promise<QcDashboard> {
 
     // 미완료 배정 오더만 보유 DAY / 난이도 분포 산정
     //
-    // [2인 배정] 담당자2 몫도 그 사람의 보유량으로 잡는다 — 예전에는 assignee_tester_id 만 봐서
-    // 담당자2로 여러 건을 들고 있어도 화면에 0으로 보였다.
-    // 공수(DAY)는 두 사람이 나눠 수행하므로 절반씩 나눈다(품목 전체 공수를 양쪽에 온전히
-    // 더하면 조직 전체 보유량이 실제의 두 배로 부풀어 오른다).
-    // 난이도 분포는 "지금 손에 든 HIGH 품목이 몇 건인가" 라서 두 사람 모두에게 1건씩 센다.
-    const dualAssignee = o.is_dual_assignment ? ((o.assignee_tester_id_2 as string) ?? null) : null
-    const holders = [assignee, dualAssignee].filter((t): t is string => !!t)
+    // [병렬 배정] 담당자 1~5 몫을 각자의 보유량으로 잡는다 — 대표만 보면
+    // 병렬 담당자로 여러 건을 들고 있어도 화면에 0으로 보인다.
+    // 공수(DAY)는 N명이 나눠 수행하므로 인원수로 균등 분할한다(품목 전체 공수를 모두에게 온전히
+    // 더하면 조직 전체 보유량이 실제의 N배로 부풀어 오른다). 월간 달력은 각자 전체 기간 — 기준 차이는 열린 질문.
+    // 난이도 분포는 "지금 손에 든 HIGH 품목이 몇 건인가" 라서 담당자마다 1건씩 센다.
+    const holders = (assigneeMap.get(o.id as string) ?? []).map(a => a.testerId)
     if (holders.length > 0 && OPEN_STATUSES.has(status)) {
       const days = workdaysByCode.get(code) ?? DEFAULT_WORKDAYS // 공수 미등록 → 1일(근사치)
       const sharePerHolder = days / holders.length

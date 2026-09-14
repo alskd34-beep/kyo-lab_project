@@ -1,5 +1,5 @@
 /**
- * [BACKEND] 오더별 시험항목 — 품목 기준 스냅샷 위에서 개별 제외/추가 (0029) + 2인 배정 슬롯 (0037)
+ * [BACKEND] 오더별 시험항목 — 품목 기준 스냅샷 위에서 개별 제외/추가 (0029) + 병렬 배정 슬롯 (0037 → 0049)
  *
  *   GET   /api/pct-orders/[id]/test-items   → { rows }   (인증)
  *         품목 기준 전체를 돌려준다. 제외된 항목도 isExcluded=true 로 함께 온다.
@@ -7,7 +7,7 @@
  *
  *   PATCH /api/pct-orders/[id]/test-items   (관리자)
  *         { testItemName, excluded: boolean, reason? }   — 제외/복구 토글
- *         { testItemName, assigneeSlot: 1 | 2 }           — 2인 배정 담당자 슬롯 변경
+ *         { testItemName, assigneeSlot: 1~5 }             — 병렬 배정 담당자 슬롯 변경(오더에 있는 슬롯만, 작업 시작 전만)
  *         (assigneeSlot 이 있으면 슬롯 변경, excluded 가 있으면 제외/복구 — 둘 중 하나만 처리)
  *
  *   POST  /api/pct-orders/[id]/test-items   (관리자)
@@ -19,6 +19,7 @@
 
 import { NextRequest } from 'next/server'
 import { requireAuth, requireAdmin } from '@backend/lib/guard'
+import { MAX_PARALLEL_ASSIGNEES, isAssigneeSlot } from '@shared/assignment'
 import { supabaseAdmin } from '@backend/lib/supabase'
 import {
   listOrderDetail, setExcluded, addManualItem, removeItem, setAssigneeSlot,
@@ -55,30 +56,18 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       testItemName?: string
       excluded?: boolean
       reason?: string
-      /** 2인 배정 담당자 슬롯 변경 — excluded 와는 별개 액션, 둘 중 하나만 처리한다 */
-      assigneeSlot?: 1 | 2
+      /** 병렬 배정 담당자 슬롯 변경 — excluded 와는 별개 액션, 둘 중 하나만 처리한다 */
+      assigneeSlot?: number
     }
     if (!body.testItemName) {
       return Response.json({ error: 'testItemName 은 필수입니다.' }, { status: 400 })
     }
 
     if (body.assigneeSlot !== undefined) {
-      if (body.assigneeSlot !== 1 && body.assigneeSlot !== 2) {
-        return Response.json({ error: 'assigneeSlot 은 1 또는 2 여야 합니다.' }, { status: 400 })
+      if (!isAssigneeSlot(body.assigneeSlot)) {
+        return Response.json({ error: `assigneeSlot 은 1~${MAX_PARALLEL_ASSIGNEES} 사이 정수여야 합니다.` }, { status: 400 })
       }
-      const { data: order, error: oErr } = await supabaseAdmin
-        .from('pct_orders').select('is_dual_assignment, locked').eq('id', id).maybeSingle()
-      if (oErr) throw oErr
-      if (!order) return Response.json({ error: '오더를 찾을 수 없습니다.' }, { status: 404 })
-      if (!order.is_dual_assignment) {
-        return Response.json({ error: '2인 배정 오더에서만 담당자를 나눌 수 있습니다.' }, { status: 400 })
-      }
-      if (order.locked) {
-        return Response.json(
-          { error: '확정(LOCK)된 오더는 담당자 배분을 변경할 수 없습니다. 확정 해제 후 다시 시도해 주세요.' },
-          { status: 400 },
-        )
-      }
+      // 병렬 배정 여부·LOCK·그 오더에 있는 슬롯·작업 0건 검증은 서비스가 한다.
       // 누가 배분을 바꿨는지 감사 이력(pct_order_edits)에 남긴다 — GMP 추적 대상이다.
       await setAssigneeSlot(id, body.testItemName, body.assigneeSlot, g.payload.sub ?? null)
       return Response.json({ ok: true })

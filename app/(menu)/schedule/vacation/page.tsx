@@ -1003,7 +1003,7 @@ function AddModal({
     // 있을 가능성이 높다는 뜻이다. 등록 시점에 알리지 않으면 아무도 그 오더를 다시
     // 열지 않는 한 영영 드러나지 않는다. 대상자의 testerId 로 이미 배정된 오더를 찾아
     // 겹치면 확인만 받는다(차단하지 않음 — 이 시스템의 일관된 정책, types/leave.ts 참고).
-    // 2인 배정의 담당자2도 포함된다 — listOrders 가 assignedToTesterFilter 로 두 슬롯을 모두 본다.
+    // 병렬 배정의 담당자 2~5 도 포함된다 — listOrders 가 담당자 슬롯 테이블(0049)로 모든 슬롯을 본다.
     const targetTesterId = isAdmin ? (users.find(u => u.id === userId)?.testerId ?? null) : null
     if (targetTesterId) {
       try {

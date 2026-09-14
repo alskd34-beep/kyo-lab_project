@@ -17,6 +17,9 @@ export function describeSchemaError(
   const missing =
     // PGRST205 테이블 없음 / PGRST204 컬럼 없음 / 42P01 relation / 42703 column
     e?.code === 'PGRST205' || e?.code === 'PGRST204'
+    // PGRST200 관계(임베드) 없음 — 병렬 배정(0049) 담당자 테이블 임베드일 때만 미적용으로 본다.
+    // 다른 임베드 오타까지 설치 안내로 가리지 않게 좁힌다.
+    || (e?.code === 'PGRST200' && /pct_order_assignees/.test(msg))
     || e?.code === '42P01' || e?.code === '42703'
     || /Could not find the .*(table|column)|does not exist/i.test(msg)
   if (missing) {

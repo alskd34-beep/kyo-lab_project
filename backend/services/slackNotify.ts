@@ -31,7 +31,8 @@ interface JobContext {
   testerName: string | null
   productName: string | null
   batchNo: string | null
-  isDualAssignment: boolean
+  /** 병렬 배정(담당자 2명 이상, 0049) 오더의 작업인가 */
+  isParallel: boolean
 }
 
 /** 단계별 이모지 — 그 외 상태(방어적)는 ⚪ */
@@ -56,21 +57,31 @@ async function loadContext(jobId: string): Promise<JobContext | null> {
   try {
     const { data, error } = await supabaseAdmin
       .from('qc_jobs')
-      .select('qc_no, assignee_tester_id, order_id, testers(name), pct_orders(product_name, batch_no, is_dual_assignment)')
+      .select('qc_no, assignee_tester_id, order_id, testers(name), pct_orders(product_name, batch_no)')
       .eq('id', jobId)
       .maybeSingle()
     if (error || !data) throw error ?? new Error('작업을 찾을 수 없습니다')
 
     const row = data as unknown as Record<string, unknown>
     const tester = row.testers as { name: string | null } | null
-    const order = row.pct_orders as { product_name: string | null; batch_no: string | null; is_dual_assignment: boolean | null } | null
+    const order = row.pct_orders as { product_name: string | null; batch_no: string | null } | null
+
+    // 병렬 배정 여부 — 담당자 슬롯 행 수(≥ 2)로 파생한다(0049). 조회 실패(미적용 등)면 표시만 뺀다.
+    let isParallel = false
+    if (row.order_id) {
+      const { count, error: cntErr } = await supabaseAdmin
+        .from('pct_order_assignees')
+        .select('slot', { count: 'exact', head: true })
+        .eq('order_id', row.order_id as string)
+      if (!cntErr) isParallel = (count ?? 0) >= 2
+    }
 
     return {
       qcNo: row.qc_no as string,
       testerName: tester?.name ?? null,
       productName: order?.product_name ?? null,
       batchNo: order?.batch_no ?? null,
-      isDualAssignment: !!order?.is_dual_assignment,
+      isParallel,
     }
   } catch (err) {
     // 조회 실패는 대개 일시적이 아니라 스키마·권한 문제라 계속 재발한다.
@@ -132,10 +143,10 @@ function buildCard(notice: StageNotice, ctx: JobContext | null): { text: string;
     },
   ]
 
-  if (ctx.isDualAssignment) {
+  if (ctx.isParallel) {
     blocks.push({
       type: 'context',
-      elements: [{ type: 'mrkdwn', text: '2인 배정 — 담당자별 작업입니다' }],
+      elements: [{ type: 'mrkdwn', text: '병렬 배정 — 담당자별 작업입니다' }],
     })
   }
 

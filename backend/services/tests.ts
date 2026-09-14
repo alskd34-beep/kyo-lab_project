@@ -6,12 +6,14 @@
  *  - 시험번호·진행상태 : 연결된 qc_jobs(order_id). 미착수 오더는 QC번호 '-' + 오더 상태 사용
  *  - 시험항목 : 작업이 있으면 qc_job_items(실제), 없으면 product_test_items(예정)
  *  - 구분 : products.product_type (없으면 제형 dosage_form)
- *  - 담당자 : assignee_tester_id → testers.name
+ *  - 담당자 : pct_order_assignees(담당자 1~5, 0049) → testers.name (병렬 배정이면 전원)
  */
 
 import { supabaseAdmin } from '@backend/lib/supabase'
 import { DELETED_STATUS } from '@shared/qc-status'
 import { METHOD_PARTIAL, mapByOrders } from '@backend/services/pctOrderTestItems'
+import { loadAssigneesByOrder } from '@backend/services/orderAssignees'
+import { isParallelAssignment } from '@shared/assignment'
 import type { TestRow, StatusKey } from '@shared/qc'
 
 interface TestsQuery {
@@ -33,8 +35,6 @@ interface OrderLite {
   status: string
   is_urgent: boolean | null
   assignee_tester_id: string | null
-  is_dual_assignment: boolean | null
-  assignee_tester_id_2: string | null
   created_at: string
 }
 
@@ -103,7 +103,7 @@ export async function listTests(q: TestsQuery = {}): Promise<TestRow[]> {
   // 1) 오더 (작업현황 원본, 삭제 제외)
   const { data: orderData, error } = await supabaseAdmin
     .from('pct_orders')
-    .select('id, product_code, product_name, batch_no, dosage_form, method, due_date, status, is_urgent, assignee_tester_id, is_dual_assignment, assignee_tester_id_2, created_at')
+    .select('id, product_code, product_name, batch_no, dosage_form, method, due_date, status, is_urgent, assignee_tester_id, created_at')
     .neq('status', DELETED_STATUS)
     .order('created_at', { ascending: false })
   if (error) throw error
@@ -113,15 +113,17 @@ export async function listTests(q: TestsQuery = {}): Promise<TestRow[]> {
   const orderIds = orders.map(o => o.id)
 
   // 2) 작업(QC번호·상태), 담당자명, 품목 메타(구분·예정항목) — 병렬
-  const [jobsRes, testersRes, productMeta, orderItems] = await Promise.all([
+  const [jobsRes, testersRes, productMeta, orderItems, assigneeMap] = await Promise.all([
     supabaseAdmin.from('qc_jobs').select('id, order_id, qc_no, status').in('order_id', orderIds),
     supabaseAdmin.from('testers').select('id, name'),
     productMetaByCode([...new Set(orders.map(o => o.product_code))]),
     // 개별항목 오더는 품목 전체가 아니라 오더에서 고른 항목만 보여준다
     mapByOrders(orders.filter(o => o.method === METHOD_PARTIAL).map(o => o.id)),
+    // 담당자 구성(0049). 미적용이면 대표 미러로 1인 배정처럼 보인다(시험현황 조회를 막지 않는다)
+    orderIds.length > 300 ? loadAssigneesByOrder(undefined, { mirror: orders }) : loadAssigneesByOrder(orderIds, { mirror: orders }),
   ])
 
-  // 2인 배정 오더는 담당자별로 작업이 2건이다. 예전처럼 Map<orderId, job> 에 담으면
+  // 병렬 배정 오더는 담당자별로 작업이 여러 건이다. 예전처럼 Map<orderId, job> 에 담으면
   // 나중에 온 행이 앞 행을 덮어써서 한 사람 몫(QC번호·항목)만 남고 나머지는 조용히 사라진다.
   // 시험현황의 한 줄은 어디까지나 "오더 한 건"이므로, 두 작업을 합쳐서 보여준다.
   const jobsByOrder = new Map<string, { id: string; qcNo: string; status: string }[]>()
@@ -155,20 +157,19 @@ export async function listTests(q: TestsQuery = {}): Promise<TestRow[]> {
     const jobs = jobsByOrder.get(o.id) ?? []
     const job  = jobs[0]
     const meta = productMeta.get(o.product_code)
-    // 2인 배정이면 담당자 두 명을 함께 보여준다 — 담당자1만 쓰면 나머지 한 명이 화면에서 사라진다.
-    const names = [
-      o.assignee_tester_id,
-      o.is_dual_assignment ? o.assignee_tester_id_2 : null,
-    ].map(id => (id ? testerName.get(id) ?? '' : '')).filter(Boolean)
+    // 병렬 배정이면 담당자 전원(담당자 1~5, 번호 순)을 함께 보여준다 — 대표만 쓰면 나머지가 화면에서 사라진다.
+    const slots = assigneeMap.get(o.id) ?? []
+    const parallel = isParallelAssignment(slots)
+    const names = slots.map(a => testerName.get(a.testerId) ?? '').filter(Boolean)
     const name = names.join(', ')
-    // 진행상태: 1인 배정은 예전 그대로 작업 상태 우선. 2인 배정은 작업이 2건이라 어느 한쪽을
-    // 고를 수 없고, 오더 상태가 이미 두 작업 중 가장 뒤처진 단계로 동기화돼 있으므로 그것을 쓴다
+    // 진행상태: 1인 배정은 예전 그대로 작업 상태 우선. 병렬 배정은 작업이 여러 건이라 어느 한쪽을
+    // 고를 수 없고, 오더 상태가 이미 작업들 중 가장 뒤처진 단계로 동기화돼 있으므로 그것을 쓴다
     // (backend/services/qcJobs.ts 의 syncOrderStatusFromJobs).
-    const koStatus = o.is_dual_assignment ? o.status : (job?.status ?? o.status)
+    const koStatus = parallel ? o.status : (job?.status ?? o.status)
     // 시작한 작업이 있으면 실제 체크리스트, 없으면 예정 항목
     //  (개별항목 오더는 오더에서 고른 항목, 전항목 오더는 품목 전체)
     const planned = o.method === METHOD_PARTIAL ? orderItems.get(o.id) : meta?.items
-    // 2인 배정은 두 사람의 체크리스트를 합쳐야 그 제조번호의 전체 시험항목이 된다.
+    // 병렬 배정은 담당자들의 체크리스트를 합쳐야 그 제조번호의 전체 시험항목이 된다.
     const items = (jobs.length > 0
       ? [...new Set(jobs.flatMap(j => itemsByJob.get(j.id) ?? []))]
       : planned) ?? []
@@ -180,7 +181,7 @@ export async function listTests(q: TestsQuery = {}): Promise<TestRow[]> {
       type:        o.method ?? '-',
       product:     o.product_name,
       batchNo:     o.batch_no,
-      // 2인 배정이면 QC번호가 담당자별로 2개다 — 둘 다 보여야 어느 시험인지 추적된다.
+      // 병렬 배정이면 QC번호가 담당자별로 여러 개다 — 전부 보여야 어느 시험인지 추적된다.
       testNo:      jobs.length > 0 ? jobs.map(j => j.qcNo).join(', ') : '-',
       items:       items.join(', '),
       itemList:    items,

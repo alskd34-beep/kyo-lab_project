@@ -10,7 +10,8 @@
  */
 
 import { randomUUID } from 'crypto'
-import { assignedToTesterFilter } from '@backend/lib/assigneeFilter'
+import { ASSIGNED_TESTER_FILTER_COLUMN, withAssignedTesterEmbed } from '@backend/lib/assigneeFilter'
+import { loadAssigneesByOrder } from '@backend/services/orderAssignees'
 import { DELETED_STATUS, ITEM_STATUS_LABEL, type JobItemStatus } from '@shared/qc-status'
 import { supabaseAdmin, supabaseAdmin as supabase } from '@backend/lib/supabase'
 import { runLetsurText } from '@backend/lib/letsurClient'
@@ -313,6 +314,8 @@ interface OrderRow {
   status: string
   is_urgent: boolean
   assignee_tester_id: string | null
+  /** 담당자 1~5 시험자 id(번호 순, 0049). 병렬 배정이면 여러 명 */
+  assignee_ids: string[]
 }
 interface JobInfo {
   qcNo: string
@@ -381,17 +384,21 @@ async function fetchScopedOrders(
 
   let q = supabaseAdmin
     .from('pct_orders')
-    .select('id, product_code, product_name, batch_no, due_date, method, status, is_urgent, assignee_tester_id')
+    .select(withAssignedTesterEmbed('id, product_code, product_name, batch_no, due_date, method, status, is_urgent, assignee_tester_id', restrictTester))
     .neq('status', DELETED_STATUS)
   if (opts.productCode) q = q.eq('product_code', opts.productCode)
   if (opts.dueFrom) q = q.gte('due_date', opts.dueFrom)
   if (opts.dueTo) q = q.lte('due_date', opts.dueTo)
   if (opts.urgent) q = q.eq('is_urgent', true)
-  // 2인 배정 담당자2도 자기 오더로 본다(담당자1만 보면 담당자2는 0건으로 답한다)
-  if (restrictTester) q = q.or(assignedToTesterFilter(restrictTester))
+  // 병렬 배정 담당자 2~5 도 자기 오더로 본다(대표만 보면 병렬 담당자는 0건으로 답한다)
+  if (restrictTester) q = q.eq(ASSIGNED_TESTER_FILTER_COLUMN, restrictTester)
 
   const { data } = await q.order('due_date', { ascending: true }).limit(20)
-  return (data ?? []) as OrderRow[]
+  const rows = (data ?? []) as unknown as Omit<OrderRow, 'assignee_ids'>[]
+  // 담당 표시는 담당자 N명 모두 — 0049 미적용이면 대표 미러만(챗봇 답변을 막지 않는다)
+  const assigneeMap = await loadAssigneesByOrder(rows.map(o => o.id), { mirror: rows })
+    .catch(() => new Map<string, { slot: number; testerId: string }[]>())
+  return rows.map(o => ({ ...o, assignee_ids: (assigneeMap.get(o.id) ?? []).map(a => a.testerId) }))
 }
 
 /** tester_id → 이름 매핑 */
@@ -431,7 +438,7 @@ async function jobItemsForOrders(orderIds: string[]): Promise<Map<string, JobInf
     }
     const prev = map.get(orderId)
     if (!prev) { map.set(orderId, info); continue }
-    // 2인 배정 오더는 담당자별로 작업이 2건이다. 그대로 덮어쓰면 한 사람의 QC번호와
+    // 병렬 배정 오더는 담당자별로 작업이 여러 건이다. 그대로 덮어쓰면 한 사람의 QC번호와
     // 시험항목 진행상태가 통째로 사라져, AI 가 "그 배치는 항목이 3개뿐"이라고 잘못 답한다.
     map.set(orderId, {
       qcNo:   `${prev.qcNo}, ${info.qcNo}`,
@@ -448,7 +455,10 @@ function itemStatusKo(s: string): string {
 }
 
 function formatOrderLine(o: OrderRow, names: Map<string, string>, jobs: Map<string, JobInfo>): string {
-  const tester = o.assignee_tester_id ? (names.get(o.assignee_tester_id) ?? '미지정') : '미배정'
+  // 병렬 배정이면 담당자 전원(번호 순)
+  const tester = o.assignee_ids.length > 0
+    ? o.assignee_ids.map(id => names.get(id) ?? '미지정').join(', ')
+    : '미배정'
   const ji = jobs.get(o.id)
   const items = ji && ji.items.length
     ? ` | 시험항목: ${ji.items.map(it => `${it.name}(${itemStatusKo(it.status)})`).join(', ')}`
@@ -481,7 +491,7 @@ async function buildScheduleBlock(range: { label: string; from: string; to: stri
   const head = `### 일정 — ${range.label}${scope.isAdmin ? '' : ' (본인 배정)'} : 완료예정 기준 ${orders.length}건`
   if (orders.length === 0) return `${head}\n- 해당 기간 오더 없음`
   const [names, jobs] = await Promise.all([
-    testerNameMap(orders.map(o => o.assignee_tester_id)),
+    testerNameMap(orders.flatMap(o => o.assignee_ids)),
     jobItemsForOrders(orders.map(o => o.id)),
   ])
   return [head, ...orders.map(o => formatOrderLine(o, names, jobs))].join('\n')
@@ -497,7 +507,7 @@ async function buildUrgentBlock(scope: Scope, range: { label: string; from: stri
   const head = `### 긴급 오더${period}${scope.isAdmin ? '' : ' (본인 배정)'} : ${orders.length}건`
   if (orders.length === 0) return `${head}\n- 긴급으로 지정된 오더 없음`
   const [names, jobs] = await Promise.all([
-    testerNameMap(orders.map(o => o.assignee_tester_id)),
+    testerNameMap(orders.flatMap(o => o.assignee_ids)),
     jobItemsForOrders(orders.map(o => o.id)),
   ])
   return [head, ...orders.map(o => formatOrderLine(o, names, jobs))].join('\n')
@@ -512,7 +522,7 @@ async function buildProductPctBlock(p: ProductLite, scope: Scope): Promise<strin
 
   if (orders.length > 0) {
     const [names, jobs] = await Promise.all([
-      testerNameMap(orders.map(o => o.assignee_tester_id)),
+      testerNameMap(orders.flatMap(o => o.assignee_ids)),
       jobItemsForOrders(orders.map(o => o.id)),
     ])
     lines.push(`### QC 오더 — ${p.name}${scope.isAdmin ? '' : ' (본인 배정)'} (${orders.length}건)`)
@@ -540,7 +550,7 @@ async function buildTesterOrdersBlock(t: TesterLite, scope: Scope): Promise<stri
   const orders = await fetchScopedOrders({ testerId: t.id }, scope)
   if (orders.length === 0) return ''
   const [names, jobs] = await Promise.all([
-    testerNameMap(orders.map(o => o.assignee_tester_id)),
+    testerNameMap(orders.flatMap(o => o.assignee_ids)),
     jobItemsForOrders(orders.map(o => o.id)),
   ])
   return [`### ${t.name} 시험자 QC 오더 (${orders.length}건)`, ...orders.map(o => formatOrderLine(o, names, jobs))].join('\n')

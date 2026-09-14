@@ -16,8 +16,9 @@
  *   4. 포장일이 없으면 `due_date` 에서 거꾸로 (납기를 맞추는 최소 일정)
  * 길이는 `product_workload.avg_workdays`(공수, DAY)이고 주말·공휴일은 건너뛴다.
  *
- * 2인 배정(`is_dual_assignment`)은 담당자1·담당자2 **양쪽 행**에 각각 놓는다.
- * 한 명한테만 놓으면 나머지 한 명의 그 기간 부하가 달력에서 사라진다.
+ * 병렬 배정(담당자 2명 이상, 0049)은 담당자 1~5 **각자의 행**에 각각 놓는다 — 각자 전체 기간으로.
+ * 한 명한테만 놓으면 나머지 담당자의 그 기간 부하가 달력에서 사라진다.
+ * (관리자 대시보드는 보유 DAY 를 인원수로 나누고 달력은 각자 전체 기간이다 — 기준 차이는 intent 열린 질문)
  *
  * ⚠️ 반환 필드가 snake_case 인 것은 의도적 예외다. 월간 화면이 이 응답과
  *    PCT 브릿지(`frontend/lib/pct-schedule-bridge.ts`)의 행을 같은 배열에서 병합하므로
@@ -27,12 +28,13 @@
 import { supabaseAdmin } from '@backend/lib/supabase'
 import { selectAll } from '@backend/lib/supabasePage'
 import { listOrders, type PctOrderRow } from '@backend/services/pctOrders'
+import { ASSIGNEE_SLOTS } from '@shared/assignment'
 import { getHolidaySet } from '@backend/services/holidays'
 import { DELETED_STATUS } from '@shared/qc-status'
 import { workingDaysAfter, workingDaysBefore, workingDaysFromInclusive } from '@backend/lib/workdays'
 
 export interface MonthlyScheduleRow {
-  /** `${orderId}:${슬롯}` — 2인 배정은 담당자별로 행이 갈리므로 오더 id 만으로는 겹친다 */
+  /** `${orderId}:${슬롯}` — 병렬 배정은 담당자별로 행이 갈리므로 오더 id 만으로는 겹친다 */
   id: string
   /** 담당자 없는 오더는 달력에 놓을 자리가 없어 애초에 행을 만들지 않는다 */
   tester_id: string
@@ -48,8 +50,10 @@ export interface MonthlyScheduleRow {
   /** 실제로 차지하는 근무일 목록(주말·공휴일 제외). 화면은 이 날짜들에만 셀을 놓는다 */
   dates: string[]
   is_urgent: boolean
-  is_duo: boolean
-  duo_partner_id: string | null
+  /** 병렬 배정(담당자 2명 이상) 오더의 행인가 */
+  is_parallel: boolean
+  /** 같은 오더를 함께 맡은 다른 담당자들(시험자 id) — 1인 배정이면 빈 배열 */
+  co_assignee_ids: string[]
   status: string
   note: string | null
   /** 관리자 확정(LOCK) 여부 */
@@ -140,7 +144,7 @@ export async function getMonthlySchedule(month: string): Promise<MonthlySchedule
         .order('sequence_order', { ascending: true }),
     ])
 
-  /** `${orderId}::${testerId}` → 그 사람의 작업. 2인 배정은 사람마다 작업이 따로 선다 */
+  /** `${orderId}::${testerId}` → 그 사람의 작업. 병렬 배정은 사람마다 작업이 따로 선다 */
   const jobByOrderTester = new Map<string, { workStartDate: string | null; status: string }>()
   for (const j of (jobRes.data ?? []) as Record<string, unknown>[]) {
     jobByOrderTester.set(`${j.order_id as string}::${(j.assignee_tester_id as string) ?? ''}`, {
@@ -161,18 +165,10 @@ export async function getMonthlySchedule(month: string): Promise<MonthlySchedule
 
   const schedules: MonthlyScheduleRow[] = []
   for (const order of liveOrders) {
-    // 2인 배정일 때만 담당자2 슬롯을 편다. 담당자가 아직 없는 오더는 달력에 놓을 자리가 없다.
-    const slots: { slot: 1 | 2; testerId: string | null; partnerId: string | null }[] = [
-      { slot: 1, testerId: order.assigneeTesterId, partnerId: order.isDualAssignment ? order.assigneeTesterId2 : null },
-    ]
-    // 담당자1과 담당자2가 같은 사람이면 슬롯을 펴지 않는다 — 한 사람의 같은 일이
-    // 셀에 두 번 쌓여 그 사람 부하가 두 배로 보인다.
-    if (order.isDualAssignment && order.assigneeTesterId2 && order.assigneeTesterId2 !== order.assigneeTesterId) {
-      slots.push({ slot: 2, testerId: order.assigneeTesterId2, partnerId: order.assigneeTesterId })
-    }
-
-    for (const { slot, testerId, partnerId } of slots) {
-      if (!testerId) continue
+    // 담당자 슬롯마다 행을 편다(같은 사람은 DB 유니크로 한 오더에 한 번뿐이다).
+    // 담당자가 아직 없는 오더는 달력에 놓을 자리가 없다.
+    for (const { slot, testerId } of order.assignees) {
+      const coAssigneeIds = order.assignees.filter(a => a.testerId !== testerId).map(a => a.testerId)
 
       const job = jobByOrderTester.get(`${order.id}::${testerId}`)
       const dates = assignedDates(order, job?.workStartDate ?? null, holidays)
@@ -180,10 +176,10 @@ export async function getMonthlySchedule(month: string): Promise<MonthlySchedule
       const inMonth = dates.filter(d => d >= monthStart && d <= monthEnd)
       if (inMonth.length === 0) continue
 
-      // 담당자별 시험항목. 2인 배정이 아니면 슬롯 구분 없이 오더의 전체 항목을 쓴다.
-      const items = order.isDualAssignment
+      // 담당자별 시험항목. 병렬 배정이 아니면 슬롯 구분 없이 오더의 전체 항목을 쓴다.
+      const items = order.isParallel
         ? (itemsByOrderSlot.get(`${order.id}::${slot}`) ?? [])
-        : [...(itemsByOrderSlot.get(`${order.id}::1`) ?? []), ...(itemsByOrderSlot.get(`${order.id}::2`) ?? [])]
+        : ASSIGNEE_SLOTS.flatMap(s => itemsByOrderSlot.get(`${order.id}::${s}`) ?? [])
 
       schedules.push({
         id:             `${order.id}:${slot}`,
@@ -197,8 +193,8 @@ export async function getMonthlySchedule(month: string): Promise<MonthlySchedule
         workdays:       dates.length,
         dates,
         is_urgent:      order.isUrgent,
-        is_duo:         order.isDualAssignment,
-        duo_partner_id: partnerId,
+        is_parallel:     order.isParallel,
+        co_assignee_ids: coAssigneeIds,
         // 작업이 섰으면 작업 단계가, 아직이면 오더 상태가 지금 상태다.
         status:         job?.status ?? order.status,
         note:           [

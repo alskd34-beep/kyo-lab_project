@@ -6,7 +6,8 @@
  */
 
 import { supabaseAdmin } from '@backend/lib/supabase'
-import { assignedToTesterFilter } from '@backend/lib/assigneeFilter'
+import { ASSIGNED_TESTER_FILTER_COLUMN, withAssignedTesterEmbed } from '@backend/lib/assigneeFilter'
+import { loadAssigneesByOrder } from '@backend/services/orderAssignees'
 import { sanitizeFilterTerm } from '@backend/lib/postgrestFilter'
 import { DELETED_STATUS } from '@shared/qc-status'
 import {
@@ -219,12 +220,13 @@ async function overviewContext(scope: QthinkScope): Promise<string> {
     .eq('is_active', true)
   if (!scope.isAdmin && scope.testerId) testerCountQuery.eq('id', scope.testerId)
 
+  const restrictTester = !scope.isAdmin && scope.testerId ? scope.testerId : null
   const orderCountQuery = supabaseAdmin
     .from('pct_orders')
-    .select('*', { count: 'exact', head: true })
+    .select(withAssignedTesterEmbed('id', restrictTester), { count: 'exact', head: true })
     .neq('status', DELETED_STATUS)
-  // 2인 배정 담당자2 몫도 그 사람의 오더다
-  if (!scope.isAdmin && scope.testerId) orderCountQuery.or(assignedToTesterFilter(scope.testerId))
+  // 병렬 배정 담당자 2~5 몫도 그 사람의 오더다
+  if (restrictTester) orderCountQuery.eq(ASSIGNED_TESTER_FILTER_COLUMN, restrictTester)
 
   const jobCountQuery = supabaseAdmin.from('qc_jobs').select('*', { count: 'exact', head: true })
   if (!scope.isAdmin && scope.testerId) jobCountQuery.eq('assignee_tester_id', scope.testerId)
@@ -492,11 +494,13 @@ async function testerNames(ids: Array<string | null>): Promise<Map<string, strin
 async function ordersContext(intent: QthinkIntent, scope: QthinkScope): Promise<string> {
   if (!scope.isAdmin && !scope.testerId) return '### PCT 오더\n- 계정에 연결된 시험자가 없어 조회할 수 없습니다.'
   const keyword = primaryKeyword(intent)
+  const restrictTester = !scope.isAdmin && scope.testerId ? scope.testerId : null
   let query = supabaseAdmin
     .from('pct_orders')
-    .select('product_code, product_name, batch_no, packaging_date, due_date, is_urgent, method, status, assignee_tester_id', { count: 'exact' })
+    .select(withAssignedTesterEmbed('id, product_code, product_name, batch_no, packaging_date, due_date, is_urgent, method, status, assignee_tester_id', restrictTester), { count: 'exact' })
     .neq('status', DELETED_STATUS)
-  if (!scope.isAdmin && scope.testerId) query = query.or(assignedToTesterFilter(scope.testerId))
+  // 병렬 배정 담당자 2~5 몫도 그 사람의 오더다
+  if (restrictTester) query = query.eq(ASSIGNED_TESTER_FILTER_COLUMN, restrictTester)
   if (keyword) query = query.ilike('product_name', `%${keyword}%`)
   if (intent.status) query = query.eq('status', intent.status)
   if (intent.urgent !== null) query = query.eq('is_urgent', intent.urgent)
@@ -505,13 +509,17 @@ async function ordersContext(intent: QthinkIntent, scope: QthinkScope): Promise<
   const { data, count, error } = await query.order('due_date', { ascending: true }).limit(30)
   if (error) throw error
 
-  const rows = data ?? []
-  const names = await testerNames(rows.map(row => row.assignee_tester_id as string | null))
+  const rows = (data ?? []) as unknown as Record<string, unknown>[]
   const lines = [`### ${scope.isAdmin ? 'PCT 오더' : '본인 배정 PCT 오더'}: ${count ?? rows.length}건`]
   if (intent.operation === 'count') return lines.join('\n')
+  // 담당 표시는 담당자 N명 모두 — 0049 미적용이면 대표 미러만
+  const mirror = rows.map(row => ({ id: row.id as string, assignee_tester_id: (row.assignee_tester_id as string | null) ?? null }))
+  const assigneeMap = await loadAssigneesByOrder(mirror.map(m => m.id), { mirror })
+  const names = await testerNames([...assigneeMap.values()].flat().map(a => a.testerId))
   if (rows.length === 0) lines.push('- 조건에 맞는 오더가 없습니다.')
   for (const row of rows) {
-    const tester = row.assignee_tester_id ? names.get(row.assignee_tester_id as string) ?? '미지정' : '미배정'
+    const ids = (assigneeMap.get(row.id as string) ?? []).map(a => a.testerId)
+    const tester = ids.length > 0 ? ids.map(id => names.get(id) ?? '미지정').join(', ') : '미배정'
     lines.push(`- ${row.product_name}(${row.product_code}) | 배치 ${row.batch_no} | 포장 ${row.packaging_date ?? '-'} | 완료예정 ${row.due_date ?? '-'} | 상태 ${row.status} | 담당 ${tester}${row.is_urgent ? ' | 긴급' : ''}`)
   }
   return lines.join('\n')

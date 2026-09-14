@@ -5,7 +5,9 @@
  * 폴백:  기존 규칙엔진(scheduleEngine) — Codex 미사용/실패 시.
  *
  * 두 방식 모두 "업무가 적은 담당자 우선 + 공수/역량 고려" 정책을 따른다.
- * 결과의 testerId 를 pct_orders.assignee_tester_id 에 영속한다.
+ * 결과의 testerId 를 대표 담당자(슬롯 1)로 영속한다 — DB 함수 set_order_primary_assignee(0049)가
+ * pct_order_assignees 슬롯 1·미러(assignee_tester_id)·감사를 한 트랜잭션으로 쓴다.
+ * AI 는 병렬 배정을 만들지 않고, 이미 병렬 배정된 오더(담당자 2명 이상)는 건드리지 않는다.
  */
 
 import { supabaseAdmin } from '@backend/lib/supabase'
@@ -46,6 +48,9 @@ import {
 } from '@shared/leave'
 import { buildGroupsFromOrders, type OrderForGrouping } from '@backend/services/concurrentGroups'
 import { loadFamilyByCode } from '@backend/services/concurrentProductFamilies'
+import {
+  AssignmentRejectedError, loadAssigneesByOrder, setOrderPrimaryAssignee,
+} from '@backend/services/orderAssignees'
 
 /**
  * 반차와 겹친 배정 — 관리자가 "이대로 둘지" 확인하는 용도.
@@ -68,6 +73,11 @@ export interface AssignResult {
   details: Array<{ orderId: string; testerId: string | null; testerName: string | null; note: string }>
   /** 반차 겹침 배정(비어 있으면 겹침 없음) — 화면 확인 + 관리자 알림 대상 */
   halfDayNotices: HalfDayAssignNotice[]
+  /**
+   * DB 함수가 업무 규칙으로 거절해 배정하지 못한 오더(LOCK 건너뜀 제외) — 배치는 멈추지 않고 계속한다.
+   * 예: 대상 로드 뒤 누군가 작업을 시작함, 추천 시험자가 이미 그 오더의 병렬 담당자, 비활성 전환 등.
+   */
+  failures: Array<{ orderId: string; productName: string; batchNo: string; reason: string }>
 }
 
 interface OrderForAssign {
@@ -139,7 +149,14 @@ async function loadTargetOrders(orderIds?: string[]): Promise<OrderForAssign[]> 
     .select('order_id')
     .in('order_id', candidates.map(o => o.id))
   const started = new Set((jobs ?? []).map(j => j.order_id as string))
-  return candidates.filter(o => !started.has(o.id))
+  const notStarted = candidates.filter(o => !started.has(o.id))
+  if (notStarted.length === 0) return []
+
+  // [병렬 배정] AI 는 병렬 배정(담당자 2명 이상) 오더를 건드리지 않는다 — 명시 orderIds 경로에서도.
+  // 대표만 바꾸면 병렬 담당자 구성이 관리자 모르게 흔들린다. 미배정 경로(assignee_tester_id is null)는
+  // 담당자 행이 0개라 원래 해당이 없지만 같은 기준으로 한 번에 거른다.
+  const assigneeMap = await loadAssigneesByOrder(notStarted.map(o => o.id))
+  return notStarted.filter(o => (assigneeMap.get(o.id)?.length ?? 0) < 2)
 }
 
 /**
@@ -202,19 +219,22 @@ function leaveWindow(orders: OrderForAssign[]): { from: string; to: string } {
 async function currentWorkload(): Promise<Map<string, number>> {
   const { data } = await supabaseAdmin
     .from('pct_orders')
-    .select('assignee_tester_id, is_dual_assignment, assignee_tester_id_2, status')
+    .select('id, status')
     .not('assignee_tester_id', 'is', null)
-    .not('status', 'in', `("${CLOSED_STAGE}","삭제")`)
+    .not('status', 'in', `("${CLOSED_STAGE}","${DELETED_STATUS}")`)
+    .range(0, 9999)
+  const liveIds = new Set((data ?? []).map(r => r.id as string))
   const m = new Map<string, number>()
-  for (const r of data ?? []) {
-    const id = r.assignee_tester_id as string
-    m.set(id, (m.get(id) ?? 0) + 1)
-    // [2인 배정] 담당자2도 그 오더를 손에 들고 있다. 여기서 안 세면 담당자2로 몇 건을
-    // 맡고 있든 부하가 0으로 보여, 자동배정이 그 사람을 "가장 한가한 사람"으로 골라
-    // 신규 오더를 몰아준다. (AI 가 2인 배정을 새로 만들지 않는다는 규칙은 그대로다 —
-    //  이미 만들어진 2인 배정을 부하 계산에서 보이게 하는 것뿐이다.)
-    const second = r.is_dual_assignment ? ((r.assignee_tester_id_2 as string) ?? null) : null
-    if (second) m.set(second, (m.get(second) ?? 0) + 1)
+  if (liveIds.size === 0) return m
+  // [병렬 배정] 담당자 1~5 모두 그 오더를 손에 들고 있다 — 오더당 담당자 N명 각각 +1.
+  // 대표만 세면 병렬 담당자로 몇 건을 맡고 있든 부하가 0으로 보여, 자동배정이 그 사람을
+  // "가장 한가한 사람"으로 골라 신규 오더를 몰아준다. (AI 가 병렬 배정을 새로 만들지 않는다는
+  //  규칙은 그대로다 — 이미 만들어진 병렬 배정을 부하 계산에서 보이게 하는 것뿐이다.)
+  // 열린 오더 id 가 많아 in() 대신 담당자 테이블 전체를 한 번 읽어 거른다.
+  const assigneeMap = await loadAssigneesByOrder()
+  for (const [orderId, slots] of assigneeMap) {
+    if (!liveIds.has(orderId)) continue
+    for (const a of slots) m.set(a.testerId, (m.get(a.testerId) ?? 0) + 1)
   }
   return m
 }
@@ -287,7 +307,7 @@ async function highDifficultyPenalty(): Promise<Record<string, number>> {
   const [{ data: orders }, { data: prods }] = await Promise.all([
     supabaseAdmin
       .from('pct_orders')
-      .select('assignee_tester_id, product_code')
+      .select('id, product_code')
       .not('assignee_tester_id', 'is', null)
       .neq('status', DELETED_STATUS)
       .gte('created_at', twoWeeksAgoIso),   // [규칙4] 최근 2주(14일)
@@ -295,11 +315,15 @@ async function highDifficultyPenalty(): Promise<Record<string, number>> {
   ])
   const diffByCode = new Map<string, string>()
   for (const p of prods ?? []) diffByCode.set(String(p.product_code), (p.difficulty as string) ?? '')
+  // [병렬 배정] 담당자 1~5 모두 그 HIGH 품목을 나눠 맡는다 — 대표만 세던 틈을 함께 고친다.
+  const highOrderIds = (orders ?? [])
+    .filter(o => diffByCode.get(String(o.product_code)) === 'High')
+    .map(o => o.id as string)
+  const assigneeMap = await loadAssigneesByOrder(highOrderIds)
   const counts = new Map<string, number>()
-  for (const o of orders ?? []) {
-    if (diffByCode.get(String(o.product_code)) === 'High') {
-      const id = o.assignee_tester_id as string
-      counts.set(id, (counts.get(id) ?? 0) + 1)
+  for (const orderId of highOrderIds) {
+    for (const a of assigneeMap.get(orderId) ?? []) {
+      counts.set(a.testerId, (counts.get(a.testerId) ?? 0) + 1)
     }
   }
   const penalty: Record<string, number> = {}
@@ -307,13 +331,17 @@ async function highDifficultyPenalty(): Promise<Record<string, number>> {
   return penalty
 }
 
-/** 배정 결과 적용 (testerId 검증 후 update) */
+/** LOCK 거절 문구(DB 함수 0049) — 자동배정은 이 경우 오류가 아니라 건너뜀으로 처리한다 */
+const LOCKED_ASSIGN_REJECT = '확정(LOCK)된 오더는 담당자를 변경할 수 없습니다'
+
+/** 배정 결과 적용 — 대표 담당자(슬롯 1)만 DB 함수로 기록한다(미러·감사 포함) */
 async function applyAssignments(
   orders: OrderForAssign[],
   pick: (order: OrderForAssign) => { id: string; name: string } | null,
   reasonFor: (order: OrderForAssign) => string,
 ): Promise<Omit<AssignResult, 'mode' | 'halfDayNotices'>> {
   const details: AssignResult['details'] = []
+  const failures: AssignResult['failures'] = []
   let assigned = 0
   for (const o of orders) {
     const hit = pick(o)
@@ -326,26 +354,37 @@ async function applyAssignments(
       continue
     }
     if (hit?.id) {
-      const beforeUser = (o.assignee_tester_id as string | null) ?? null
-      // 조건부 갱신 — 대상 로드 시점 이후 다른 관리자가 LOCK 을 걸었으면 적용하지 않는다.
-      const { data: updated, error } = await supabaseAdmin
-        .from('pct_orders')
-        .update({ assignee_tester_id: hit.id, note: withoutAutoUnassignedNote(o.note) })
-        .eq('id', o.id)
-        .eq('locked', false)
-        .select('id')
-        .maybeSingle()
-      if (error) throw error
-      if (!updated) {
-        details.push({ orderId: o.id, testerId: null, testerName: null, note: '확정(LOCK) 상태로 변경되어 건너뜀' })
-        continue
+      // 대표 담당자(슬롯 1) + 미러 + 감사를 한 트랜잭션으로. 대상 로드 시점 이후 다른 관리자가
+      // LOCK 을 걸었으면 함수가 오더 행을 잠근 뒤 거절한다 → 건너뜀으로 기록한다.
+      let result
+      try {
+        result = await setOrderPrimaryAssignee(o.id, hit.id, null, 'AI 자동배정')
+      } catch (e) {
+        if (e instanceof Error && e.message.includes(LOCKED_ASSIGN_REJECT)) {
+          details.push({ orderId: o.id, testerId: null, testerName: null, note: '확정(LOCK) 상태로 변경되어 건너뜀' })
+          continue
+        }
+        // 업무 규칙 거절은 이 오더만 실패로 모으고 다음 오더로 넘어간다 — 앞 오더들은 이미 배정됐는데
+        // 배치 전체를 500 으로 끝내면 관리자는 전부 실패한 줄 안다. 설치·DB 오류는 모든 오더에 같으므로 멈춘다.
+        if (e instanceof AssignmentRejectedError) {
+          details.push({ orderId: o.id, testerId: null, testerName: null, note: `배정 실패: ${e.message}` })
+          failures.push({ orderId: o.id, productName: o.product_name, batchNo: o.batch_no, reason: e.message })
+          continue
+        }
+        throw e
+      }
+      // 미배정 사유 메모 정리는 배정이 성공한 뒤에만(담당자 컬럼과 무관한 note 만 쓴다)
+      const cleanedNote = withoutAutoUnassignedNote(o.note)
+      if (cleanedNote !== (o.note ?? null)) {
+        const { error } = await supabaseAdmin.from('pct_orders').update({ note: cleanedNote }).eq('id', o.id)
+        if (error) console.error('[pctAssign] 자동배정 미배정 사유 메모 정리 실패 — 배정은 반영됨:', o.id, error)
       }
       assigned++
       details.push({ orderId: o.id, testerId: hit.id, testerName: hit.name, note: '배정됨' })
-      if (beforeUser !== hit.id) {
+      if (result.changed) {
         await logReassignment({
           orderId: o.id,
-          beforeUser,
+          beforeUser: result.beforeTesterId,
           afterUser: hit.id,
           reason: 'AI 자동배정',
           changedBy: null,
@@ -369,7 +408,7 @@ async function applyAssignments(
       details.push({ orderId: o.id, testerId: null, testerName: null, note: reason })
     }
   }
-  return { assigned, unassigned: orders.length - assigned, details }
+  return { assigned, unassigned: orders.length - assigned, details, failures }
 }
 
 // ─── Codex CLI 배분 ───────────────────────────────────────────────────────────
@@ -649,7 +688,7 @@ async function autoAssignRule(
 export async function autoAssign(orderIds?: string[]): Promise<AssignResult> {
   const orders = await loadTargetOrders(orderIds)
   if (orders.length === 0) {
-    return { mode: 'rule', assigned: 0, unassigned: 0, details: [], halfDayNotices: [] }
+    return { mode: 'rule', assigned: 0, unassigned: 0, details: [], halfDayNotices: [], failures: [] }
   }
 
   // [동시분석] 동일 품목군(기준설정 마스터)/유사 품목명을 한 그룹으로 묶고 대표만 배정 대상으로 삼는다.
@@ -811,98 +850,59 @@ async function notifyHalfDayNotices(
   }
 }
 
-/** 수동 단일 배정·배정 해제(testerId=null). 담당자가 실제로 바뀌면 재배정 이력 기록 */
+/**
+ * 수동 단일 배정·배정 해제(testerId=null) — 대표 담당자(슬롯 1)만 바꾼다.
+ *
+ * 검사·슬롯 1·미러·구 컬럼·감사는 DB 함수 set_order_primary_assignee(0049)가 한 트랜잭션으로 한다:
+ *   · LOCK 오더 거절 · 비활성 시험자 거절
+ *   · 병렬 담당자가 남은 오더의 대표 해제 거절 · 이미 이 오더의 병렬 담당자인 사람을 대표로 넣기 거절
+ *   · 이미 작업을 시작한 대표의 교체·해제 거절
+ * 이 서비스는 커밋 뒤 재배정 이력·휴가 겹침 알림만 한다. 담당자가 실제로 바뀐 경우에만.
+ */
 export async function assignManually(
   orderId: string,
   testerId: string | null,
   opts: { changedBy?: string | null; reason?: string | null } = {},
 ): Promise<void> {
-  // 비활성 시험자에게는 수동으로도 배정할 수 없다(계정 비활성 = 업무 제외).
+  // 비활성 시험자에게는 수동으로도 배정할 수 없다(계정 비활성 = 업무 제외). 최종 판정은 DB 함수.
   await assertTesterAssignable(testerId)
 
-  // 변경 전 담당자 조회 → 재배정 이력용 (locked 컬럼까지 받기 위해 select('*'))
-  const { data: before } = await supabaseAdmin
+  const result = await setOrderPrimaryAssignee(
+    orderId,
+    testerId,
+    opts.changedBy ?? null,
+    opts.reason?.trim() || (testerId ? '수동 배정' : '수동 배정 해제'),
+  )
+  if (!result.changed) return
+
+  // 알림 문구용 오더 정보(커밋 뒤 읽기). select('*') — 0042(planned_start_date) 미적용 환경에서도 깨지지 않게
+  const { data: order } = await supabaseAdmin
     .from('pct_orders')
     .select('*')
     .eq('id', orderId)
     .maybeSingle()
-  const beforeUser = (before?.assignee_tester_id as string) ?? null
-
-  // [원칙3] 확정(LOCK)된 오더는 배정·해제 대상에서 제외한다.
-  if (before?.locked && beforeUser !== testerId) {
-    throw new Error('확정(LOCK)된 오더는 담당자를 변경할 수 없습니다. 확정 해제 후 다시 시도해 주세요.')
-  }
-
-  // ─── [2인 배정] 이 경로는 updateOrderWithReason 의 검증을 하나도 거치지 않는다 ───
-  // 여기서 막지 않으면 담당자1만 직접 UPDATE 되어 오더가 모순된 상태로 굳는다.
-  if (beforeUser !== testerId) {
-    const isDual = !!before?.is_dual_assignment
-    const tester2 = (before?.assignee_tester_id_2 as string) ?? null
-
-    // 담당자1을 비우면 is_dual_assignment=true 인데 담당자1이 null 인 상태가 된다.
-    // 그러면 담당자2는 startJob 의 `!order.assignee_tester_id` 가드에 걸려 자기 몫조차
-    // 시작할 수 없고, 오더 수정도 배정 검증에 걸려 되돌릴 방법이 없다.
-    if (isDual && testerId === null) {
-      throw new Error('2인 배정 오더는 담당자를 해제할 수 없습니다. 오더 수정에서 2인 배정을 먼저 해제하세요.')
-    }
-
-    // 담당자2와 같은 사람을 담당자1로 넣으면 0037 의 chk_pct_orders_dual_distinct 위반(23514)이
-    // Postgres 원문 그대로 올라오고, assign 라우트의 errorStatus() 가 못 걸러 500 으로 샌다.
-    if (testerId !== null && tester2 !== null && testerId === tester2) {
-      throw new Error('이미 담당자2로 배정된 시험자입니다.')
-    }
-
-    // 이미 작업을 시작한 담당자는 교체하지 않는다(updateOrderWithReason 과 동일 규칙·동일 문구).
-    // 여기서 안 막으면 슬롯별 잠금이 이 경로로 그대로 우회된다.
-    if (beforeUser) {
-      const { data: startedByThis } = await supabaseAdmin
-        .from('qc_jobs')
-        .select('qc_no')
-        .eq('order_id', orderId)
-        .eq('assignee_tester_id', beforeUser)
-        .maybeSingle()
-      if (startedByThis) {
-        throw new Error(
-          `이미 작업을 시작한 담당자(QC ${startedByThis.qc_no})는 변경할 수 없습니다. 작업을 먼저 정리하세요.`,
-        )
-      }
-    }
-  }
-
-  // 조건부 갱신 — 읽기와 쓰기 사이에 다른 관리자가 LOCK 을 걸었을 수 있다(TOCTOU).
-  // `.eq('locked', false)` 를 붙여 그 경우 0행이 갱신되도록 하고, 0행이면 실패로 알린다.
-  // (locked 컬럼이 없는 환경(0015 미적용)에서는 조건을 걸 수 없으므로 기존 동작을 유지한다)
-  const hasLockedColumn = before != null && 'locked' in before
-  let q = supabaseAdmin.from('pct_orders').update({ assignee_tester_id: testerId }).eq('id', orderId)
-  if (hasLockedColumn) q = q.eq('locked', false)
-  const { data: updated, error } = await q.select('id').maybeSingle()
-  if (error) throw error
-  if (!updated) {
-    throw new Error('확정(LOCK) 상태가 변경되어 배정을 적용하지 못했습니다. 새로고침 후 다시 시도해 주세요.')
-  }
 
   // 담당자가 실제로 바뀐 경우에만 이력 기록 (분석용: 누가/왜/어느 품목에서 변경되는가)
-  if (beforeUser !== testerId) {
-    await logReassignment({
-      orderId,
-      beforeUser,
-      afterUser: testerId,
-      reason: opts.reason ?? null,
-      changedBy: opts.changedBy ?? null,
-    }).catch(() => {})
+  await logReassignment({
+    orderId,
+    beforeUser: result.beforeTesterId,
+    afterUser: testerId,
+    reason: opts.reason ?? null,
+    changedBy: opts.changedBy ?? null,
+  }).catch(() => {})
 
-    // 수동 배정은 현장 예외를 막지 않으므로 차단하지 않는다.
-    // 다만 휴가·출장 구간과 겹치면 관리자 알림을 남겨 사후 추적이 가능하게 한다.
-    await warnIfAssigneeOnLeave({
-      orderId,
-      testerId,
-      order: {
-        packagingDate: (before?.packaging_date as string) ?? null,
-        dueDate: (before?.due_date as string) ?? null,
-      },
-      productName: (before?.product_name as string) ?? '',
-      batchNo: (before?.batch_no as string) ?? '',
-      via: '수동 배정',
-    })
-  }
+  // 수동 배정은 현장 예외를 막지 않으므로 차단하지 않는다.
+  // 다만 휴가·출장 구간과 겹치면 관리자 알림을 남겨 사후 추적이 가능하게 한다.
+  await warnIfAssigneeOnLeave({
+    orderId,
+    testerId,
+    order: {
+      packagingDate: (order?.packaging_date as string) ?? null,
+      dueDate: (order?.due_date as string) ?? null,
+      plannedStartDate: (order?.planned_start_date as string) ?? null,
+    },
+    productName: (order?.product_name as string) ?? '',
+    batchNo: (order?.batch_no as string) ?? '',
+    via: '수동 배정',
+  })
 }

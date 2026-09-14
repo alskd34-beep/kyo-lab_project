@@ -31,6 +31,7 @@
 
 import { supabaseAdmin } from '@backend/lib/supabase'
 import { selectAll } from '@backend/lib/supabasePage'
+import { loadAssigneesByOrder } from '@backend/services/orderAssignees'
 import { DELETED_STATUS } from '@shared/qc-status'
 
 export interface SavingMember {
@@ -128,6 +129,10 @@ export async function listGroupSavings(opts: { from?: string; to?: string } = {}
   if (jobsRes.error) throw jobsRes.error
 
   const orderById = new Map((ordersRes.data ?? []).map(o => [o.id as string, o]))
+  // 담당 표시는 담당자 N명 모두(병렬 배정, 0049) — 미적용이면 대표 미러만
+  const assigneeMap = await loadAssigneesByOrder(memberIds, {
+    mirror: (ordersRes.data ?? []).map(o => ({ id: o.id as string, assignee_tester_id: (o.assignee_tester_id as string | null) ?? null })),
+  })
   const nameOf = new Map((testersRes.data ?? []).map(t => [t.id as string, t.name as string]))
   const workdaysOf = new Map<string, number>()
   for (const w of (wlRes.data ?? []) as Record<string, unknown>[]) {
@@ -187,7 +192,7 @@ export async function listGroupSavings(opts: { from?: string; to?: string } = {}
       batchNo:     (o.batch_no as string) ?? '',
       status:      o.status as string,
       workdays:    workdaysOf.get(String(o.product_code)) ?? null,
-      testerName:  o.assignee_tester_id ? nameOf.get(o.assignee_tester_id as string) ?? null : null,
+      testerName:  (assigneeMap.get(o.id as string) ?? []).map(a => nameOf.get(a.testerId)).filter(Boolean).join(', ') || null,
     }))
 
     const days = members.map(m => m.workdays).filter((d): d is number => d != null)

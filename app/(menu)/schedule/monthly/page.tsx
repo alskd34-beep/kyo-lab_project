@@ -30,6 +30,7 @@ import {
 import { useAuth } from '@frontend/lib/auth-context'
 import { formatMinutes } from '@frontend/lib/workload-format'
 import type { SideWorkCategory, SideWorkLog } from '@shared/side-work'
+import { PARALLEL_BADGE_LABEL } from '@shared/assignment'
 import {
   SideWorkDialog,
   type SideWorkDialogTarget,
@@ -53,8 +54,10 @@ interface ScheduleRow {
   avg_hours?: number
   dates?: string[]     // PCT 출처: 명시적 배정 근무일(주말 제외). 있으면 이 날짜들에 배치
   is_urgent: boolean
-  is_duo: boolean
-  duo_partner_id: number | string | null
+  /** 병렬 배정(담당자 2명 이상) 오더의 행 */
+  is_parallel: boolean
+  /** 같은 오더를 함께 맡은 다른 담당자들(시험자 id) */
+  co_assignee_ids?: (number | string)[]
   status: string
   note: string | null
   locked?: boolean   // 관리자 확정(LOCK). DB 출처에만 있다
@@ -117,7 +120,7 @@ function dayOfWeek(dateStr: string): number {
 
 const DOW_KOR = ['일', '월', '화', '수', '목', '금', '토']
 
-// 셀 색상 — 여기 색은 장식이 아니라 뜻이다(긴급·듀오).
+// 셀 색상 — 여기 색은 장식이 아니라 뜻이다(긴급·병렬).
 // 아무 표시도 없는 '예정'은 이 화면의 기본값이라 색을 빼고 중립 톤으로 물러앉힌다.
 function cellStyle(row: ScheduleRow): { bg: string; border: string; label: string } {
   if (row.is_urgent) return {
@@ -125,10 +128,10 @@ function cellStyle(row: ScheduleRow): { bg: string; border: string; label: strin
     border: 'border-red-300 dark:border-red-800',
     label: '긴급',
   }
-  if (row.is_duo) return {
+  if (row.is_parallel) return {
     bg: 'bg-blue-200 dark:bg-blue-900/60 hover:bg-blue-300',
     border: 'border-blue-300 dark:border-blue-800',
-    label: '듀오',
+    label: PARALLEL_BADGE_LABEL,
   }
   return {
     bg: 'bg-card hover:bg-muted',
@@ -374,7 +377,7 @@ export default function MonthlySchedulePage() {
     return {
       total:   allSchedules.length,
       urgent:  allSchedules.filter(s => s.is_urgent).length,
-      duo:     allSchedules.filter(s => s.is_duo).length,
+      parallel: allSchedules.filter(s => s.is_parallel).length,
       testers: visibleTesters.length,
       // 부업무는 건수와 시간을 함께 본다 — 건수만 보면 30분짜리와 종일짜리가 같아진다.
       sideCount:   sideLogs.length,
@@ -606,7 +609,7 @@ export default function MonthlySchedulePage() {
                   { label: '총 배정',     value: `${stats.total}건`,   tone: TXT_PRIMARY },
                   { label: '활동 시험자', value: `${stats.testers}명`, tone: TXT_PRIMARY },
                   { label: '긴급',        value: `${stats.urgent}건`,  tone: stats.urgent > 0 ? 'text-destructive' : TXT_MUTED },
-                  { label: '듀오',        value: `${stats.duo}건`,     tone: TXT_PRIMARY },
+                  { label: PARALLEL_BADGE_LABEL, value: `${stats.parallel}건`, tone: TXT_PRIMARY },
                   // 시험 밖에서 사라진 시간이 얼마인지 — 이 화면에서 처음으로 답할 수 있게 된 값이다
                   { label: '부업무',      value: `${stats.sideCount}건`, tone: TXT_PRIMARY,
                     sub: stats.sideMinutes > 0 ? formatMinutes(stats.sideMinutes) : null },
@@ -866,7 +869,7 @@ export default function MonthlySchedulePage() {
               {[
                 { swatch: 'border-border bg-card', label: '일반' },
                 { swatch: 'border-red-300 bg-red-200 dark:border-red-800 dark:bg-red-900/60', label: '긴급' },
-                { swatch: 'border-blue-300 bg-blue-200 dark:border-blue-800 dark:bg-blue-900/60', label: '듀오' },
+                { swatch: 'border-blue-300 bg-blue-200 dark:border-blue-800 dark:bg-blue-900/60', label: PARALLEL_BADGE_LABEL },
                 /* PCT 스냅샷 출처는 범례에서 뺀다 — 만드는 코드가 없어 이 색이 화면에 뜰 일이
                    없다. 있지도 않은 색을 범례가 설명하면 사용자가 자기 화면을 의심하게 된다. */
                 { swatch: 'border-teal-300 bg-teal-100 dark:border-teal-800 dark:bg-teal-900/60', label: '부업무(시험 외)' },
