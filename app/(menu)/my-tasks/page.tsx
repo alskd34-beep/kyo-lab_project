@@ -537,6 +537,35 @@ export default function MyTasksPage() {
     finally { setBusy(null) }
   }
 
+  /**
+   * 그룹 단위 항목 조작 — 한 번 눌러 그룹 안 내 배치 전부를 처리한다.
+   * 기록은 배치별로 그대로 남는다(서버가 배치마다 개별 기록을 쓴다).
+   */
+  const groupItemAction = async (
+    groupId: string, testItemName: string, action: "start" | "clear" | "cancel",
+  ) => {
+    setBusy(`${groupId}:${testItemName}`)
+    try {
+      const res = await fetch(`/api/qc-jobs/group/${groupId}/items`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ testItemName, action }),
+      })
+      const data = await res.json() as { error?: string; affected?: number; jobs?: number; advanced?: string[] }
+      if (!res.ok) throw new Error(data.error)
+      await load()
+      // 0건은 성공이 아니라 "바뀐 것이 없음" 이다. 조용히 넘기면 버튼이 죽은 것과 구별되지 않는다.
+      if ((data.affected ?? 0) === 0) {
+        flash(`"${testItemName}" 에 처리할 배치가 없습니다. 목록을 새로 불러왔습니다.`, "error")
+      } else if (data.advanced && data.advanced.length > 0) {
+        flash(`모든 시험항목 완료 — QC ${data.advanced.join(", ")} 가 "검토전" 으로 넘어갔습니다.`)
+      } else if (action === "clear") {
+        flash(`${data.affected}개 배치의 "${testItemName}" 을 완료 처리했습니다.`)
+      }
+    } catch (e) { flash(`처리 실패: ${e instanceof Error ? e.message : ""}`, "error") }
+    finally { setBusy(null) }
+  }
+
   /** 잡 PATCH 코어 — 새로고침/알림 없음 (일괄에서 재사용) */
   const patchJobCore = async (jobId: string, patch: Record<string, string>) => {
     const res = await fetch(`/api/qc-jobs/${jobId}`, {
@@ -906,32 +935,6 @@ export default function MyTasksPage() {
       </div>
     </>
   )
-
-  /**
-   * 그룹 단위 항목 조작 — 한 번 눌러 그룹 안 내 배치 전부를 처리한다.
-   * 기록은 배치별로 그대로 남는다(서버가 배치마다 개별 기록을 쓴다).
-   */
-  const groupItemAction = async (
-    groupId: string, testItemName: string, action: "start" | "clear" | "cancel",
-  ) => {
-    setBusy(`${groupId}:${testItemName}`)
-    try {
-      const res = await fetch(`/api/qc-jobs/group/${groupId}/items`, {
-        method: "PATCH", credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ testItemName, action }),
-      })
-      const data = await res.json() as { error?: string; affected?: number; jobs?: number; advanced?: string[] }
-      if (!res.ok) throw new Error(data.error)
-      await load()
-      if (data.advanced && data.advanced.length > 0) {
-        flash(`모든 시험항목 완료 — QC ${data.advanced.join(", ")} 가 "검토전" 으로 넘어갔습니다.`)
-      } else if (action === "clear") {
-        flash(`${data.affected ?? 0}개 배치의 "${testItemName}" 을 완료 처리했습니다.`)
-      }
-    } catch (e) { flash(`처리 실패: ${e instanceof Error ? e.message : ""}`, "error") }
-    finally { setBusy(null) }
-  }
 
   /**
    * 그룹 카드 — 같은 동시분석 그룹의 배치들을 하나로 본다.
