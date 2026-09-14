@@ -49,14 +49,54 @@ openssl rand -hex 32   # JWT_ACCESS_SECRET / JWT_REFRESH_SECRET 각각
 
 ## 2. 배포 절차
 
+저장소 `alskd34-beep/kyo-lab_project` 의 `main` 이 **Railway 서비스 `kyo-app` 에 직접 연결**돼 있다.
+`main` 에 push 하면 Railway 가 감지해 빌드·배포한다. **GitHub Actions 는 배포 경로에 없다.**
+
 1. **Railway 프로젝트 생성** → `New Project` → `Deploy from GitHub repo`
-   → `KSSEO-HUUS/kyo-project` 선택
+   → `alskd34-beep/kyo-lab_project` 선택
 2. **환경변수 입력** (아래 표) — `Variables` 탭
    - ⚠️ `NEXT_PUBLIC_*` 은 **빌드 시점에 번들에 박히므로 첫 배포 전에** 넣어야 한다.
 3. **배포** — 저장소의 `railway.json` 이 빌드·실행·헬스체크를 정의하므로 추가 설정이 필요 없다.
 4. **도메인 발급** — `Settings` → `Networking` → `Generate Domain`
 5. **사내망에서 접속 확인** → 로그인 화면이 뜨면 성공
 6. **[3. 배포 후 검증](#3-배포-후-검증-필수)** 을 반드시 수행
+
+### 연동이 끊겼을 때 다시 붙이는 법
+
+Railway GitHub App 이 저장소 소유 계정(`alskd34-beep`)에 **설치**돼 있어야 한다.
+Railway 계정에 GitHub 을 연결(Authorize)한 것만으로는 저장소를 읽지 못한다 — 설치가 따로다.
+
+```bash
+# 1) App 설치: https://github.com/apps/railway-app/installations/new 에서 계정과 저장소 선택
+# 2) 서비스에 연결
+railway service source connect --repo alskd34-beep/kyo-lab_project --branch main --service kyo-app
+```
+
+`User does not have access to the repo` 가 나오면 1번이 빠진 것이다.
+
+### 자동 배포가 막혔을 때의 수동 배포
+
+Railway 연동이 끊겼거나 저장소를 못 쓸 때는 작업 폴더에서 직접 올린다.
+
+```bash
+railway login
+railway up --ci   --project e1bbd8a0-e14b-4f7b-8c60-4b64bbd80a58   --environment production --service kyo-app   --message "manual: <커밋 해시>"
+```
+
+### 이전 방식(GitHub Actions)을 걷어낸 이유 — 2026-09-14
+
+원래는 `.github/workflows/deploy.yml` 이 `main` push 를 받아 `railway up` 을 돌렸다.
+저장소가 Railway 계정과 **다른 GitHub 계정 소유**라 Railway GitHub App 을 설치할 수 없었기 때문이다.
+
+그 우회로가 2026-09-10 부터 조용히 죽었다. GitHub 결제 실패로 **Actions 잡이 시작조차 못 하고**
+(`The job was not started because recent account payments have failed…`) 3~6초 만에 실패했고,
+그 사이 커밋 9건이 운영에 반영되지 않은 채 나흘이 흘렀다. 배포 실패가 화면에 드러나지 않아 아무도 몰랐다.
+
+그래서 저장소를 Railway 계정과 같은 GitHub 계정(`alskd34-beep`)으로 옮기고, Railway 네이티브 연동으로 바꿨다.
+**배포 경로에서 GitHub Actions 와 `RAILWAY_TOKEN` 시크릿이 사라졌다.**
+
+- 옛 저장소 `KSSEO-HUUS/kyo-project` 는 더 이상 배포에 관여하지 않는다.
+- 대신 Actions 가 하던 `paths-ignore`(문서·마크다운만 고치면 배포 생략)가 없어져, **문서만 고쳐도 재배포된다.**
 
 ---
 
