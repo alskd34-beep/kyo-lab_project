@@ -7,11 +7,12 @@
  * "진행중" 이라는 상태값만으로는 알 수 없는 **어떤 시험항목을 수행 중인지**를
  * 항목 체크리스트 + 현재 항목 강조 + 항목별 소요시간으로 보여준다.
  *
- * 관리자는 여기서 상태도 바꾼다 — 다음 단계 전진과, 잘못 넘긴 단계를 사유와 함께
- * 되돌리는 직접 변경 두 경로 모두 공통 JobStatusControl 이 담당한다(시험현황과 동일).
+ * 관리자는 여기서 시험항목을 **항목마다 검토**한다 — 항목 행의 [검토 시작]·[검토 완료]·[검토 취소]·[재실시]와
+ * 일괄 편의 버튼(공통 job-item-review). 작업 단계(진행중·검토전·검토중·승인전)는 서버가 항목 상태에서
+ * 도출하므로 단계 막대는 서버 값을 그대로 보여 준다. 승인과 사유가 필요한 직접 변경은 공통 JobStatusControl.
  *
- * qc_job_items 에는 항목별 '진행중' 플래그가 없다(pending|cleared).
- * 백엔드 getJobDetail 이 미완료 항목 중 순번이 가장 빠른 항목을 현재 항목으로 계산해 내려준다.
+ * 항목은 0040 부터 'in_progress' 상태와 started_at 을 직접 갖는다. 진행 중 항목은 서버(getJobDetail)가
+ * 시험자가 [시작]으로 정한 것만 내려준다(병행 시험이라 여럿일 수 있다).
  */
 
 import { useCallback, useEffect, useState } from "react"
@@ -19,6 +20,9 @@ import {
   CheckCircle2, Circle, Clock, LoaderCircle, TriangleAlert, User,
 } from "lucide-react"
 import { IN_PROGRESS_STATUS, stageStyle } from "@shared/qc-status"
+import {
+  BulkReviewBar, ItemReviewActions, ItemReviewBadge,
+} from "@frontend/components/common/job-item-review"
 import { cn } from "@frontend/lib/utils"
 import { Badge } from "@frontend/components/ui/badge"
 import { Button } from "@frontend/components/ui/button"
@@ -43,6 +47,12 @@ interface JobItem {
   elapsedMinutes: number | null
   /** 작업 시작부터 이 항목 완료까지 누적 소요 분 */
   elapsedTotalMinutes: number | null
+  /** 검토 축(0048): none | reviewing | reviewed */
+  reviewStatus: string
+  reviewStartedAt: string | null
+  reviewStartedByName: string | null
+  reviewedAt: string | null
+  reviewedByName: string | null
 }
 export interface JobDetail {
   jobId: string; qcNo: string; status: string
@@ -58,6 +68,8 @@ export interface JobDetail {
   currentItemStartedAt: string | null
   nextStage: string | null
   nextStageLabel: string | null
+  /** 0048 미적용 안내 — 검토 상태를 읽지 못했을 때만 */
+  reviewSetupError: string | null
 }
 
 // ─── 헬퍼 ────────────────────────────────────────────────────────────────────
@@ -154,7 +166,7 @@ export function JobDetailModal({
             )}
         </span>
       )}
-      description="시험항목 진행 내역을 확인하고, 관리자는 작업 상태를 변경합니다."
+      description="시험항목 진행 내역을 확인하고, 관리자는 시험항목을 검토하고 작업 상태를 변경합니다."
       footer={(
         <div className="flex w-full justify-end">
           <Button variant="outline" onClick={() => onOpenChange(false)}>닫기</Button>
@@ -203,11 +215,28 @@ export function JobDetailModal({
                 </div>
               </section>
 
-              {/* 상태 변경 (관리자) — 잘못 넘긴 단계를 사유와 함께 되돌릴 수 있다 */}
+              {/* 상태 변경 (관리자) — 승인, 사유를 적는 직접 변경 */}
               {isAdmin && (
                 <JobStatusControl
                   jobId={detail.jobId}
                   status={detail.status}
+                  onChanged={handleChanged}
+                />
+              )}
+
+              {detail.reviewSetupError && (
+                <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-normal break-keep text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                  {detail.reviewSetupError}
+                </p>
+              )}
+
+              {/* 시험항목 검토 요약 + 일괄 편의 버튼 (관리자) */}
+              {/* 0048 미적용 안내가 떠 있으면 검토 버튼을 숨긴다(눌러도 설치 안내로 거절된다) */}
+              {isAdmin && !detail.reviewSetupError && detail.items.length > 0 && (
+                <BulkReviewBar
+                  jobId={detail.jobId}
+                  jobStatus={detail.status}
+                  items={detail.items}
                   onChanged={handleChanged}
                 />
               )}
@@ -293,49 +322,66 @@ export function JobDetailModal({
                       <li
                         key={it.id}
                         className={cn(
-                          "flex items-center justify-between gap-2 rounded-md border px-3 py-2.5",
+                          "flex flex-col gap-1.5 rounded-md border px-3 py-2.5",
                           // 완료 행의 연한 파랑은 밝은 배경 전제 — 다크에서 명도만 뒤집는다
                           done && "border-blue-200 bg-blue-50/60 dark:border-blue-800 dark:bg-blue-950/60",
                           isCurrent && "border-primary/40 bg-primary/5",
                         )}
                       >
-                        <div className="flex min-w-0 items-center gap-2">
-                          <span className="w-5 shrink-0 text-xs tabular-nums text-muted-foreground">
-                            {idx + 1}
-                          </span>
-                          {done
-                            ? <CheckCircle2 className="size-4 shrink-0 text-blue-600 dark:text-blue-300" />
-                            : isCurrent
-                              ? <LoaderCircle className="size-4 shrink-0 text-primary" />
-                              : <Circle className="size-4 shrink-0 text-muted-foreground" />}
-                          <span className={cn(
-                            "truncate text-sm",
-                            done ? "font-medium text-blue-800 dark:text-blue-200"
-                              : isCurrent ? "font-semibold text-foreground"
-                              : "text-foreground",
-                          )}>
-                            {it.testItemName}
-                          </span>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="w-5 shrink-0 text-xs tabular-nums text-muted-foreground">
+                              {idx + 1}
+                            </span>
+                            {done
+                              ? <CheckCircle2 className="size-4 shrink-0 text-blue-600 dark:text-blue-300" />
+                              : isCurrent
+                                ? <LoaderCircle className="size-4 shrink-0 text-primary" />
+                                : <Circle className="size-4 shrink-0 text-muted-foreground" />}
+                            <span className={cn(
+                              "truncate text-sm",
+                              done ? "font-medium text-blue-800 dark:text-blue-200"
+                                : isCurrent ? "font-semibold text-foreground"
+                                : "text-foreground",
+                            )}>
+                              {it.testItemName}
+                            </span>
+                          </div>
+
+                          <div className="flex shrink-0 items-center gap-2">
+                            {done ? (
+                              <span className="text-xs leading-normal text-blue-700 dark:text-blue-300">
+                                {it.clearedAt && formatDateTime(it.clearedAt)}
+                                {/* 작업 시작 기준 누적 소요시간 (구간이 다르면 함께 표기) */}
+                                {(() => {
+                                  const label = formatItemElapsed(it.elapsedTotalMinutes, it.elapsedMinutes)
+                                  return label && ` · ${label}`
+                                })()}
+                              </span>
+                            ) : isCurrent ? (
+                              <Badge variant="outline" className={cn("gap-1", IN_PROGRESS_STYLE.cls)}>
+                                <span className={cn("size-1.5 rounded-full", IN_PROGRESS_STYLE.dot)} />진행 중
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary">대기</Badge>
+                            )}
+                          </div>
                         </div>
 
-                        <div className="flex shrink-0 items-center gap-2">
-                          {done ? (
-                            <span className="text-xs leading-normal text-blue-700 dark:text-blue-300">
-                              {it.clearedAt && formatDateTime(it.clearedAt)}
-                              {/* 작업 시작 기준 누적 소요시간 (구간이 다르면 함께 표기) */}
-                              {(() => {
-                                const label = formatItemElapsed(it.elapsedTotalMinutes, it.elapsedMinutes)
-                                return label && ` · ${label}`
-                              })()}
-                            </span>
-                          ) : isCurrent ? (
-                            <Badge variant="outline" className={cn("gap-1", IN_PROGRESS_STYLE.cls)}>
-                              <span className={cn("size-1.5 rounded-full", IN_PROGRESS_STYLE.dot)} />진행 중
-                            </Badge>
-                          ) : (
-                            <Badge variant="secondary">대기</Badge>
-                          )}
-                        </div>
+                        {/* 검토 — 시험이 끝난 항목만. 관리자는 여기서 항목마다 검토한다 */}
+                        {done && (
+                          <div className="flex flex-wrap items-center justify-between gap-2 pl-7">
+                            <ItemReviewBadge item={it} meta />
+                            {isAdmin && !detail.reviewSetupError && (
+                              <ItemReviewActions
+                                jobId={detail.jobId}
+                                jobStatus={detail.status}
+                                item={it}
+                                onChanged={handleChanged}
+                              />
+                            )}
+                          </div>
+                        )}
                       </li>
                     )
                   })}

@@ -4,12 +4,19 @@
  * qc_jobs.status / pct_orders.status 에 저장되는 한글 값을 여기서만 정의한다.
  * 화면·서비스마다 문자열을 따로 적지 말고 이 파일을 import 한다.
  *
- * 단계 흐름
- *   진행중 ─(자동: 전 시험항목 완료)─▶ 검토전 ─[검토 시작]─▶ 검토중 ─[검토 완료]─▶ 승인전 ─[승인]─▶ 승인완료
+ * 단계 흐름 (2026-09-15 항목 단위 검토 — intent/2026-09-15-item-level-review-spec.md)
+ *   진행중 · 검토전 · 검토중 · 승인전 은 사람이 버튼으로 넘기는 단계가 아니라
+ *   **시험항목 상태에서 서버가 도출하는 단계**다(DB 함수 derive_job_stage 가 단일 기준, 0048).
+ *     - 전 항목 검토 완료                     → 승인전
+ *     - 검토 흔적(검토 중·완료) 1건 이상      → 검토중
+ *     - 전 항목 시험 완료 + 검토 흔적 0       → 검토전
+ *     - 그 외                                  → 진행중
+ *   승인전 ─[승인]─▶ 승인완료 만 관리자가 작업 단위로 누른다.
+ *   검토는 관리자가 시험항목마다 [검토 시작]·[검토 완료]·[검토 취소]·[재실시] 로 한다.
  *
  * - '검토 완료'와 '승인 대기'는 같은 시점이라 `승인전` 하나로 저장한다.
- * - 수동 전이([...] 버튼)는 관리자만 가능하다.
- * - '지연'은 단계가 아니라 납기 경과 표시라 이 흐름과 별개로 유지한다.
+ * - '지연'은 단계가 아니라 납기 경과 표시라 이 흐름과 별개로 유지한다(지연·승인완료 작업은 도출하지 않는다).
+ * - ⚠️ 이 파일의 상태 문자열을 바꾸면 supabase/migrations/0048_item_review.sql(과 0047)의 SQL 리터럴도 함께 바꾼다.
  */
 
 // ─── 단계 ────────────────────────────────────────────────────────────────────
@@ -58,6 +65,59 @@ export const ITEM_STATUS_LABEL: Record<JobItemStatus, string> = {
   cleared: '완료',
 }
 
+// ─── 시험항목 검토 상태 (qc_job_items.review_status, 0048) ────────────────────
+/**
+ * 시험 축(status)과 직교하는 검토 축. `none` 이 아니면 시험 상태는 반드시 `cleared` 다(DB CHECK).
+ * ⚠️ supabase/migrations/0048_item_review.sql 의 리터럴과 같은 값이어야 한다.
+ */
+export const ITEM_REVIEW_NONE = 'none'
+export const ITEM_REVIEW_REVIEWING = 'reviewing'
+export const ITEM_REVIEW_REVIEWED = 'reviewed'
+
+export const ITEM_REVIEW_STATUSES = [ITEM_REVIEW_NONE, ITEM_REVIEW_REVIEWING, ITEM_REVIEW_REVIEWED] as const
+export type ItemReviewStatus = (typeof ITEM_REVIEW_STATUSES)[number]
+
+/**
+ * 검토 배지 라벨. `none` 은 시험이 끝난(cleared) 항목에만 '검토 대기' 로 보인다 —
+ * 시험 중인 항목에 검토 배지를 붙이지 않는다.
+ */
+export const ITEM_REVIEW_LABEL: Record<ItemReviewStatus, string> = {
+  none: '검토 대기',
+  reviewing: '검토 중',
+  reviewed: '검토 완료',
+}
+
+/** 검토 흔적이 있는가 — 시험자가 그 항목을 더 이상 조작할 수 없다. */
+export function hasReviewTrace(reviewStatus: string | null | undefined): boolean {
+  return reviewStatus === ITEM_REVIEW_REVIEWING || reviewStatus === ITEM_REVIEW_REVIEWED
+}
+
+/** 관리자의 항목 검토 동작 (item_review_action 의 p_action) */
+export const ITEM_REVIEW_ACTIONS = ['review_start', 'review_complete', 'review_cancel', 'reopen'] as const
+export type ItemReviewAction = (typeof ITEM_REVIEW_ACTIONS)[number]
+/** 일괄 편의 버튼이 쓰는 동작 (item_review_bulk_action 의 p_action) */
+export const ITEM_REVIEW_BULK_ACTIONS = ['review_start', 'review_complete'] as const
+export type ItemReviewBulkAction = (typeof ITEM_REVIEW_BULK_ACTIONS)[number]
+
+export const ITEM_REVIEW_ACTION_LABEL: Record<ItemReviewAction, string> = {
+  review_start: '검토 시작',
+  review_complete: '검토 완료',
+  review_cancel: '검토 취소',
+  reopen: '재실시',
+}
+
+/** 사유가 필수인 검토 동작 */
+export function reviewActionNeedsReason(action: string): boolean {
+  return action === 'review_cancel' || action === 'reopen'
+}
+
+export function isItemReviewAction(v: unknown): v is ItemReviewAction {
+  return typeof v === 'string' && (ITEM_REVIEW_ACTIONS as readonly string[]).includes(v)
+}
+export function isItemReviewBulkAction(v: unknown): v is ItemReviewBulkAction {
+  return typeof v === 'string' && (ITEM_REVIEW_BULK_ACTIONS as readonly string[]).includes(v)
+}
+
 /** 작업(qc_jobs)에 올 수 있는 모든 상태 */
 export const JOB_STATUSES: readonly string[] = [...JOB_STAGES, DELAYED_STATUS]
 /** 오더(pct_orders)에 올 수 있는 모든 상태 */
@@ -80,21 +140,30 @@ export const NEXT_STAGE: Record<JobStage, JobStage | null> = {
 }
 
 /**
- * 다음 단계로 넘기는 버튼 라벨. null 이면 수동 전이가 없다.
- * '진행중 → 검토전'은 시험항목이 모두 완료될 때 서버가 자동으로 넘긴다.
+ * 다음 단계로 넘기는 버튼 라벨. null 이면 작업 단위 수동 전이가 없다.
+ * 진행중·검토전·검토중은 시험항목 상태에서 서버가 도출하므로 버튼이 없고,
+ * 관리자가 작업 단위로 누르는 것은 승인전 ─[승인]─▶ 승인완료 하나뿐이다.
  */
 export const STAGE_ACTION_LABEL: Record<JobStage, string | null> = {
   진행중:   null,
-  검토전:   '검토 시작',
-  검토중:   '검토 완료',
+  검토전:   null,
+  검토중:   null,
   승인전:   '승인',
   승인완료: null,
 }
 
-/** 관리자가 버튼으로 넘길 수 있는 단계인가 */
+/** 관리자가 버튼으로 넘길 수 있는 단계인가 (= 승인전) */
 export function canAdvanceByAdmin(stage: string): stage is JobStage {
   return isJobStage(stage) && STAGE_ACTION_LABEL[stage] !== null
 }
+
+/**
+ * 시험항목 상태에서 도출되는 단계. 관리자 직접 변경으로 이 단계들로 옮길 때는
+ * 항목 상태로 도출한 값과 같아야 한다(0048 derive_job_stage).
+ */
+export const DERIVED_JOB_STAGES: ReadonlySet<string> = new Set<string>([
+  '진행중', '검토전', '검토중', '승인전',
+])
 
 /** 종결(더 진행할 것이 없는) 단계 */
 export const CLOSED_STAGE: JobStage = '승인완료'
@@ -105,14 +174,24 @@ export const OPEN_STATUSES: ReadonlySet<string> = new Set<string>([
 ])
 
 /**
- * 담당자가 **시험항목을 직접 만질 수 있는** 작업 상태.
+ * 담당자가 **시험항목을 직접 만질 수 있는** 작업 상태 — 항목 시작·시작 취소·완료, 동시분석 그룹 조작, 화면 버튼.
  *
- * 검토·승인 단계로 넘어간 작업의 항목은 서버가 거절한다(qcJobs.clearItem). 화면이 이
- * 기준을 모르면 눌러도 아무 일이 없는 버튼을 그리게 된다 — 실제로 동시분석 그룹 카드가
- * '검토전' 작업까지 세어 "1/2" 에서 멈춘 것처럼 보이는 버그가 났다. 서버와 화면이 같은
- * 목록을 본다.
+ * 항목 단위 검토(0048) 뒤로는 검토중 작업에도 아직 검토가 시작되지 않은 항목이 남아 시험이 계속된다.
+ * 그래서 검토전·검토중까지 포함한다. 단 **검토 흔적이 있는 항목**은 이 집합과 무관하게 거절한다.
+ * 화면이 이 기준을 모르면 눌러도 아무 일이 없는 버튼을 그리게 된다 — 서버와 화면이 같은 목록을 본다.
+ *
+ * ⚠️ 시험자 상태 변경(TESTER_STATUS_CHANGE_STATUSES)과 **다른 집합**이다. 하나로 합쳐 넓히면
+ *    시험자가 검토중 작업을 진행중으로 되돌릴 수 있게 된다.
  */
-export const SELF_EDITABLE_JOB_STATUSES: ReadonlySet<string> = new Set<string>([
+export const ITEM_EDITABLE_JOB_STATUSES: ReadonlySet<string> = new Set<string>([
+  '진행중', DELAYED_STATUS, '검토전', '검토중',
+])
+
+/**
+ * 담당 시험자가 작업 상태를 스스로 바꿀 수 있는 출발·목표 상태 (진행중 ↔ 지연).
+ * 검토·승인 단계는 항목 검토와 관리자 승인으로만 움직인다.
+ */
+export const TESTER_STATUS_CHANGE_STATUSES: ReadonlySet<string> = new Set<string>([
   '진행중', DELAYED_STATUS,
 ])
 

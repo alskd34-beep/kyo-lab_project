@@ -67,7 +67,7 @@ export async function logJobStatusChange(input: LogInput): Promise<void> {
 }
 
 /**
- * 이력 테이블이 아직 없는 환경(마이그레이션 0032 미적용)의 오류인가.
+ * 이력 테이블이 아직 없는 환경(마이그레이션 0035 미적용)의 오류인가.
  * PostgREST 는 스키마 캐시에 없는 테이블을 PGRST205 로, Postgres 는 42P01 로 알린다.
  */
 function isMissingTable(err: { code?: string; message?: string } | null): boolean {

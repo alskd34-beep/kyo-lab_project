@@ -4,6 +4,7 @@
  *
  * 순차 전이(POST .../stage)로는 표현할 수 없는 정정 — 되돌리기, 지연 지정/해제 —
  * 를 위한 통로다. 사유가 필수이며 상태 이력에 사유까지 남는다.
+ *   → { ok, from, to, message? }  to = 실제로 된 단계(항목 상태로 재도출된 결과), message = 요청과 다를 때 안내
  */
 
 import { NextRequest } from 'next/server'

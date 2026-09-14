@@ -4,11 +4,14 @@
  * [FRONTEND] QC 작업 상태 변경 (관리자)
  *
  * 두 가지 경로를 한 곳에 모은다.
- *  1) 다음 단계로  — 정해진 순서대로 한 칸 전진 (POST /api/qc-jobs/[id]/stage)
- *                   단계 전이는 되돌리려면 사유가 필요한 되돌리기라, 누르는 순간
- *                   바로 넘기지 않고 "무엇이 어떻게 바뀌는지" 를 보여준 뒤 확인받는다.
- *  2) 직접 변경   — 되돌리기·지연 지정처럼 순서를 벗어나는 정정. **사유 필수**
- *                   (PATCH /api/qc-jobs/[id]/status)
+ *  1) 승인        — 승인전 → 승인완료 (POST /api/qc-jobs/[id]/stage)
+ *                   되돌리려면 사유가 필요하므로, 누르는 순간 바로 넘기지 않고
+ *                   "무엇이 어떻게 바뀌는지" 를 보여준 뒤 확인받는다.
+ *                   진행중·검토전·검토중·승인전은 시험항목 검토에서 서버가 도출한다(0048) —
+ *                   작업 단위 [검토 시작]·[검토 완료] 버튼은 없다.
+ *  2) 직접 변경   — 지연 지정/해제·승인 되돌리기처럼 순서를 벗어나는 정정. **사유 필수**
+ *                   (PATCH /api/qc-jobs/[id]/status). 항목 상태와 맞지 않는 단계는 서버가 거절하고
+ *                   그 메시지를 그대로 보여 준다.
  *
  * 어느 쪽이든 서버가 상태 이력에 남기므로, 바로 아래 이력 타임라인에서 확인할 수 있다.
  */
@@ -16,8 +19,8 @@
 import { useState } from "react"
 import { ArrowRight, Check, LoaderCircle, PenLine, ShieldAlert } from "lucide-react"
 import {
-  CLOSED_STAGE, DELAYED_STATUS, IN_PROGRESS_STATUS, JOB_STAGES,
-  NEXT_STAGE, STAGE_ACTION_LABEL, isJobStage,
+  CLOSED_STAGE, DELAYED_STATUS, JOB_STAGES,
+  NEXT_STAGE, STAGE_ACTION_LABEL, canAdvanceByAdmin,
 } from "@shared/qc-status"
 import { cn } from "@frontend/lib/utils"
 import { Button } from "@frontend/components/ui/button"
@@ -47,13 +50,16 @@ export function JobStatusControl({
   const [manualOpen, setManualOpen] = useState(false)
   const [target, setTarget] = useState<string>("")
   const [reason, setReason] = useState("")
+  // 서버가 요청과 다른 단계로 맞춘 경우의 안내(지연 해제·재도출)
+  const [notice, setNotice] = useState<string | null>(null)
 
-  const nextStage = isJobStage(status) ? NEXT_STAGE[status] : null
-  const nextLabel = isJobStage(status) ? STAGE_ACTION_LABEL[status] : null
+  // 작업 단위 수동 전이는 승인(승인전 → 승인완료) 하나뿐이다
+  const nextStage = canAdvanceByAdmin(status) ? NEXT_STAGE[status] : null
+  const nextLabel = canAdvanceByAdmin(status) ? STAGE_ACTION_LABEL[status] : null
 
   async function advance() {
     if (!jobId) return
-    setBusy(true); setError(null)
+    setBusy(true); setError(null); setNotice(null)
     try {
       const res = await fetch(`/api/qc-jobs/${jobId}/stage`, {
         method: "POST",
@@ -83,8 +89,9 @@ export function JobStatusControl({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: target, reason }),
       })
-      const data = await res.json().catch(() => ({})) as { error?: string }
+      const data = await res.json().catch(() => ({})) as { error?: string; message?: string }
       if (!res.ok) throw new Error(data.error ?? "상태 변경 실패")
+      setNotice(data.message ?? null)
       setManualOpen(false); setTarget(""); setReason("")
       setConfirming(false)
       onChanged()
@@ -123,13 +130,11 @@ export function JobStatusControl({
             </Button>
           ) : (
             <span className="max-w-[22rem] text-right text-xs leading-normal text-muted-foreground">
-              {status === IN_PROGRESS_STATUS
-                ? "전 시험항목이 완료되면 서버가 자동으로 “검토전”으로 넘깁니다."
-                : status === CLOSED_STAGE
-                  ? "마지막 단계입니다. 잘못 승인했다면 직접 변경으로 되돌리세요."
-                  : status === DELAYED_STATUS
-                    ? "지연은 단계 순서 밖의 상태라 직접 변경으로만 바꿉니다."
-                    : "이 단계에서 넘길 다음 단계가 없습니다."}
+              {status === CLOSED_STAGE
+                ? "마지막 단계입니다. 잘못 승인했다면 직접 변경으로 “승인전”으로 되돌리세요."
+                : status === DELAYED_STATUS
+                  ? "지연은 단계 순서 밖의 상태라 직접 변경으로만 바꿉니다. 해제하면 시험항목 상태에 맞는 단계로 돌아갑니다."
+                  : "시험항목 검토를 시작하면 작업이 검토중으로, 모든 시험항목 검토가 끝나면 승인전으로 서버가 자동 전환합니다."}
             </span>
           )}
           <Button
@@ -202,6 +207,7 @@ export function JobStatusControl({
         </div>
       )}
 
+      {notice && <p className="mt-2 text-xs font-medium text-blue-700 dark:text-blue-300">{notice}</p>}
       {error && <p className="mt-2 text-xs font-medium text-destructive">{error}</p>}
     </section>
   )

@@ -26,22 +26,33 @@ import {
   CLOSED_STAGE,
   DELAYED_STATUS,
   DELETED_STATUS,
+  DERIVED_JOB_STAGES,
   IN_PROGRESS_STATUS,
   ITEM_CLEARED,
+  ITEM_EDITABLE_JOB_STATUSES,
   ITEM_IN_PROGRESS,
   ITEM_PENDING,
+  ITEM_REVIEW_NONE,
   JOB_STAGES,
   JOB_STATUSES,
   NEXT_STAGE,
   PENDING_STATUS,
   REVIEWING_STATUS,
   REVIEW_READY_STATUS,
-  SELF_EDITABLE_JOB_STATUSES,
   STAGE_ACTION_LABEL,
+  TESTER_STATUS_CHANGE_STATUSES,
   canAdvanceByAdmin,
+  hasReviewTrace,
   isJobStage,
   type JobStage,
 } from '@shared/qc-status'
+
+/** 0048 미적용 안내에 쓰는 기능 이름·마이그레이션 파일 */
+export const ITEM_REVIEW_FEATURE = '시험항목 검토'
+export const ITEM_REVIEW_MIGRATION = '0048_item_review.sql'
+/** 0048 의 DB 함수를 부를 수 없을 때(미적용) 쓰기 동작을 거절하는 문구 — spec §3.2 */
+export const ITEM_REVIEW_INSTALL_MESSAGE =
+  '시험항목 검토 기능의 DB 설치(0048 마이그레이션)가 아직 적용되지 않았습니다. 관리자에게 문의하세요.'
 
 export interface JobItemRow {
   id: string
@@ -56,7 +67,85 @@ export interface JobItemRow {
   elapsedMinutes: number | null
   /** 작업 시작부터 이 항목 완료까지 누적 소요 분 — 작업 화면 표시 기준 */
   elapsedTotalMinutes: number | null
+  /** 검토 축(0048): 'none' | 'reviewing' | 'reviewed'. 0048 미적용이면 'none' */
+  reviewStatus: string
+  reviewStartedAt: string | null
+  reviewStartedByName: string | null
+  reviewedAt: string | null
+  reviewedByName: string | null
 }
+
+// ─── 시험항목 조회 (0048 검토 컬럼 포함) ──────────────────────────────────────
+const ITEM_BASE_COLUMNS =
+  'id, qc_job_id, test_item_name, sequence_order, status, started_at, cleared_at, elapsed_minutes, elapsed_total_minutes'
+const ITEM_REVIEW_COLUMNS =
+  'review_status, review_started_at, review_started_by_name, reviewed_at, reviewed_by_name'
+
+/** 테이블·컬럼·함수가 아직 없는(마이그레이션 미적용) 오류인가 */
+export function isSchemaMissingError(err: { code?: string } | null | undefined): boolean {
+  const c = err?.code
+  return c === '42703' || c === '42P01' || c === '42883'
+    || c === 'PGRST202' || c === 'PGRST204' || c === 'PGRST205'
+}
+
+/**
+ * 작업들의 시험항목을 읽는다(순번 순).
+ *
+ * 0048 미적용 DB 에서는 검토 컬럼 참조가 42703 을 내고, PostgREST 는 select 전체를 실패시킨다.
+ * 예전 코드는 이 오류를 버려 항목 목록이 **아무 안내 없이 텅 비었다**. 여기서는 검토 컬럼 없이
+ * 한 번 더 읽어 화면이 죽지 않게 하고, 무엇을 적용해야 하는지 `reviewSetupError` 로 알린다.
+ * (읽기 경로의 대체일 뿐이다 — 검토 쓰기 동작과 시험자 항목 조작은 미적용이면 거절한다)
+ */
+async function loadJobItems(
+  jobIds: string[],
+): Promise<{ byJob: Map<string, JobItemRow[]>; reviewSetupError: string | null }> {
+  const byJob = new Map<string, JobItemRow[]>()
+  if (jobIds.length === 0) return { byJob, reviewSetupError: null }
+
+  let reviewSetupError: string | null = null
+  let rows: Record<string, unknown>[] = []
+  const full = await supabaseAdmin
+    .from('qc_job_items')
+    .select(`${ITEM_BASE_COLUMNS}, ${ITEM_REVIEW_COLUMNS}`)
+    .in('qc_job_id', jobIds)
+    .order('sequence_order', { ascending: true })
+  if (full.error && isSchemaMissingError(full.error)) {
+    reviewSetupError = describeSchemaError(full.error, ITEM_REVIEW_FEATURE, ITEM_REVIEW_MIGRATION).message
+    const base = await supabaseAdmin
+      .from('qc_job_items')
+      .select(ITEM_BASE_COLUMNS)
+      .in('qc_job_id', jobIds)
+      .order('sequence_order', { ascending: true })
+    if (base.error) throw base.error
+    rows = (base.data ?? []) as unknown as Record<string, unknown>[]
+  } else {
+    if (full.error) throw full.error
+    rows = (full.data ?? []) as unknown as Record<string, unknown>[]
+  }
+
+  for (const it of rows) {
+    const jid = it.qc_job_id as string
+    const arr = byJob.get(jid) ?? []
+    arr.push({
+      id: it.id as string,
+      testItemName: it.test_item_name as string,
+      sequenceOrder: it.sequence_order as number,
+      status: it.status as string,
+      startedAt: (it.started_at as string) ?? null,
+      clearedAt: (it.cleared_at as string) ?? null,
+      elapsedMinutes: (it.elapsed_minutes as number) ?? null,
+      elapsedTotalMinutes: (it.elapsed_total_minutes as number) ?? null,
+      reviewStatus: (it.review_status as string) ?? ITEM_REVIEW_NONE,
+      reviewStartedAt: (it.review_started_at as string) ?? null,
+      reviewStartedByName: (it.review_started_by_name as string) ?? null,
+      reviewedAt: (it.reviewed_at as string) ?? null,
+      reviewedByName: (it.reviewed_by_name as string) ?? null,
+    })
+    byJob.set(jid, arr)
+  }
+  return { byJob, reviewSetupError }
+}
+
 export interface QcJobRow {
   id: string
   orderId: string
@@ -165,9 +254,13 @@ export async function getStartReadiness(
  * - pendingOrders: 내 tester 배정 + 아직 작업 미시작
  * - jobs: 내가 시작한 작업(+항목)
  */
-export async function listWorkspace(userSub: string): Promise<{ testerLinked: boolean; pendingOrders: PendingOrderRow[]; jobs: QcJobRow[] }> {
+export async function listWorkspace(userSub: string): Promise<{
+  testerLinked: boolean; pendingOrders: PendingOrderRow[]; jobs: QcJobRow[]
+  /** 0048 미적용 안내(검토 상태를 읽지 못함). 적용됐으면 null */
+  reviewSetupError: string | null
+}> {
   const testerId = await getTesterId(userSub)
-  if (!testerId) return { testerLinked: false, pendingOrders: [], jobs: [] }
+  if (!testerId) return { testerLinked: false, pendingOrders: [], jobs: [], reviewSetupError: null }
 
   // 내 작업
   const { data: jobRows, error: jobsErr } = await supabaseAdmin
@@ -197,28 +290,7 @@ export async function listWorkspace(userSub: string): Promise<{ testerLinked: bo
 
   // 작업 항목
   const jobIds = (jobRows ?? []).map(j => j.id as string)
-  const itemsByJob = new Map<string, JobItemRow[]>()
-  if (jobIds.length > 0) {
-    const { data: items } = await supabaseAdmin
-      .from('qc_job_items')
-      .select('id, qc_job_id, test_item_name, sequence_order, status, started_at, cleared_at, elapsed_minutes, elapsed_total_minutes')
-      .in('qc_job_id', jobIds)
-      .order('sequence_order', { ascending: true })
-    for (const it of items ?? []) {
-      const arr = itemsByJob.get(it.qc_job_id as string) ?? []
-      arr.push({
-        id: it.id as string,
-        testItemName: it.test_item_name as string,
-        sequenceOrder: it.sequence_order as number,
-        status: it.status as string,
-        startedAt: (it.started_at as string) ?? null,
-        clearedAt: (it.cleared_at as string) ?? null,
-        elapsedMinutes: (it.elapsed_minutes as number) ?? null,
-        elapsedTotalMinutes: (it.elapsed_total_minutes as number) ?? null,
-      })
-      itemsByJob.set(it.qc_job_id as string, arr)
-    }
-  }
+  const { byJob: itemsByJob, reviewSetupError } = await loadJobItems(jobIds)
 
   // 동시분석 그룹 — 화면이 같은 그룹의 작업을 카드 하나로 묶는다.
   // 0044 미적용이나 테이블 부재에도 화면이 죽지 않게 실패를 삼킨다(묶기는 편의 기능이다).
@@ -303,7 +375,7 @@ export async function listWorkspace(userSub: string): Promise<{ testerLinked: bo
       groupSize:  groupByOrder.get(o.id as string)?.size ?? 0,
     }))
 
-  return { testerLinked: true, pendingOrders, jobs }
+  return { testerLinked: true, pendingOrders, jobs, reviewSetupError }
 }
 
 // ─── 작업자 현황 (관리자 한눈에 보기) ──────────────────────────────────────────
@@ -419,10 +491,12 @@ export interface JobDetail {
   currentItemStartedAt: string | null
   /** 관리자가 버튼으로 넘길 수 있는 다음 단계. 없으면 null */
   nextStage: string | null
-  /** 그 버튼에 표시할 라벨 (예: '검토 시작'). 없으면 null */
+  /** 그 버튼에 표시할 라벨 (이제 '승인' 뿐). 없으면 null */
   nextStageLabel: string | null
   /** 소유자(로그인 사용자) id — 라우트의 소유권 검사에 쓴다 */
   assigneeUserId: string | null
+  /** 0048 미적용 안내(검토 상태를 읽지 못함). 적용됐으면 null */
+  reviewSetupError: string | null
 }
 
 /**
@@ -450,31 +524,19 @@ export async function getJobDetail(jobId: string): Promise<JobDetail | null> {
     job.assignee_tester_id
       ? supabaseAdmin.from('testers').select('name, employee_no').eq('id', job.assignee_tester_id as string).maybeSingle()
       : Promise.resolve({ data: null }),
-    supabaseAdmin
-      .from('qc_job_items')
-      .select('id, test_item_name, sequence_order, status, started_at, cleared_at, elapsed_minutes, elapsed_total_minutes')
-      .eq('qc_job_id', jobId)
-      .order('sequence_order', { ascending: true }),
+    loadJobItems([jobId]),
   ])
 
   const order = orderRes.data as Record<string, unknown> | null
   const tester = testerRes.data as Record<string, unknown> | null
 
-  const items: JobItemRow[] = (itemsRes.data ?? []).map(it => ({
-    id: it.id as string,
-    testItemName: it.test_item_name as string,
-    sequenceOrder: it.sequence_order as number,
-    status: it.status as string,
-    startedAt: (it.started_at as string) ?? null,
-    clearedAt: (it.cleared_at as string) ?? null,
-    elapsedMinutes: (it.elapsed_minutes as number) ?? null,
-    elapsedTotalMinutes: (it.elapsed_total_minutes as number) ?? null,
-  }))
+  const items: JobItemRow[] = itemsRes.byJob.get(jobId) ?? []
 
   const status = job.status as string
   // "현재 수행 중인 항목"은 아직 시험을 하고 있는 단계에서만 의미가 있다.
-  // 검토전 이후 단계는 시험이 끝난 상태라 현재 항목을 표시하지 않는다.
-  const testing = status === IN_PROGRESS_STATUS || status === DELAYED_STATUS
+  // 항목 단위 검토(0048) 뒤로는 검토전·검토중 작업에도 시험 중인 항목이 있을 수 있다 —
+  // 시험자가 항목을 조작할 수 있는 단계(ITEM_EDITABLE_JOB_STATUSES)와 같은 기준을 쓴다.
+  const testing = ITEM_EDITABLE_JOB_STATUSES.has(status)
   const running = testing ? items.filter(i => i.status === ITEM_IN_PROGRESS) : []
   // 요약 줄에는 가장 먼저 시작한 항목을 세운다 — 여러 개를 걸어둔 시험자의 화면에서
   // 순번이 아니라 "가장 오래 돌고 있는 것"이 먼저 눈에 들어와야 한다.
@@ -507,6 +569,7 @@ export async function getJobDetail(jobId: string): Promise<JobDetail | null> {
     nextStage: canAdvanceByAdmin(status) ? NEXT_STAGE[status] : null,
     nextStageLabel: canAdvanceByAdmin(status) ? STAGE_ACTION_LABEL[status] : null,
     assigneeUserId: (job.assignee_user_id as string) ?? null,
+    reviewSetupError: itemsRes.reviewSetupError,
   }
 }
 
@@ -690,7 +753,8 @@ export async function listWorkerOverview(viewerTesterId: string | null = null): 
     if (!ACTIVE_JOB_STATUSES.has(status)) continue
 
     if (status === IN_PROGRESS_STATUS) row.inProgress += 1
-    // 검토전·검토중·승인전은 모두 "시험은 끝나고 후속 절차 대기" — 검토 카운터로 함께 센다
+    // 검토전·검토중·승인전은 검토·승인 절차에 들어간 작업이라 검토 카운터로 함께 센다.
+    // (항목 단위 검토 뒤로 검토중 작업에는 시험 중인 항목이 남아 있을 수 있다 — 화면 미표시 필드)
     else if (status === REVIEW_READY_STATUS || status === REVIEWING_STATUS || status === APPROVAL_READY_STATUS) row.reviewing += 1
     else if (status === DELAYED_STATUS) row.delayed += 1
 
@@ -1031,11 +1095,12 @@ export async function cancelJobStart(
 export async function updateJobDates(jobId: string, userSub: string, dates: { workStartDate?: string | null; workEndDate?: string | null }): Promise<void> {
   await assertOwner(jobId, userSub)
 
-  // [원칙2] 검토·승인 단계에 들어간 작업의 수행일자는 담당자가 바꿀 수 없다.
+  // [원칙2] 승인 단계(승인전·승인완료)에 들어간 작업의 수행일자는 담당자가 바꿀 수 없다.
+  // 항목 단위 검토(0048) 뒤로 검토전·검토중 작업에도 시험이 이어질 수 있어 그 단계까지는 허용한다(결정 Q7).
   const { data: job } = await supabaseAdmin
     .from('qc_jobs').select('status, work_start_date, work_end_date').eq('id', jobId).maybeSingle()
   if (!job) throw new Error('작업을 찾을 수 없습니다.')
-  if (!SELF_SERVICE_STATUSES.has(job.status as string)) {
+  if (!ITEM_EDITABLE_JOB_STATUSES.has(job.status as string)) {
     throw new Error(`"${job.status}" 단계의 작업은 수행일자를 변경할 수 없습니다.`)
   }
 
@@ -1134,67 +1199,160 @@ async function hasUnstartedAssignee(orderId: string, startedTesterIds: (string |
   return false
 }
 
-/**
- * 모든 시험항목이 완료되면 작업 상태를 '진행중' → '검토전' 으로 자동 전환한다.
- * 이후 검토·승인 단계는 관리자가 작업 현황 화면에서 버튼으로 넘긴다(advanceJobStage).
- *
- * - 대상은 '진행중' 인 작업만. 이후 단계는 그대로 두고,
- *   '지연' 은 지연 표시를 잃지 않도록 자동 전환하지 않는다(담당자가 직접 변경).
- * - 조건부 update(.eq('status','진행중'))로 항목 동시 클리어 시 중복 전환·중복 알림을 막는다.
- * - work_end_date 는 건드리지 않는다(승인완료 시점에만 기록).
- *
- * @returns allCleared(전 항목 완료 여부)와 statusChangedTo(전환된 경우 '검토전')
- */
-async function autoAdvanceToReview(jobId: string): Promise<{ allCleared: boolean; statusChangedTo: string | null }> {
-  // 미완료 항목이 남아있으면 전환하지 않음
-  const { count: remaining, error: cntErr } = await supabaseAdmin
-    .from('qc_job_items')
-    .select('id', { count: 'exact', head: true })
-    .eq('qc_job_id', jobId)
-    .neq('status', ITEM_CLEARED)
-  if (cntErr || remaining === null || remaining > 0) return { allCleared: false, statusChangedTo: null }
-
-  const target = NEXT_STAGE[IN_PROGRESS_STATUS] ?? REVIEW_READY_STATUS   // '검토전'
-
-  // '진행중' 인 경우에만 전환 (동시 호출 시 한 번만 성공)
-  const { data: updated } = await supabaseAdmin
-    .from('qc_jobs')
-    .update({ status: target })
-    .eq('id', jobId)
-    .eq('status', IN_PROGRESS_STATUS)
-    .select('order_id')
-    .maybeSingle()
-  if (!updated) return { allCleared: true, statusChangedTo: null }
-
-  // 오더 상태 동기화(2인 배정에서는 다른 담당자의 작업이 아직 뒤처져 있을 수 있다) + 이력 + 감독관 알림
-  await syncOrderStatusFromJobs(updated.order_id as string)
-  await logJobStatusChange({
-    jobId, orderId: updated.order_id as string,
-    fromStatus: IN_PROGRESS_STATUS, toStatus: target,
-    source: 'auto', note: '전 시험항목 완료로 서버가 자동 전환했습니다.',
-  })
-
-  // 슬랙 알림은 부가 기능이다 — 응답을 붙잡지 않도록 await 하지 않는다.
-  // 이 뒤의 return 값이 곧 HTTP 응답이라, await 하면 전이 API 가 슬랙 왕복만큼 느려진다.
-  void notifyStageChangeToSlack({
-    jobId, orderId: updated.order_id as string,
-    fromStatus: IN_PROGRESS_STATUS, toStatus: target, source: 'auto',
-  }).catch(() => {})
-
-  await createNotification({
-    type: 'status_changed',
-    title: '검토 대기',
-    body: `모든 시험항목이 완료되어 작업 상태가 "${target}" 으로 자동 변경되었습니다.`,
-    relatedOrderId: updated.order_id as string,
-    relatedQcJobId: jobId,
-    severity: 'info',
-  })
-  return { allCleared: true, statusChangedTo: target }
+// ─── 작업 단계 도출 (0048 — DB 함수가 단일 기준) ──────────────────────────────
+/** recompute_job_stage 반환값 */
+export interface StageRecomputeResult {
+  jobId: string
+  orderId: string
+  qcNo: string
+  from: string
+  to: string
+  /** 도출로 작업 단계가 실제로 바뀌었는가 — 커밋 뒤 오더 동기화·알림 여부 */
+  changed: boolean
+  /** 바뀐 경우 상태 이력(qc_job_status_history.note)에 적힌 문구 */
+  note?: string
 }
 
 /**
- * 검토·승인 단계를 한 칸 앞으로 넘긴다 (관리자 전용).
- *   검토전 ─[검토 시작]─▶ 검토중 ─[검토 완료]─▶ 승인전 ─[승인]─▶ 승인완료
+ * 0048 DB 함수 호출 오류를 사용자에게 보일 Error 로 바꾼다.
+ *  - P0001: 함수가 던진 업무 거절(한국어 메시지 그대로)
+ *  - 함수 없음(PGRST202/42883): 설치 안내 (비원자 폴백은 하지 않는다)
+ *  - 잘못된 uuid(22P02): "찾을 수 없습니다"
+ *  - 그 밖(함수 본문의 컬럼 오류 등 실제 버그): 원인을 붙인 한국어 메시지 — 설치 안내로 가리지 않는다
+ */
+export function translateItemReviewRpcError(
+  error: { code?: string; message?: string },
+  notFoundMessage = '시험항목을 찾을 수 없습니다.',
+): Error {
+  if (error.code === 'P0001') return new Error(error.message ?? '요청을 처리할 수 없습니다.')
+  if (error.code === 'PGRST202' || error.code === '42883') return new Error(ITEM_REVIEW_INSTALL_MESSAGE)
+  if (error.code === '22P02') return new Error(notFoundMessage)
+  return new Error(`시험항목 검토 처리 중 DB 오류가 발생했습니다. 관리자에게 문의하세요. (원인: ${error.message || error.code || '알 수 없음'})`)
+}
+
+/**
+ * 작업 단계를 시험항목 상태로 다시 맞춘다 — DB 함수 recompute_job_stage(0048).
+ *
+ * 규칙(승인완료·지연은 건너뜀 → 전 항목 검토 완료 = 승인전 → 검토 흔적 1건 이상 = 검토중 →
+ * 전 항목 완료 = 검토전 → 그 외 진행중)은 DB 에만 있다. 여기서 다시 계산하지 않는다(규칙 두 벌 금지).
+ * 단계가 바뀌면 함수가 같은 트랜잭션에서 상태 이력(source auto)까지 남긴다.
+ * 오더 상태·슬랙·앱 알림은 커밋 뒤 notifyStageRecomputed 가 한다.
+ *
+ * 재실행 안전: 호출마다 잠금 아래에서 현재 항목을 다시 읽어 수렴한다(F1-5).
+ * F2(항목 담당자 변경)의 reassign_job_item 은 같은 함수를 DB 안에서 부른다.
+ */
+export async function recomputeJobStage(
+  jobId: string, actorUserId: string | null, note: string,
+): Promise<StageRecomputeResult> {
+  const { data, error } = await supabaseAdmin.rpc('recompute_job_stage', {
+    p_job_id: jobId, p_actor: actorUserId, p_note: note,
+  })
+  if (error) throw translateItemReviewRpcError(error, '작업을 찾을 수 없습니다.')
+  return data as StageRecomputeResult
+}
+
+/**
+ * 항목 상태로 도출한 작업 단계(순수 조회) — DB 함수 derive_job_stage(0048).
+ * 관리자 직접 변경의 일치 판정(F1-7)과 지연 해제 복귀(F1-3)에 쓴다. 없는 작업이면 null.
+ */
+export async function deriveJobStage(jobId: string): Promise<string | null> {
+  const { data, error } = await supabaseAdmin.rpc('derive_job_stage', { p_job_id: jobId })
+  if (error) throw translateItemReviewRpcError(error, '작업을 찾을 수 없습니다.')
+  return (data as string | null) ?? null
+}
+
+/** 승인 거절 문구 — 전 항목 검토 완료 전 (리뷰 M2) */
+const APPROVAL_NEEDS_REVIEW_MESSAGE = '모든 시험항목의 검토가 끝나야 승인할 수 있습니다.'
+
+/**
+ * 승인(승인전 → 승인완료) 전 확인 — 0048 이 적용된 환경이면 그 작업의 전 항목이 검토 완료여야 한다.
+ * 도출 규칙상 "전 항목 reviewed" = derive_job_stage 가 '승인전'. 규칙을 TS 에 다시 쓰지 않고 그 값으로 판정한다.
+ * 0048 미적용(함수 없음)이면 검토 기록 자체가 없으므로 기존처럼 허용한다.
+ */
+async function assertAllItemsReviewed(jobId: string): Promise<void> {
+  const { data, error } = await supabaseAdmin.rpc('derive_job_stage', { p_job_id: jobId })
+  if (error) {
+    if (error.code === 'PGRST202' || error.code === '42883') return
+    throw translateItemReviewRpcError(error, '작업을 찾을 수 없습니다.')
+  }
+  if (data !== APPROVAL_READY_STATUS) throw new Error(APPROVAL_NEEDS_REVIEW_MESSAGE)
+}
+
+/**
+ * 사람이 작업을 도출 단계로 옮긴(지연 해제·직접 변경) **커밋 뒤** 한 번 더 재도출해 수렴시킨다(리뷰 M3).
+ * 도출값은 잠금 밖에서 구했으므로, 그 사이 항목 검토가 커밋됐으면 틀린 단계가 남는다 — 전 항목이
+ * 검토 완료면 더 올 항목 이벤트가 없어 영구히 남을 수 있다. recompute 는 재실행 안전이다.
+ * 실패해도 사람의 변경은 이미 커밋됐다 — 로그만 남기고 현재 단계를 돌려준다.
+ */
+async function settleDerivedStage(jobId: string, actor: string, fallback: string): Promise<string> {
+  if (!DERIVED_JOB_STAGES.has(fallback)) return fallback
+  try {
+    const stage = await recomputeJobStage(jobId, actor, '상태 변경 직후 시험항목 상태에 따라 서버가 자동 전환했습니다.')
+    await notifyStageRecomputed(stage)
+    return stage.to
+  } catch (err) {
+    console.error('[qcJobs.settleDerivedStage] 재도출 실패 — 상태 변경은 반영됨:', jobId, err)
+    return fallback
+  }
+}
+
+/** 요청한 단계와 실제로 된 단계가 다를 때 화면에 보일 문구 */
+function stageDiffMessage(requested: string, actual: string): string | undefined {
+  return requested === actual
+    ? undefined
+    : `요청한 "${requested}" 대신 시험항목 상태에 따라 "${actual}" 단계가 되었습니다.`
+}
+
+/**
+ * 도출로 작업 단계가 바뀐 **커밋 뒤** 후속 처리 — 오더 상태 동기화 → 슬랙 → 앱 알림(spec §7).
+ * 단계가 바뀌지 않았으면 아무것도 하지 않는다(항목 검토마다 알리지 않는다).
+ * 여기서의 실패는 검토·단계를 되돌리지 않는다 — 서버 로그만 남기고 삼킨다.
+ */
+export async function notifyStageRecomputed(stage: StageRecomputeResult | null): Promise<void> {
+  if (!stage?.changed) return
+  const note = stage.note ?? '시험항목 상태에 따라 서버가 자동 전환했습니다.'
+  try {
+    // 오더 상태는 현행 규칙(지연 우선 → 가장 덜 진행된 작업 단계 → 미시작 담당자 상한) 그대로(결정 Q2)
+    await syncOrderStatusFromJobs(stage.orderId)
+  } catch (err) {
+    console.error('[qcJobs.notifyStageRecomputed] 오더 상태 동기화 실패 — 작업 단계는 반영됨:', stage, err)
+  }
+
+  // 슬랙 알림은 부가 기능이다 — 응답을 붙잡지 않도록 await 하지 않는다.
+  void notifyStageChangeToSlack({
+    jobId: stage.jobId, orderId: stage.orderId,
+    fromStatus: stage.from, toStatus: stage.to, source: 'auto', note,
+  }).catch(() => {})
+
+  try {
+    if (stage.to === REVIEW_READY_STATUS) {
+      await createNotification({
+        type: 'status_changed',
+        title: '검토 대기',
+        body: `모든 시험항목이 완료되어 작업 상태가 "${REVIEW_READY_STATUS}" 으로 자동 변경되었습니다.`,
+        relatedOrderId: stage.orderId, relatedQcJobId: stage.jobId, severity: 'info',
+      })
+    } else {
+      // 앞으로 가는 전이는 info, 뒤로 가는 전이(재실시·검토 취소)는 warning
+      const forward = JOB_STAGES.indexOf(stage.to as JobStage) > JOB_STAGES.indexOf(stage.from as JobStage)
+      await createNotification({
+        type: 'status_changed',
+        title: '작업 단계 자동 변경',
+        body: `QC ${stage.qcNo} 작업이 "${stage.from}" → "${stage.to}" 단계로 자동 변경되었습니다. (${note})`,
+        relatedOrderId: stage.orderId, relatedQcJobId: stage.jobId,
+        severity: forward ? 'info' : 'warning',
+      })
+    }
+  } catch (err) {
+    console.error('[qcJobs.notifyStageRecomputed] 앱 알림 생성 실패 — 작업 단계는 반영됨:', stage, err)
+  }
+}
+
+/**
+ * 승인 — 승인전 ─[승인]─▶ 승인완료 (관리자 전용).
+ *
+ * 항목 단위 검토(0048) 뒤로 작업 단위 [검토 시작]·[검토 완료] 는 없다. 검토전·검토중·승인전은
+ * 시험항목 검토에서 서버가 도출하고, 사람이 작업 단위로 넘기는 것은 승인 하나뿐이다.
  *
  * - `expected` 를 주면 화면이 보고 있던 단계와 실제 단계가 같을 때만 전환한다(동시 클릭 방지).
  * - 조건부 update 로 한 번만 성공하게 한다.
@@ -1218,14 +1376,12 @@ export async function advanceJobStage(
   if (expected && expected !== current) {
     throw new Error(`이미 "${current}" 단계로 변경되었습니다. 새로고침 후 다시 시도하세요.`)
   }
-  if (!isJobStage(current)) {
-    throw new Error(`"${current}" 상태에서는 단계를 넘길 수 없습니다.`)
-  }
-  if (!canAdvanceByAdmin(current)) {
-    throw new Error(`"${current}" 단계에서는 넘길 다음 단계가 없습니다.`)
+  if (!isJobStage(current) || !canAdvanceByAdmin(current)) {
+    throw new Error('승인은 "승인전" 단계의 작업에서만 할 수 있습니다. 검토는 시험항목별로 진행합니다.')
   }
   const target = NEXT_STAGE[current]
   if (!target) throw new Error(`"${current}" 단계에서는 넘길 다음 단계가 없습니다.`)
+  if (target === CLOSED_STAGE) await assertAllItemsReviewed(jobId)
 
   const patch: Record<string, unknown> = { status: target }
   if (target === CLOSED_STAGE && !job.work_end_date) {
@@ -1270,24 +1426,35 @@ export async function advanceJobStage(
   return { from: current, to: target }
 }
 
-/** 항목을 만지기 전 공통 확인 — 소유권 + 시험 단계 여부 + 항목 존재.
+/** 항목을 만지기 전 공통 확인 — 소유권 + 작업 단계 + 항목 존재 + 검토 흔적.
  *
- *  [원칙2] 검토·승인 단계로 넘어간 작업의 항목은 더 이상 손댈 수 없다.
+ *  [원칙2] 승인 단계(승인전·승인완료)로 넘어간 작업의 항목은 더 이상 손댈 수 없다.
  *  예전에는 상태를 보지 않아 '승인완료' 작업에도 cleared_at 을 쓰고 알림까지 보냈다.
+ *  항목 단위 검토(0048) 뒤로는 검토전·검토중 작업의 **검토가 시작되지 않은** 항목은 계속 시험한다.
+ *  검토 흔적이 있는 항목은 거절한다. 0048 미적용이면 검토 상태를 읽지 못해 **쓰기 전에** 안내로 거절한다.
  */
 async function loadItemForEdit(jobId: string, itemId: string, userSub: string) {
   await assertOwner(jobId, userSub)
 
   const { data: job } = await supabaseAdmin
     .from('qc_jobs').select('work_started_at, created_at, order_id, status').eq('id', jobId).single()
-  if (job && !SELF_SERVICE_STATUSES.has(job.status as string)) {
+  if (job && !ITEM_EDITABLE_JOB_STATUSES.has(job.status as string)) {
     throw new Error(`"${job.status}" 단계의 작업은 시험항목을 변경할 수 없습니다.`)
   }
 
-  const { data: item } = await supabaseAdmin
-    .from('qc_job_items').select('id, test_item_name, status, started_at')
+  const { data: item, error: itemErr } = await supabaseAdmin
+    .from('qc_job_items').select('id, test_item_name, status, started_at, review_status')
     .eq('id', itemId).eq('qc_job_id', jobId).maybeSingle()
+  if (itemErr) {
+    if (isSchemaMissingError(itemErr)) {
+      throw describeSchemaError(itemErr, ITEM_REVIEW_FEATURE, ITEM_REVIEW_MIGRATION)
+    }
+    throw itemErr
+  }
   if (!item) throw new Error('시험항목을 찾을 수 없습니다.')
+  if (hasReviewTrace(item.review_status as string)) {
+    throw new Error('검토가 시작된 시험항목은 변경할 수 없습니다.')
+  }
 
   return { job, item }
 }
@@ -1312,6 +1479,8 @@ export async function startItem(
     .from('qc_job_items')
     .update({ status: ITEM_IN_PROGRESS, started_at: now })
     .eq('id', itemId).eq('qc_job_id', jobId)
+  // 23514 = 검토 흔적 CHECK(0048) — 확인 뒤 그 사이 항목이 완료·검토된 경합
+  if (error?.code === '23514') throw new Error('작업 상태가 바뀌었습니다. 새로고침 후 다시 확인해 주세요.')
   if (error) throw error
   return { startedAt: now }
 }
@@ -1328,10 +1497,12 @@ export async function cancelItemStart(
     .from('qc_job_items')
     .update({ status: ITEM_PENDING, started_at: null })
     .eq('id', itemId).eq('qc_job_id', jobId)
+  // 23514 = 검토 흔적 CHECK(0048) — 확인 뒤 그 사이 항목이 완료·검토된 경합
+  if (error?.code === '23514') throw new Error('작업 상태가 바뀌었습니다. 새로고침 후 다시 확인해 주세요.')
   if (error) throw error
 }
 
-/** 항목 클리어 — 시간 적재 + 감독관 알림 + 전체 완료 시 '검토전' 자동 전환
+/** 항목 클리어 — 시간 적재 + 감독관 알림 + 작업 단계 재도출(recompute_job_stage)
  *
  *  소요시간은 두 기준을 함께 적재한다.
  *   - elapsed_total_minutes : 작업 시작 → 이 항목 완료 (작업 화면에 보여주는 값)
@@ -1344,7 +1515,7 @@ export async function cancelItemStart(
  */
 export async function clearItem(
   jobId: string, itemId: string, userSub: string,
-): Promise<{ allCleared: boolean; statusChangedTo: string | null }> {
+): Promise<{ allCleared: boolean; statusChangedTo: string | null; stageSyncFailed?: boolean }> {
   const { job, item } = await loadItemForEdit(jobId, itemId, userSub)
   if (item.status === ITEM_CLEARED) throw new Error('이미 완료된 시험항목입니다.')
   const now = new Date()
@@ -1391,25 +1562,44 @@ export async function clearItem(
     relatedQcJobId: jobId, severity: 'info',
   })
 
-  // 마지막 항목이었다면 '검토전' 으로 자동 전환
-  return autoAdvanceToReview(jobId)
+  // 작업 단계 재도출 — 항목 완료는 기존 TS 경로를 유지하고 커밋 뒤 DB 함수를 부른다(F1-5).
+  // 실패해도 항목 완료는 이미 커밋됐다. 함수는 재실행 안전이라 다음 항목 이벤트 때 단계가 맞춰진다.
+  const note = `시험항목 "${item.test_item_name as string}" 완료로 서버가 자동 전환했습니다.`
+  let stage: StageRecomputeResult | null = null
+  let stageSyncFailed = false
+  try {
+    stage = await recomputeJobStage(jobId, userSub, note)
+  } catch (err) {
+    stageSyncFailed = true
+    console.error('[qcJobs.clearItem] 작업 단계 재도출 실패 — 항목 완료는 반영됨:', jobId, err)
+  }
+  await notifyStageRecomputed(stage)
+
+  const { count: remaining, error: cntErr } = await supabaseAdmin
+    .from('qc_job_items')
+    .select('id', { count: 'exact', head: true })
+    .eq('qc_job_id', jobId)
+    .neq('status', ITEM_CLEARED)
+  const allCleared = !cntErr && remaining === 0
+
+  // statusChangedTo = 이번 항목 완료로 **도출된 작업 단계가 바뀐 경우** 그 단계(바뀌지 않았으면 null)
+  // stageSyncFailed = 항목 완료는 반영됐지만 작업 단계를 맞추지 못함(다음 항목 이벤트·관리자 검토 때 수렴)
+  return { allCleared, statusChangedTo: stage?.changed ? stage.to : null, ...(stageSyncFailed ? { stageSyncFailed } : {}) }
 }
 
-/**
- * 담당 시험자가 직접 바꿀 수 있는 상태.
- * 검토·승인 단계는 관리자만 advanceJobStage 로 넘길 수 있어야 워크플로가 의미를 갖는다.
+/** 작업 상태 변경(담당자) — 진행중 ↔ 지연만. 오더 상태 동기화 + 감독관 알림.
  *
- * 목록은 @shared/qc-status 가 단일 기준이다 — 화면(동시분석 그룹 카드)도 같은 목록을
- * 봐야 "눌러도 아무 일이 없는 버튼" 이 생기지 않는다.
+ *  출발·목표 집합은 TESTER_STATUS_CHANGE_STATUSES(@shared/qc-status)다. 항목 조작 집합
+ *  (ITEM_EDITABLE_JOB_STATUSES)과 섞으면 시험자가 검토중 작업을 진행중으로 되돌릴 수 있게 된다.
+ *
+ *  지연 해제(F1-3): 지연에서 벗어날 때는 요청값 대신 **항목 상태로 도출한 단계**로 되돌린다
+ *  (검토가 이미 시작된 작업이면 진행중이 아니라 검토중·승인전으로 돌아간다).
  */
-const SELF_SERVICE_STATUSES = SELF_EDITABLE_JOB_STATUSES
-
-/** 작업 상태 변경(담당자) — 오더 상태 동기화 + 감독관 알림.
- *  최종 단계(승인완료)면 work_end_date를 오늘로 설정(이미 설정된 경우 유지).
- */
-export async function changeJobStatus(jobId: string, userSub: string, status: string): Promise<void> {
+export async function changeJobStatus(
+  jobId: string, userSub: string, status: string,
+): Promise<{ from: string; to: string; message?: string }> {
   await assertOwner(jobId, userSub)
-  if (!SELF_SERVICE_STATUSES.has(status)) {
+  if (!TESTER_STATUS_CHANGE_STATUSES.has(status)) {
     throw new Error(`"${status}" 는 담당자가 직접 지정할 수 없습니다. 검토·승인은 관리자가 작업 현황에서 진행합니다.`)
   }
 
@@ -1421,55 +1611,78 @@ export async function changeJobStatus(jobId: string, userSub: string, status: st
     .from('qc_jobs').select('status, work_end_date').eq('id', jobId).maybeSingle()
   if (!before) throw new Error('작업을 찾을 수 없습니다.')
   const current = before.status as string
-  if (!SELF_SERVICE_STATUSES.has(current)) {
+  if (!TESTER_STATUS_CHANGE_STATUSES.has(current)) {
     throw new Error(
       `"${current}" 단계의 작업은 담당자가 상태를 바꿀 수 없습니다. 관리자에게 문의하세요.`,
     )
   }
-  if (current === status) return   // 변경 없음
+  if (current === status) return { from: current, to: status }   // 변경 없음
 
-  const patch: Record<string, unknown> = { status }
+  // F1-3 — 지연 해제는 도출 단계로 복귀
+  let target = status
+  let note = '담당자 상태 변경'
+  if (current === DELAYED_STATUS) {
+    const derived = await deriveJobStage(jobId)
+    if (!derived) throw new Error('작업을 찾을 수 없습니다.')
+    target = derived
+    if (derived !== status) note = `담당자 상태 변경 — 항목 상태에 따라 '${derived}' 로 복귀`
+  }
+
+  const patch: Record<string, unknown> = { status: target }
   const { data: job, error } = await supabaseAdmin
     .from('qc_jobs').update(patch).eq('id', jobId)
     .eq('status', current)          // 낙관적 잠금 — 그 사이 바뀌었으면 실패
     .select('order_id').maybeSingle()
   if (error) throw error
-  if (!job) throw new Error('다른 사용자가 먼저 상태를 변경했습니다. 새로고침 후 다시 시도하세요.')
+  if (!job) throw new Error('작업 상태가 바뀌었습니다. 새로고침 후 다시 확인해 주세요.')
   await syncOrderStatusFromJobs(job.order_id as string)
   await logJobStatusChange({
     jobId, orderId: job.order_id as string,
-    fromStatus: current, toStatus: status,
-    changedBy: userSub, source: 'manual', note: '담당자 상태 변경',
+    fromStatus: current, toStatus: target,
+    changedBy: userSub, source: 'manual', note,
   })
 
   // 슬랙 알림은 부가 기능이다 — 응답을 붙잡지 않도록 await 하지 않는다.
   // 이 뒤의 return 값이 곧 HTTP 응답이라, await 하면 전이 API 가 슬랙 왕복만큼 느려진다.
   void notifyStageChangeToSlack({
     jobId, orderId: job.order_id as string,
-    fromStatus: current, toStatus: status, source: 'manual',
+    fromStatus: current, toStatus: target, source: 'manual',
+    ...(target !== status ? { note } : {}),
   }).catch(() => {})
 
   await createNotification({
     type: 'status_changed',
     title: '상태 변경',
-    body: `작업 상태가 "${status}" 로 변경되었습니다.`,
+    body: `작업 상태가 "${target}" 로 변경되었습니다.`,
     relatedOrderId: job.order_id as string, relatedQcJobId: jobId, severity: 'info',
   })
+
+  // 리뷰 M3 — 잠금 밖 도출값의 경합을 수렴시킨다
+  const finalStage = await settleDerivedStage(jobId, userSub, target)
+  const message = stageDiffMessage(status, finalStage)
+  return { from: current, to: finalStage, ...(message ? { message } : {}) }
 }
 
 /**
  * 관리자 상태 직접 변경 — 정해진 순서(advanceJobStage) 밖으로 상태를 옮긴다.
  *
- * 되돌리기(승인완료 → 검토중), 지연 지정/해제처럼 순차 전이로는 표현할 수 없는 정정이
- * 실제로 필요하다. 다만 임의 변경은 시험 기록의 신뢰도를 떨어뜨리므로
+ * 지연 지정/해제, 승인 되돌리기처럼 순차 전이로는 표현할 수 없는 정정이 실제로 필요하다.
+ * 다만 임의 변경은 시험 기록의 신뢰도를 떨어뜨리므로
  *  ① 관리자만(라우트에서 requireAdmin), ② **사유 필수**, ③ 상태 이력에 사유까지 남긴다.
+ *
+ * 항목 단위 검토(0048) 뒤의 허용 규칙 — spec §3.4
+ *  - 승인완료로는 **승인전에서만**, 승인완료에서는 **승인전으로만**(F1-6)
+ *  - 지연에서 벗어나면 요청값 대신 항목 상태로 도출한 단계로 복귀(F1-3)
+ *  - 그 밖에 도출 단계(진행중·검토전·검토중·승인전)로 옮기려면 **도출값과 같아야** 한다(F1-7).
+ *    판정은 DB 함수 derive_job_stage 로 하고, 판정~쓰기 사이 경합은 조건부 update 로 막는다.
+ *  - 도출 단계 → 지연, 승인전 ↔ 승인완료 는 자유
  *
  * work_end_date 는 종결 여부를 따라간다 — 승인완료로 가면 오늘로 기록하고,
  * 승인완료에서 되돌리면 지운다(완료일이 남아 있으면 완료 집계·공수 통계가 어긋난다).
  */
 export async function setJobStatusByAdmin(
   jobId: string, adminUserSub: string, status: string, reason: string,
-): Promise<{ from: string; to: string }> {
+): Promise<{ from: string; to: string; message?: string }> {
   if (!JOB_STATUSES.includes(status)) {
     throw new Error(`"${status}" 는 작업에 지정할 수 없는 상태입니다.`)
   }
@@ -1484,8 +1697,33 @@ export async function setJobStatusByAdmin(
   const current = before.status as string
   if (current === status) return { from: current, to: status }
 
-  const patch: Record<string, unknown> = { status }
-  if (status === CLOSED_STAGE) {
+  // F1-6 — 승인완료는 승인전과만 오간다
+  if ((status === CLOSED_STAGE && current !== APPROVAL_READY_STATUS)
+    || (current === CLOSED_STAGE && status !== APPROVAL_READY_STATUS)) {
+    throw new Error('승인완료는 승인전 단계에서만 변경할 수 있습니다.')
+  }
+  // 리뷰 M2 — 승인은 전 항목 검토 완료 뒤에만(0048 적용 환경)
+  if (status === CLOSED_STAGE) await assertAllItemsReviewed(jobId)
+
+  let target = status
+  let restoreNote = ''
+  if (current === DELAYED_STATUS) {
+    // F1-3 — 지연 해제는 요청값 대신 도출 단계로 복귀
+    const derived = await deriveJobStage(jobId)
+    if (!derived) throw new Error('작업을 찾을 수 없습니다.')
+    target = derived
+    if (derived !== status) restoreNote = ` (항목 상태에 따라 '${derived}' 로 복귀)`
+  } else if (DERIVED_JOB_STAGES.has(status) && current !== CLOSED_STAGE) {
+    // F1-7 — 도출 단계로의 직접 변경은 항목 상태와 일치할 때만 (승인완료 → 승인전 되돌림은 자유)
+    const derived = await deriveJobStage(jobId)
+    if (derived !== status) {
+      throw new Error('항목 상태와 맞지 않습니다 — 항목 재실시/검토 취소로 조정하세요.')
+    }
+  }
+  if (target === current) return { from: current, to: target }
+
+  const patch: Record<string, unknown> = { status: target }
+  if (target === CLOSED_STAGE) {
     if (!before.work_end_date) patch.work_end_date = kstToday()
   } else if (current === CLOSED_STAGE) {
     patch.work_end_date = null
@@ -1493,35 +1731,38 @@ export async function setJobStatusByAdmin(
 
   const { data: updated, error } = await supabaseAdmin
     .from('qc_jobs').update(patch).eq('id', jobId)
-    .eq('status', current)          // 낙관적 잠금 — 그 사이 바뀌었으면 실패
+    .eq('status', current)          // 조건부 update — 판정 뒤 그 사이 바뀌었으면 0행(F1-7)
     .select('order_id').maybeSingle()
   if (error) throw error
-  if (!updated) throw new Error('다른 사용자가 먼저 상태를 변경했습니다. 새로고침 후 다시 시도하세요.')
+  if (!updated) throw new Error('작업 상태가 바뀌었습니다. 새로고침 후 다시 확인해 주세요.')
 
   await syncOrderStatusFromJobs(updated.order_id as string)
   await logJobStatusChange({
     jobId, orderId: updated.order_id as string,
-    fromStatus: current, toStatus: status,
-    changedBy: adminUserSub, source: 'manual', note: `관리자 직접 변경 — ${note}`,
+    fromStatus: current, toStatus: target,
+    changedBy: adminUserSub, source: 'manual', note: `관리자 직접 변경 — ${note}${restoreNote}`,
   })
 
   // 슬랙 알림은 부가 기능이다 — 응답을 붙잡지 않도록 await 하지 않는다.
   // 이 뒤의 return 값이 곧 HTTP 응답이라, await 하면 전이 API 가 슬랙 왕복만큼 느려진다.
   void notifyStageChangeToSlack({
     jobId, orderId: updated.order_id as string,
-    fromStatus: current, toStatus: status, source: 'manual', note,
+    fromStatus: current, toStatus: target, source: 'manual', note: `${note}${restoreNote}`,
   }).catch(() => {})
 
   await createNotification({
     type: 'status_changed',
     title: '관리자 상태 변경',
-    body: `QC ${before.qc_no} 작업 상태가 "${current}" → "${status}" 로 변경되었습니다. (사유: ${note})`,
+    body: `QC ${before.qc_no} 작업 상태가 "${current}" → "${target}" 로 변경되었습니다. (사유: ${note})${restoreNote}`,
     relatedOrderId: updated.order_id as string,
     relatedQcJobId: jobId,
     severity: 'warning',
   })
 
-  return { from: current, to: status }
+  // 리뷰 M3 — 도출 단계로 옮긴 경우 잠금 아래에서 한 번 더 수렴
+  const finalStage = await settleDerivedStage(jobId, adminUserSub, target)
+  const message = stageDiffMessage(status, finalStage)
+  return { from: current, to: finalStage, ...(message ? { message } : {}) }
 }
 
 /** 작업 소유자(로그인 사용자) id — 라우트의 소유권 검사용. 없는 작업이면 undefined */
@@ -1558,7 +1799,7 @@ export interface GroupItemResult {
   affected: number
   /** 건드린 작업 수 */
   jobs: number
-  /** 전 항목 완료로 '검토전' 이 된 작업의 QC번호 */
+  /** 이번 항목 완료로 **도출된 작업 단계가 바뀐** 작업의 QC번호(대개 전 항목 완료 → '검토전') */
   advanced: string[]
 }
 
@@ -1575,9 +1816,9 @@ async function myJobsInGroup(groupId: string, userSub: string): Promise<Array<{ 
     .in('order_id', orderIds)
     .eq('assignee_user_id', userSub)
   if (jErr) throw jErr
-  // 검토·승인 단계로 넘어간 작업은 항목을 더 이상 건드리지 않는다(clearItem 과 같은 규칙).
+  // 승인 단계로 넘어간 작업은 항목을 더 이상 건드리지 않는다(loadItemForEdit 과 같은 규칙).
   return (jobs ?? [])
-    .filter(j => SELF_SERVICE_STATUSES.has(j.status as string))
+    .filter(j => ITEM_EDITABLE_JOB_STATUSES.has(j.status as string))
     .map(j => ({ id: j.id as string, qcNo: j.qc_no as string }))
 }
 

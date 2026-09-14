@@ -6,9 +6,11 @@ import {
   ShieldAlert, ClipboardList,
 } from "lucide-react"
 import {
-  ACTIVE_JOB_STATUSES, CLOSED_STAGE, IN_PROGRESS_STATUS, ITEM_CLEARED, ITEM_IN_PROGRESS, ITEM_PENDING, PENDING_STATUS,
-  SELF_EDITABLE_JOB_STATUSES, stageStyle,
+  ACTIVE_JOB_STATUSES, CLOSED_STAGE, IN_PROGRESS_STATUS, ITEM_CLEARED, ITEM_EDITABLE_JOB_STATUSES, ITEM_IN_PROGRESS,
+  ITEM_PENDING, ITEM_REVIEW_REVIEWED, ITEM_REVIEW_REVIEWING, PENDING_STATUS, TESTER_STATUS_CHANGE_STATUSES,
+  hasReviewTrace, stageStyle,
 } from "@shared/qc-status"
+import { ItemReviewBadge } from "@frontend/components/common/job-item-review"
 import { useAuth } from "@frontend/lib/auth-context"
 import { api, errorMessage } from "@frontend/lib/api-client"
 import { cn } from "@frontend/lib/utils"
@@ -35,6 +37,12 @@ interface JobItem {
   elapsedMinutes: number | null
   /** 작업 시작부터 이 항목 완료까지 누적 소요 분 */
   elapsedTotalMinutes: number | null
+  /** 검토 축(0048): none | reviewing | reviewed — 시험자는 읽기만 한다 */
+  reviewStatus?: string | null
+  reviewStartedAt?: string | null
+  reviewStartedByName?: string | null
+  reviewedAt?: string | null
+  reviewedByName?: string | null
 }
 interface Job {
   id: string; orderId: string; qcNo: string; productName: string; batchNo: string
@@ -57,6 +65,9 @@ interface MergedItem {
   inProgress: number
   /** 진행 중인 것들 중 가장 이른 시작 시각 — "N분 경과" 표시용 */
   earliestStart: string | null
+  /** 검토 중·검토 완료 배치 수 — 관리자가 항목마다 검토한다(읽기 전용 표시) */
+  reviewing: number
+  reviewed: number
 }
 
 /** equipmentMaster ReadinessResult (UI 전용 타입) */
@@ -79,11 +90,11 @@ interface ReadinessResult {
 }
 
 /**
- * 시험자가 직접 바꿀 수 있는 상태만 남긴다.
- * 검토전은 시험항목을 모두 완료하면 자동 전환되고,
- * 검토중·승인전·승인완료는 관리자가 작업 현황 화면에서 넘긴다. (types/qc-status.ts)
+ * 시험자가 직접 바꿀 수 있는 상태만 남긴다(진행중 ↔ 지연).
+ * 검토전·검토중·승인전은 시험항목 완료와 관리자의 항목 검토에서 서버가 도출하고,
+ * 승인완료는 관리자가 승인한다. 지연을 풀면 서버가 항목 상태에 맞는 단계로 되돌린다. (types/qc-status.ts)
  */
-const STATUS_OPTIONS = ["진행중", "지연"]
+const STATUS_OPTIONS: string[] = [...TESTER_STATUS_CHANGE_STATUSES]
 const statusCls = (s: string) => stageStyle(s).cls
 
 function dDay(due: string | null): number | null {
@@ -328,6 +339,8 @@ export default function MyTasksPage() {
   const [linked, setLinked] = useState(true)
   const [pending, setPending] = useState<PendingOrder[]>([])
   const [jobs, setJobs] = useState<Job[]>([])
+  /** 0048 미적용 안내 — 검토 상태를 읽지 못했을 때만 */
+  const [reviewSetupError, setReviewSetupError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
   // 진행 중 항목의 "N분 경과" 표시용 시계. 1분마다 한 번만 다시 그리면 충분하다.
@@ -360,6 +373,7 @@ export default function MyTasksPage() {
       const data = await res.json()
       const nextJobs: Job[] = data.jobs ?? []
       setLinked(data.testerLinked ?? false)
+      setReviewSetupError(typeof data.reviewSetupError === "string" ? data.reviewSetupError : null)
       setPending(data.pendingOrders ?? [])
       setJobs(nextJobs)
       return res.ok && Array.isArray(data.jobs) ? nextJobs : null
@@ -526,12 +540,14 @@ export default function MyTasksPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ itemId, action }),
       })
-      const data = await res.json() as { error?: string; statusChangedTo?: string | null }
+      const data = await res.json() as { error?: string; statusChangedTo?: string | null; stageSyncFailed?: boolean }
       if (!res.ok) throw new Error(data.error)
       await load()
-      // 마지막 항목이었으면 서버가 상태를 자동 전환한다 — 사용자가 알 수 있게 안내
-      if (data.statusChangedTo) {
-        flash(`모든 시험항목 완료 — 상태가 "${data.statusChangedTo}" 로 자동 변경되었습니다.`)
+      // 항목 완료로 서버가 작업 단계를 다시 도출해 바뀌었으면 — 사용자가 알 수 있게 안내
+      if (data.stageSyncFailed) {
+        flash("시험항목은 완료됐지만 작업 단계를 맞추지 못했습니다. 다음 처리 때 자동으로 맞춰집니다.", "error")
+      } else if (data.statusChangedTo) {
+        flash(`시험항목 완료 — 작업 단계가 "${data.statusChangedTo}" 로 자동 변경되었습니다.`)
       }
     } catch (e) { flash(`처리 실패: ${e instanceof Error ? e.message : ""}`, "error") }
     finally { setBusy(null) }
@@ -558,7 +574,7 @@ export default function MyTasksPage() {
       if ((data.affected ?? 0) === 0) {
         flash(`"${testItemName}" 에 처리할 배치가 없습니다. 목록을 새로 불러왔습니다.`, "error")
       } else if (data.advanced && data.advanced.length > 0) {
-        flash(`모든 시험항목 완료 — QC ${data.advanced.join(", ")} 가 "검토전" 으로 넘어갔습니다.`)
+        flash(`시험항목 완료 — QC ${data.advanced.join(", ")} 작업 단계가 자동으로 변경되었습니다.`)
       } else if (action === "clear") {
         flash(`${data.affected}개 배치의 "${testItemName}" 을 완료 처리했습니다.`)
       }
@@ -567,19 +583,23 @@ export default function MyTasksPage() {
   }
 
   /** 잡 PATCH 코어 — 새로고침/알림 없음 (일괄에서 재사용) */
-  const patchJobCore = async (jobId: string, patch: Record<string, string>) => {
+  const patchJobCore = async (jobId: string, patch: Record<string, string>): Promise<{ message?: string }> => {
     const res = await fetch(`/api/qc-jobs/${jobId}`, {
       method: "PATCH", credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
     })
-    if (!res.ok) throw new Error((await res.json()).error)
+    const data = await res.json().catch(() => ({})) as { error?: string; message?: string }
+    if (!res.ok) throw new Error(data.error)
+    return data
   }
 
   const patchJob = async (jobId: string, patch: Record<string, string>) => {
     try {
-      await patchJobCore(jobId, patch)
+      const r = await patchJobCore(jobId, patch)
       await load()
+      // 지연 해제는 서버가 항목 상태에 맞는 단계로 되돌린다 — 요청과 다르면 알린다
+      if (r.message) flash(r.message)
     } catch (e) { flash(`저장 실패: ${e instanceof Error ? e.message : ""}`, "error") }
   }
 
@@ -592,20 +612,20 @@ export default function MyTasksPage() {
    * 어제 보던 자리에서 오늘 못 찾는다.
    */
   const activeGroupBlocks = useMemo(() => {
-    // 그룹으로 묶는 대상은 **서버가 실제로 조작하는 작업**뿐이다(진행중·지연).
-    // 검토전 이후로 넘어간 작업까지 세면 카드는 "1/2" 라고 말하는데 서버는 1건만 처리해,
-    // 눌러도 아무 일이 없는 것처럼 보인다. 화면과 서버가 같은 목록을 봐야 한다.
+    // 그룹으로 묶는 대상은 **서버가 실제로 조작하는 작업**뿐이다(ITEM_EDITABLE_JOB_STATUSES —
+    // 진행중·지연·검토전·검토중). 승인전 이후로 넘어간 작업까지 세면 카드는 "1/2" 라고 말하는데
+    // 서버는 1건만 처리해, 눌러도 아무 일이 없는 것처럼 보인다. 화면과 서버가 같은 목록을 봐야 한다.
     const byGroup = new Map<string, Job[]>()
     for (const j of activeJobs) {
-      if (!j.groupId || !SELF_EDITABLE_JOB_STATUSES.has(j.status)) continue
+      if (!j.groupId || !ITEM_EDITABLE_JOB_STATUSES.has(j.status)) continue
       const a = byGroup.get(j.groupId) ?? []; a.push(j); byGroup.set(j.groupId, a)
     }
     const out: ({ kind: "group"; groupId: string; jobs: Job[] } | { kind: "single"; jobs: Job[] })[] = []
     const done = new Set<string>()
     for (const j of activeJobs) {
       const gid = j.groupId
-      // 조작 불가 상태(검토전·검토중·승인전)의 작업은 그룹에 넣지 않고 낱개 카드로 남긴다.
-      const mates = gid && SELF_EDITABLE_JOB_STATUSES.has(j.status) ? byGroup.get(gid) ?? [] : []
+      // 조작 불가 상태(승인전)의 작업은 그룹에 넣지 않고 낱개 카드로 남긴다.
+      const mates = gid && ITEM_EDITABLE_JOB_STATUSES.has(j.status) ? byGroup.get(gid) ?? [] : []
       if (gid && mates.length >= 2) {
         if (done.has(gid)) continue
         done.add(gid)
@@ -630,15 +650,21 @@ export default function MyTasksPage() {
     setJobBulkBusy(true)
     const nameById = new Map(activeJobs.map(j => [j.id, `QC ${j.qcNo}`] as const))
     let ok = 0
+    let redirected = 0
     const failed: string[] = []
     try {
       for (const id of ids) {
-        try { await patchJobCore(id, { status: bulkStatus }); ok++ }
+        try {
+          const r = await patchJobCore(id, { status: bulkStatus })
+          ok++
+          if (r.message) redirected++
+        }
         catch { failed.push(nameById.get(id) ?? id) }
       }
       await load()
       setSelectedJobs(new Set())
       const parts: string[] = [`${ok}건 '${bulkStatus}' 적용`]
+      if (redirected) parts.push(`그중 ${redirected}건은 시험항목 상태에 따라 다른 단계로 복귀`)
       if (failed.length) parts.push(`실패 ${failed.length}건`)
       flash(parts.join(" · "), failed.length ? "error" : "info")
     } finally {
@@ -768,6 +794,12 @@ export default function MyTasksPage() {
             진행 중 <span className="font-semibold tabular-nums text-foreground">{activeJobs.length}</span>건
           </p>
         </header>
+
+        {reviewSetupError && (
+          <div className="shrink-0 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-normal break-keep text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+            {reviewSetupError}
+          </div>
+        )}
 
         {msg && (
           <div className={cn(
@@ -949,9 +981,13 @@ export default function MyTasksPage() {
     const merged = new Map<string, MergedItem>()
     for (const j of groupJobs) {
       for (const it of j.items) {
-        const m = merged.get(it.testItemName) ?? { name: it.testItemName, total: 0, cleared: 0, inProgress: 0, earliestStart: null }
+        const m = merged.get(it.testItemName) ?? {
+          name: it.testItemName, total: 0, cleared: 0, inProgress: 0, earliestStart: null, reviewing: 0, reviewed: 0,
+        }
         m.total += 1
         if (it.status === ITEM_CLEARED) m.cleared += 1
+        if (it.reviewStatus === ITEM_REVIEW_REVIEWING) m.reviewing += 1
+        if (it.reviewStatus === ITEM_REVIEW_REVIEWED) m.reviewed += 1
         if (it.status === ITEM_IN_PROGRESS) {
           m.inProgress += 1
           if (it.startedAt && (!m.earliestStart || it.startedAt < m.earliestStart)) m.earliestStart = it.startedAt
@@ -961,7 +997,8 @@ export default function MyTasksPage() {
     }
     const items = [...merged.values()]
     const allCleared = items.filter(i => i.cleared === i.total).length
-    const anyDone = groupJobs.every(j => j.status === CLOSED_STAGE)
+    // 그룹에는 조작 가능한 작업만 묶이지만, 방어적으로 서버 기준(ITEM_EDITABLE_JOB_STATUSES)을 한 번 더 본다
+    const anyDone = !groupJobs.every(j => ITEM_EDITABLE_JOB_STATUSES.has(j.status))
     const dd = dDay(groupJobs.map(j => j.dueDate).filter(Boolean).sort()[0] ?? null)
 
     return (
@@ -1051,7 +1088,15 @@ export default function MyTasksPage() {
                       )}
                     </div>
                     {done ? (
-                      <span className="shrink-0 text-xs leading-normal text-blue-700 dark:text-blue-300">완료</span>
+                      <span className="shrink-0 text-xs leading-normal text-blue-700 dark:text-blue-300">
+                        완료
+                        {/* 검토는 관리자가 배치(항목)마다 한다 — 시험자는 진행 정도만 본다 */}
+                        {m.reviewed + m.reviewing > 0 && (
+                          <span className="ml-1.5 tabular-nums text-muted-foreground">
+                            · 검토 완료 {m.reviewed}/{m.total}{m.reviewing > 0 && ` · 검토 중 ${m.reviewing}`}
+                          </span>
+                        )}
+                      </span>
                     ) : anyDone ? null : running ? (
                       <div className="flex shrink-0 items-center gap-1">
                         <Button variant="ghost" size="icon-sm" title="시작 취소 — 대기로 되돌립니다"
@@ -1150,7 +1195,7 @@ export default function MyTasksPage() {
               </div>
             </div>
             {/* 담당자가 바꿀 수 있는 단계(진행중·지연)만 선택형으로 둔다.
-                검토전 이후 단계는 관리자가 작업 현황에서 넘기므로 읽기 전용으로 표시한다.
+                검토전·검토중·승인전은 서버가 항목 상태에서 도출하고 승인완료는 관리자가 승인하므로 읽기 전용으로 표시한다.
                 (STATUS_OPTIONS 에 없는 값을 Select 에 넣으면 라벨이 빈칸으로 렌더된다) */}
             {STATUS_OPTIONS.includes(job.status) ? (
               <Select
@@ -1166,7 +1211,7 @@ export default function MyTasksPage() {
               </Select>
             ) : (
               <span
-                title="검토·승인 단계는 관리자가 변경합니다."
+                title="검토·승인 단계는 시험항목 검토에 따라 서버가 정합니다. 승인은 관리자가 합니다."
                 className={cn(
                   'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs leading-normal font-semibold',
                   statusCls(job.status),
@@ -1210,6 +1255,8 @@ export default function MyTasksPage() {
                 const done = it.status === ITEM_CLEARED
                 const started = it.status === ITEM_IN_PROGRESS
                 const itemBusy = busy === it.id
+                // 조작 버튼은 서버가 받아 주는 경우에만 — 작업이 승인전·승인완료거나 검토가 시작된 항목이면 숨긴다
+                const locked = !ITEM_EDITABLE_JOB_STATUSES.has(job.status) || hasReviewTrace(it.reviewStatus)
                 return (
                   <li
                     key={it.id}
@@ -1239,15 +1286,19 @@ export default function MyTasksPage() {
                       )}
                     </div>
                     {done ? (
-                      <span className="shrink-0 text-xs leading-normal tabular-nums text-blue-700 dark:text-blue-300">
-                        {it.clearedAt && new Date(it.clearedAt).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
-                        {/* 작업 시작 기준 누적 소요시간 (항목 실소요가 다르면 함께 표기) */}
-                        {(() => {
-                          const label = formatItemElapsed(it.elapsedTotalMinutes, it.elapsedMinutes)
-                          return label && ` · ${label}`
-                        })()}
+                      <span className="flex shrink-0 flex-wrap items-center justify-end gap-x-2 gap-y-0.5">
+                        <span className="text-xs leading-normal tabular-nums text-blue-700 dark:text-blue-300">
+                          {it.clearedAt && new Date(it.clearedAt).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                          {/* 작업 시작 기준 누적 소요시간 (항목 실소요가 다르면 함께 표기) */}
+                          {(() => {
+                            const label = formatItemElapsed(it.elapsedTotalMinutes, it.elapsedMinutes)
+                            return label && ` · ${label}`
+                          })()}
+                        </span>
+                        {/* 검토 상태 — 읽기 전용. 검토는 관리자가 항목마다 한다 */}
+                        <ItemReviewBadge item={it} />
                       </span>
-                    ) : isDone ? null : started ? (
+                    ) : locked ? null : started ? (
                       <div className="flex shrink-0 items-center gap-1">
                         <Button
                           variant="ghost"

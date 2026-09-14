@@ -142,7 +142,8 @@ function buildCard(notice: StageNotice, ctx: JobContext | null): { text: string;
   blocks.push({ type: 'section', text: { type: 'mrkdwn', text: transition } })
 
   const contextElements = [`${sourceLabel(notice.source)} · ${timeTag}`]
-  if (notice.note) contextElements.push(`사유: ${escapeSlack(notice.note)}`)
+  // 서버 자동 전환의 note 는 사람의 사유가 아니라 전환 원인이다
+  if (notice.note) contextElements.push(`${notice.source === 'auto' ? '원인' : '사유'}: ${escapeSlack(notice.note)}`)
   blocks.push({
     type: 'context',
     elements: contextElements.map(el => ({ type: 'mrkdwn', text: el })),
