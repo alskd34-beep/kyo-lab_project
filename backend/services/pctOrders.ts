@@ -323,7 +323,7 @@ export async function listOrders(filters: {
  * 오더 중복(23505) 오류 문구.
  *
  * 0052 부터 중복 기준은 **품목코드·제조번호·품목명·구분 네 값이 모두 같을 때**다(uq_pct_orders_identity).
- * 자동 적재 오더끼리만 (제조번호, 품목코드) 가 따로 유일하다(uq_pct_orders_auto_batch_code — 수동 오더 경로에서는 걸리지 않는다).
+ * 0053 부터 자동 적재 오더도 같은 기준이다(uq_pct_orders_auto_batch_code 제거). 0053 적용 전 DB 에만 그 인덱스가 남아 있다.
  * 0052 적용 전 DB 는 옛 제약 unique(batch_no, product_code) 가 남아 있어 품목명·구분이 달라도 막힌다 — 그 경우를 따로 알린다.
  */
 export function duplicateOrderMessage(err: { message?: string } | null | undefined): string {

@@ -77,7 +77,18 @@ async function selectAllRange(
   return { data: all, error: null }
 }
 
-const keyOf = (batchNo: string, code: string) => `${batchNo}|${code}`
+/**
+ * 적재 자연키 — **제조번호·품목코드·품목명·구분 네 값**(0053).
+ *
+ * 제조팀 시트에는 같은 제조번호·품목코드인데 구분만 다른 행(예: 26017 PV3 와 26017 일반)이 실제로 있다.
+ * 예전 키(제조번호|품목코드)는 이 두 행을 한 오더로 보고 회차마다 구분을 번갈아 덮어썼다.
+ * DB 의 uq_pct_orders_identity(0052) 와 같은 정규화 — 품목명·구분 앞뒤 공백 무시, 구분 null = ''.
+ */
+const keyOf = (batchNo: string, code: string, productName: string, validationType: string | null | undefined) =>
+  `${batchNo}|${code}|${(productName ?? '').trim()}|${(validationType ?? '').trim()}`
+
+/** 이름·구분 변경 매칭(보조)용 — 제조번호|품목코드 */
+const batchCodeOf = (batchNo: string, code: string) => `${batchNo}|${code}`
 
 /**
  * 변경 차단 대상 상태.
@@ -171,29 +182,65 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
     await selectAllRange(supabaseAdmin, 'pct_orders')
   if (exErr) throw new Error(`기존 오더 조회 실패: ${exErr.message}`)
 
-  // 자연키는 전체에서 유일하므로 두 맵의 키는 절대 겹치지 않는다 — 상태로만 나눈다.
-  //   existingByKey : 변경감지·변경없음갱신·삭제감지 3개 루프가 쓰는, 지금까지의 "기존 오더" 그 집합(의미 불변)
-  //   deletedByKey  : 복구 판정 전용. 여기 섞으면 삭제 감지 루프가 이미 삭제된 건을 매 회차 다시 훑는다.
-  const existingByKey = new Map<string, ExistingOrder>()
-  const deletedByKey = new Map<string, ExistingOrder>()
-  for (const r of existingRows ?? []) {
-    const row = r as unknown as ExistingOrder
-    // 수동 오더는 적재 매칭에서 뺀다(0052 — 오더 중복 규칙). 수동 오더는 시트가 원본이 아니고,
-    // 품목명·구분이 다르면 같은 제조번호·품목코드의 자동 오더와 함께 있을 수 있다.
-    // 예전에는 같은 키의 수동 오더를 "기존 오더"로 보고 시트 값으로 덮어써 수동 표시(ingest_state)까지 잃었다.
-    // 자동 오더끼리는 (제조번호, 품목코드)가 여전히 유일하므로(0052 부분 unique) 두 맵의 키는 겹치지 않는다.
-    if (row.ingest_state === 'manual') continue
-    const key = keyOf(row.batch_no, row.product_code)
-    if (row.status === DELETED_STATUS) deletedByKey.set(key, row)
-    else existingByKey.set(key, row)
-  }
-
   // 0039(validation_type) 적용 여부. 적재는 크론이라, 컬럼이 없는데 insert/update 에
   // 넣으면 PGRST204 로 **적재 전체가 죽는다**. 마이그레이션 적용 순서에 배포가 매이지
   // 않도록 실제 행에서 컬럼 존재를 확인하고 넣을지 정한다(pctOrders 의 locked 와 같은 방식).
   // 행이 하나도 없으면 판정할 수 없으므로 넣지 않는다 — 다음 적재부터 자연히 켜진다.
   const firstRow = (existingRows ?? [])[0]
   const hasValidationColumn = firstRow != null && 'validation_type' in firstRow
+  // 구분 컬럼이 없는 DB 에서는 구분을 키에 넣지 않는다(시트 값만 있고 DB 는 늘 비어 있어 매 회차 신규로 오판된다)
+  const keyOfOrder = (o: ExistingOrder) =>
+    keyOf(o.batch_no, o.product_code, o.product_name, hasValidationColumn ? o.validation_type : null)
+  const keyOfSheet = (r: SheetPctRow) =>
+    keyOf(r.batchNo, r.productCode, r.productName, hasValidationColumn ? r.validationType : null)
+
+  // 네 값 키는 삭제된 수동 오더를 뺀 전체에서 유일(uq_pct_orders_identity)하므로 두 맵의 키는 겹치지 않는다 — 상태로만 나눈다.
+  //   existingByKey : 변경감지·변경없음갱신·삭제감지 3개 루프가 쓰는 "기존 오더" 집합
+  //   deletedByKey  : 복구 판정 전용. 여기 섞으면 삭제 감지 루프가 이미 삭제된 건을 매 회차 다시 훑는다.
+  //   activeByBatchCode : 품목명·구분이 시트에서 바뀐 행을 "새 오더 + 옛 오더 삭제" 가 아니라 "변경" 으로 잇는 보조 색인
+  const existingByKey = new Map<string, ExistingOrder>()
+  const deletedByKey = new Map<string, ExistingOrder>()
+  const activeByBatchCode = new Map<string, ExistingOrder[]>()
+  for (const r of existingRows ?? []) {
+    const row = r as unknown as ExistingOrder
+    // 수동 오더는 적재 매칭에서 뺀다(0052). 수동 오더는 시트가 원본이 아니고, 네 값 중 하나라도 다르면
+    // 같은 제조번호·품목코드의 자동 오더와 함께 있을 수 있다. 예전에는 같은 키의 수동 오더를 시트 값으로 덮어썼다.
+    if (row.ingest_state === 'manual') continue
+    const key = keyOfOrder(row)
+    if (row.status === DELETED_STATUS) {
+      deletedByKey.set(key, row)
+    } else {
+      existingByKey.set(key, row)
+      const bc = batchCodeOf(row.batch_no, row.product_code)
+      activeByBatchCode.set(bc, [...(activeByBatchCode.get(bc) ?? []), row])
+    }
+  }
+
+  // 시트 전체의 네 값 키 — 보조 매칭이 "시트에 그대로 있는 오더" 를 가져가지 않게 한다
+  const sheetKeys = new Set(sheetRows.map(keyOfSheet))
+  // 제조번호|품목코드 묶음마다 기존 오더와 정확히 맞지 않는 시트 행 수 — 1건일 때만 보조 매칭(모호하면 새 오더로 본다)
+  const unmatchedSheetCountByBatchCode = new Map<string, number>()
+  for (const r of sheetRows) {
+    if (existingByKey.has(keyOfSheet(r)) || deletedByKey.has(keyOfSheet(r))) continue
+    const bc = batchCodeOf(r.batchNo, r.productCode)
+    unmatchedSheetCountByBatchCode.set(bc, (unmatchedSheetCountByBatchCode.get(bc) ?? 0) + 1)
+  }
+  /**
+   * 품목명·구분이 바뀐 시트 행을 기존 오더에 잇는다(보조 매칭).
+   * 조건: 같은 제조번호·품목코드의 기존(삭제 아님) 자동 오더 중 **시트 어디에도 네 값이 그대로 없는** 오더가 정확히 1건이고,
+   *       그 묶음에서 정확히 맞는 오더가 없는 시트 행도 1건일 때만. 둘 이상이면 어느 것이 어느 것인지 알 수 없어 잇지 않는다
+   *       (새 오더 생성 + 옛 오더는 삭제 감지 규칙대로) — 조용히 엉뚱한 오더를 덮어쓰는 것보다 낫다.
+   */
+  const consumedByFallback = new Set<string>()
+  const fallbackMatch = (r: SheetPctRow): ExistingOrder | undefined => {
+    const bc = batchCodeOf(r.batchNo, r.productCode)
+    if ((unmatchedSheetCountByBatchCode.get(bc) ?? 0) !== 1) return undefined
+    const candidates = (activeByBatchCode.get(bc) ?? [])
+      .filter(o => !sheetKeys.has(keyOfOrder(o)) && !consumedByFallback.has(o.id))
+    if (candidates.length !== 1) return undefined
+    consumedByFallback.add(candidates[0].id)
+    return candidates[0]
+  }
   const withValidation = <T extends Record<string, unknown>>(patch: T, value: string | null) =>
     (hasValidationColumn ? { ...patch, validation_type: value } : patch)
 
@@ -364,7 +411,12 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
   }
 
   for (const row of sheetRows) {
-    const key = keyOf(row.batchNo, row.productCode)
+    const key = keyOfSheet(row)
+    // 네 값이 모두 같은 시트 행이 두 번 나오면 두 번째는 같은 오더를 한 번 더 만들거나 덮으려 한다 — 실패로 남기고 건너뛴다
+    if (seen.has(key)) {
+      fail(key, 'new', '시트에 제조번호·품목코드·품목명·구분이 모두 같은 행이 중복돼 있어 두 번째 행은 건너뛰었습니다.')
+      continue
+    }
     seen.add(key)
     if (row.codeGenerated) result.codeGenerated++
 
@@ -391,9 +443,12 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
       synced = false  // 자동 등록되었지만 정보 미보완 → 적재에 표기
     }
 
-    const existing = existingByKey.get(key)
-    // 기존(삭제 아님)에 없을 때만 삭제 맵을 본다 — 자연키가 전체 유니크라 둘 다에
-    // 있을 수는 없지만, 순서를 명시해 의도를 남긴다.
+    // 네 값이 그대로인 기존 오더 → 없으면 품목명·구분만 바뀐 기존 오더(보조 매칭) 순서로 찾는다.
+    // 보조 매칭된 오더는 자기 네 값 키로도 seen 에 넣어 아래 삭제 감지에서 "시트에서 사라짐" 으로 잡히지 않게 한다.
+    const exactExisting = existingByKey.get(key)
+    const existing = exactExisting ?? (deletedByKey.has(key) ? undefined : fallbackMatch(row))
+    if (existing && !exactExisting) seen.add(keyOfOrder(existing))
+    // 기존(삭제 아님)에 없을 때만 삭제 맵을 본다 — 네 값 키가 유일해 둘 다에 있을 수는 없지만, 순서를 명시해 의도를 남긴다.
     const deleted = existing ? undefined : deletedByKey.get(key)
 
     if (deleted) {
@@ -422,12 +477,15 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
         source_file_id: fileId,
       }, row.validationType))
       if (error) {
-        // 같은 제조번호·품목코드의 수동 오더가 있는 경우 — 0052 적용 후에는 품목명·구분까지 모두 같을 때만,
-        // 0052 적용 전에는 (제조번호, 품목코드) 만 같아도 막힌다. 어느 쪽이든 조용히 넘기지 않고 실패로 남긴다.
-        const dupManual = error.code === '23505'
-          ? ' — 같은 제조번호·품목코드(품목명·구분 포함)의 수동 오더가 이미 있습니다. 수동 오더를 정리하거나 SQL 0052 적용 여부를 확인하세요.'
+        // 중복(23505) — ① 네 값이 모두 같은 수동 오더가 이미 있음(uq_pct_orders_identity)
+        // ② SQL 0053 적용 전이라 자동 오더끼리 (제조번호, 품목코드) 부분 unique(uq_pct_orders_auto_batch_code)가 남아 있음.
+        // 어느 쪽이든 조용히 넘기지 않고 실패로 남긴다.
+        const dupHint = error.code === '23505'
+          ? (/uq_pct_orders_auto_batch_code/.test(error.message ?? '')
+            ? ' — 같은 제조번호·품목코드에 구분·품목명이 다른 자동 오더가 이미 있습니다. SQL 0053(자동 오더 제조번호·품목코드 제약 제거)을 적용하세요.'
+            : ' — 제조번호·품목코드·품목명·구분이 모두 같은 오더(수동 오더 등)가 이미 있습니다.')
           : ''
-        fail(key, 'new', `신규 오더 생성 실패: ${error.message}${dupManual}`)
+        fail(key, 'new', `신규 오더 생성 실패: ${error.message}${dupHint}`)
       } else {
         result.created++
         await logIngest(key, 'new', PENDING_STATUS, fileId)
