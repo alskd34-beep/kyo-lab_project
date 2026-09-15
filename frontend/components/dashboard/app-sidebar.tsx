@@ -30,7 +30,7 @@ import {
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface SubItem {
   id: string; label: string; adminOnly?: boolean; live?: boolean
-  /** 앱 밖 화면으로 보내는 메뉴 — 새 탭으로 연다(frontend/lib/external-links.ts) */
+  /** 앱 밖 화면으로 보내는 메뉴 — 지금 창에서 이동한다(frontend/lib/external-links.ts) */
   externalHref?: string
 }
 interface NavItem {
@@ -395,15 +395,16 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                           <SidebarMenuSub>
                             {item.subItems.map(sub => {
                               const subIsActive = subActive(sub.id)
-                              // 앱 밖 화면 — 사내망 http 주소라 iframe 으로 넣지 못하고 새 탭으로 연다
+                              // 앱 밖 화면 — 사내망 http 주소라 iframe 으로 넣지 못하고 **지금 창에서** 그 주소로 이동한다.
+                              // next/link 는 앱 안 경로용이라 일반 <a> 를 쓴다. 돌아올 때는 브라우저 뒤로 가기.
                               if (sub.externalHref) {
                                 return (
                                   <SidebarMenuSubItem key={sub.id}>
                                     <SidebarMenuSubButton asChild isActive={subIsActive}>
-                                      <a href={sub.externalHref} target="_blank" rel="noopener noreferrer" onClick={closeOnMobile}>
+                                      <a href={sub.externalHref} onClick={closeOnMobile}>
                                         <span title="개발 완료" className="size-1.5 shrink-0 rounded-full bg-muted-foreground" />
                                         <span>{sub.label}</span>
-                                        <ExternalLink className="ml-auto size-3.5 text-muted-foreground" aria-label="새 탭에서 열림" />
+                                        <ExternalLink className="ml-auto size-3.5 text-muted-foreground" aria-label="사내 외부 화면으로 이동" />
                                       </a>
                                     </SidebarMenuSubButton>
                                   </SidebarMenuSubItem>
