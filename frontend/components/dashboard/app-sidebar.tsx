@@ -5,8 +5,9 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   Home, FlaskConical, ShieldCheck, AlertTriangle, FileText, BarChart2, Cpu,
-  Settings, Calendar, ClipboardList, SlidersHorizontal, ChevronRight, ChevronsUpDown, LogOut,
+  Settings, Calendar, ClipboardList, SlidersHorizontal, ChevronRight, ChevronsUpDown, LogOut, ExternalLink,
 } from "lucide-react"
+import { OOT_STATUS_URL } from "@frontend/lib/external-links"
 
 import { isAdminOnlyPath } from "@shared/route-access"
 import { cn } from "@frontend/lib/utils"
@@ -27,7 +28,11 @@ import {
 } from "@frontend/components/ui/sidebar"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-interface SubItem { id: string; label: string; adminOnly?: boolean; live?: boolean }
+interface SubItem {
+  id: string; label: string; adminOnly?: boolean; live?: boolean
+  /** 앱 밖 화면으로 보내는 메뉴 — 새 탭으로 연다(frontend/lib/external-links.ts) */
+  externalHref?: string
+}
 interface NavItem {
   id: string
   icon: React.ComponentType<{ className?: string }>
@@ -84,7 +89,7 @@ const NAV_SECTIONS: NavSection[] = [
         id: "deviation", icon: AlertTriangle, label: "일탈관리", adminOnly: true,
         subItems: [
           { id: "oos", label: "OOS현황" },
-          { id: "capa", label: "CAPA관리" },
+          { id: "capa", label: "OOT 현황조회", live: true, externalHref: OOT_STATUS_URL },
           { id: "inv-report", label: "조사보고서" },
         ],
       },
@@ -390,6 +395,20 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                           <SidebarMenuSub>
                             {item.subItems.map(sub => {
                               const subIsActive = subActive(sub.id)
+                              // 앱 밖 화면 — 사내망 http 주소라 iframe 으로 넣지 못하고 새 탭으로 연다
+                              if (sub.externalHref) {
+                                return (
+                                  <SidebarMenuSubItem key={sub.id}>
+                                    <SidebarMenuSubButton asChild isActive={subIsActive}>
+                                      <a href={sub.externalHref} target="_blank" rel="noopener noreferrer" onClick={closeOnMobile}>
+                                        <span title="개발 완료" className="size-1.5 shrink-0 rounded-full bg-muted-foreground" />
+                                        <span>{sub.label}</span>
+                                        <ExternalLink className="ml-auto size-3.5 text-muted-foreground" aria-label="새 탭에서 열림" />
+                                      </a>
+                                    </SidebarMenuSubButton>
+                                  </SidebarMenuSubItem>
+                                )
+                              }
                               return (
                                 <SidebarMenuSubItem key={sub.id}>
                                   <SidebarMenuSubButton asChild isActive={subIsActive}>
