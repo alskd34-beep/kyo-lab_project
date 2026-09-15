@@ -15,6 +15,7 @@ import {
 import { assertTesterAssignable } from '@backend/services/testers'
 import { logReassignment } from '@backend/services/reassignmentHistory'
 import { warnIfAssigneeOnLeave } from '@backend/services/leaveConflicts'
+import { removeGroupMembers } from '@backend/services/concurrentGroups'
 import { ASSIGNED_TESTER_FILTER_COLUMN, withAssignedTesterEmbed } from '@backend/lib/assigneeFilter'
 import { describeSchemaError } from '@backend/lib/schemaError'
 import { generateNaBatchNo, generateNaProductCode } from '@backend/lib/orderNa'
@@ -319,9 +320,27 @@ export async function listOrders(filters: {
 }
 
 /**
+ * 오더 중복(23505) 오류 문구.
+ *
+ * 0052 부터 중복 기준은 **품목코드·제조번호·품목명·구분 네 값이 모두 같을 때**다(uq_pct_orders_identity).
+ * 자동 적재 오더끼리만 (제조번호, 품목코드) 가 따로 유일하다(uq_pct_orders_auto_batch_code — 수동 오더 경로에서는 걸리지 않는다).
+ * 0052 적용 전 DB 는 옛 제약 unique(batch_no, product_code) 가 남아 있어 품목명·구분이 달라도 막힌다 — 그 경우를 따로 알린다.
+ */
+export function duplicateOrderMessage(err: { message?: string } | null | undefined): string {
+  const msg = err?.message ?? ''
+  if (msg.includes('uq_pct_orders_identity')) {
+    return '품목코드·제조번호·품목명·구분이 모두 같은 오더가 이미 있습니다. 네 값 중 하나라도 달라야 등록할 수 있습니다.'
+  }
+  if (msg.includes('uq_pct_orders_auto_batch_code')) {
+    return '같은 제조번호·품목코드의 자동 적재 오더가 이미 있습니다.'
+  }
+  return '이미 동일한 제조번호·품목코드의 오더가 있습니다. (DB 마이그레이션 0052 적용 전에는 품목명·구분이 달라도 같은 제조번호·품목코드 오더를 만들 수 없습니다)'
+}
+
+/**
  * 수동 오더 생성 (오더배정 화면에서 직접 등록).
  * 제조팀 시트 적재가 아닌 사용자 입력 오더 — product_synced=false, ingest_state='manual'.
- * 자연키(batch_no, product_code) 중복 시 명확한 에러를 던진다.
+ * 품목코드·제조번호·품목명·구분이 모두 같은 오더가 있으면 명확한 에러를 던진다(0052 — 하나라도 다르면 자동 오더가 있어도 등록된다).
  *
  * 담당자는 항상 1인(대표)으로 시작한다 — 병렬 배정은 오더 수정 화면에서만 켠다(스펙 확정).
  * 담당자 기록은 insert 에 넣지 않고 DB 함수 set_order_primary_assignee(0049)로 한다(슬롯 1 행·미러·감사를 함께).
@@ -396,7 +415,7 @@ export async function createOrder(input: {
   const { data, error } = result
   if (error) {
     if (error.code === '23505') {
-      throw new Error('이미 동일한 제조번호·품목코드의 오더가 있습니다.')
+      throw new Error(duplicateOrderMessage(error))
     }
     throw error
   }
@@ -474,6 +493,75 @@ export async function createOrder(input: {
     locked: !!o.locked,
     createdAt: o.created_at as string,
     updatedAt: o.updated_at as string,
+  }
+}
+
+/**
+ * 수동 오더 삭제 — **소프트 삭제**(status='삭제', deleted_at). 행을 지우지 않는다(GMP 이력 보존).
+ *
+ * 적재의 삭제 감지(pctIngest.ts)와 같은 표현이라 목록 기본 필터·대시보드·배정 대상에서 똑같이 빠진다.
+ * 다른 점:
+ *  - ingest_state 는 'manual' 을 그대로 둔다 — 적재 삭제처럼 'deleted' 로 덮으면 수동 오더였다는 표시를 잃는다.
+ *  - 사유 필수. pct_order_edits 에 status 변경 이력을 **먼저** 남기고 값을 바꾼다(updateOrderWithReason 과 같은 순서).
+ *  - 동시분석 그룹에서 뺀다. 적재 삭제는 재생성(rebuildGroups)이 삭제 오더를 걸러 자동 그룹에서 빠지지만,
+ *    수동·잠긴 그룹은 재생성 대상이 아니라 삭제 오더가 멤버로 남는다 — 여기서 직접 뺀다(남은 멤버 1건 이하면 그룹 해체).
+ *  - 담당자 구성은 건드리지 않는다(적재 삭제와 같음). 삭제 오더는 목록·할 일·부하 집계에서 상태로 걸러진다.
+ *
+ * 막는 조건(서버 최종 판정): 자동 적재 오더 · 이미 삭제됨 · 확정(LOCK) · 작업(qc_jobs)이 하나라도 있음.
+ */
+export async function deleteManualOrder(id: string, reason: string, deletedBy: string | null): Promise<void> {
+  const trimmedReason = (reason ?? '').trim()
+  if (!trimmedReason) throw new Error('삭제 사유는 필수입니다.')
+
+  const { data: current, error: curErr } = await supabaseAdmin
+    .from('pct_orders').select('*').eq('id', id).maybeSingle()
+  if (curErr) throw curErr
+  if (!current) throw new Error('오더를 찾을 수 없습니다.')
+  const row = current as Record<string, unknown>
+  if (row.ingest_state !== 'manual') {
+    throw new Error('자동 적재 오더는 삭제할 수 없습니다. 제조팀 시트가 원본입니다.')
+  }
+  if (row.status === DELETED_STATUS) throw new Error('이미 삭제된 오더입니다.')
+  if (row.locked) throw new Error('확정(LOCK)된 오더는 삭제할 수 없습니다. 확정 해제 후 다시 시도해 주세요.')
+
+  const { count: jobCount, error: jobErr } = await supabaseAdmin
+    .from('qc_jobs').select('id', { count: 'exact', head: true }).eq('order_id', id)
+  if (jobErr) throw jobErr
+  if ((jobCount ?? 0) > 0) throw new Error('이미 시험이 시작된 오더는 삭제할 수 없습니다.')
+
+  // ① 이력 먼저
+  const { data: edit, error: logErr } = await supabaseAdmin
+    .from('pct_order_edits')
+    .insert({ order_id: id, field: 'status', old_value: String(row.status ?? ''), new_value: DELETED_STATUS, reason: trimmedReason, edited_by: deletedBy })
+    .select('id')
+    .single()
+  if (logErr) throw new Error(`삭제 이력 기록 실패로 삭제를 취소했습니다: ${logErr.message}`)
+
+  // ② 조건부 소프트 삭제 — 이력을 쓰는 사이 상태가 바뀌었으면(삭제·확정) 0행이 되어 되돌린다
+  const { data: updated, error: updErr } = await supabaseAdmin
+    .from('pct_orders')
+    .update({ status: DELETED_STATUS, deleted_at: new Date().toISOString() })
+    .eq('id', id)
+    .eq('ingest_state', 'manual')
+    .neq('status', DELETED_STATUS)
+    .select('id')
+  const rollbackEdit = () => supabaseAdmin.from('pct_order_edits').delete().eq('id', edit.id as string).then(
+    undefined,
+    () => console.error('[pctOrders] 삭제 이력 롤백 실패 — 수동 정리 필요:', edit.id),
+  )
+  if (updErr) { await rollbackEdit(); throw updErr }
+  if (!updated || updated.length === 0) {
+    await rollbackEdit()
+    throw new Error('오더 상태가 바뀌어 삭제하지 못했습니다. 새로고침 후 다시 시도해 주세요.')
+  }
+
+  // ③ 동시분석 그룹에서 빼기 — 실패해도 삭제 자체는 되돌리지 않는다(다음 재생성·관리자 정리로 수습 가능)
+  try {
+    const { data: memberships } = await supabaseAdmin
+      .from('concurrent_analysis_group_items').select('group_id').eq('order_id', id)
+    for (const m of memberships ?? []) await removeGroupMembers(m.group_id as string, [id])
+  } catch (err) {
+    console.error('[pctOrders] 삭제 오더의 동시분석 그룹 정리 실패 — 삭제는 반영됨:', id, err)
   }
 }
 
@@ -780,7 +868,7 @@ export async function updateOrderWithReason(
         () => console.error('[pctOrders] 이력 롤백 실패 — 수동 정리 필요:', ids),
       )
     }
-    // 자연키 unique(batch_no, product_code) 충돌
+    // 오더 중복 충돌 — 0052 후: 네 값(품목코드·제조번호·품목명·구분) 모두 같음 / 0052 전: (제조번호, 품목코드)
     if ((updErr as { code?: string }).code === '23505') {
       if (generatedKeyFields.length > 0 && attempt < 2) {
         for (const rule of MANUAL_KEY_RULES) {
@@ -789,8 +877,8 @@ export async function updateOrderWithReason(
         ;({ dbPatch, edits } = buildEdits())
         continue
       }
-      // 수동 오더의 N/A 를 풀고 넣은 실제 값이 다른 오더와 같은 경우
-      throw new Error('이미 동일한 제조번호·품목코드의 오더가 있습니다.')
+      // 수동 오더의 식별 칸(N/A 해제 포함)을 바꾼 결과가 다른 오더와 네 값 모두 같은 경우
+      throw new Error(duplicateOrderMessage(updErr))
     }
     throw updErr
   }

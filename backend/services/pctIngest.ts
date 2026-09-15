@@ -178,6 +178,11 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
   const deletedByKey = new Map<string, ExistingOrder>()
   for (const r of existingRows ?? []) {
     const row = r as unknown as ExistingOrder
+    // 수동 오더는 적재 매칭에서 뺀다(0052 — 오더 중복 규칙). 수동 오더는 시트가 원본이 아니고,
+    // 품목명·구분이 다르면 같은 제조번호·품목코드의 자동 오더와 함께 있을 수 있다.
+    // 예전에는 같은 키의 수동 오더를 "기존 오더"로 보고 시트 값으로 덮어써 수동 표시(ingest_state)까지 잃었다.
+    // 자동 오더끼리는 (제조번호, 품목코드)가 여전히 유일하므로(0052 부분 unique) 두 맵의 키는 겹치지 않는다.
+    if (row.ingest_state === 'manual') continue
     const key = keyOf(row.batch_no, row.product_code)
     if (row.status === DELETED_STATUS) deletedByKey.set(key, row)
     else existingByKey.set(key, row)
@@ -417,7 +422,12 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
         source_file_id: fileId,
       }, row.validationType))
       if (error) {
-        fail(key, 'new', `신규 오더 생성 실패: ${error.message}`)
+        // 같은 제조번호·품목코드의 수동 오더가 있는 경우 — 0052 적용 후에는 품목명·구분까지 모두 같을 때만,
+        // 0052 적용 전에는 (제조번호, 품목코드) 만 같아도 막힌다. 어느 쪽이든 조용히 넘기지 않고 실패로 남긴다.
+        const dupManual = error.code === '23505'
+          ? ' — 같은 제조번호·품목코드(품목명·구분 포함)의 수동 오더가 이미 있습니다. 수동 오더를 정리하거나 SQL 0052 적용 여부를 확인하세요.'
+          : ''
+        fail(key, 'new', `신규 오더 생성 실패: ${error.message}${dupManual}`)
       } else {
         result.created++
         await logIngest(key, 'new', PENDING_STATUS, fileId)
@@ -485,7 +495,7 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
     // 수동 오더는 정의상 시트에 없다 — "시트에서 사라졌다"는 판정 자체가 성립하지
     // 않는다. 가드가 없으면 '대기' 상태 수동 오더는 다음 적재에서 100% 삭제되고,
     // 게다가 삭제가 ingest_state 를 'deleted' 로 덮어써 'manual' 마커까지 잃어
-    // 사후 식별조차 불가능해진다.
+    // 사후 식별조차 불가능해진다. (이제 맵을 만들 때 이미 빼지만, 방어선으로 남긴다)
     if (existing.ingest_state === 'manual') continue
     const { error } = await supabaseAdmin.from('pct_orders').update({
       status: DELETED_STATUS, ingest_state: 'deleted', deleted_at: nowIso,

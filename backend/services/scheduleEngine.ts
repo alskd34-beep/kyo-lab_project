@@ -30,6 +30,8 @@ export interface EnginePctRow {
   품목코드: string
   품목명:   string
   제조번호: string
+  /** 오더 id — 호출부(pctAssign)가 결과를 오더에 되붙이는 키. 같은 품목코드·제조번호 오더가 둘 이상일 수 있다(0052) */
+  orderId?: string
   포장일:   string   // ISO 'YYYY-MM-DD' 또는 'M/D'
   완료예정일?: string // QC완료예정일 — 역순 ALAP 스케줄링 기준(있으면 우선). 없으면 포장일 정방향
   긴급:     boolean
@@ -58,6 +60,8 @@ export interface EngineWorkload { productCode: string; avgWorkdays: number }
 /** 반차와 겹친 배정 — 관리자가 "이대로 배정할지" 확인하는 용도 */
 export interface EngineHalfDayNotice {
   testerId: string
+  /** 입력 행의 orderId (있을 때) */
+  orderId?: string
   productCode: string
   batchNo: string
   testItemName: string | null   // 개별항목 배정이면 항목명, 전항목이면 null
@@ -111,6 +115,8 @@ export interface StabilityLink {
 
 export interface EngineAssignment {
   key: string
+  /** 입력 행의 orderId (있을 때) */
+  orderId?: string
   productCode: string
   productName: string
   batchNo: string
@@ -135,6 +141,8 @@ export interface EngineAssignment {
 }
 
 export interface EngineUnassigned {
+  /** 입력 행의 orderId (있을 때) */
+  orderId?: string
   productCode: string
   productName: string
   batchNo: string
@@ -412,7 +420,7 @@ export function generatePctSchedule(input: EngineInput): EngineResult {
       const reason = (r.포장일 ?? '').trim()
         ? '포장일 형식 오류'
         : NO_PACKAGING_DATE_REASON
-      unassigned.push({ productCode: code, productName: r.품목명, batchNo: r.제조번호, testItems: effectiveItems, reason })
+      unassigned.push({ orderId: r.orderId, productCode: code, productName: r.품목명, batchNo: r.제조번호, testItems: effectiveItems, reason })
       continue
     }
     const due = normalizeDate(r.완료예정일 ?? '', year)
@@ -426,7 +434,7 @@ export function generatePctSchedule(input: EngineInput): EngineResult {
     // 키워드 품목인데 품목별 시험항목이 없으면 폴백 없이 미배정+경고(PRD).
     const isIndividualGroup = isIndividualItemKeyword(r.품목명)
     if (isIndividualGroup && items.length === 0) {
-      unassigned.push({ productCode: code, productName: r.품목명, batchNo: r.제조번호, testItems: [], reason: '개별항목 그룹 품목이나 품목별 시험항목 없음' })
+      unassigned.push({ orderId: r.orderId, productCode: code, productName: r.품목명, batchNo: r.제조번호, testItems: [], reason: '개별항목 그룹 품목이나 품목별 시험항목 없음' })
       continue
     }
     const method: '전항목' | '개별항목' = isIndividualGroup ? '개별항목' : r.진행방법
@@ -464,7 +472,7 @@ export function generatePctSchedule(input: EngineInput): EngineResult {
         assignedThisProduct.add(testerId)
         assignments.push({
           key: `${code}-${r.제조번호}-${ti}-${testerId}`,
-          productCode: code, productName: r.품목명, batchNo: r.제조번호,
+          orderId: r.orderId, productCode: code, productName: r.품목명, batchNo: r.제조번호,
           testerName, testerId, testItems: [ti], method: '개별항목',
           isDuo, duoPartner: partner, isUrgent: r.긴급, startDate: itemStart, dates: itemDates, workdays: itemWorkdays,
           note: [isHeavyMetal ? '개별 중금속(1일 고정)' : '', r.긴급 ? '긴급' : '', itemWin.deadlineRisk ? '⚠마감위험' : ''].filter(Boolean).join(' '),
@@ -475,7 +483,7 @@ export function generatePctSchedule(input: EngineInput): EngineResult {
         packInfo.push({ earliestStart, due, workdays: itemWorkdays, pinned: isHeavyMetal })
       }
       if (unassignedItems.length > 0) {
-        unassigned.push({ productCode: code, productName: r.품목명, batchNo: r.제조번호, testItems: unassignedItems, reason: `개별항목 자격 시험자 없음: ${unassignedItems.join(', ')}` })
+        unassigned.push({ orderId: r.orderId, productCode: code, productName: r.품목명, batchNo: r.제조번호, testItems: unassignedItems, reason: `개별항목 자격 시험자 없음: ${unassignedItems.join(', ')}` })
       }
     } else {
       // 전항목: 전체 시험항목 장비 합집합을 다룰 수 있는 1인(또는 듀오)
@@ -501,7 +509,7 @@ export function generatePctSchedule(input: EngineInput): EngineResult {
       } else {
         const d = pickDuo(capsArr, dates)
         if (!d) {
-          unassigned.push({ productCode: code, productName: r.품목명, batchNo: r.제조번호, testItems: effectiveItems, reason: needsDuo ? '듀오 조 구성 불가' : '전항목 자격 시험자 없음' })
+          unassigned.push({ orderId: r.orderId, productCode: code, productName: r.품목명, batchNo: r.제조번호, testItems: effectiveItems, reason: needsDuo ? '듀오 조 구성 불가' : '전항목 자격 시험자 없음' })
           continue
         }
         chosen = d.lead; isDuo = true; partner = d.partner.name
@@ -512,7 +520,7 @@ export function generatePctSchedule(input: EngineInput): EngineResult {
 
       assignments.push({
         key: `${code}-${r.제조번호}-${chosen.id}`,
-        productCode: code, productName: r.품목명, batchNo: r.제조번호,
+        orderId: r.orderId, productCode: code, productName: r.품목명, batchNo: r.제조번호,
         testerName: chosen.name, testerId: chosen.id, testItems: effectiveItems,
         method: '전항목', isDuo, duoPartner: partner, isUrgent: r.긴급,
         startDate, dates, workdays,
@@ -589,6 +597,7 @@ export function generatePctSchedule(input: EngineInput): EngineResult {
     if (days.length > 0) {
       halfDayNotices.push({
         testerId: a.testerId,
+        orderId: a.orderId,
         productCode: a.productCode,
         batchNo: a.batchNo,
         testItemName: a.assignmentType === 'INDIVIDUAL_ITEM' ? (a.testItemName ?? null) : null,
@@ -603,6 +612,7 @@ export function generatePctSchedule(input: EngineInput): EngineResult {
         if (pDays.length > 0) {
           halfDayNotices.push({
             testerId: partner.id,
+            orderId: a.orderId,
             productCode: a.productCode,
             batchNo: a.batchNo,
             testItemName: a.assignmentType === 'INDIVIDUAL_ITEM' ? (a.testItemName ?? null) : null,

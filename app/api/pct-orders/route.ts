@@ -5,11 +5,12 @@
  *         필수: productName·dueDate. productCode·batchNo 를 비우면 N/A(서버가 NA-… 대체값 생성)
  *   PATCH /api/pct-orders  { id, patch, reason, assignees? }         — 사유 필수 수정 (admin)
  *         assignees: [{ slot: 1~5, testerId }] 병렬 배정 담당자 구성(빈 배열 = 미배정). 없으면 구성은 그대로.
+ *   DELETE /api/pct-orders { id, reason }                          — 수동 오더 소프트 삭제 (admin, 사유 필수)
  */
 
 import { NextRequest } from 'next/server'
 import { requireAuth, requireAdmin } from '@backend/lib/guard'
-import { listOrders, createOrder, updateOrderWithReason } from '@backend/services/pctOrders'
+import { listOrders, createOrder, updateOrderWithReason, deleteManualOrder } from '@backend/services/pctOrders'
 
 export const runtime = 'nodejs'
 
@@ -94,6 +95,20 @@ export async function PATCH(req: NextRequest) {
     await updateOrderWithReason(body.id, body.patch, body.reason ?? '', auth.payload.sub ?? null, {
       assignees: body.assignees,
     })
+    return Response.json({ ok: true })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : '서버 오류'
+    return Response.json({ error: msg }, { status: 400 })
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  const auth = await requireAdmin(req)
+  if (!auth.ok) return auth.response
+  try {
+    const body = await req.json().catch(() => ({})) as { id?: string; reason?: string }
+    if (!body.id) return Response.json({ error: 'id 필수' }, { status: 400 })
+    await deleteManualOrder(body.id, body.reason ?? '', auth.payload.sub ?? null)
     return Response.json({ ok: true })
   } catch (err) {
     const msg = err instanceof Error ? err.message : '서버 오류'

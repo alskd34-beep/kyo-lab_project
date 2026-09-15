@@ -5,7 +5,7 @@ import { useAuth } from "@frontend/lib/auth-context"
 import {
   RefreshCw, Sparkles, History, AlertCircle, X, Loader2, Database, Plus,
   ChevronDown, ChevronRight, ChevronLeft, Lock, LockOpen, Search, CalendarDays, Users, ListChecks, Layers,
-  Check, UserMinus,
+  Check, UserMinus, Trash2,
 } from "lucide-react"
 import { CLOSED_STAGE, JOB_STAGES, stageStyle } from "@shared/qc-status"
 import {
@@ -587,6 +587,13 @@ export default function OrdersPage() {
 
   const unsyncedCount = rows.filter(r => r.source === "auto" && !r.productSynced).length
 
+  // 품목코드·제조번호가 같은 오더가 둘 이상인 오더 id — 카드에서 구분 배지를 늘 띄워 서로 가른다
+  const sameKeyOrderIds = useMemo(() => {
+    const byKey = new Map<string, OrderRow[]>()
+    for (const r of rows) pushTo(byKey, `${r.productCode}|${r.batchNo}`, r)
+    return new Set([...byKey.values()].filter(rs => rs.length > 1).flat().map(r => r.id))
+  }, [rows])
+
   /**
    * 오더 id → 그 오더가 속한 동시분석 실행 그룹.
    *
@@ -930,9 +937,11 @@ export default function OrdersPage() {
                     목록에서 바로 알아볼 수 있어야 한다. 표시 전용이다 — 배정 엔진(pctAssign)은
                     이 값을 읽지 않는다. 대부분이 '일반'이라 전부 붙이면 배지가 의미를 잃으므로
                     일반이 아닐 때만 띄운다. */}
-                {r.validationType && r.validationType !== "일반" && (
+                {/* 같은 품목코드·제조번호 오더가 둘 이상이면(0052 — 품목명·구분이 다르면 허용) 구분이 '일반'·없음이어도
+                    띄운다. 그래야 품목명까지 같은 두 카드(구분만 다름)를 목록에서 가를 수 있다. */}
+                {(sameKeyOrderIds.has(r.id) || (r.validationType && r.validationType !== "일반")) && (
                   <Badge variant="outline" className="border-blue-200 text-blue-700 dark:border-blue-800 dark:text-blue-300">
-                    {r.validationType}
+                    {r.validationType || "구분 없음"}
                   </Badge>
                 )}
               </div>
@@ -2170,6 +2179,69 @@ function CreateModal({ testers, absences, onClose, onCreated }: {
   )
 }
 
+// ─── 수동 오더 삭제 확인 (사유 필수) ──────────────────────────────────────────
+function DeleteOrderDialog({ order, onClose, onDeleted }: { order: OrderRow; onClose: () => void; onDeleted: () => void }) {
+  const uid = useId()
+  const [reason, setReason] = useState("")
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  const submit = async () => {
+    if (!reason.trim()) { setErr("삭제 사유는 필수입니다."); return }
+    setBusy(true); setErr(null)
+    try {
+      const res = await fetch("/api/pct-orders", {
+        method: "DELETE", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: order.id, reason: reason.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      onDeleted()
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "삭제 실패")
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <Dialog open onOpenChange={next => { if (!next && !busy) onClose() }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>수동 오더를 삭제할까요?</DialogTitle>
+          <DialogDescription className="break-keep">
+            {order.productName} ({displayBatchNo(order.batchNo)}) 오더를 삭제 상태로 바꿉니다. 목록·배정 대상에서 빠지고,
+            삭제 사유는 수정 이력에 남습니다. 동시분석 그룹에 들어 있으면 그룹에서도 빠집니다.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogBody>
+          <label htmlFor={`${uid}-deleteReason`} className="mb-1 block text-xs font-semibold text-foreground">
+            삭제 사유 <span className="text-red-500">*</span>
+          </label>
+          <textarea
+            id={`${uid}-deleteReason`}
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+            rows={3}
+            placeholder="삭제하는 이유를 입력하세요 (필수)"
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+          />
+          {err && (
+            <p className="mt-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs leading-normal break-keep text-destructive">
+              {err}
+            </p>
+          )}
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={busy}>취소</Button>
+          <Button variant="destructive" onClick={submit} disabled={busy || !reason.trim()}>
+            {busy ? <Loader2 className="animate-spin" /> : <Trash2 />}삭제
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 /// ─── 수정 모달 (사유 필수) ────────────────────────────────────────────────────
 /** 오더 수정 서랍의 담당자 행 (슬롯 번호 + 고른 시험자, 빈 문자열 = 아직 안 고름) */
 interface AssigneeFormRow { slot: AssigneeSlot; testerId: string }
@@ -2233,8 +2305,15 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
   const [reason, setReason] = useState("")
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  // 삭제를 막는 이유(서버 deleteManualOrder 와 같은 기준의 화면 보조 판정) — null 이면 삭제 가능
+  const deleteBlockReason = order.locked
+    ? "확정(LOCK)된 오더는 삭제할 수 없습니다. 확정 해제 후 삭제하세요."
+    : order.hasJob
+      ? "이미 시험이 시작된 오더는 삭제할 수 없습니다."
+      : null
 
-  const dates = { packagingDate: form.packagingDate || null, dueDate: form.dueDate || null, plannedStartDate: form.plannedStartDate || null }
+  const dates ={ packagingDate: form.packagingDate || null, dueDate: form.dueDate || null, plannedStartDate: form.plannedStartDate || null }
   const testerName = (id: string) => testers.find(t => t.id === id)?.name ?? "선택한"
   const savedBySlot = useMemo(() => new Map(order.assignees.map(a => [a.slot as number, a])), [order.assignees])
   const savedTesterIds = useMemo(() => new Set(order.assignees.map(a => a.testerId)), [order.assignees])
@@ -2450,6 +2529,19 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
       onClose={onClose}
       footer={
         <>
+          {/* 수동 오더만 삭제(소프트 삭제, 사유 필수) — [취소] 왼쪽. 최종 판정은 서버(deleteManualOrder). */}
+          {/* 비활성 버튼은 pointer-events 가 꺼져 title 이 안 뜨므로 감싼 span 에 이유를 단다 */}
+          {!isAutoOrder && isAdmin && (
+            <span title={deleteBlockReason ?? "이 수동 오더를 삭제합니다"} className="inline-flex">
+              <Button
+                variant="destructive" size="lg"
+                onClick={() => setDeleteOpen(true)}
+                disabled={saving || !!deleteBlockReason}
+              >
+                <Trash2 />삭제
+              </Button>
+            </span>
+          )}
           <Button variant="outline" size="lg" onClick={onClose}>취소</Button>
           <Button size="lg" onClick={save} disabled={saving}>
             {saving && <Loader2 className="animate-spin" />}저장
@@ -2706,6 +2798,13 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
         </p>
       )}
 
+      {deleteOpen && (
+        <DeleteOrderDialog
+          order={order}
+          onClose={() => setDeleteOpen(false)}
+          onDeleted={() => { setDeleteOpen(false); onSaved() }}
+        />
+      )}
     </SlideOver>
   )
 }

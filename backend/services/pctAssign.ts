@@ -114,8 +114,18 @@ function withAutoUnassignedNote(note: string | null, reason: string): string {
     .join('\n')
 }
 
+/**
+ * 배정 결과를 오더에 되붙이는 키 — **오더 id**.
+ * 예전에는 `품목코드|제조번호` 였는데, 0052 부터 품목명·구분이 다르면 같은 품목코드·제조번호 오더가
+ * 둘 이상 있을 수 있어(자동 + 수동 등) Map 이 덮어써져 배정 결과가 섞인다.
+ */
 function orderKey(order: OrderForAssign): string {
-  return `${order.product_code}|${order.batch_no}`
+  return order.id
+}
+
+/** 엔진 결과 행의 키 — 입력 행에 실어 보낸 orderId. 없으면(다른 호출부) 예전 키로 */
+function engineResultKey(r: { orderId?: string; productCode: string; batchNo: string }): string {
+  return r.orderId ?? `${r.productCode}|${r.batchNo}`
 }
 
 /**
@@ -597,6 +607,7 @@ async function autoAssignRule(
     // [규칙3] 긴급은 공수 ≤3DAY 품목만 허용(PRD). 공수 미상정 품목은 ≤3DAY 보장이 안 되므로 긴급 제외.
     const urgent = !!o.is_urgent && wd != null && emergencyAllowed(wd)
     return {
+      orderId:  o.id,
       품목코드: code,
       품목명:   o.product_name ?? '',
       제조번호: o.batch_no ?? '',
@@ -633,9 +644,9 @@ async function autoAssignRule(
   })
 
   const testerByKey = new Map<string, { id: string; name: string }>()
-  for (const a of engine.assignments) testerByKey.set(`${a.productCode}|${a.batchNo}`, { id: a.testerId, name: a.testerName })
+  for (const a of engine.assignments) testerByKey.set(engineResultKey(a), { id: a.testerId, name: a.testerName })
   const reasonByKey = new Map<string, string>()
-  for (const item of engine.unassigned) reasonByKey.set(`${item.productCode}|${item.batchNo}`, item.reason)
+  for (const item of engine.unassigned) reasonByKey.set(engineResultKey(item), item.reason)
 
   // [규칙1] 향정신성 오더는 **사후 거부가 아니라 사전 필터**로 처리한다.
   //
@@ -660,10 +671,10 @@ async function autoAssignRule(
       absences, holidays,
     })
     for (const a of psychoEngine.assignments) {
-      psychoByKey.set(`${a.productCode}|${a.batchNo}`, { id: a.testerId, name: a.testerName })
+      psychoByKey.set(engineResultKey(a), { id: a.testerId, name: a.testerName })
     }
     for (const item of psychoEngine.unassigned) {
-      reasonByKey.set(`${item.productCode}|${item.batchNo}`, item.reason)
+      reasonByKey.set(engineResultKey(item), item.reason)
     }
   }
 
@@ -678,7 +689,7 @@ async function autoAssignRule(
     .map(t => ({ id: t.id, name: t.name }))
   const pick = withForcedRules(
     (o) => {
-      const key = `${o.product_code}|${o.batch_no}`
+      const key = orderKey(o)
       // 향정신성 오더는 제외 대상을 뺀 후보로 재계산한 결과를 우선한다.
       if (isPsychotropic(o.product_name)) return psychoByKey.get(key) ?? null
       return testerByKey.get(key) ?? null
@@ -810,7 +821,7 @@ function collectHalfDayNotices(input: {
     for (const r of reps) repByKey.set(orderKey(r), r)
 
     for (const n of engineNotices) {
-      const rep = repByKey.get(`${n.productCode}|${n.batchNo}`)
+      const rep = repByKey.get(engineResultKey(n))
       if (!rep) continue
       for (const member of membersByRepId.get(rep.id) ?? [rep]) {
         // 엔진 판정 시점과 최종 배정이 어긋날 수 있어(강제배정 규칙 등) 담당자가 같을 때만 알린다
