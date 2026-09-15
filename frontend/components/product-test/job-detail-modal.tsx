@@ -20,6 +20,8 @@ import {
   CheckCircle2, Circle, Clock, LoaderCircle, TriangleAlert, User,
 } from "lucide-react"
 import { IN_PROGRESS_STATUS, stageStyle } from "@shared/qc-status"
+import { displayBatchNo } from "@shared/order-na"
+import { GroupMembersSection, type JobGroupSummary } from "@frontend/components/common/job-group-stage"
 import {
   BulkReviewBar, ItemReviewActions, ItemReviewBadge,
 } from "@frontend/components/common/job-item-review"
@@ -70,6 +72,8 @@ export interface JobDetail {
   nextStageLabel: string | null
   /** 0048 미적용 안내 — 검토 상태를 읽지 못했을 때만 */
   reviewSetupError: string | null
+  /** 동시분석 그룹 요약(오더 2건 이상, 관리자 응답에만). 없으면 null */
+  group?: JobGroupSummary | null
 }
 
 // ─── 헬퍼 ────────────────────────────────────────────────────────────────────
@@ -201,7 +205,7 @@ export function JobDetailModal({
                 <p className="truncate text-sm font-semibold text-foreground">
                   {detail.productName}
                   <span className="ml-1.5 font-mono text-xs font-normal text-muted-foreground">
-                    / {detail.batchNo}
+                    / {displayBatchNo(detail.batchNo)}
                   </span>
                 </p>
                 <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -215,12 +219,18 @@ export function JobDetailModal({
                 </div>
               </section>
 
-              {/* 상태 변경 (관리자) — 승인, 사유를 적는 직접 변경 */}
+              {/* 동시분석 그룹 — 같은 그룹의 다른 배치(관리자 응답에만 온다) */}
+              {isAdmin && detail.group && (
+                <GroupMembersSection group={detail.group} currentJobId={detail.jobId} />
+              )}
+
+              {/* 상태 변경 (관리자) — 승인(그룹이면 그룹 승인이 기본), 사유를 적는 직접 변경 */}
               {isAdmin && (
                 <JobStatusControl
                   jobId={detail.jobId}
                   status={detail.status}
                   onChanged={handleChanged}
+                  group={detail.group}
                 />
               )}
 
@@ -238,6 +248,7 @@ export function JobDetailModal({
                   jobStatus={detail.status}
                   items={detail.items}
                   onChanged={handleChanged}
+                  group={detail.group}
                 />
               )}
 
@@ -378,6 +389,7 @@ export function JobDetailModal({
                                 jobStatus={detail.status}
                                 item={it}
                                 onChanged={handleChanged}
+                                group={detail.group}
                               />
                             )}
                           </div>

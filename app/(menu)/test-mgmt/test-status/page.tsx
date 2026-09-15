@@ -20,6 +20,7 @@ import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from '@fr
 import { TesterAvatar } from '@frontend/lib/tester-profiles'
 import { useAuth } from '@frontend/lib/auth-context'
 import { TestDetailDrawer } from '@frontend/components/test-mgmt/test-detail-drawer'
+import { ConcurrentBadge } from '@frontend/components/common/job-group-stage'
 import { MobileFilterPanel } from '@frontend/components/common/mobile-filter-panel'
 import { format, subMonths } from 'date-fns'
 import {
@@ -513,7 +514,10 @@ export default function TestStatusPage() {
                               </span>
                             </div>
                             <p className="mt-1 truncate text-sm font-medium text-foreground">{row.product}</p>
-                            <p className="font-mono text-xs leading-normal text-muted-foreground">{row.testNo}</p>
+                            <p className="flex min-w-0 items-center gap-1.5 font-mono text-xs leading-normal text-muted-foreground">
+                              <span className="truncate">{row.testNo}</span>
+                              <ConcurrentBadge size={row.groupSize} />
+                            </p>
                             <p className="mt-1 truncate text-xs leading-normal text-muted-foreground">{row.items}</p>
                             <div className="mt-1.5 flex items-center justify-between gap-2">
                               <div className="flex min-w-0 items-center gap-1.5">
@@ -623,7 +627,12 @@ export default function TestStatusPage() {
                         </TableCell>
                         <TableCell className="px-3 py-2">
                           <CellStack
-                            primary={row.testNo}
+                            primary={
+                              <span className="flex min-w-0 items-center gap-1.5">
+                                <span className="truncate">{row.testNo}</span>
+                                <ConcurrentBadge size={row.groupSize} />
+                              </span>
+                            }
                             secondary={row.items}
                             primaryClass="font-mono text-xs text-foreground"
                             title={`${row.testNo} / ${row.items}`}

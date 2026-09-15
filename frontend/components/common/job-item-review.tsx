@@ -8,6 +8,10 @@
  *
  * 버튼 노출은 보조 판정일 뿐이다. 최종 허용 판정·기록·작업 단계 도출은 서버(DB 함수 0048)가 한다.
  * 규칙 전문: intent/2026-09-15-item-level-review-spec.md
+ *
+ * 작업이 동시분석 그룹(시작된 작업 2건 이상)에 속하면 검토 시작·검토 완료와 일괄 버튼의 기본 동작이
+ * **그룹 적용**이고, 보조로 "이 배치만"을 둔다(0051). 검토 취소·재실시는 전파하지 않는다.
+ * 규칙 전문: intent/2026-09-15-group-stage-progress-spec.md
  */
 
 import { useState } from "react"
@@ -22,6 +26,11 @@ import { cn } from "@frontend/lib/utils"
 import { Badge } from "@frontend/components/ui/badge"
 import { Button } from "@frontend/components/ui/button"
 import { Input } from "@frontend/components/ui/input"
+import type { GroupReviewResult } from "@shared/qc-group-stage"
+import {
+  GroupTargetConfirmDialog, groupApplyLabel, groupReviewItemCount, groupReviewTargets, isGroupActionable,
+  useGroupStageResultToast, type JobGroupSummary,
+} from "@frontend/components/common/job-group-stage"
 import {
   Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@frontend/components/ui/dialog"
@@ -194,21 +203,49 @@ function ReviewReasonDialog({ action, item, busy, error, onSubmit, onClose }: {
  *   검토 대기(cleared+none) → [검토 시작] · 검토 중 → [검토 완료] [검토 취소] · 완료 항목 → [재실시]
  * 작업이 승인완료면 전부 숨긴다.
  */
-export function ItemReviewActions({ jobId, jobStatus, item, disabled = false, onChanged }: {
+export function ItemReviewActions({ jobId, jobStatus, item, disabled = false, onChanged, group = null }: {
   jobId: string
   jobStatus: string
   item: ReviewableItem
   disabled?: boolean
   /** 검토가 반영된 뒤 호출 — 상세·이력·목록 갱신에 쓴다 */
   onChanged: () => void
+  /** 작업이 속한 동시분석 그룹(관리자 상세 응답). 있으면 검토 시작·완료의 기본 동작이 그룹 적용 */
+  group?: JobGroupSummary | null
 }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [reasonAction, setReasonAction] = useState<"review_cancel" | "reopen" | null>(null)
   const [confirmComplete, setConfirmComplete] = useState(false)
+  const [confirmGroupComplete, setConfirmGroupComplete] = useState(false)
+  const showGroupResult = useGroupStageResultToast()
 
   if (jobStatus === CLOSED_STAGE || item.status !== ITEM_CLEARED) return null
   const rs = reviewStatusOf(item)
+
+  // 그룹 적용 대상 — 이 배치 말고 다른 배치에도 적용할 것이 있을 때만 그룹 버튼을 보인다(보조 판정)
+  const groupOn = isGroupActionable(group)
+  const startTargets = groupOn ? groupReviewTargets(group, "review_start", item.testItemName) : []
+  const completeTargets = groupOn ? groupReviewTargets(group, "review_complete", item.testItemName) : []
+  const showGroupStart = startTargets.some(m => m.jobId !== jobId)
+  const showGroupComplete = completeTargets.some(m => m.jobId !== jobId)
+
+  async function runGroup(action: ItemReviewBulkAction) {
+    if (!group) return
+    setBusy(true); setError(null)
+    try {
+      const res = await api.post<GroupReviewResult>(
+        `/api/qc-jobs/group/${group.groupId}/review`, { testItemName: item.testItemName, action },
+      )
+      showGroupResult(`"${item.testItemName}" ${ITEM_REVIEW_ACTION_LABEL[action]}(그룹)`, res)
+      setConfirmGroupComplete(false)
+      onChanged()
+    } catch (e) {
+      setError(errorMessage(e))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function run(action: ItemReviewAction, reason?: string) {
     setBusy(true); setError(null)
@@ -228,15 +265,33 @@ export function ItemReviewActions({ jobId, jobStatus, item, disabled = false, on
   return (
     <div className="flex flex-col items-end gap-1">
       <div className="flex flex-wrap items-center justify-end gap-1">
+        {/* 그룹 적용이 기본 — 검토 시작은 모달 없이 실행하고 결과를 토스트로 알린다 */}
+        {showGroupStart && (
+          <Button size="sm" variant="outline" onClick={() => void runGroup("review_start")} disabled={off}>
+            {busy && !reasonAction ? <Loader2 className="animate-spin" /> : <ClipboardCheck />}
+            검토 시작 ({groupApplyLabel(startTargets.length)})
+          </Button>
+        )}
         {rs === ITEM_REVIEW_NONE && (
-          <Button size="sm" variant="outline" onClick={() => void run("review_start")} disabled={off}>
-            {busy && !reasonAction ? <Loader2 className="animate-spin" /> : <ClipboardCheck />}검토 시작
+          <Button size="sm" variant={showGroupStart ? "ghost" : "outline"} onClick={() => void run("review_start")} disabled={off}>
+            {busy && !reasonAction && !showGroupStart ? <Loader2 className="animate-spin" /> : <ClipboardCheck />}
+            {showGroupStart ? "이 배치만" : "검토 시작"}
+          </Button>
+        )}
+        {showGroupComplete && (
+          <Button size="sm" onClick={() => { setError(null); setConfirmGroupComplete(true) }} disabled={off}>
+            <CheckCheck />검토 완료 ({groupApplyLabel(completeTargets.length)})
           </Button>
         )}
         {rs === ITEM_REVIEW_REVIEWING && (
           <>
-            <Button size="sm" onClick={() => { setError(null); setConfirmComplete(true) }} disabled={off}>
-              <CheckCheck />검토 완료
+            <Button
+              size="sm"
+              variant={showGroupComplete ? "ghost" : "default"}
+              onClick={() => { setError(null); setConfirmComplete(true) }}
+              disabled={off}
+            >
+              <CheckCheck />{showGroupComplete ? "이 배치만 검토 완료" : "검토 완료"}
             </Button>
             <Button size="sm" variant="ghost" onClick={() => { setError(null); setReasonAction("review_cancel") }} disabled={off}>
               <Undo2 />검토 취소
@@ -247,7 +302,20 @@ export function ItemReviewActions({ jobId, jobStatus, item, disabled = false, on
           <RotateCcw />재실시
         </Button>
       </div>
-      {error && !reasonAction && !confirmComplete && <p className="text-right text-xs leading-normal break-keep text-destructive">{error}</p>}
+      {error && !reasonAction && !confirmComplete && !confirmGroupComplete && <p className="text-right text-xs leading-normal break-keep text-destructive">{error}</p>}
+      {confirmGroupComplete && (
+        <GroupTargetConfirmDialog
+          title="검토 완료 — 동시분석 그룹"
+          description={`시험항목 "${item.testItemName}" 을 그룹 ${completeTargets.length}배치에서 검토 완료로 기록합니다. 검토 기록은 배치마다 남습니다.`}
+          warning={REVIEW_COMPLETE_WARNING}
+          targets={completeTargets}
+          busy={busy}
+          error={error}
+          confirmLabel={`검토 완료 ${completeTargets.length}배치`}
+          onConfirm={() => void runGroup("review_complete")}
+          onClose={() => { setConfirmGroupComplete(false); setError(null) }}
+        />
+      )}
       {confirmComplete && (
         <ReviewCompleteConfirmDialog
           names={[item.testItemName]}
@@ -276,16 +344,44 @@ export function ItemReviewActions({ jobId, jobStatus, item, disabled = false, on
  *   완료 항목 전체 검토 시작 / 검토 중 항목 전체 검토 완료 — 각각 대상이 1건 이상일 때만.
  * 서버가 한 트랜잭션으로 처리한다(전부 성공 아니면 전부 실패). 기록은 항목마다 남는다.
  */
-export function BulkReviewBar({ jobId, jobStatus, items, onChanged, className }: {
+export function BulkReviewBar({ jobId, jobStatus, items, onChanged, className, group = null }: {
   jobId: string
   jobStatus: string
   items: ReviewableItem[]
   onChanged: () => void
   className?: string
+  /** 작업이 속한 동시분석 그룹. 있으면 일괄 버튼의 기본 동작이 그룹 전 배치 적용 */
+  group?: JobGroupSummary | null
 }) {
   const [busy, setBusy] = useState<ItemReviewBulkAction | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [confirmComplete, setConfirmComplete] = useState(false)
+  const [confirmGroupComplete, setConfirmGroupComplete] = useState(false)
+  const showGroupResult = useGroupStageResultToast()
+
+  const groupOn = isGroupActionable(group)
+  const groupStartTargets = groupOn ? groupReviewTargets(group, "review_start", null) : []
+  const groupCompleteTargets = groupOn ? groupReviewTargets(group, "review_complete", null) : []
+  const groupCompleteItems = groupOn ? groupReviewItemCount(group, "review_complete") : 0
+  const showGroupStart = groupStartTargets.some(m => m.jobId !== jobId)
+  const showGroupComplete = groupCompleteTargets.some(m => m.jobId !== jobId)
+
+  async function runGroup(action: ItemReviewBulkAction) {
+    if (!group) return
+    setBusy(action); setError(null)
+    try {
+      const res = await api.post<GroupReviewResult>(`/api/qc-jobs/group/${group.groupId}/review-bulk`, { action })
+      showGroupResult(
+        action === "review_start" ? "완료 항목 전체 검토 시작(그룹)" : "검토 중 항목 전체 검토 완료(그룹)", res,
+      )
+      setConfirmGroupComplete(false)
+      onChanged()
+    } catch (e) {
+      setError(errorMessage(e))
+    } finally {
+      setBusy(null)
+    }
+  }
 
   const waiting = items.filter(i => i.status === ITEM_CLEARED && reviewStatusOf(i) === ITEM_REVIEW_NONE).length
   const reviewing = items.filter(i => reviewStatusOf(i) === ITEM_REVIEW_REVIEWING).length
@@ -312,24 +408,65 @@ export function BulkReviewBar({ jobId, jobStatus, items, onChanged, className }:
         <span className="text-xs leading-normal tabular-nums text-muted-foreground">
           검토 대기 {waiting}건 · 검토 중 {reviewing}건 · 검토 완료 {reviewed}/{items.length}
         </span>
+        {groupOn && (
+          <span className="text-xs leading-normal tabular-nums text-muted-foreground">
+            (그룹 전체: 검토 대기 {groupReviewItemCount(group, "review_start")}건 · 검토 중 {groupCompleteItems}건)
+          </span>
+        )}
         {!closed && (
           <div className="ml-auto flex flex-wrap items-center gap-1.5">
-            {waiting > 0 && (
-              <Button size="sm" variant="outline" onClick={() => void run("review_start")} disabled={busy !== null}>
+            {/* 그룹 적용이 기본 — 검토 시작은 모달 없이, 검토 완료는 대상 배치 확인 모달 */}
+            {showGroupStart && (
+              <Button size="sm" variant="outline" onClick={() => void runGroup("review_start")} disabled={busy !== null}>
                 {busy === "review_start" ? <Loader2 className="animate-spin" /> : <ClipboardCheck />}
-                완료 항목 전체 검토 시작
+                완료 항목 전체 검토 시작 ({groupApplyLabel(groupStartTargets.length)})
+              </Button>
+            )}
+            {waiting > 0 && (
+              <Button
+                size="sm"
+                variant={showGroupStart ? "ghost" : "outline"}
+                onClick={() => void run("review_start")}
+                disabled={busy !== null}
+              >
+                {busy === "review_start" && !showGroupStart ? <Loader2 className="animate-spin" /> : <ClipboardCheck />}
+                {showGroupStart ? "이 배치만" : "완료 항목 전체 검토 시작"}
+              </Button>
+            )}
+            {showGroupComplete && (
+              <Button size="sm" onClick={() => { setError(null); setConfirmGroupComplete(true) }} disabled={busy !== null}>
+                <CheckCheck />
+                검토 중 항목 전체 검토 완료 ({groupApplyLabel(groupCompleteTargets.length)})
               </Button>
             )}
             {reviewing > 0 && (
-              <Button size="sm" onClick={() => { setError(null); setConfirmComplete(true) }} disabled={busy !== null}>
+              <Button
+                size="sm"
+                variant={showGroupComplete ? "ghost" : "default"}
+                onClick={() => { setError(null); setConfirmComplete(true) }}
+                disabled={busy !== null}
+              >
                 <CheckCheck />
-                검토 중 항목 전체 검토 완료
+                {showGroupComplete ? "이 배치만 검토 완료" : "검토 중 항목 전체 검토 완료"}
               </Button>
             )}
           </div>
         )}
       </div>
-      {error && !confirmComplete && <p className="mt-2 text-xs font-medium text-destructive">{error}</p>}
+      {error && !confirmComplete && !confirmGroupComplete && <p className="mt-2 text-xs font-medium text-destructive">{error}</p>}
+      {confirmGroupComplete && (
+        <GroupTargetConfirmDialog
+          title="검토 중 항목 전체 검토 완료 — 동시분석 그룹"
+          description={`그룹 ${groupCompleteTargets.length}배치의 검토 중 시험항목 ${groupCompleteItems}건을 검토 완료로 기록합니다. 검토 기록은 배치·항목마다 남습니다.`}
+          warning={REVIEW_COMPLETE_WARNING}
+          targets={groupCompleteTargets}
+          busy={busy !== null}
+          error={error}
+          confirmLabel={`검토 완료 ${groupCompleteTargets.length}배치`}
+          onConfirm={() => void runGroup("review_complete")}
+          onClose={() => { setConfirmGroupComplete(false); setError(null) }}
+        />
+      )}
       {confirmComplete && (
         <ReviewCompleteConfirmDialog
           names={items.filter(i => reviewStatusOf(i) === ITEM_REVIEW_REVIEWING).map(i => i.testItemName)}

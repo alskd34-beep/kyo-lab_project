@@ -14,6 +14,10 @@
  *                   그 메시지를 그대로 보여 준다.
  *
  * 어느 쪽이든 서버가 상태 이력에 남기므로, 바로 아래 이력 타임라인에서 확인할 수 있다.
+ *
+ * 작업이 동시분석 그룹에 속하고 다른 배치도 "승인전" 이면 [승인]의 기본 동작이 **그룹 승인**이다
+ * (POST /api/qc-jobs/group/[groupId]/approve — 배치마다 기존 승인 경로, 원자적이지 않음). 보조로 "이 배치만".
+ * 직접 변경은 그룹으로 전파하지 않는다. 규칙 전문: intent/2026-09-15-group-stage-progress-spec.md §6
  */
 
 import { useState } from "react"
@@ -22,6 +26,12 @@ import {
   CLOSED_STAGE, DELAYED_STATUS, JOB_STAGES,
   NEXT_STAGE, STAGE_ACTION_LABEL, canAdvanceByAdmin,
 } from "@shared/qc-status"
+import type { GroupApproveResult } from "@shared/qc-group-stage"
+import { api, errorMessage } from "@frontend/lib/api-client"
+import {
+  GroupTargetConfirmDialog, groupApplyLabel, groupApproveTargets, isGroupActionable,
+  useGroupStageResultToast, type JobGroupSummary,
+} from "@frontend/components/common/job-group-stage"
 import { cn } from "@frontend/lib/utils"
 import { Button } from "@frontend/components/ui/button"
 import { Input } from "@frontend/components/ui/input"
@@ -32,8 +42,11 @@ import {
 /** 관리자가 지정할 수 있는 상태 — 단계 5개 + 지연 (오더 전용 '대기'·'삭제'는 제외) */
 const SELECTABLE_STATUSES: string[] = [...JOB_STAGES, DELAYED_STATUS]
 
+/** 그룹 승인 확인 모달 경고 — spec §9 */
+const GROUP_APPROVE_WARNING = "승인은 되돌릴 수 없습니다. 되돌리려면 배치마다 사유를 적어 직접 변경해야 합니다."
+
 export function JobStatusControl({
-  jobId, status, onChanged, className,
+  jobId, status, onChanged, className, group = null,
 }: {
   /** 아직 시작되지 않은 오더면 null — 안내만 보여준다 */
   jobId: string | null
@@ -42,7 +55,12 @@ export function JobStatusControl({
   /** 상태가 실제로 바뀐 뒤 호출 — 목록·이력 갱신에 쓴다 */
   onChanged: () => void
   className?: string
+  /** 작업이 속한 동시분석 그룹(관리자 상세 응답). 있으면 [승인]의 기본 동작이 그룹 승인 */
+  group?: JobGroupSummary | null
 }) {
+  const [groupConfirm, setGroupConfirm] = useState(false)
+  const [groupError, setGroupError] = useState<string | null>(null)
+  const showGroupResult = useGroupStageResultToast()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // 단계 전이 확인 대기 — 두 패널(확인/직접 변경)은 동시에 열리지 않는다
@@ -56,6 +74,27 @@ export function JobStatusControl({
   // 작업 단위 수동 전이는 승인(승인전 → 승인완료) 하나뿐이다
   const nextStage = canAdvanceByAdmin(status) ? NEXT_STAGE[status] : null
   const nextLabel = canAdvanceByAdmin(status) ? STAGE_ACTION_LABEL[status] : null
+
+  // 그룹 승인 대상(보조 판정) — 이 배치 말고 다른 "승인전" 배치가 있을 때만 그룹 버튼
+  const groupOn = isGroupActionable(group)
+  const approveTargets = groupOn ? groupApproveTargets(group) : []
+  const showGroupApprove = !!nextStage && approveTargets.some(m => m.jobId !== jobId)
+
+  async function approveGroup() {
+    if (!group) return
+    setBusy(true); setGroupError(null); setError(null); setNotice(null)
+    try {
+      const res = await api.post<GroupApproveResult>(`/api/qc-jobs/group/${group.groupId}/approve`, {})
+      showGroupResult("승인(그룹)", res)
+      setGroupConfirm(false)
+      setConfirming(false)
+      onChanged()
+    } catch (e) {
+      setGroupError(errorMessage(e))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function advance() {
     if (!jobId) return
@@ -118,7 +157,26 @@ export function JobStatusControl({
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-semibold text-foreground">상태 변경</span>
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
-          {nextStage && nextLabel ? (
+          {nextStage && nextLabel && showGroupApprove ? (
+            <>
+              <Button
+                size="sm"
+                onClick={() => { setGroupConfirm(true); setGroupError(null); setConfirming(false); setManualOpen(false); setError(null) }}
+                disabled={busy}
+              >
+                <ArrowRight />{nextLabel} → {nextStage} ({groupApplyLabel(approveTargets.length)})
+              </Button>
+              <Button
+                size="sm"
+                variant={confirming ? "secondary" : "ghost"}
+                aria-expanded={confirming}
+                onClick={() => { setConfirming(c => !c); setManualOpen(false); setError(null) }}
+                disabled={busy}
+              >
+                이 배치만
+              </Button>
+            </>
+          ) : nextStage && nextLabel ? (
             <Button
               size="sm"
               variant={confirming ? "secondary" : "default"}
@@ -205,6 +263,20 @@ export function JobStatusControl({
             </Button>
           </div>
         </div>
+      )}
+
+      {groupConfirm && (
+        <GroupTargetConfirmDialog
+          title="승인 — 동시분석 그룹"
+          description={`그룹 ${approveTargets.length}배치를 "${nextStage ?? CLOSED_STAGE}" 로 넘깁니다. 배치마다 모든 시험항목의 검토가 끝났는지 확인하고, 완료일이 오늘로 기록됩니다.`}
+          warning={GROUP_APPROVE_WARNING}
+          targets={approveTargets}
+          busy={busy}
+          error={groupError}
+          confirmLabel={`승인 ${approveTargets.length}배치`}
+          onConfirm={() => void approveGroup()}
+          onClose={() => { setGroupConfirm(false); setGroupError(null) }}
+        />
       )}
 
       {notice && <p className="mt-2 text-xs font-medium text-blue-700 dark:text-blue-300">{notice}</p>}

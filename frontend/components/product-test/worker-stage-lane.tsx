@@ -5,6 +5,8 @@ import { ChevronDown, ChevronUp, Clock } from "lucide-react"
 import { DELAYED_STATUS, IN_PROGRESS_STATUS, JOB_STAGES } from "@shared/qc-status"
 import { cn } from "@frontend/lib/utils"
 import { Badge } from "@frontend/components/ui/badge"
+import { displayBatchNo } from "@shared/order-na"
+import { ConcurrentBadge } from "@frontend/components/common/job-group-stage"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 export interface OverviewJob {
@@ -19,6 +21,8 @@ export interface OverviewJob {
   itemsCleared: number
   workStartDate: string | null
   workEndDate: string | null
+  /** 동시분석 그룹의 오더 수 — 2 이상이면 "동시 N" 배지 */
+  groupSize?: number
 }
 
 export interface OverviewPending {
@@ -115,7 +119,7 @@ export function JobChip({
     <button
       type="button"
       onClick={() => onOpen(job.jobId)}
-      title={`${job.productName} / ${job.batchNo} — ${job.status}`}
+      title={`${job.productName} / ${displayBatchNo(job.batchNo)} — ${job.status}`}
       className={cn(
         "w-full cursor-pointer rounded-md border bg-card p-2.5 text-left shadow-sm transition-colors",
         // 연한 hover·완료·지연 배경은 밝은 배경 전제라 다크에서 명도만 뒤집는다(50->950, 200->800, 300->700)
@@ -127,6 +131,7 @@ export function JobChip({
       <div className="flex items-center justify-between gap-1">
         <span className="truncate font-mono text-xs leading-normal font-bold text-blue-700 dark:text-blue-300">QC {job.qcNo}</span>
         <span className="flex shrink-0 items-center gap-1">
+          <ConcurrentBadge size={job.groupSize} />
           {job.isUrgent && (
             <Badge variant="outline" className="border-red-200 px-1 py-0 text-xs leading-normal text-red-700 dark:border-red-800 dark:text-red-300">
               긴급
@@ -142,7 +147,7 @@ export function JobChip({
         </span>
       </div>
       <p className="mt-0.5 truncate text-xs leading-normal font-medium text-foreground">{job.productName}</p>
-      <p className="truncate font-mono text-xs leading-normal text-muted-foreground">{job.batchNo}</p>
+      <p className="truncate font-mono text-xs leading-normal text-muted-foreground">{displayBatchNo(job.batchNo)}</p>
     </button>
   )
 }
@@ -283,12 +288,13 @@ export function WorkerStageLane({
                       QC {mainJob.qcNo}
                     </span>
                     <div className="flex shrink-0 items-center gap-1">
+                      <ConcurrentBadge size={mainJob.groupSize} />
                       <DDay due={mainJob.dueDate} />
                     </div>
                   </div>
 
                   <p className="mt-1 truncate text-xs leading-normal font-medium text-muted-foreground">
-                    {mainJob.productName} / {mainJob.batchNo}
+                    {mainJob.productName} / {displayBatchNo(mainJob.batchNo)}
                   </p>
 
                   {mainJob.itemsTotal > 0 && (
@@ -405,7 +411,7 @@ export function WorkerStageLane({
                 <DDay due={firstPending.dueDate} />
               </div>
               <p className="mt-1 truncate text-xs leading-normal text-muted-foreground">
-                {firstPending.productName} {firstPending.batchNo}
+                {firstPending.productName} {displayBatchNo(firstPending.batchNo)}
               </p>
             </div>
           </div>
@@ -449,7 +455,7 @@ export function WorkerStageLane({
                   >
                     <span className="min-w-0 truncate font-medium text-foreground">
                       {order.productName}{" "}
-                      <span className="font-mono text-muted-foreground">{order.batchNo}</span>
+                      <span className="font-mono text-muted-foreground">{displayBatchNo(order.batchNo)}</span>
                     </span>
                     <div className="flex shrink-0 items-center gap-1">
                       {order.isUrgent && (

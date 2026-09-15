@@ -13,6 +13,7 @@ import { supabaseAdmin } from '@backend/lib/supabase'
 import { DELETED_STATUS } from '@shared/qc-status'
 import { METHOD_PARTIAL, mapByOrders } from '@backend/services/pctOrderTestItems'
 import { loadAssigneesByOrder } from '@backend/services/orderAssignees'
+import { loadGroupSizeByOrder } from '@backend/services/qcJobs'
 import { isParallelAssignment } from '@shared/assignment'
 import type { TestRow, StatusKey } from '@shared/qc'
 
@@ -113,7 +114,7 @@ export async function listTests(q: TestsQuery = {}): Promise<TestRow[]> {
   const orderIds = orders.map(o => o.id)
 
   // 2) 작업(QC번호·상태), 담당자명, 품목 메타(구분·예정항목) — 병렬
-  const [jobsRes, testersRes, productMeta, orderItems, assigneeMap] = await Promise.all([
+  const [jobsRes, testersRes, productMeta, orderItems, assigneeMap, groupSizeByOrder] = await Promise.all([
     supabaseAdmin.from('qc_jobs').select('id, order_id, qc_no, status').in('order_id', orderIds),
     supabaseAdmin.from('testers').select('id, name'),
     productMetaByCode([...new Set(orders.map(o => o.product_code))]),
@@ -121,6 +122,8 @@ export async function listTests(q: TestsQuery = {}): Promise<TestRow[]> {
     mapByOrders(orders.filter(o => o.method === METHOD_PARTIAL).map(o => o.id)),
     // 담당자 구성(0049). 미적용이면 대표 미러로 1인 배정처럼 보인다(시험현황 조회를 막지 않는다)
     orderIds.length > 300 ? loadAssigneesByOrder(undefined, { mirror: orders }) : loadAssigneesByOrder(orderIds, { mirror: orders }),
+    // 동시분석 그룹 크기 — 목록의 "동시 N" 배지(실패해도 빈 맵)
+    loadGroupSizeByOrder(),
   ])
 
   // 병렬 배정 오더는 담당자별로 작업이 여러 건이다. 예전처럼 Map<orderId, job> 에 담으면
@@ -193,6 +196,7 @@ export async function listTests(q: TestsQuery = {}): Promise<TestRow[]> {
       status:      toStatusKey(koStatus),
       rawStatus:   koStatus,
       isUrgent:    !!o.is_urgent,
+      groupSize:   groupSizeByOrder.get(o.id) ?? 0,
     }
   })
 

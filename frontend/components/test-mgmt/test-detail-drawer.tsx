@@ -18,6 +18,10 @@ import { useCallback, useEffect, useState } from "react"
 import { CheckCircle2, Circle, ListChecks, LoaderCircle, TriangleAlert } from "lucide-react"
 import type { TestRow } from "@shared/qc"
 import { DELAYED_STATUS, IN_PROGRESS_STATUS, ITEM_EDITABLE_JOB_STATUSES, stageStyle } from "@shared/qc-status"
+import { displayBatchNo } from "@shared/order-na"
+import {
+  ConcurrentBadge, GroupMembersSection, type JobGroupSummary,
+} from "@frontend/components/common/job-group-stage"
 import {
   BulkReviewBar, ItemReviewActions, ItemReviewBadge,
 } from "@frontend/components/common/job-item-review"
@@ -54,6 +58,8 @@ interface JobItemsSnapshot {
   }>
   /** 0048 미적용 안내 — 검토 상태를 읽지 못했을 때만 */
   reviewSetupError: string | null
+  /** 동시분석 그룹 요약(오더 2건 이상, 관리자 응답에만). 없으면 null */
+  group?: JobGroupSummary | null
 }
 
 function formatMinutes(min: number): string {
@@ -156,6 +162,7 @@ export function TestDetailDrawer({
             </Badge>
           )}
           {row?.isUrgent && <Badge variant="outline" className="border-red-200 text-red-700 dark:border-red-800 dark:text-red-300">긴급</Badge>}
+          <ConcurrentBadge size={row?.groupSize} />
         </span>
       )}
       description="시험 요약·시험항목 진행·상태 변경 이력을 한 곳에서 확인합니다."
@@ -184,7 +191,7 @@ export function TestDetailDrawer({
           <section className="rounded-md border bg-card p-3 shadow-sm">
             <p className="truncate text-sm font-semibold text-foreground">
               {row.product}
-              <span className="ml-1.5 font-mono text-xs font-normal text-muted-foreground">/ {row.batchNo}</span>
+              <span className="ml-1.5 font-mono text-xs font-normal text-muted-foreground">/ {displayBatchNo(row.batchNo)}</span>
             </p>
             <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
               <SummaryField label="구분" value={row.category} />
@@ -202,9 +209,14 @@ export function TestDetailDrawer({
             </div>
           </section>
 
-          {/* 상태 변경 (관리자) */}
+          {/* 동시분석 그룹 — 같은 그룹의 다른 배치(관리자 응답에만 온다) */}
+          {isAdmin && detail?.group && (
+            <GroupMembersSection group={detail.group} currentJobId={row.jobId} />
+          )}
+
+          {/* 상태 변경 (관리자) — 그룹이면 그룹 승인이 기본 */}
           {isAdmin && (
-            <JobStatusControl jobId={row.jobId} status={status} onChanged={handleChanged} />
+            <JobStatusControl jobId={row.jobId} status={status} onChanged={handleChanged} group={detail?.group} />
           )}
 
           {detail?.reviewSetupError && (
@@ -216,7 +228,7 @@ export function TestDetailDrawer({
           {/* 시험항목 검토 요약 + 일괄 편의 버튼 (관리자) */}
           {/* 0048 미적용 안내가 떠 있으면 검토 버튼을 숨긴다(눌러도 설치 안내로 거절된다) */}
           {isAdmin && row.jobId && !detail?.reviewSetupError && items && items.length > 0 && (
-            <BulkReviewBar jobId={row.jobId} jobStatus={status} items={items} onChanged={handleChanged} />
+            <BulkReviewBar jobId={row.jobId} jobStatus={status} items={items} onChanged={handleChanged} group={detail?.group} />
           )}
 
           {/* 시험항목 */}
@@ -308,6 +320,7 @@ export function TestDetailDrawer({
                                 jobStatus={status}
                                 item={it}
                                 onChanged={handleChanged}
+                                group={detail?.group}
                               />
                             )}
                           </div>

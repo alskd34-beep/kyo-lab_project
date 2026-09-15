@@ -27,6 +27,7 @@ import {
 import { ASSIGNED_TESTER_FILTER_COLUMN, withAssignedTesterEmbed } from '@backend/lib/assigneeFilter'
 import { PRIMARY_ASSIGNEE_SLOT, isParallelAssignment } from '@shared/assignment'
 import { notifyStageChangeToSlack } from '@backend/services/slackNotify'
+import type { GroupMember, JobGroupSummary } from '@shared/qc-group-stage'
 import {
   ACTIVE_JOB_STATUSES,
   APPROVAL_READY_STATUS,
@@ -415,6 +416,8 @@ export interface OverviewJobRow {
   itemsCleared: number
   workStartDate: string | null
   workEndDate: string | null
+  /** 이 오더가 속한 동시분석 그룹의 오더 수 — 2 이상이면 카드에 "동시 N" 배지. 그룹이 없거나 1건이면 0 */
+  groupSize: number
 }
 export interface OverviewPendingRow {
   orderId: string
@@ -470,6 +473,7 @@ function toOverviewJob(
   j: Record<string, unknown>,
   o: Record<string, unknown> | undefined,
   itemAgg: Map<string, { total: number; cleared: number }>,
+  groupSizeByOrder: Map<string, number>,
 ): OverviewJobRow {
   const agg = itemAgg.get(j.id as string) ?? { total: 0, cleared: 0 }
   return {
@@ -484,6 +488,108 @@ function toOverviewJob(
     itemsCleared: agg.cleared,
     workStartDate: (j.work_start_date as string) ?? null,
     workEndDate: (j.work_end_date as string) ?? null,
+    groupSize: groupSizeByOrder.get(j.order_id as string) ?? 0,
+  }
+}
+
+/**
+ * 오더 → 그 오더가 속한 동시분석 그룹의 오더 수(2 이상만). 목록의 "동시 N" 배지용.
+ * 그룹 테이블이 없거나 읽기에 실패해도 목록은 죽지 않게 빈 맵을 돌려준다(표시 편의 기능이다).
+ */
+export async function loadGroupSizeByOrder(): Promise<Map<string, number>> {
+  const out = new Map<string, number>()
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('concurrent_analysis_group_items').select('group_id, order_id')
+    if (error) return out
+    const sizeOf = new Map<string, number>()
+    for (const it of data ?? []) sizeOf.set(it.group_id as string, (sizeOf.get(it.group_id as string) ?? 0) + 1)
+    for (const it of data ?? []) {
+      const size = sizeOf.get(it.group_id as string) ?? 0
+      if (size >= 2) out.set(it.order_id as string, size)
+    }
+  } catch { /* 그룹 정보가 없으면 배지 없이 보인다 */ }
+  return out
+}
+
+/**
+ * 작업이 속한 동시분석 그룹 요약(관리자 작업 상세의 "동시분석 N건").
+ * 오더 2건 미만 그룹이거나 그룹이 없으면 null. 그룹 테이블을 읽지 못해도 상세 조회를 막지 않는다.
+ * 멤버마다 항목 검토 요약을 싣는다 — 화면이 확인 모달의 대상 배치를 계산한다(최종 판정은 서버).
+ */
+async function loadJobGroupSummary(orderId: string): Promise<JobGroupSummary | null> {
+  try {
+    const { data: mine, error: mineErr } = await supabaseAdmin
+      .from('concurrent_analysis_group_items').select('group_id').eq('order_id', orderId).maybeSingle()
+    if (mineErr || !mine) return null
+    const groupId = mine.group_id as string
+
+    const [groupRes, membersRes] = await Promise.all([
+      supabaseAdmin.from('concurrent_analysis_groups').select('id, label').eq('id', groupId).maybeSingle(),
+      supabaseAdmin.from('concurrent_analysis_group_items').select('order_id').eq('group_id', groupId),
+    ])
+    if (membersRes.error) return null
+    const orderIds = (membersRes.data ?? []).map(m => m.order_id as string)
+    if (orderIds.length < 2) return null
+
+    const [ordersRes, jobsRes] = await Promise.all([
+      supabaseAdmin.from('pct_orders').select('id, product_name, batch_no, status').in('id', orderIds),
+      supabaseAdmin.from('qc_jobs').select('id, order_id, qc_no, status, assignee_tester_id').in('order_id', orderIds),
+    ])
+    if (ordersRes.error || jobsRes.error) return null
+    const orderById = new Map((ordersRes.data ?? []).map(o => [o.id as string, o as Record<string, unknown>]))
+    const jobRows = (jobsRes.data ?? []) as Record<string, unknown>[]
+
+    const testerIds = [...new Set(jobRows.map(j => j.assignee_tester_id as string | null).filter((t): t is string => !!t))]
+    const [testersRes, itemsRes] = await Promise.all([
+      testerIds.length > 0
+        ? supabaseAdmin.from('testers').select('id, name').in('id', testerIds)
+        : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+      loadJobItems(jobRows.map(j => j.id as string)),
+    ])
+    const testerName = new Map((testersRes.data ?? []).map(t => [t.id as string, t.name as string]))
+
+    const members: GroupMember[] = []
+    for (const oid of orderIds) {
+      const o = orderById.get(oid)
+      const base = {
+        orderId: oid,
+        productName: (o?.product_name as string) ?? '',
+        batchNo: (o?.batch_no as string) ?? '',
+      }
+      const jobs = jobRows.filter(j => j.order_id === oid)
+      if (jobs.length === 0) {
+        members.push({ ...base, jobId: null, qcNo: null, status: (o?.status as string) ?? '', testerName: null, items: [] })
+        continue
+      }
+      for (const j of jobs) {
+        members.push({
+          ...base,
+          jobId: j.id as string,
+          qcNo: j.qc_no as string,
+          status: j.status as string,
+          testerName: testerName.get(j.assignee_tester_id as string) ?? null,
+          items: (itemsRes.byJob.get(j.id as string) ?? []).map(it => ({
+            testItemName: it.testItemName, status: it.status, reviewStatus: it.reviewStatus,
+          })),
+        })
+      }
+    }
+    // QC번호 순(미시작 오더는 뒤) — 조회마다 순서가 흔들리지 않게
+    members.sort((a, b) => {
+      if ((a.qcNo === null) !== (b.qcNo === null)) return a.qcNo === null ? 1 : -1
+      return (a.qcNo ?? '').localeCompare(b.qcNo ?? '') || a.batchNo.localeCompare(b.batchNo)
+    })
+
+    return {
+      groupId,
+      groupLabel: (groupRes.data?.label as string | null) ?? null,
+      orderCount: orderIds.length,
+      members,
+    }
+  } catch (err) {
+    console.error('[qcJobs.loadJobGroupSummary] 동시분석 그룹 요약을 읽지 못함 — 상세는 그룹 없이 보인다:', orderId, err)
+    return null
   }
 }
 
@@ -521,6 +627,11 @@ export interface JobDetail {
   assigneeUserId: string | null
   /** 0048 미적용 안내(검토 상태를 읽지 못함). 적용됐으면 null */
   reviewSetupError: string | null
+  /**
+   * 동시분석 그룹 요약(오더 2건 이상 그룹만). 관리자 응답에만 싣는다 — 시험자 열람 경로로
+   * 남의 배치 QC번호·담당자를 넓혀 보이지 않게(spec §8). 없거나 시험자면 null.
+   */
+  group: JobGroupSummary | null
 }
 
 /**
@@ -531,7 +642,11 @@ export interface JobDetail {
  * 않는다. 0040 부터 항목이 'in_progress' 상태와 started_at 을 직접 갖는다 — 추론하지
  * 않고 시험자가 [시작]으로 정한 것만 진행 중으로 본다(병행이라 여럿일 수 있다).
  */
-export async function getJobDetail(jobId: string): Promise<JobDetail | null> {
+export async function getJobDetail(
+  jobId: string,
+  /** includeGroup: 동시분석 그룹 요약을 싣는가(관리자만) */
+  opts: { includeGroup?: boolean } = {},
+): Promise<JobDetail | null> {
   const { data: job } = await supabaseAdmin
     .from('qc_jobs')
     .select('id, order_id, qc_no, status, work_start_date, work_end_date, work_started_at, created_at, assignee_tester_id, assignee_user_id')
@@ -539,7 +654,7 @@ export async function getJobDetail(jobId: string): Promise<JobDetail | null> {
     .maybeSingle()
   if (!job) return null
 
-  const [orderRes, testerRes, itemsRes] = await Promise.all([
+  const [orderRes, testerRes, itemsRes, group] = await Promise.all([
     supabaseAdmin
       .from('pct_orders')
       .select('id, product_code, product_name, batch_no, due_date, is_urgent, method')
@@ -549,6 +664,7 @@ export async function getJobDetail(jobId: string): Promise<JobDetail | null> {
       ? supabaseAdmin.from('testers').select('name, employee_no').eq('id', job.assignee_tester_id as string).maybeSingle()
       : Promise.resolve({ data: null }),
     loadJobItems([jobId]),
+    opts.includeGroup ? loadJobGroupSummary(job.order_id as string) : Promise.resolve(null),
   ])
 
   const order = orderRes.data as Record<string, unknown> | null
@@ -594,6 +710,7 @@ export async function getJobDetail(jobId: string): Promise<JobDetail | null> {
     nextStageLabel: canAdvanceByAdmin(status) ? STAGE_ACTION_LABEL[status] : null,
     assigneeUserId: (job.assignee_user_id as string) ?? null,
     reviewSetupError: itemsRes.reviewSetupError,
+    group,
   }
 }
 
@@ -657,8 +774,8 @@ export async function listWorkerOverview(viewerTesterId: string | null = null): 
     .order('employee_no', { ascending: true })
   const testers = (testerData ?? []) as Record<string, unknown>[]
 
-  // 2) 작업 + 3) 오더 (삭제 제외) 병렬
-  const [jobsRes, ordersRes] = await Promise.all([
+  // 2) 작업 + 3) 오더 (삭제 제외) + 동시분석 그룹 크기("동시 N" 배지) 병렬
+  const [jobsRes, ordersRes, groupSizeByOrder] = await Promise.all([
     supabaseAdmin
       .from('qc_jobs')
       .select('id, order_id, qc_no, assignee_tester_id, status, work_start_date, work_end_date')
@@ -667,6 +784,7 @@ export async function listWorkerOverview(viewerTesterId: string | null = null): 
       .from('pct_orders')
       .select('id, product_name, batch_no, due_date, is_urgent, status')
       .neq('status', DELETED_STATUS),
+    loadGroupSizeByOrder(),
   ])
   // 예전(0037)에는 error 를 버려 관리자 「작업자 현황」이 안내 없이 통째로 비어 보였다(listWorkspace 와 같은 문제).
   if (jobsRes.error) throw describeSchemaError(jobsRes.error, PARALLEL_ASSIGN_FEATURE, PARALLEL_ASSIGN_MIGRATION)
@@ -766,7 +884,7 @@ export async function listWorkerOverview(viewerTesterId: string | null = null): 
       if ((j.work_end_date as string) === today) completedToday += 1
       // 예전에는 여기서 건너뛰어 화면에서 완료 작업을 아예 볼 수 없었다.
       // 집계만 하지 말고 목록도 함께 내려준다(화면에서 기간으로 좁혀 본다).
-      row.completedJobs.push(toOverviewJob(j, o, itemAgg))
+      row.completedJobs.push(toOverviewJob(j, o, itemAgg, groupSizeByOrder))
       continue
     }
     if (!ACTIVE_JOB_STATUSES.has(status)) continue
@@ -777,7 +895,7 @@ export async function listWorkerOverview(viewerTesterId: string | null = null): 
     else if (status === REVIEW_READY_STATUS || status === REVIEWING_STATUS || status === APPROVAL_READY_STATUS) row.reviewing += 1
     else if (status === DELAYED_STATUS) row.delayed += 1
 
-    row.activeJobs.push(toOverviewJob(j, o, itemAgg))
+    row.activeJobs.push(toOverviewJob(j, o, itemAgg, groupSizeByOrder))
   }
 
   // 시작 대기 오더 집계 (배정됐고 status '대기' & 아직 미시작)

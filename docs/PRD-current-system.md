@@ -194,6 +194,14 @@ qc_jobs + qc_job_items 생성 (QC번호 채번 qcNumber.ts)
   DB 함수 `reassign_job_item(order, 항목명, 기대 슬롯, 받는 슬롯, user, reason)` 한 트랜잭션이 네 경우(행 이동·A 행 삭제·B 작업에 추가·배분만)와 스냅샷 슬롯·
   `pct_order_edits(testItemAssignee, 이름+QC번호)` 감사·A·B 작업 단계 재도출(`recompute_job_stage`)을 함께 처리하고, 커밋 뒤 오더 상태 동기화·받는 사람 앱 알림(`시험항목 인계`).
   항목 시작·시작 취소·완료는 조건부 update 로 바뀌어 그 사이 넘어간 항목에 0행이면 실패로 응답한다. 규칙: `intent/2026-09-15-in-progress-item-reassign-spec.md`.
+- **동시분석 그룹 단계 일괄 진행**(2026-09-15, `0051`, 테이블 변경 없음): 관리자 작업 패널(`/product-test/prod-status`)·시험현황 서랍(`/test-mgmt/test-status`)이 작업의 동시분석 그룹(오더 2건 이상)을
+  "동시분석 N건"(멤버 QC번호·제조번호·단계·담당자, 관리자 응답 `JobDetail.group` 에만)으로 보이고, 작업 현황 레인 카드·시험현황 목록에 "동시 N" 배지(`groupSize`)를 붙인다.
+  그룹의 시작된 작업이 2건 이상이면 항목 검토 시작·완료, 완료 항목 전체 검토 시작/검토 중 항목 전체 검토 완료, [승인]의 기본 동작이 **그룹 적용**("그룹 N배치에 적용")이고 보조로 "이 배치만"이다.
+  서버가 **조작 시점 그룹 구성**의 모든 오더·모든 작업(담당자 무관)을 다시 계산한다. 그룹 검토는 DB 함수 `group_item_review_action`·`group_item_review_bulk_action`(내부 `group_review_apply`) 한 트랜잭션 —
+  관리자 재확인, 작업 id 오름차순 잠금 → 항목 잠금, 배치별 판정 뒤 0048 `apply_item_review_step`·`recompute_job_stage` 재사용, 조건이 맞지 않는 (작업, 항목)은 사유와 함께 건너뛰고(`processed[]`·`skipped[]`·`stages[]`), 처리 0건이면 "처리할 시험항목이 없습니다." 로 거절.
+  검토 이력·단계 이력은 배치마다 따로 남는다. 그룹 승인(`POST /api/qc-jobs/group/[groupId]/approve`)은 **원자적이지 않다** — 작업마다 기존 `advanceJobStage`(전 항목 검토 완료 확인·오더 동기화·이력·알림)를 부르고 불충족 배치는 건너뛴다.
+  라우트 `POST /api/qc-jobs/group/[groupId]/review`·`/review-bulk`·`/approve`(requireAdmin), 서비스 `backend/services/qcJobGroupStage.ts`, 결과 토스트 "처리 N · 건너뜀 M". 검토 취소·재실시·직접 변경은 전파하지 않는다.
+  규칙: `intent/2026-09-15-group-stage-progress-spec.md`. 배포 순서: SQL 0051 → 앱.
 - **스케줄 부가**: `operator_schedule`(휴가), `equipment_reservation`(예약), `reassignment_history`(재배정), 동시분석 그룹, `concurrent_product_families`/`concurrent_product_family_members`(동시분석 품목군 마스터, product_code unique), `holidays`/`public_holidays`(source api|manual), `equipment_master`.
 - **마이그레이션**: **0001~0024**. ⚠️ 라이브 DB가 일부 마이그레이션과 불일치 — 특히 **0021~0024는 수동 적용 대상**(Supabase 대시보드 SQL Editor, idempotent). 0011/0014~0018·0020도 수동 적용 필요분 존재(graceful 폴백 내장).
 

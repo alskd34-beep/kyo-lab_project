@@ -17,7 +17,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   if (!auth.ok) return auth.response
   try {
     const { id } = await ctx.params
-    const detail = await getJobDetail(id)
+    // 동시분석 그룹 요약(남의 배치 QC번호·담당자)은 관리자 응답에만 싣는다(spec §8)
+    const detail = await getJobDetail(id, { includeGroup: auth.payload.role === 'admin' })
     if (!detail) return Response.json({ error: '작업을 찾을 수 없습니다.' }, { status: 404 })
     // 담당자는 본인 작업과 병렬 배정으로 함께 맡은 오더의 동료(담당자 1~5 전원) 작업만 열람할 수 있다(관리자는 전체).
     // 예전에는 requireAuth 만 통과하면 임의 작업 id 의 상세를 볼 수 있었다(IDOR).
