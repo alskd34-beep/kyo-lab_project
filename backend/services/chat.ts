@@ -13,6 +13,7 @@ import { randomUUID } from 'crypto'
 import { ASSIGNED_TESTER_FILTER_COLUMN, withAssignedTesterEmbed } from '@backend/lib/assigneeFilter'
 import { loadAssigneesByOrder } from '@backend/services/orderAssignees'
 import { DELETED_STATUS, ITEM_STATUS_LABEL, type JobItemStatus } from '@shared/qc-status'
+import { displayBatchNo, displayProductCode } from '@shared/order-na'
 import { supabaseAdmin, supabaseAdmin as supabase } from '@backend/lib/supabase'
 import { runLetsurText } from '@backend/lib/letsurClient'
 import { resolveChatImages } from '@backend/lib/chatUploads'
@@ -463,7 +464,8 @@ function formatOrderLine(o: OrderRow, names: Map<string, string>, jobs: Map<stri
   const items = ji && ji.items.length
     ? ` | 시험항목: ${ji.items.map(it => `${it.name}(${itemStatusKo(it.status)})`).join(', ')}`
     : ''
-  return `- 품목 ${o.product_name}(${o.product_code}) | 배치 ${o.batch_no} | 완료예정 ${o.due_date ?? '-'}`
+  // 수동 오더의 N/A 대체값은 "N/A" 로 넘긴다 — 모델이 가짜 번호를 실제 번호로 답하지 않게
+  return `- 품목 ${o.product_name}(${displayProductCode(o.product_code)}) | 배치 ${displayBatchNo(o.batch_no)} | 완료예정 ${o.due_date ?? '-'}`
     + ` | 시험방법 ${o.method ?? '-'} | 담당 ${tester} | 상태 ${o.status}${o.is_urgent ? ' | 긴급' : ''}`
     + (ji ? ` | QC ${ji.qcNo}` : '')
     + items

@@ -17,6 +17,7 @@ import { Card } from '@frontend/components/ui/card'
 import { Skeleton } from '@frontend/components/ui/skeleton'
 import { ACTIVE_JOB_STATUSES, CLOSED_STAGE, stageStyle } from '@shared/qc-status'
 import { isHardLeave, leaveTypeLabel } from '@shared/leave'
+import { displayBatchNo } from '@shared/order-na'
 
 // ─── API 응답 ─────────────────────────────────────────────────────────────────
 interface JobApiRow {
@@ -124,7 +125,7 @@ function buildMyTasks(data: WorkspaceApiResponse): MyTask[] {
     .map(j => ({
       key: `job:${j.id}`,
       productName: j.productName,
-      batchNo: j.batchNo,
+      batchNo: displayBatchNo(j.batchNo),
       status: j.status,
       dueDate: j.dueDate,
       dDay: calcDday(j.dueDate),
@@ -134,7 +135,7 @@ function buildMyTasks(data: WorkspaceApiResponse): MyTask[] {
   const waiting: MyTask[] = data.pendingOrders.map(o => ({
     key: `order:${o.id}`,
     productName: o.productName,
-    batchNo: o.batchNo,
+    batchNo: displayBatchNo(o.batchNo),
     status: '대기',
     dueDate: o.dueDate,
     dDay: calcDday(o.dueDate),

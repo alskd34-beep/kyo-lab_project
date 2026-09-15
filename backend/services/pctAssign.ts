@@ -34,6 +34,7 @@ import { codexAssignEnabled, runCodexJson } from '@backend/lib/codexCli'
 import { getHolidaySet } from '@backend/services/holidays'
 import { kstNow, kstToday, kstYear } from '@backend/lib/kstDate'
 import {
+  NO_PACKAGING_DATE_REASON,
   buildCapResolver,
   generatePctSchedule,
   type EngineHalfDayNotice,
@@ -344,7 +345,9 @@ async function applyAssignments(
   const failures: AssignResult['failures'] = []
   let assigned = 0
   for (const o of orders) {
-    const hit = pick(o)
+    // [최종 반영 직전] 포장일 없는 오더(수동 오더 포장일 N/A 등)는 어떤 경로의 결과로도 배정하지 않는다 —
+    // 그룹 대표 결과 전파·Codex 응답·강제배정 규칙이 사전 제외를 우회하지 못하게 여기서 한 번 더 막는다.
+    const hit = o.packaging_date ? pick(o) : null
     // [규칙1] 향정신성 의약품(자이렌정·아디펙스정)은 강지윤·김정호 배정 불가
     if (hit?.id && isPsychotropic(o.product_name) && PSYCHOTROPIC_EXCLUDED_NAMES.includes(hit.name as never)) {
       const note = withAutoUnassignedNote(o.note, '향정신성 의약품 제외 대상(배정 불가)')
@@ -474,6 +477,8 @@ async function autoAssignCodex(
     orderId: o.id,
     productName: o.product_name,
     batchNo: o.batch_no,
+    packagingDate: o.packaging_date,
+    dueDate: o.due_date,
     isUrgent: o.is_urgent,
     method: o.method,
     testItems: itemsByCode.get(o.product_code) ?? [],
@@ -498,6 +503,8 @@ async function autoAssignCodex(
   const testerById = new Map(testers.map(t => [t.id, t.name]))
 
   const basePick = (o: OrderForAssign): { id: string; name: string } | null => {
+    // [검증] 포장일 없는 오더는 LLM 이 담당자를 지목해도 받지 않는다(규칙엔진과 같은 기준 — 자동배정 대상 아님).
+    if (!o.packaging_date) return null
     const tid = byOrder.get(o.id)
     if (!tid || !testerById.has(tid)) return null
 
@@ -693,8 +700,10 @@ export async function autoAssign(orderIds?: string[]): Promise<AssignResult> {
 
   // [동시분석] 동일 품목군(기준설정 마스터)/유사 품목명을 한 그룹으로 묶고 대표만 배정 대상으로 삼는다.
   // 엔진/LLM 에는 reps 만 태워 공수를 그룹당 1회 계산하고, 배정 결과를 멤버 전체에 전파한다.
+  // [후보 구성] 포장일 없는 오더는 그룹 구성·엔진·LLM 입력에서 뺀다 — 포장일 있는 대표와 같은 그룹이 되면
+  // 대표 결과를 전파받아 배정되기 때문이다. 결과 목록에는 applyAssignments 가 사유와 함께 남긴다.
   const familyByCode = await loadFamilyByCode().catch(() => new Map<string, string>())
-  const { reps, memberToRep } = groupOrders(orders, familyByCode)
+  const { reps, memberToRep } = groupOrders(orders.filter(o => !!o.packaging_date), familyByCode)
 
   // 부재(휴가/출장) 로드.
   //  - 연차·출장: 배정 제외 (엔진이 근무일 단위로 판정)
@@ -714,7 +723,11 @@ export async function autoAssign(orderIds?: string[]): Promise<AssignResult> {
     reasonByKey: Map<string, string>
     halfDayNotices: EngineHalfDayNotice[]
   } | null = null
-  if (codexAssignEnabled()) {
+  // 대상이 모두 포장일 없는 오더면 엔진·LLM 을 부르지 않는다(전부 사유와 함께 미배정으로 남는다)
+  if (reps.length === 0) {
+    resolved = { mode: 'rule', pick: () => null, reasonByKey: new Map(), halfDayNotices: [] }
+  }
+  if (!resolved && codexAssignEnabled()) {
     try {
       resolved = await autoAssignCodex(reps, excludedTesterIds)
     } catch (err) {
@@ -726,6 +739,8 @@ export async function autoAssign(orderIds?: string[]): Promise<AssignResult> {
   // [동시분석] 각 멤버는 자신이 속한 그룹 대표의 배정 결과를 따른다(한 시험자가 동시분석).
   const groupPick: PickFn = (o) => resolved!.pick(memberToRep.get(o.id) ?? o)
   const reasonFor = (o: OrderForAssign) => {
+    // 포장일 없는 오더는 후보에서 빠졌다 — 어느 경로(규칙엔진·Codex)든 같은 사유로 알린다
+    if (!o.packaging_date) return NO_PACKAGING_DATE_REASON
     const representative = memberToRep.get(o.id) ?? o
     return resolved!.reasonByKey.get(orderKey(representative))
       ?? '자동배정 조건을 만족하는 담당자를 찾지 못했습니다. 담당자 역량·휴가·업무량을 확인해 주세요.'

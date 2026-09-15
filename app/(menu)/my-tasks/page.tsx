@@ -10,6 +10,7 @@ import {
   ITEM_PENDING, ITEM_REVIEW_REVIEWED, ITEM_REVIEW_REVIEWING, PENDING_STATUS, TESTER_STATUS_CHANGE_STATUSES,
   hasReviewTrace, stageStyle,
 } from "@shared/qc-status"
+import { displayBatchNo } from "@shared/order-na"
 import { ItemReviewBadge } from "@frontend/components/common/job-item-review"
 import { ItemReassignDialog } from "@frontend/components/common/item-reassign-dialog"
 import { useAuth } from "@frontend/lib/auth-context"
@@ -194,7 +195,7 @@ function CancelStartDialog({
         <DialogHeader>
           <DialogTitle>작업 시작 취소</DialogTitle>
           <DialogDescription className="text-xs leading-normal break-keep">
-            <span className="font-mono">QC {job.qcNo}</span> · {job.productName} / <span className="font-mono">{job.batchNo}</span>
+            <span className="font-mono">QC {job.qcNo}</span> · {job.productName} / <span className="font-mono">{displayBatchNo(job.batchNo)}</span>
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="space-y-3">
@@ -906,12 +907,12 @@ export default function MyTasksPage() {
                         checked={isChecked}
                         onChange={() => toggleOne(o.id)}
                         disabled={bulkBusy}
-                        aria-label={`${o.productName} ${o.batchNo} 선택`}
+                        aria-label={`${o.productName} ${displayBatchNo(o.batchNo)} 선택`}
                         className="cb-custom mt-0.5"
                       />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold text-foreground">{o.productName}</p>
-                        <p className="font-mono text-xs text-muted-foreground">{o.batchNo}</p>
+                        <p className="font-mono text-xs text-muted-foreground">{displayBatchNo(o.batchNo)}</p>
                       </div>
                       {o.isUrgent && <Badge variant="destructive">긴급</Badge>}
                     </div>
@@ -1072,7 +1073,7 @@ export default function MyTasksPage() {
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-normal text-muted-foreground">
             {groupJobs.map(j => (
               <span key={j.id} className="inline-flex items-center rounded-md border px-1.5 font-mono tabular-nums">
-                {j.batchNo}
+                {displayBatchNo(j.batchNo)}
                 <span className={cn("ml-1 font-sans", statusCls(j.status))}>{j.status}</span>
                 {/* 시작 취소는 배치(작업) 하나씩만 — 그룹 전체로 번지지 않는다 */}
                 {canCancelStart(j) && (
@@ -1201,7 +1202,7 @@ export default function MyTasksPage() {
               )}
             </div>
             <p className="mt-0.5 truncate text-sm font-semibold text-foreground">
-              {job.productName} <span className="font-mono text-xs font-normal text-muted-foreground">/ {job.batchNo}</span>
+              {job.productName} <span className="font-mono text-xs font-normal text-muted-foreground">/ {displayBatchNo(job.batchNo)}</span>
               {/* 동시분석 묶음인데 지금은 함께 조작할 수 없는 경우(나머지가 검토 단계로 넘어감).
                   묶음 표시를 통째로 지우면 "어제는 한 카드였는데" 가 되므로 사실만 남긴다. */}
               {job.groupId && job.groupSize > 1 && (

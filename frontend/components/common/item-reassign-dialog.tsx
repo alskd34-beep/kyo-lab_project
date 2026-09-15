@@ -15,6 +15,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { ArrowRightLeft, Loader2 } from "lucide-react"
 import { api, errorMessage } from "@frontend/lib/api-client"
+import { displayBatchNo } from "@shared/order-na"
 import { Button } from "@frontend/components/ui/button"
 import { Input } from "@frontend/components/ui/input"
 import { Skeleton } from "@frontend/components/ui/skeleton"
@@ -123,7 +124,7 @@ export function ItemReassignDialog({
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription className="text-xs leading-normal break-keep">
-            {ctx ? <>{ctx.productName} / <span className="font-mono">{ctx.batchNo}</span> · </> : null}
+            {ctx ? <>{ctx.productName} / <span className="font-mono">{displayBatchNo(ctx.batchNo)}</span> · </> : null}
             {testItemName}
           </DialogDescription>
         </DialogHeader>

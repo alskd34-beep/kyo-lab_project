@@ -17,6 +17,10 @@ import { logReassignment } from '@backend/services/reassignmentHistory'
 import { warnIfAssigneeOnLeave } from '@backend/services/leaveConflicts'
 import { ASSIGNED_TESTER_FILTER_COLUMN, withAssignedTesterEmbed } from '@backend/lib/assigneeFilter'
 import { describeSchemaError } from '@backend/lib/schemaError'
+import { generateNaBatchNo, generateNaProductCode } from '@backend/lib/orderNa'
+import {
+  NA_DIRECT_INPUT_MESSAGE, NA_RESERVED_PREFIX, hasReservedNaPrefix, isNaBatchNo, isNaLiteralText, isNaProductCode,
+} from '@shared/order-na'
 import {
   PARALLEL_ASSIGN_FEATURE,
   PARALLEL_ASSIGN_MIGRATION,
@@ -146,6 +150,18 @@ const FIELD_LABEL: Record<EditableField, string> = {
 }
 function fieldLabel(f: EditableField): string {
   return FIELD_LABEL[f] ?? f
+}
+
+/**
+ * 사용자가 키 칸에 N/A 흉내 값을 직접 넣으면 거절한다 — N/A 는 체크(비워 보냄)하면 서버가 대체값을 만든다.
+ *  - 'N/A'·'NA'·'n/a' 같은 글자(대소문자·공백 무시)
+ *  - 대체값 모양(NA-…)
+ */
+function assertNotReservedNa(value: string, label: string): void {
+  if (isNaLiteralText(value)) throw new Error(NA_DIRECT_INPUT_MESSAGE)
+  if (hasReservedNaPrefix(value)) {
+    throw new Error(`${label}은(는) '${NA_RESERVED_PREFIX}' 로 시작할 수 없습니다. 값이 없으면 N/A 로 표시하세요.`)
+  }
 }
 
 const FIELD_TO_COL: Record<EditableField, string> = {
@@ -329,10 +345,16 @@ export async function createOrder(input: {
   /** 만든 사람(users.id) — 담당자 지정 감사 기록에 남는다 */
   createdBy?: string | null
 }): Promise<PctOrderRow> {
-  const code = (input.productCode ?? '').trim()
+  // 수동 오더 필수 = 품목명 + 완료예정일. 품목코드·제조번호는 비우면(N/A) 서버가 고유 대체값을 만든다
+  // (규칙: @shared/order-na). 사용자가 대체값 모양(NA-…)을 직접 넣는 것은 거절한다.
   const name = (input.productName ?? '').trim()
-  const batch = (input.batchNo ?? '').trim()
-  if (!code || !name || !batch) throw new Error('품목코드·품목명·제조번호는 필수입니다.')
+  if (!name) throw new Error('품목명은 필수입니다.')
+  const dueDate = (input.dueDate ?? '').trim()
+  if (!dueDate) throw new Error('완료예정일은 필수입니다.')
+  const inputCode = (input.productCode ?? '').trim()
+  const inputBatch = (input.batchNo ?? '').trim()
+  assertNotReservedNa(inputCode, '품목코드')
+  assertNotReservedNa(inputBatch, '제조번호')
   // 비활성 시험자는 담당자로 지정할 수 없다 (최종 판정은 DB 함수 — 여기는 오더를 만들기 전 선검사)
   const assigneeTesterId = input.assigneeTesterId || null
   await assertTesterAssignable(assigneeTesterId)
@@ -340,7 +362,7 @@ export async function createOrder(input: {
   const method = input.method || '전항목'
   const selectedItems = normalizeForMethod(method, input.testItems)
 
-  const { data, error } = await supabaseAdmin
+  const insertManualOrder = (code: string, batch: string) => supabaseAdmin
     .from('pct_orders')
     .insert({
       product_code:       code,
@@ -351,7 +373,7 @@ export async function createOrder(input: {
       // 값이 없으면 아예 보내지 않아 컬럼이 없어도 수동 오더 생성이 실패하지 않는다.
       ...(input.validationType?.trim() ? { validation_type: input.validationType.trim().toUpperCase() } : {}),
       packaging_date:     input.packagingDate || null,
-      due_date:           input.dueDate || null,
+      due_date:           dueDate,
       ...(input.plannedStartDate ? { planned_start_date: input.plannedStartDate } : {}),
       is_urgent:          input.isUrgent ?? false,
       method:             method,
@@ -362,8 +384,18 @@ export async function createOrder(input: {
     })
     .select('*')
     .single()
+
+  // 대체값은 무작위 48비트라 사실상 겹치지 않지만, 자연키 충돌이 나면 대체값을 쓴 경우에만 다시 만든다.
+  // 사용자가 두 키를 모두 입력했으면 충돌은 진짜 중복이므로 한 번만 시도한다.
+  const generatesKey = !inputCode || !inputBatch
+  const insertWithKeys = () => insertManualOrder(inputCode || generateNaProductCode(), inputBatch || generateNaBatchNo())
+  let result = await insertWithKeys()
+  for (let retry = 0; generatesKey && retry < 2 && result.error?.code === '23505'; retry++) {
+    result = await insertWithKeys()
+  }
+  const { data, error } = result
   if (error) {
-    if ((error as { code?: string }).code === '23505') {
+    if (error.code === '23505') {
       throw new Error('이미 동일한 제조번호·품목코드의 오더가 있습니다.')
     }
     throw error
@@ -402,7 +434,7 @@ export async function createOrder(input: {
       plannedStartDate: (o.planned_start_date as string) ?? null,
     },
     productName: name,
-    batchNo:     batch,
+    batchNo:     o.batch_no as string,
     via:         '오더 추가',
   })
 
@@ -459,6 +491,54 @@ export async function setOrderLock(orderId: string, lock: boolean, userId: strin
     // 컬럼 미존재(마이그레이션 0015 미적용) 등
     throw new Error(`확정/잠금 실패: ${error.message} (마이그레이션 0015 적용 필요 가능)`)
   }
+}
+
+/** 수동 오더 키 칸의 N/A 대체값 규칙 — 수정 경로에서 생성·재생성에 쓴다 */
+const MANUAL_KEY_RULES = [
+  { field: 'productCode' as const, col: 'product_code', isNa: isNaProductCode, generate: generateNaProductCode },
+  { field: 'batchNo' as const, col: 'batch_no', isNa: isNaBatchNo, generate: generateNaBatchNo },
+]
+type ManualKeyField = (typeof MANUAL_KEY_RULES)[number]['field']
+
+/**
+ * 수동 오더 수정 patch 의 필수·N/A 규칙(등록과 같은 기준 — @shared/order-na).
+ *  - **변경 적용 후 최종 값** 기준으로 품목명·완료예정일이 있어야 한다. patch 에 없는 칸은 지금 저장된 값으로 본다
+ *    — 원래 비어 있던 수동 오더도 예외 없이 채워야 저장된다(비고만 고치는 요청 포함).
+ *  - 품목코드·제조번호를 비우면(N/A) 고유 대체값으로 바꾼다. 이미 N/A 대체값이면 그대로 둔다(변경 없음).
+ *  - 사용자가 'N/A' 글자·NA-… 값을 직접 넣으면 거절한다. 지금 저장된 값을 그대로 보내는 것은 변경이 아니므로 통과
+ *    (예약어 검사는 새로 넣거나 바꾼 값에만 — 규칙 이전에 NA- 로 시작하는 실제 키를 가진 오더도 다른 칸을 고칠 수 있다).
+ * N/A 를 끄고 실제 값을 넣는 것은 일반 수정이다 — 자연키 unique 는 DB 가 그대로 검사한다.
+ *
+ * @returns generated 이번에 새로 만든 대체값 칸 — 자연키 충돌 시 이 칸만 다시 만든다
+ */
+function normalizeManualKeyPatch(
+  patch: Partial<Record<EditableField, string | boolean | null>>,
+  currentRow: Record<string, unknown>,
+): { patch: Partial<Record<EditableField, string | boolean | null>>; generated: ManualKeyField[] } {
+  const next = { ...patch }
+  const finalText = (field: EditableField, col: string) =>
+    String((field in next ? next[field] : currentRow[col]) ?? '').trim()
+  if (!finalText('productName', 'product_name')) throw new Error('품목명은 필수입니다.')
+  if (!finalText('dueDate', 'due_date')) throw new Error('수동 오더의 완료예정일은 필수입니다.')
+
+  const generated: ManualKeyField[] = []
+  for (const rule of MANUAL_KEY_RULES) {
+    if (!(rule.field in next)) continue
+    const value = String(next[rule.field] ?? '').trim()
+    const currentValue = (currentRow[rule.col] as string | null) ?? null
+    if (!value) {
+      if (rule.isNa(currentValue)) {
+        next[rule.field] = currentValue
+      } else {
+        next[rule.field] = rule.generate()
+        generated.push(rule.field)
+      }
+      continue
+    }
+    if (value !== currentValue) assertNotReservedNa(value, fieldLabel(rule.field))
+    next[rule.field] = value
+  }
+  return { patch: next, generated }
 }
 
 /** 담당자 변경 계획 — 무엇을 어느 DB 함수로 바꿀지 */
@@ -593,27 +673,38 @@ export async function updateOrderWithReason(
   )
 
   const isManual = currentRow.ingest_state === 'manual'
-  const dbPatch: Record<string, unknown> = {}
-  const edits: Array<{ field: string; old_value: string | null; new_value: string | null }> = []
-
-  for (const field of EDITABLE_FIELDS) {
-    // 담당자는 컬럼에 직접 쓰지 않는다 — 아래 DB 함수가 슬롯·미러·감사를 함께 쓴다.
-    if (field === 'assigneeTesterId') continue
-    if (!(field in patch)) continue
-    const col = FIELD_TO_COL[field]
-    const newVal = patch[field] ?? null
-    const oldVal = currentRow[col] ?? null
-    const oldStr = oldVal === null ? null : String(oldVal)
-    const newStr = newVal === null ? null : String(newVal)
-    if (oldStr === newStr) continue
-    if (!isManual && AUTO_IMMUTABLE_FIELDS.includes(field as (typeof AUTO_IMMUTABLE_FIELDS)[number])) {
-      // 보호 필드가 늘어날 때마다 문구를 고쳐야 하는 하드코딩 목록이었다 —
-      // 실제로 막힌 필드 이름을 그대로 알려주는 편이 정확하고 유지보수도 없다.
-      throw new Error(`자동 적재 오더는 ${fieldLabel(field)}을(를) 수정할 수 없습니다. 제조팀 시트가 원본입니다.`)
-    }
-    dbPatch[col] = newVal
-    edits.push({ field, old_value: oldStr, new_value: newStr })
+  // 자동(시트) 오더에는 필수·N/A 규칙을 적용하지 않는다 — 시트 원본 데이터다.
+  let generatedKeyFields: ManualKeyField[] = []
+  if (isManual) {
+    const normalized = normalizeManualKeyPatch(patch, currentRow)
+    patch = normalized.patch
+    generatedKeyFields = normalized.generated
   }
+
+  const buildEdits = () => {
+    const dbPatch: Record<string, unknown> = {}
+    const edits: Array<{ field: string; old_value: string | null; new_value: string | null }> = []
+    for (const field of EDITABLE_FIELDS) {
+      // 담당자는 컬럼에 직접 쓰지 않는다 — 아래 DB 함수가 슬롯·미러·감사를 함께 쓴다.
+      if (field === 'assigneeTesterId') continue
+      if (!(field in patch)) continue
+      const col = FIELD_TO_COL[field]
+      const newVal = patch[field] ?? null
+      const oldVal = currentRow[col] ?? null
+      const oldStr = oldVal === null ? null : String(oldVal)
+      const newStr = newVal === null ? null : String(newVal)
+      if (oldStr === newStr) continue
+      if (!isManual && AUTO_IMMUTABLE_FIELDS.includes(field as (typeof AUTO_IMMUTABLE_FIELDS)[number])) {
+        // 보호 필드가 늘어날 때마다 문구를 고쳐야 하는 하드코딩 목록이었다 —
+        // 실제로 막힌 필드 이름을 그대로 알려주는 편이 정확하고 유지보수도 없다.
+        throw new Error(`자동 적재 오더는 ${fieldLabel(field)}을(를) 수정할 수 없습니다. 제조팀 시트가 원본입니다.`)
+      }
+      dbPatch[col] = newVal
+      edits.push({ field, old_value: oldStr, new_value: newStr })
+    }
+    return { dbPatch, edits }
+  }
+  let { dbPatch, edits } = buildEdits()
 
   if (edits.length === 0 && plan.kind === 'none') return  // 변경 없음
 
@@ -668,7 +759,9 @@ export async function updateOrderWithReason(
   //
   // 근본 해결은 update+insert 를 한 트랜잭션(RPC)이나 DB 트리거로 옮기는 것이다.
   // (담당자 구성은 이미 DB 함수 한 트랜잭션이다 — 아래 ②)
-  if (edits.length > 0) {
+  // 이번 수정에서 새로 만든 N/A 대체값이 자연키에 걸리면(사실상 없음) 그 칸만 다시 만들어 최대 2번 더 시도한다.
+  // 사용자가 넣은 실제 값끼리의 충돌은 진짜 중복이므로 재시도하지 않는다.
+  for (let attempt = 0; edits.length > 0; attempt++) {
     const { data: insertedEdits, error: logErr } = await supabaseAdmin
       .from('pct_order_edits')
       .insert(
@@ -678,17 +771,28 @@ export async function updateOrderWithReason(
     if (logErr) throw new Error(`수정 이력 기록 실패로 변경을 취소했습니다: ${logErr.message}`)
 
     const { error: updErr } = await supabaseAdmin.from('pct_orders').update(dbPatch).eq('id', id)
-    if (updErr) {
-      // 값 변경이 실패했으므로 방금 남긴 이력을 제거해 "일어나지 않은 변경"이 남지 않게 한다.
-      const ids = (insertedEdits ?? []).map(r => r.id as string)
-      if (ids.length > 0) {
-        await supabaseAdmin.from('pct_order_edits').delete().in('id', ids).then(
-          undefined,
-          () => console.error('[pctOrders] 이력 롤백 실패 — 수동 정리 필요:', ids),
-        )
-      }
-      throw updErr
+    if (!updErr) break
+    // 값 변경이 실패했으므로 방금 남긴 이력을 제거해 "일어나지 않은 변경"이 남지 않게 한다.
+    const ids = (insertedEdits ?? []).map(r => r.id as string)
+    if (ids.length > 0) {
+      await supabaseAdmin.from('pct_order_edits').delete().in('id', ids).then(
+        undefined,
+        () => console.error('[pctOrders] 이력 롤백 실패 — 수동 정리 필요:', ids),
+      )
     }
+    // 자연키 unique(batch_no, product_code) 충돌
+    if ((updErr as { code?: string }).code === '23505') {
+      if (generatedKeyFields.length > 0 && attempt < 2) {
+        for (const rule of MANUAL_KEY_RULES) {
+          if (generatedKeyFields.includes(rule.field)) patch[rule.field] = rule.generate()
+        }
+        ;({ dbPatch, edits } = buildEdits())
+        continue
+      }
+      // 수동 오더의 N/A 를 풀고 넣은 실제 값이 다른 오더와 같은 경우
+      throw new Error('이미 동일한 제조번호·품목코드의 오더가 있습니다.')
+    }
+    throw updErr
   }
 
   // ── ② 담당자 구성 — DB 함수 한 트랜잭션(슬롯·미러·구 컬럼·항목 되돌림·감사), 마지막에 ────────

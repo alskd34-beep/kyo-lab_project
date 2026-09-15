@@ -25,6 +25,7 @@ import {
   PENDING_STATUS,
   stageStyle,
 } from '@shared/qc-status'
+import { displayBatchNo } from '@shared/order-na'
 
 /** 시험자 카드에 나열할 개별 작업(오더) */
 interface TesterWorkItem {
@@ -145,7 +146,7 @@ function buildUpcoming(orders: PctOrderApiRow[]): UpcomingRow[] {
     .map(order => ({
       id: order.id,
       productName: order.productName,
-      batchNo: order.batchNo,
+      batchNo: displayBatchNo(order.batchNo),   // 표시 전용 — 수동 오더 N/A 대체값은 "N/A"
       dueDate: order.dueDate,
       dDay: calcDday(order.dueDate),
       status: order.status,
@@ -190,7 +191,7 @@ function buildTesterLoads(orders: PctOrderApiRow[], testerRows: TesterApiRow[]):
       const item: TesterWorkItem = {
         id: order.id,
         productName: order.productName,
-        batchNo: order.batchNo,
+        batchNo: displayBatchNo(order.batchNo),
         status: order.status,
         dueDate: order.dueDate,
         dDay: calcDday(order.dueDate),

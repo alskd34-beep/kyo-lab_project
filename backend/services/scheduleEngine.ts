@@ -19,6 +19,12 @@ import {
   workingDaysAfter, workingDaysBefore, workingDaysFromInclusive,
 } from '@backend/lib/workdays'
 
+/**
+ * 포장일 없는 오더(수동 오더의 포장일 N/A 포함)의 미배정 사유.
+ * 엔진 안 판정과 pctAssign 의 사전 제외·최종 반영 직전 검사가 같은 문구를 쓴다.
+ */
+export const NO_PACKAGING_DATE_REASON = '포장일이 없어(N/A) AI 자동배정 대상이 아닙니다. 담당자를 직접 지정하세요.'
+
 // ─── 입력 타입 ─────────────────────────────────────────────────────────────────
 export interface EnginePctRow {
   품목코드: string
@@ -401,7 +407,12 @@ export function generatePctSchedule(input: EngineInput): EngineResult {
     // 일정: 완료예정일(QC완료예정일) 기준 역순 ALAP — 윈도우 [포장일+1근무일, 완료예정일] 안에서
     // 가능한 늦게 배치. 윈도우에 공수가 안 들어가면 정방향 + 마감위험. 완료예정일 없으면 정방향.
     if (!date) {
-      unassigned.push({ productCode: code, productName: r.품목명, batchNo: r.제조번호, testItems: effectiveItems, reason: '포장일 형식 오류/누락' })
+      // 포장일이 비어 있는 경우(수동 오더의 포장일 N/A 포함)와 형식이 틀린 경우를 가른다 —
+      // 앞의 것은 오류가 아니라 "자동배정 대상이 아님" 이고 관리자가 직접 배정하면 된다.
+      const reason = (r.포장일 ?? '').trim()
+        ? '포장일 형식 오류'
+        : NO_PACKAGING_DATE_REASON
+      unassigned.push({ productCode: code, productName: r.품목명, batchNo: r.제조번호, testItems: effectiveItems, reason })
       continue
     }
     const due = normalizeDate(r.완료예정일 ?? '', year)

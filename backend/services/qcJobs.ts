@@ -933,8 +933,12 @@ export async function startJob(orderId: string, userSub: string): Promise<{ jobI
       sequence_order: it.sequenceOrder ?? idx,
       test_item_id: it.testItemId ?? null,
     }))
-  } else {
+  }
+  // '전항목' 인데 품목 마스터에 없는 오더(수동 오더의 품목코드 N/A 등)인지 — 안내 문구를 가르는 데 쓴다
+  let productInMaster = true
+  if (!isParallel && order.method !== METHOD_PARTIAL) {
     const { data: prod } = await supabaseAdmin.from('products').select('id').eq('product_code', order.product_code).maybeSingle()
+    productInMaster = !!prod?.id
     if (prod?.id) {
       const { data: pti } = await supabaseAdmin
         .from('product_test_items')
@@ -947,6 +951,17 @@ export async function startJob(orderId: string, userSub: string): Promise<{ jobI
         test_item_id: (r.test_item_id as string | null) ?? null,
       }))
     }
+    // 품목 기준 항목이 없으면(마스터에 없는 품목 · 마스터에 항목 0개) 관리자가 오더 수정 서랍에서
+    // **이 오더에 직접 지정한 시험항목**(pct_order_test_items, 제외 안 된 것)으로 시작한다.
+    // 품목 기준이 있는 오더는 예전과 똑같이 품목 기준을 쓴다 — 기존 오더의 동작은 바꾸지 않는다.
+    if (plannedItems.length === 0) {
+      const selected = await activeItemsForSlot(orderId, order.product_code, mySlot)
+      selected.forEach((it, idx) => plannedItems.push({
+        test_item_name: it.testItemName,
+        sequence_order: it.sequenceOrder ?? idx,
+        test_item_id: it.testItemId ?? null,
+      }))
+    }
   }
 
   // 항목이 하나도 없으면 **작업을 만들기 전에** 멈춘다.
@@ -957,8 +972,11 @@ export async function startJob(orderId: string, userSub: string): Promise<{ jobI
   // 병렬 배정·개별항목 경로는 이미 같은 이유로 막고 있었다 — 셋의 기준을 맞춘다.
   if (plannedItems.length === 0) {
     throw new Error(
-      `"${order.product_name}" 에 등록된 시험항목이 없습니다. ` +
-      `품목 관리에서 시험항목을 먼저 지정한 뒤 시작해 주세요.`,
+      productInMaster
+        ? `"${order.product_name}" 에 등록된 시험항목이 없습니다. ` +
+          `품목 관리에서 시험항목을 지정하거나, 관리자가 오더 수정에서 이 오더의 시험항목을 지정한 뒤 시작해 주세요.`
+        : `"${order.product_name}" 은(는) 품목 마스터에 없는 오더입니다. ` +
+          `관리자가 오더 수정에서 시험항목을 지정한 뒤 시작해 주세요.`,
     )
   }
 

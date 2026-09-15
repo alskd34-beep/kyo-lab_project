@@ -2,6 +2,7 @@
  * [BACKEND] PCT 오더
  *   GET   /api/pct-orders?status=&assigneeTesterId=&includeDeleted=  — 목록 (인증)
  *   POST  /api/pct-orders  { ...오더필드 }                          — 수동 오더 생성 (admin)
+ *         필수: productName·dueDate. productCode·batchNo 를 비우면 N/A(서버가 NA-… 대체값 생성)
  *   PATCH /api/pct-orders  { id, patch, reason, assignees? }         — 사유 필수 수정 (admin)
  *         assignees: [{ slot: 1~5, testerId }] 병렬 배정 담당자 구성(빈 배열 = 미배정). 없으면 구성은 그대로.
  */
@@ -42,13 +43,14 @@ export async function POST(req: NextRequest) {
       /** method='개별항목' 일 때 배정할 시험항목 */
       testItems?: Array<{ testItemId?: string | null; testItemName?: string }>
     }
-    if (!body.productCode || !body.productName || !body.batchNo) {
-      return Response.json({ error: '품목코드·품목명·제조번호는 필수입니다.' }, { status: 400 })
+    // 수동 오더 필수 = 품목명 + 완료예정일. 품목코드·제조번호는 비우면 N/A(서비스가 대체값 생성)
+    if (!body.productName?.trim() || !body.dueDate?.trim()) {
+      return Response.json({ error: '품목명·완료예정일은 필수입니다.' }, { status: 400 })
     }
     const row = await createOrder({
-      productCode: body.productCode,
+      productCode: body.productCode ?? '',
       productName: body.productName,
-      batchNo: body.batchNo,
+      batchNo: body.batchNo ?? '',
       dosageForm: body.dosageForm ?? null,
       validationType: body.validationType ?? null,
       packagingDate: body.packagingDate ?? null,

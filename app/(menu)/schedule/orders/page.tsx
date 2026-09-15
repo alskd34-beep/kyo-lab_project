@@ -24,6 +24,11 @@ import {
 import { useLeaveReschedule } from "@frontend/components/schedule/leave-reschedule-dialog"
 import { ConcurrentGroupDialog } from "@frontend/components/schedule/concurrent-group-dialog"
 import { OrderTestItemsSection, type OrderTestItemDetailRow } from "@frontend/components/schedule/order-test-items-section"
+import { NaToggle, OrderInfoTable } from "@frontend/components/schedule/order-info-table"
+import {
+  NA_DIRECT_INPUT_MESSAGE, NA_RESERVED_PREFIX, displayBatchNo, displayOrderOptional, displayProductCode,
+  hasReservedNaPrefix, isNaBatchNo, isNaLiteralText, isNaProductCode,
+} from "@shared/order-na"
 import { TesterAvatar, TesterOptionLabel, primeTesterProfileCache } from "@frontend/lib/tester-profiles"
 import { Button } from "@frontend/components/ui/button"
 import { Card } from "@frontend/components/ui/card"
@@ -155,7 +160,7 @@ function groupTooltip(g: ConcurrentGroup, selfOrderId: string): string {
     `시험시작일 ${g.testStartDate ?? "미정"}`,
   ]
   if (g.groupLock) lines.push("잠긴 그룹 — 재적재해도 구성이 바뀌지 않습니다")
-  const others = g.items.filter(i => i.orderId !== selfOrderId).map(i => i.batchNo)
+  const others = g.items.filter(i => i.orderId !== selfOrderId).map(i => displayBatchNo(i.batchNo))
   if (others.length > 0) lines.push(`함께: ${others.join(", ")}`)
   if (g.note) lines.push(g.note)
   return lines.join("\n")
@@ -493,7 +498,7 @@ export default function OrdersPage() {
     if (testerId) {
       const conflicted = targets
         .map(r => ({
-          label: `${r.productName} (${r.batchNo})`,
+          label: `${r.productName} (${displayBatchNo(r.batchNo)})`,
           conflicts: conflictsFor(testerId, r, absences),
         }))
         .filter(i => i.conflicts.length > 0)
@@ -611,8 +616,9 @@ export default function OrdersPage() {
     if (!q) return rows
     return rows.filter(r =>
       r.productName.toLowerCase().includes(q) ||
-      r.productCode.toLowerCase().includes(q) ||
-      r.batchNo.toLowerCase().includes(q) ||
+      // 화면에 보이는 값으로 찾는다 — N/A 오더는 "n/a" 로 걸리고 내부 대체값(NA-…)으로는 안 걸린다
+      displayProductCode(r.productCode).toLowerCase().includes(q) ||
+      displayBatchNo(r.batchNo).toLowerCase().includes(q) ||
       (r.assigneeName ?? "").toLowerCase().includes(q) ||
       // 'PV1' 처럼 구분으로 찾는 경우 — 시트 값이 대문자라 소문자로 쳐도 걸리게 한다
       (r.validationType ?? "").toLowerCase().includes(q) ||
@@ -941,9 +947,9 @@ export default function OrdersPage() {
                   <Lock className="size-2.5" />확정
                 </Badge>
               )}
-              <span className="font-mono tabular-nums">품목코드 {r.productCode}</span>
+              <span className="font-mono tabular-nums">품목코드 {displayProductCode(r.productCode)}</span>
               <span aria-hidden="true" className="text-border">·</span>
-              <span className="font-mono tabular-nums">제조번호 {r.batchNo}</span>
+              <span className="font-mono tabular-nums">제조번호 {displayBatchNo(r.batchNo)}</span>
               {/* 실행 그룹은 이 오더의 **부가정보**이지 상태가 아니다. 품목명 줄에 두면
                   이름이 쓸 폭을 빼앗아 긴 품목명이 곧바로 잘린다(광동…). 코드·제조번호와
                   같은 줄에 두면 폭이 남고, 줄이 좁아지면 스스로 아랫줄로 접힌다.
@@ -996,7 +1002,7 @@ export default function OrdersPage() {
         <dl className={cn("mt-3 grid grid-cols-2 overflow-hidden rounded-md border bg-background text-xs leading-normal sm:mt-4 [&>div]:min-w-0 [&>div]:p-2.5 sm:[&>div]:p-[0.72rem] [&>div:nth-child(odd)]:border-r [&>div:nth-child(n+3)]:border-t", isAdmin && "cursor-pointer active:bg-muted/50")}>
           <div>
             <dt className="text-muted-foreground">제형</dt>
-            <dd className="mt-0.5 truncate text-xs font-medium text-foreground sm:text-sm">{r.dosageForm ?? "-"}</dd>
+            <dd className="mt-0.5 truncate text-xs font-medium text-foreground sm:text-sm">{displayOrderOptional(r.dosageForm, r.source === "manual")}</dd>
           </div>
           <div>
             {/* 진행방법은 시트 원본값 — 실제 배정 항목은 수정 패널의 「시험항목」이 정한다 */}
@@ -1005,7 +1011,7 @@ export default function OrdersPage() {
           </div>
           <div>
             <dt className="text-muted-foreground">포장일</dt>
-            <dd className="mt-0.5 text-xs font-medium tabular-nums text-foreground sm:text-sm">{r.packagingDate ?? "-"}</dd>
+            <dd className="mt-0.5 text-xs font-medium tabular-nums text-foreground sm:text-sm">{displayOrderOptional(r.packagingDate, r.source === "manual")}</dd>
           </div>
           <div>
             <dt className="text-muted-foreground">완료예정</dt>
@@ -1160,7 +1166,7 @@ export default function OrdersPage() {
               <ul className="mt-1.5 flex flex-col gap-0.5 text-xs leading-normal">
                 {assignFailures.map(f => (
                   <li key={f.orderId} className="break-keep">
-                    · {f.productName} ({f.batchNo}) — {f.reason}
+                    · {f.productName} ({displayBatchNo(f.batchNo)}) — {f.reason}
                   </li>
                 ))}
               </ul>
@@ -1193,7 +1199,7 @@ export default function OrdersPage() {
               <ul className="mt-1.5 flex flex-col gap-0.5 text-xs leading-normal">
                 {halfDayNotices.map(n => (
                   <li key={`${n.orderId}-${n.testerId}`} className="truncate">
-                    · {n.productName} ({n.batchNo}) → <strong>{n.testerName}</strong>
+                    · {n.productName} ({displayBatchNo(n.batchNo)}) → <strong>{n.testerName}</strong>
                     <span className="ml-1 font-mono tabular-nums">{n.dates.join(", ")}</span>
                   </li>
                 ))}
@@ -1792,16 +1798,56 @@ function TestItemPickerDialog({
 // ─── 오더 추가 모달 (수동 생성) ───────────────────────────────────────────────
 interface ProductHit { id: string; productCode: string; name: string }
 interface OrderTestItem { testItemId: string; testItemName: string; sequenceOrder: number }
+
+/** 수동 오더에서 N/A 로 둘 수 있는 칸 (품목명·완료예정일은 필수라 없다) */
+type CreateNaField = "productCode" | "batchNo" | "dosageForm" | "packagingDate" | "validationType" | "plannedStartDate"
+
+/**
+ * 사용자가 키 칸에 N/A 흉내 값('N/A' 글자·대체값 모양 NA-…)을 직접 넣었는지 — 서버도 거절하지만 저장 전에 알린다.
+ * 수정 서랍은 새로 넣거나 바꾼 값만 넘긴다(지금 저장된 값은 검사하지 않는다 — 서버와 같은 기준).
+ */
+function reservedNaMessage(keys: { productCode?: string; batchNo?: string }): string | null {
+  if (isNaLiteralText(keys.productCode) || isNaLiteralText(keys.batchNo)) return NA_DIRECT_INPUT_MESSAGE
+  if (hasReservedNaPrefix(keys.productCode)) return `품목코드는 '${NA_RESERVED_PREFIX}' 로 시작할 수 없습니다. 값이 없으면 N/A 를 켜세요.`
+  if (hasReservedNaPrefix(keys.batchNo)) return `제조번호는 '${NA_RESERVED_PREFIX}' 로 시작할 수 없습니다. 값이 없으면 N/A 를 켜세요.`
+  return null
+}
+
+/**
+ * N/A 로 등록·수정할 때 흐름이 중간에 멈추는 곳을 미리 알린다(등록은 막지 않는다).
+ *  - 포장일 없음 → AI 자동배정 규칙엔진이 일정을 못 잡는다. 수동 배정은 된다.
+ *  - 품목코드 N/A(품목 마스터 없음) + 전항목 → 품목 기준 시험항목이 없어 오더에 직접 지정해야 시작된다.
+ */
+function OrderNaNotices({ noPackagingDate, noMasterItems }: { noPackagingDate: boolean; noMasterItems: boolean }) {
+  if (!noPackagingDate && !noMasterItems) return null
+  return (
+    <ul className="mt-3 flex flex-col gap-1 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-normal break-keep text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+      {noPackagingDate && <li>· 포장일이 없어 AI 자동배정 대상이 아닙니다. 담당자를 직접 지정하세요.</li>}
+      {noMasterItems && <li>· 품목코드가 N/A 이면 품목 기준 시험항목이 없습니다. 오더 수정의 시험항목에서 항목을 지정해야 작업을 시작할 수 있습니다.</li>}
+    </ul>
+  )
+}
 function CreateModal({ testers, absences, onClose, onCreated }: {
   testers: Tester[]; absences: TesterAbsence[]; onClose: () => void; onCreated: () => void
 }) {
   const { requestConfirm } = useConfirmMessage()
   const uid = useId()
   const [form, setForm] = useState({
-    productCode: "", productName: "", batchNo: "", dosageForm: "",
+    productCode: "", productName: "", batchNo: "", dosageForm: "", validationType: "",
     packagingDate: "", dueDate: "", plannedStartDate: "", isUrgent: false,
     method: "전항목", status: "대기", assigneeTesterId: "", note: "",
   })
+  // 칸별 N/A — 켜면 값을 비우고 잠근다. 필수는 품목명·완료예정일 둘뿐이다(@shared/order-na).
+  const [na, setNa] = useState<Record<CreateNaField, boolean>>({
+    productCode: false, batchNo: false, dosageForm: false, packagingDate: false, validationType: false, plannedStartDate: false,
+  })
+  const toggleNa = (field: CreateNaField, checked: boolean) => {
+    setNa(prev => ({ ...prev, [field]: checked }))
+    if (!checked) return
+    setForm(f => ({ ...f, [field]: "" }))
+    // 품목코드를 N/A 로 두면 품목 마스터와의 연결이 끊긴다 — 검색으로 고른 품목·개별항목 선택도 무효다
+    if (field === "productCode") { setProductId(""); setTestItems([]); setPq("") }
+  }
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
@@ -1837,6 +1883,7 @@ function CreateModal({ testers, absences, onClose, onCreated }: {
 
   const pickProduct = (p: ProductHit) => {
     setForm(f => ({ ...f, productCode: p.productCode, productName: p.name }))
+    setNa(prev => ({ ...prev, productCode: false }))
     setPq(`${p.name} (${p.productCode})`)
     setShowHits(false)
     // 품목이 바뀌면 이전 품목 기준으로 고른 항목은 무효다
@@ -1856,9 +1903,11 @@ function CreateModal({ testers, absences, onClose, onCreated }: {
   const assigneeName = testers.find(t => t.id === form.assigneeTesterId)?.name ?? "선택한"
 
   const save = async () => {
-    if (!form.productCode.trim() || !form.productName.trim() || !form.batchNo.trim()) {
-      setErr("품목코드·품목명·제조번호는 필수입니다."); return
+    if (!form.productName.trim() || !form.dueDate) {
+      setErr("품목명·완료예정일은 필수입니다."); return
     }
+    const reserved = reservedNaMessage({ productCode: form.productCode, batchNo: form.batchNo })
+    if (reserved) { setErr(reserved); return }
     if (form.method === "개별항목" && testItems.length === 0) {
       setErr("진행방법이 「개별항목」이면 시험항목을 1개 이상 선택하세요."); return
     }
@@ -1878,13 +1927,15 @@ function CreateModal({ testers, absences, onClose, onCreated }: {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          productCode: form.productCode.trim(),
+          // 품목코드·제조번호를 비워 보내면(N/A) 서버가 오더마다 고유 대체값을 만든다
+          productCode: na.productCode ? "" : form.productCode.trim(),
           productName: form.productName.trim(),
-          batchNo: form.batchNo.trim(),
-          dosageForm: form.dosageForm.trim() || null,
-          packagingDate: form.packagingDate || null,
-        plannedStartDate: form.plannedStartDate || null,
-          dueDate: form.dueDate || null,
+          batchNo: na.batchNo ? "" : form.batchNo.trim(),
+          dosageForm: na.dosageForm ? null : (form.dosageForm.trim() || null),
+          validationType: na.validationType ? null : (form.validationType.trim() || null),
+          packagingDate: na.packagingDate ? null : (form.packagingDate || null),
+          plannedStartDate: na.plannedStartDate ? null : (form.plannedStartDate || null),
+          dueDate: form.dueDate,
           isUrgent: form.isUrgent,
           method: form.method,
           status: form.status,
@@ -1915,7 +1966,7 @@ function CreateModal({ testers, absences, onClose, onCreated }: {
       }
     >
       <p className="mb-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-normal break-keep text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300">
-        제조 시트 적재가 아닌 수동 등록 오더입니다. 등록 후 담당자를 지정하세요.
+        제조 시트 적재가 아닌 수동 등록 오더입니다. 품목명·완료예정일만 있으면 등록되고, 모르는 칸은 N/A 로 둘 수 있습니다.
       </p>
 
       {/* 품목 검색 (자동완성) */}
@@ -1959,18 +2010,36 @@ function CreateModal({ testers, absences, onClose, onCreated }: {
           </div>
           <Badge variant="outline" className="shrink-0 tabular-nums">{testItems.length > 0 ? `시험항목 ${testItems.length}개` : "시험항목 선택"}</Badge>
         </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label="품목코드"><input value={form.productCode} onChange={e => setForm({ ...form, productCode: e.target.value })} className={cn(inputCls, "font-mono")} /></Field>
-        <Field label="제조번호"><input value={form.batchNo} onChange={e => setForm({ ...form, batchNo: e.target.value })} className={cn(inputCls, "font-mono")} /></Field>
-        <Field label="품목명" full><input value={form.productName} onChange={e => setForm({ ...form, productName: e.target.value })} className={inputCls} /></Field>
-        <Field label="제형"><input value={form.dosageForm} onChange={e => setForm({ ...form, dosageForm: e.target.value })} placeholder="예: 내용고형제 (선택)" className={inputCls} /></Field>
-        <Field label="포장일"><DateField noLabel value={form.packagingDate} onChange={v => setForm({ ...form, packagingDate: v })} /></Field>
-        <Field label="완료예정일"><DateField noLabel value={form.dueDate} onChange={v => setForm({ ...form, dueDate: v })} /></Field>
-        {/* 휴가를 피해 배정할 때 정해지는 값. 여기서 확인·수정·해제할 수 있어야 배정
-            다이얼로그가 일방통행이 되지 않는다. 비우면 포장일·납기 추정으로 돌아간다. */}
-        <Field label="착수 예정일">
-          <DateField noLabel value={form.plannedStartDate} onChange={v => setForm({ ...form, plannedStartDate: v })} placeholder="미지정 (포장일·납기로 추정)" />
+        {/* 오더 수정 서랍과 같은 식별 표·같은 칸 순서. 수동 등록이라 칸이 입력 가능하다. */}
+        <OrderInfoTable
+          productCode={{
+            value: form.productCode, editable: true, mono: true, placeholder: "비우면 N/A",
+            onChange: v => setForm(f => ({ ...f, productCode: v })),
+            na: { checked: na.productCode, onChange: c => toggleNa("productCode", c) },
+          }}
+          batchNo={{
+            value: form.batchNo, editable: true, mono: true, placeholder: "비우면 N/A",
+            onChange: v => setForm(f => ({ ...f, batchNo: v })),
+            na: { checked: na.batchNo, onChange: c => toggleNa("batchNo", c) },
+          }}
+          productName={{
+            value: form.productName, editable: true, required: true,
+            onChange: v => setForm(f => ({ ...f, productName: v })),
+          }}
+          validationType={{
+            value: form.validationType, editable: true, placeholder: "예: 일반, PV1",
+            onChange: v => setForm(f => ({ ...f, validationType: v })),
+            na: { checked: na.validationType, onChange: c => toggleNa("validationType", c) },
+          }}
+        />
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field label="제형" action={<NaToggle label="제형" checked={na.dosageForm} onChange={c => toggleNa("dosageForm", c)} />}>
+          <input value={form.dosageForm} disabled={na.dosageForm} onChange={e => setForm({ ...form, dosageForm: e.target.value })} placeholder={na.dosageForm ? "N/A" : "예: 내용고형제 (선택)"} className={cn(inputCls, "disabled:bg-muted")} />
         </Field>
+        <Field label="포장일" action={<NaToggle label="포장일" checked={na.packagingDate} onChange={c => toggleNa("packagingDate", c)} />}>
+          <DateField noLabel value={form.packagingDate} disabled={na.packagingDate} placeholder={na.packagingDate ? "N/A" : undefined} onChange={v => setForm({ ...form, packagingDate: v })} />
+        </Field>
+        <Field label="완료예정일 *"><DateField noLabel value={form.dueDate} onChange={v => setForm({ ...form, dueDate: v })} /></Field>
         <Field label="긴급">
           <Select value={form.isUrgent ? "긴급" : "일반"} onValueChange={v => setForm({ ...form, isUrgent: v === "긴급" })}>
             <SelectTrigger className="!h-9 w-full px-3"><SelectValue /></SelectTrigger>
@@ -1979,6 +2048,29 @@ function CreateModal({ testers, absences, onClose, onCreated }: {
               <SelectItem value="긴급">긴급</SelectItem>
             </SelectContent>
           </Select>
+        </Field>
+        <Field label="시험항목">
+          <div className="flex h-9 items-center gap-2 rounded-md border border-input bg-muted px-3">
+            <ListChecks className="size-4 shrink-0 text-muted-foreground" />
+            <span className="truncate text-sm font-medium text-foreground">
+              {form.method === "개별항목"
+                ? (testItems.length > 0 ? `시험항목 ${testItems.length}개` : "선택 필요")
+                : productId ? "품목 기준 전항목" : "전항목"}
+            </span>
+          </div>
+        </Field>
+        <Field label="상태">
+          <Select value={form.status} onValueChange={v => setForm({ ...form, status: v })}>
+            <SelectTrigger className="!h-9 w-full px-3"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </Field>
+        {/* 여기부터는 추가 서랍에만 있는 칸 — 수정 서랍과 같은 표 뒤쪽 행으로 둔다.
+            착수 예정일: 휴가를 피해 배정할 때 정해지는 값. 비우면 포장일·납기 추정으로 돌아간다. */}
+        <Field label="착수 예정일" action={<NaToggle label="착수 예정일" checked={na.plannedStartDate} onChange={c => toggleNa("plannedStartDate", c)} />}>
+          <DateField noLabel value={form.plannedStartDate} disabled={na.plannedStartDate} onChange={v => setForm({ ...form, plannedStartDate: v })} placeholder={na.plannedStartDate ? "N/A" : "미지정 (포장일·납기로 추정)"} />
         </Field>
         <Field label="진행방법">
           <Select
@@ -2000,7 +2092,9 @@ function CreateModal({ testers, absences, onClose, onCreated }: {
           <Field label="배정 시험항목" full>
             {!productId ? (
               <p className="rounded-md border border-dashed px-3 py-2.5 text-xs leading-normal break-keep text-muted-foreground">
-                먼저 위에서 품목을 검색해 선택하세요. 그 품목에 등록된 시험항목 중에서 고릅니다.
+                {na.productCode
+                  ? "품목코드가 N/A 이면 품목 기준 시험항목에서 고를 수 없습니다. 「전항목」으로 등록한 뒤 오더 수정의 시험항목에서 항목을 지정하세요."
+                  : "먼저 위에서 품목을 검색해 선택하세요. 그 품목에 등록된 시험항목 중에서 고릅니다."}
               </p>
             ) : (
               <div className="flex flex-col gap-2">
@@ -2027,15 +2121,7 @@ function CreateModal({ testers, absences, onClose, onCreated }: {
             )}
           </Field>
         )}
-        <Field label="상태">
-          <Select value={form.status} onValueChange={v => setForm({ ...form, status: v })}>
-            <SelectTrigger className="!h-9 w-full px-3"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field label="담당자">
+        <Field label="담당자" full>
           <Select value={form.assigneeTesterId || "none"} onValueChange={v => setForm({ ...form, assigneeTesterId: v === "none" ? "" : v })}>
             <SelectTrigger className="!h-9 w-full px-3"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -2057,6 +2143,10 @@ function CreateModal({ testers, absences, onClose, onCreated }: {
         </Field>
         <Field label="비고" full><input value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} className={inputCls} /></Field>
         </div>
+        <OrderNaNotices
+          noPackagingDate={na.packagingDate || !form.packagingDate}
+          noMasterItems={form.method !== "개별항목" && (na.productCode || !form.productCode.trim())}
+        />
       </section>
 
       <LeaveConflictNotice conflicts={leaveConflicts} testerName={assigneeName} className="mt-2" />
@@ -2098,10 +2188,15 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
   const { user } = useAuth()
   const isAdmin = user?.role === "admin"
   const isAutoOrder = order.source === "auto"
+  // 수동 오더의 식별 칸(품목코드·제조번호·품목명)은 작업 시작 전까지만 고칠 수 있다(서버 STARTED_IMMUTABLE_FIELDS 와 같은 기준).
+  // 구분은 작업 시작과 무관하게 수동 오더면 고칠 수 있다.
+  const keysEditable = !isAutoOrder && !order.hasJob
+  // N/A 대체값은 입력칸에 싣지 않는다 — N/A 를 끄면 빈 칸에서 실제 값을 넣는다
   const [form, setForm] = useState({
-    productCode: order.productCode ?? "",
+    productCode: isNaProductCode(order.productCode) ? "" : (order.productCode ?? ""),
     productName: order.productName ?? "",
-    batchNo: order.batchNo ?? "",
+    batchNo: isNaBatchNo(order.batchNo) ? "" : (order.batchNo ?? ""),
+    validationType: order.validationType ?? "",
     dosageForm: order.dosageForm ?? "",
     packagingDate: order.packagingDate ?? "",
     plannedStartDate: order.plannedStartDate ?? "",
@@ -2111,6 +2206,19 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
     status: order.status,
     note: order.note ?? "",
   })
+  // 칸별 N/A(수동 오더만). 선택 칸은 null = N/A, 키 칸은 서버가 만든 대체값 = N/A 로 읽는다.
+  const [na, setNa] = useState<Record<CreateNaField, boolean>>({
+    productCode: isNaProductCode(order.productCode),
+    batchNo: isNaBatchNo(order.batchNo),
+    validationType: !isAutoOrder && !order.validationType,
+    dosageForm: !isAutoOrder && !order.dosageForm,
+    packagingDate: !isAutoOrder && !order.packagingDate,
+    plannedStartDate: !isAutoOrder && !order.plannedStartDate,
+  })
+  const toggleNa = (field: keyof typeof na, checked: boolean) => {
+    setNa(prev => ({ ...prev, [field]: checked }))
+    if (checked) setForm(f => ({ ...f, [field]: "" }))
+  }
   // 담당자 구성 — 담당자 1(대표)은 늘 한 행이 있다. 번호는 저장된 슬롯 번호를 그대로 쓴다(구멍 허용).
   const [parallel, setParallel] = useState(order.isParallel)
   const [assigneeRows, setAssigneeRows] = useState<AssigneeFormRow[]>(() => {
@@ -2229,8 +2337,18 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
   )
 
   const save = async () => {
-    if (!isAutoOrder && (!form.productCode.trim() || !form.productName.trim() || !form.batchNo.trim())) {
-      setErr("품목코드·품목명·제조번호는 비울 수 없습니다."); return
+    if (!isAutoOrder) {
+      // 수동 오더 필수 = 품목명 + 완료예정일. 저장 후 최종 값 기준이다 — 원래 비어 있던 오더도 채워야 저장된다(서버와 같은 기준).
+      if (!form.productName.trim()) { setErr("품목명은 필수입니다."); return }
+      if (!form.dueDate) { setErr("수동 오더의 완료예정일은 필수입니다."); return }
+      // 예약어 검사는 새로 넣거나 바꾼 키 값에만 — 규칙 이전에 NA- 로 시작하는 실제 키를 가진 오더도 다른 칸을 고칠 수 있다
+      const changedKey = (naOn: boolean, typed: string, current: string) =>
+        !naOn && typed.trim() !== current ? typed : ""
+      const reserved = reservedNaMessage({
+        productCode: changedKey(na.productCode, form.productCode, order.productCode),
+        batchNo: changedKey(na.batchNo, form.batchNo, order.batchNo),
+      })
+      if (reserved) { setErr(reserved); return }
     }
     if (!reason.trim()) { setErr("수정 사유는 필수입니다."); return }
     if (parallel && assigneeRows.some(r => !r.testerId)) {
@@ -2260,9 +2378,9 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
       // **바뀐 필드만** 보낸다. 서랍을 연 사이 시험자가 작업을 시작해 오더가 '진행중'이 됐는데
       // 열어 둔 폼의 status('대기')까지 보내면, 담당자만 바꾸려던 저장이 오더 상태를 되돌린다.
       const candidate: Record<string, [string | boolean | null, string | boolean | null]> = {
-        dosageForm: [form.dosageForm.trim() || null, order.dosageForm ?? null],
-        packagingDate: [form.packagingDate || null, order.packagingDate ?? null],
-        plannedStartDate: [form.plannedStartDate || null, order.plannedStartDate ?? null],
+        dosageForm: [na.dosageForm ? null : (form.dosageForm.trim() || null), order.dosageForm ?? null],
+        packagingDate: [na.packagingDate ? null : (form.packagingDate || null), order.packagingDate ?? null],
+        plannedStartDate: [!isAutoOrder && na.plannedStartDate ? null : (form.plannedStartDate || null), order.plannedStartDate ?? null],
         dueDate: [form.dueDate || null, order.dueDate ?? null],
         isUrgent: [form.isUrgent, order.isUrgent],
         method: [form.method, order.method],
@@ -2270,9 +2388,13 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
         note: [form.note || null, order.note ?? null],
       }
       if (!isAutoOrder) {
-        candidate.productCode = [form.productCode.trim(), order.productCode]
+        // 키 칸 N/A: 이미 N/A 대체값이면 그대로(변경 없음), 실제 값이었으면 빈 값을 보내 서버가 대체값을 만든다
+        const keyValue = (naOn: boolean, typed: string, current: string, isNa: (v: string) => boolean) =>
+          naOn || !typed.trim() ? (isNa(current) ? current : "") : typed.trim()
+        candidate.productCode = [keyValue(na.productCode, form.productCode, order.productCode, isNaProductCode), order.productCode]
         candidate.productName = [form.productName.trim(), order.productName]
-        candidate.batchNo = [form.batchNo.trim(), order.batchNo]
+        candidate.batchNo = [keyValue(na.batchNo, form.batchNo, order.batchNo, isNaBatchNo), order.batchNo]
+        candidate.validationType = [na.validationType ? null : (form.validationType.trim().toUpperCase() || null), order.validationType ?? null]
       }
       const patch: Record<string, string | boolean | null> = {}
       for (const [key, [next, prev]] of Object.entries(candidate)) if (next !== prev) patch[key] = next
@@ -2344,7 +2466,9 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
       )}>
         {isAutoOrder
           ? "자동 적재 오더입니다. 품목코드·제조번호·품목명은 제조팀 원본 기준으로 고정됩니다."
-          : "품목코드·제조번호·품목명은 오더 식별정보로 읽기 전용입니다. 일정·상태·담당자 변경은 이력에 남습니다."}
+          : order.hasJob
+            ? "수동 등록 오더입니다. 작업이 시작되어 품목코드·제조번호·품목명은 고칠 수 없습니다. 변경은 이력에 남습니다."
+            : "수동 등록 오더입니다. 작업 시작 전까지 식별정보를 고칠 수 있고, 모르는 칸은 N/A 로 둘 수 있습니다. 변경은 이력에 남습니다."}
       </p>
       <section className="rounded-md border bg-muted/20 p-3">
         <div className="mb-3 flex items-center justify-between gap-2">
@@ -2354,29 +2478,45 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
           </div>
           <Badge variant="outline" className="shrink-0 tabular-nums">{order.testItemCount == null ? "시험항목 -" : `시험항목 ${order.testItemCount}개`}</Badge>
         </div>
-        <dl className="grid grid-cols-2 overflow-hidden rounded-md border bg-background text-xs leading-normal [&>div]:min-w-0 [&>div]:p-3 [&>div:nth-child(odd)]:border-r [&>div:nth-child(n+3)]:border-t">
-          <div>
-            <dt className="text-muted-foreground">품목코드</dt>
-            <dd className="mt-1 font-mono text-sm font-medium tabular-nums text-foreground">{order.productCode}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">제조번호</dt>
-            <dd className="mt-1 font-mono text-sm font-medium tabular-nums text-foreground">{order.batchNo}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">품목명</dt>
-            <dd className="mt-1 text-sm font-medium text-foreground">{order.productName}</dd>
-          </div>
-          {/* 구분도 제조팀 시트가 원본이라 품목 식별정보와 같은 칸에 둔다(읽기 전용) */}
-          <div>
-            <dt className="text-muted-foreground">구분</dt>
-            <dd className="mt-1 text-sm font-medium text-foreground">{order.validationType || "—"}</dd>
-          </div>
-        </dl>
+        {/* 오더 추가 서랍과 같은 식별 표. 자동 오더는 읽기 전용, 수동 오더는 작업 시작 전까지 입력·N/A 가능. */}
+        <OrderInfoTable
+          productCode={keysEditable
+            ? {
+              value: form.productCode, editable: true, mono: true, placeholder: "비우면 N/A",
+              onChange: v => setForm(f => ({ ...f, productCode: v })),
+              na: { checked: na.productCode, onChange: c => toggleNa("productCode", c) },
+            }
+            : { value: displayProductCode(order.productCode), editable: false, mono: true }}
+          batchNo={keysEditable
+            ? {
+              value: form.batchNo, editable: true, mono: true, placeholder: "비우면 N/A",
+              onChange: v => setForm(f => ({ ...f, batchNo: v })),
+              na: { checked: na.batchNo, onChange: c => toggleNa("batchNo", c) },
+            }
+            : { value: displayBatchNo(order.batchNo), editable: false, mono: true }}
+          productName={keysEditable
+            ? { value: form.productName, editable: true, required: true, onChange: v => setForm(f => ({ ...f, productName: v })) }
+            : { value: order.productName, editable: false }}
+          validationType={!isAutoOrder
+            ? {
+              value: form.validationType, editable: true, placeholder: "예: 일반, PV1",
+              onChange: v => setForm(f => ({ ...f, validationType: v })),
+              na: { checked: na.validationType, onChange: c => toggleNa("validationType", c) },
+            }
+            : { value: order.validationType ?? "", editable: false }}
+        />
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label="제형"><input value={form.dosageForm} onChange={e => setForm({ ...form, dosageForm: e.target.value })} placeholder="예: 내용고형제 (선택)" className={inputCls} /></Field>
-        <Field label="포장일"><DateField noLabel value={form.packagingDate} onChange={v => setForm({ ...form, packagingDate: v })} /></Field>
-        <Field label="완료예정일"><DateField noLabel value={form.dueDate} onChange={v => setForm({ ...form, dueDate: v })} /></Field>
+        <Field label="제형" action={!isAutoOrder ? <NaToggle label="제형" checked={na.dosageForm} onChange={c => toggleNa("dosageForm", c)} /> : undefined}>
+          <input value={form.dosageForm} disabled={!isAutoOrder && na.dosageForm} onChange={e => setForm({ ...form, dosageForm: e.target.value })} placeholder={!isAutoOrder && na.dosageForm ? "N/A" : "예: 내용고형제 (선택)"} className={cn(inputCls, "disabled:bg-muted")} />
+        </Field>
+        {/* 포장일은 작업 시작·LOCK 뒤 고정 칸이라 그때는 N/A 도 바꿀 수 없다(서버가 최종 판정) */}
+        <Field
+          label="포장일"
+          action={!isAutoOrder ? <NaToggle label="포장일" checked={na.packagingDate} disabled={order.hasJob || order.locked} onChange={c => toggleNa("packagingDate", c)} /> : undefined}
+        >
+          <DateField noLabel value={form.packagingDate} disabled={!isAutoOrder && na.packagingDate} placeholder={!isAutoOrder && na.packagingDate ? "N/A" : undefined} onChange={v => setForm({ ...form, packagingDate: v })} />
+        </Field>
+        <Field label={isAutoOrder ? "완료예정일" : "완료예정일 *"}><DateField noLabel value={form.dueDate} onChange={v => setForm({ ...form, dueDate: v })} /></Field>
         <Field label="긴급">
           <Select value={form.isUrgent ? "긴급" : "일반"} onValueChange={v => setForm({ ...form, isUrgent: v === "긴급" })}>
             <SelectTrigger className="!h-9 w-full px-3"><SelectValue /></SelectTrigger>
@@ -2403,6 +2543,20 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
               {STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
             </SelectContent>
           </Select>
+        </Field>
+        {/* 착수 예정일 — 추가 서랍과 같은 칸. 확정(LOCK) 뒤에는 고정 칸이라 N/A 도 바꿀 수 없다(서버 LOCKED_IMMUTABLE_FIELDS 가 최종 판정).
+            작업 시작 뒤에는 실제 착수일이 달력에서 이 값을 이기므로 서버가 막지 않는다(기존 규칙 그대로). */}
+        <Field
+          label="착수 예정일"
+          action={!isAutoOrder ? <NaToggle label="착수 예정일" checked={na.plannedStartDate} disabled={order.locked} onChange={c => toggleNa("plannedStartDate", c)} /> : undefined}
+        >
+          <DateField
+            noLabel
+            value={form.plannedStartDate}
+            disabled={order.locked || (!isAutoOrder && na.plannedStartDate)}
+            placeholder={!isAutoOrder && na.plannedStartDate ? "N/A" : "미지정 (포장일·납기로 추정)"}
+            onChange={v => setForm({ ...form, plannedStartDate: v })}
+          />
         </Field>
         {/*
           담당자 — 1인 배정이면 '미배정' 선택이 곧 배정 해제. 확정(LOCK)된 오더는 변경 불가(원칙3).
@@ -2499,6 +2653,13 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
         </Field>
         <Field label="비고" full><input value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} className={inputCls} /></Field>
       </div>
+      {!isAutoOrder && (
+        <OrderNaNotices
+          noPackagingDate={na.packagingDate || !form.packagingDate}
+          // 품목 마스터 연결이 없는 전항목 오더 — 오더에 직접 지정한 항목(아래 시험항목 섹션)이 없으면 시작이 막힌다
+          noMasterItems={!order.hasJob && order.method !== "개별항목" && isNaProductCode(order.productCode) && !(order.testItemCount && order.testItemCount > 0)}
+        />
+      )}
       </section>
 
       {leaveByRow
@@ -2558,6 +2719,8 @@ function fmtEditValue(field: string, v: string | null, testers: Tester[]): strin
   if (isAssigneeField) return testers.find(t => t.id === v)?.name ?? v
   if (field === "isUrgent") return v === "true" ? "긴급" : "일반"
   if (field === "isDualAssignment") return v === "true" ? "병렬 배정" : "1인 배정"
+  if (field === "productCode") return displayProductCode(v)
+  if (field === "batchNo") return displayBatchNo(v)
   return v
 }
 

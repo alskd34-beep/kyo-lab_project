@@ -16,6 +16,7 @@
 
 import { supabaseAdmin } from '@backend/lib/supabase'
 import { escapeSlack, isSlackEnabled, maskWebhook, postSlack, type SlackBlock, warnOnce } from '@backend/lib/slack'
+import { displayBatchNo } from '@shared/order-na'
 
 export interface StageNotice {
   jobId: string
@@ -80,7 +81,8 @@ async function loadContext(jobId: string): Promise<JobContext | null> {
       qcNo: row.qc_no as string,
       testerName: tester?.name ?? null,
       productName: order?.product_name ?? null,
-      batchNo: order?.batch_no ?? null,
+      // 수동 오더의 N/A 제조번호 대체값(NA-B-…)은 가짜 번호로 읽히지 않게 "N/A" 로 보낸다
+      batchNo: displayBatchNo(order?.batch_no ?? null),
       isParallel,
     }
   } catch (err) {

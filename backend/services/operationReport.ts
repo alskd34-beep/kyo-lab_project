@@ -26,6 +26,7 @@ import { aggregateSideWork } from '@backend/services/sideWork'
 import { expandRange, isNonWorkingDay } from '@backend/lib/workdays'
 import { listGroupSavings, summarizeSavings, unionMinutes } from '@backend/services/concurrentSavings'
 import { CLOSED_STAGE } from '@shared/qc-status'
+import { displayBatchNo } from '@shared/order-na'
 import {
   WORK_MINUTES_PER_DAY,
   type OperationReport,
@@ -240,7 +241,7 @@ export async function getOperationReport(params: { from: string; to: string }): 
         source: r.source,
         members: r.members.length,
         productName: r.members[0]?.productName ?? '',
-        batchNos: r.members.map(m => m.batchNo),
+        batchNos: r.members.map(m => displayBatchNo(m.batchNo)),   // 표시 전용 — N/A 대체값은 "N/A"
         testerNames: [...new Set(r.members.map(m => m.testerName).filter((n): n is string => !!n))],
         savedDays: r.savedDays,
         savedMinutes: r.savedMinutes,

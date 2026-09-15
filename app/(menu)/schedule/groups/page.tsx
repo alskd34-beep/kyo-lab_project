@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { useAuth } from "@frontend/lib/auth-context"
+import { displayBatchNo, displayProductCode } from "@shared/order-na"
 import { RefreshCw, Lock, Unlock, Loader2 } from "lucide-react"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import { Button } from "@frontend/components/ui/button"
@@ -185,8 +186,8 @@ export default function GroupsPage() {
                       {it.productName}
                     </span>
                     <span className="flex min-w-0 items-center gap-2 text-xs leading-normal text-muted-foreground sm:contents">
-                      <span className="shrink-0 font-mono">{it.productCode}</span>
-                      <span className="shrink-0 font-mono">{it.batchNo}</span>
+                      <span className="shrink-0 font-mono">{displayProductCode(it.productCode)}</span>
+                      <span className="shrink-0 font-mono">{displayBatchNo(it.batchNo)}</span>
                       <span className="ml-auto shrink-0 tabular-nums sm:ml-0 sm:w-24 sm:text-right">{it.packagingDate ?? "-"}</span>
                     </span>
                   </li>

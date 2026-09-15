@@ -22,6 +22,7 @@ import {
 import { Button } from "@frontend/components/ui/button"
 import { Input } from "@frontend/components/ui/input"
 import { cn } from "@frontend/lib/utils"
+import { displayBatchNo, displayProductCode } from "@shared/order-na"
 
 export interface GroupWarning { level: "warn" | "block"; message: string }
 
@@ -141,9 +142,9 @@ export function ConcurrentGroupDialog({
                   {candidates.map(c => (
                     <li key={c.orderId} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 py-1.5 text-xs leading-normal">
                       <span className="flex min-w-0 items-baseline gap-2">
-                        <span className="shrink-0 font-mono text-muted-foreground">{c.productCode}</span>
+                        <span className="shrink-0 font-mono text-muted-foreground">{displayProductCode(c.productCode)}</span>
                         <span className="min-w-0 truncate font-medium text-foreground">{c.productName}</span>
-                        <span className="shrink-0 text-muted-foreground">/ {c.batchNo}</span>
+                        <span className="shrink-0 text-muted-foreground">/ {displayBatchNo(c.batchNo)}</span>
                       </span>
                       <span className="shrink-0 tabular-nums text-muted-foreground">
                         포장 {c.packagingDate ?? "-"}

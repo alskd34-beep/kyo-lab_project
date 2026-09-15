@@ -19,6 +19,7 @@ import {
 } from "@frontend/components/ui/table"
 import { ManagementDrawer } from "@frontend/components/common/management-drawer"
 import { orderTestWindow, overlaps, todayIso } from "@shared/leave"
+import { displayBatchNo } from "@shared/order-na"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 type ScheduleType = "ANNUAL" | "HALF_DAY" | "BUSINESS_TRIP"
@@ -1021,7 +1022,7 @@ function AddModal({
               description: (
                 <span className="block whitespace-pre-line">
                   이 기간에 이미 이 사람에게 배정된 오더가 있습니다.
-                  {"\n"}{conflicting.map(o => `· ${o.productName} (${o.batchNo})`).join("\n")}
+                  {"\n"}{conflicting.map(o => `· ${o.productName} (${displayBatchNo(o.batchNo)})`).join("\n")}
                   {"\n"}그대로 등록할 수 있으며, 해당 오더는 관리자가 다시 확인해야 합니다.
                 </span>
               ),

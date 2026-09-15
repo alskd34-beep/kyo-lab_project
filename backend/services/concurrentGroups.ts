@@ -10,6 +10,7 @@
  *   5) 유사 품목명 — (a) 한쪽이 다른쪽의 substring 이거나,
  *      (b) 회사명 접두어 제거 후 공통 접두어가 MIN_PREFIX_LEN 이상
  *         (예: 베니톨정·베니톨에스정·베니톨플러스정 → 공통 접두어 '베니톨' → 동일 그룹)
+ *   단, 품목코드가 N/A(수동 오더 대체값)인 오더는 자동으로 묶지 않는다(단독 그룹).
  *
  * 그룹별:
  *   - test_start_date = MAX(그룹 내 packaging_date) + 1일 (없으면 무시, 전부 없으면 null)
@@ -23,6 +24,7 @@
 import { supabaseAdmin } from '@backend/lib/supabase'
 import { selectAll } from '@backend/lib/supabasePage'
 import { DELETED_STATUS } from '@shared/qc-status'
+import { isNaProductCode } from '@shared/order-na'
 
 export interface GroupItem {
   orderId: string
@@ -165,10 +167,16 @@ export function buildGroupsFromOrders(
     if (rx !== ry) parent[Math.max(rx, ry)] = Math.min(rx, ry)
   }
 
+  // [N/A 제외] 품목코드가 N/A(수동 오더 대체값, @shared/order-na)인 오더는 품목을 알 수 없으므로
+  // 어떤 규칙(품목군·품목코드·품목명 동일/유사)으로도 다른 오더와 자동으로 묶지 않는다 — 단독 그룹으로 남는다.
+  // 같은 시험을 함께 하려면 관리자가 수동 그룹으로 묶는다.
+  const naCode = orders.map(o => isNaProductCode(o.productCode))
+
   // [마스터 우선] 동일 품목군(family)에 속한 오더끼리 먼저 강제 병합
   if (familyByCode && familyByCode.size > 0) {
     const firstIdxByFamily = new Map<string, number>()
     for (let i = 0; i < n; i++) {
+      if (naCode[i]) continue
       const fam = familyByCode.get(orders[i].productCode)
       if (!fam) continue
       const prev = firstIdxByFamily.get(fam)
@@ -179,7 +187,9 @@ export function buildGroupsFromOrders(
 
   // [규칙 보완] 마스터로 묶이지 않은 나머지는 유사도 규칙으로 병합
   for (let i = 0; i < n; i++) {
+    if (naCode[i]) continue
     for (let j = i + 1; j < n; j++) {
+      if (naCode[j]) continue
       if (sameGroup(orders[i], orders[j])) union(i, j)
     }
   }

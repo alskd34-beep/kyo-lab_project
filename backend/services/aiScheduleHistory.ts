@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@backend/lib/supabase'
 import { listIngestLog } from '@backend/services/pctOrders'
+import { displayBatchNo, displayProductCode } from '@shared/order-na'
 
 export type AiScheduleHistoryType = 'edit' | 'reassign' | 'ingest'
 
@@ -71,6 +72,9 @@ function displayEditValue(field: string, value: string | null, testerNames: Map<
   if (TESTER_ID_FIELDS.has(field)) return testerNames.get(value) ?? value
   if (field === 'isUrgent') return value === 'true' ? '긴급' : '일반'
   if (field === 'isDualAssignment') return value === 'true' ? '병렬 배정' : '1인 배정'
+  // 수동 오더 N/A 대체값 → "N/A" (N/A 를 풀고 실제 번호를 넣은 이력은 "N/A → 2409001" 로 읽힌다)
+  if (field === 'productCode') return displayProductCode(value)
+  if (field === 'batchNo') return displayBatchNo(value)
   return value
 }
 
@@ -105,8 +109,9 @@ async function loadOrderLookup(orderIds: string[]): Promise<Map<string, { produc
   for (const row of data ?? []) {
     map.set(row.id as string, {
       productName: (row.product_name as string) ?? null,
-      productCode: (row.product_code as string) ?? null,
-      batchNo:     (row.batch_no as string) ?? null,
+      // 표시 전용 조회라 N/A 대체값은 "N/A" 로 바꿔 둔다
+      productCode: displayProductCode((row.product_code as string) ?? null),
+      batchNo:     displayBatchNo((row.batch_no as string) ?? null),
     })
   }
   return map

@@ -9,6 +9,7 @@
  */
 
 import { supabaseAdmin } from '@backend/lib/supabase'
+import { maskNaKeys } from '@shared/order-na'
 
 export type NotificationType =
   | 'product_unsynced'   // 품목마스터 미동기화
@@ -44,12 +45,14 @@ export interface NotificationRow {
   createdAt: string
 }
 
+// 알림 문구는 호출부(서비스·DB 함수)마다 제조번호·품목코드를 그대로 끼워 만든다. 수동 오더의 N/A 대체값
+// (NA-P-…/NA-B-…)이 가짜 번호로 보이지 않게 **읽을 때 한 곳에서** "N/A" 로 바꾼다 — 저장값은 원문 유지.
 function mapRow(r: Record<string, unknown>): NotificationRow {
   return {
     id: r.id as string,
     type: r.type as string,
-    title: r.title as string,
-    body: (r.body as string) ?? null,
+    title: maskNaKeys(r.title as string),
+    body: r.body == null ? null : maskNaKeys(r.body as string),
     targetUserId: (r.target_user_id as string) ?? null,
     relatedOrderId: (r.related_order_id as string) ?? null,
     relatedQcJobId: (r.related_qc_job_id as string) ?? null,

@@ -10,6 +10,7 @@ import { ASSIGNED_TESTER_FILTER_COLUMN, withAssignedTesterEmbed } from '@backend
 import { loadAssigneesByOrder } from '@backend/services/orderAssignees'
 import { sanitizeFilterTerm } from '@backend/lib/postgrestFilter'
 import { DELETED_STATUS } from '@shared/qc-status'
+import { displayBatchNo, displayOrderOptional, displayProductCode } from '@shared/order-na'
 import {
   QCINK_NAME,
   buildQthinkIntentPrompt,
@@ -497,7 +498,7 @@ async function ordersContext(intent: QthinkIntent, scope: QthinkScope): Promise<
   const restrictTester = !scope.isAdmin && scope.testerId ? scope.testerId : null
   let query = supabaseAdmin
     .from('pct_orders')
-    .select(withAssignedTesterEmbed('id, product_code, product_name, batch_no, packaging_date, due_date, is_urgent, method, status, assignee_tester_id', restrictTester), { count: 'exact' })
+    .select(withAssignedTesterEmbed('id, product_code, product_name, batch_no, packaging_date, due_date, ingest_state, is_urgent, method, status, assignee_tester_id', restrictTester), { count: 'exact' })
     .neq('status', DELETED_STATUS)
   // 병렬 배정 담당자 2~5 몫도 그 사람의 오더다
   if (restrictTester) query = query.eq(ASSIGNED_TESTER_FILTER_COLUMN, restrictTester)
@@ -520,7 +521,7 @@ async function ordersContext(intent: QthinkIntent, scope: QthinkScope): Promise<
   for (const row of rows) {
     const ids = (assigneeMap.get(row.id as string) ?? []).map(a => a.testerId)
     const tester = ids.length > 0 ? ids.map(id => names.get(id) ?? '미지정').join(', ') : '미배정'
-    lines.push(`- ${row.product_name}(${row.product_code}) | 배치 ${row.batch_no} | 포장 ${row.packaging_date ?? '-'} | 완료예정 ${row.due_date ?? '-'} | 상태 ${row.status} | 담당 ${tester}${row.is_urgent ? ' | 긴급' : ''}`)
+    lines.push(`- ${row.product_name}(${displayProductCode(row.product_code as string)}) | 배치 ${displayBatchNo(row.batch_no as string)} | 포장 ${displayOrderOptional(row.packaging_date as string | null, row.ingest_state === 'manual')} | 완료예정 ${row.due_date ?? '-'} | 상태 ${row.status} | 담당 ${tester}${row.is_urgent ? ' | 긴급' : ''}`)
   }
   return lines.join('\n')
 }
@@ -550,7 +551,7 @@ async function jobsContext(intent: QthinkIntent, scope: QthinkScope): Promise<st
   for (const row of rows) {
     const order = orderMap.get(row.order_id as string)
     const tester = row.assignee_tester_id ? names.get(row.assignee_tester_id as string) ?? '미지정' : '미배정'
-    lines.push(`- QC ${row.qc_no} | ${order?.product_name ?? '품목 미확인'} | 배치 ${order?.batch_no ?? '-'} | 상태 ${row.status} | 담당 ${tester} | 작업 ${row.work_start_date ?? '-'}~${row.work_end_date ?? '-'}`)
+    lines.push(`- QC ${row.qc_no} | ${order?.product_name ?? '품목 미확인'} | 배치 ${displayBatchNo(order?.batch_no) ?? '-'} | 상태 ${row.status} | 담당 ${tester} | 작업 ${row.work_start_date ?? '-'}~${row.work_end_date ?? '-'}`)
   }
   return lines.join('\n')
 }

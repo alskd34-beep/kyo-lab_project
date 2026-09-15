@@ -18,6 +18,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@frontend/components/ui/select'
 import { JOB_STAGES, OPEN_STATUSES, stageStyle } from "@shared/qc-status"
 import { PARALLEL_BADGE_LABEL, assigneeSlotLabel } from "@shared/assignment"
+import { displayBatchNo, displayProductCode } from "@shared/order-na"
 import { cn } from "@frontend/lib/utils"
 import { TesterAvatar } from "@frontend/lib/tester-profiles"
 import {
@@ -267,7 +268,7 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
                                 긴급
                               </span>
                             )}
-                            <span className="min-w-0 truncate font-mono">{r.batchNo}</span>
+                            <span className="min-w-0 truncate font-mono">{displayBatchNo(r.batchNo)}</span>
                             <span className="shrink-0 tabular-nums">공수 {r.workdays != null ? `${r.workdays}일` : "-"}</span>
                           </div>
                         </li>
@@ -293,8 +294,8 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
                                   {secondarySlotOf(r) !== null && <SecondaryAssigneeBadge slot={secondarySlotOf(r)!} />}
                                 </span>
                               </td>
-                              <td className="px-3 py-2.5 font-mono text-xs text-blue-600 dark:text-blue-300">{r.productCode}</td>
-                              <td className="px-3 py-2.5 font-mono text-xs">{r.batchNo}</td>
+                              <td className="px-3 py-2.5 font-mono text-xs text-blue-600 dark:text-blue-300">{displayProductCode(r.productCode)}</td>
+                              <td className="px-3 py-2.5 font-mono text-xs">{displayBatchNo(r.batchNo)}</td>
                               <td className="px-3 py-2.5">{r.dosageForm ?? "-"}</td>
                               <td className="px-3 py-2.5">{r.packagingDate ?? "-"}</td>
                               <td className={cn("px-3 py-2.5", r.dueDate && "font-semibold text-red-500")}>{r.dueDate ?? "-"}</td>
@@ -399,7 +400,7 @@ export function AssigneeDetailModal({ testerId, testerName, onClose, onOpenDetai
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <p className="flex items-center gap-1.5 text-xs leading-normal font-semibold text-foreground">
-                            <span className="truncate">{r.productName} (제조 {r.batchNo})</span>
+                            <span className="truncate">{r.productName} (제조 {displayBatchNo(r.batchNo)})</span>
                             {secondarySlotOf(r) !== null && <SecondaryAssigneeBadge slot={secondarySlotOf(r)!} />}
                             {r.isUrgent && <span className="shrink-0 rounded-md bg-red-50 px-1.5 py-0.5 text-xs leading-normal font-semibold text-red-600 dark:bg-red-950 dark:text-red-300">긴급</span>}
                           </p>

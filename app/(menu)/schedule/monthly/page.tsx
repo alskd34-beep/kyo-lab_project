@@ -31,6 +31,11 @@ import { useAuth } from '@frontend/lib/auth-context'
 import { formatMinutes } from '@frontend/lib/workload-format'
 import type { SideWorkCategory, SideWorkLog } from '@shared/side-work'
 import { PARALLEL_BADGE_LABEL } from '@shared/assignment'
+import { displayBatchNo, displayProductCode } from '@shared/order-na'
+
+/** 제조번호 표시값 — 수동 오더 N/A 대체값은 "N/A" (숫자로 들어온 시트 값은 그대로) */
+const shownBatchNo = (v: string | number | undefined): string | number | undefined =>
+  typeof v === 'string' ? displayBatchNo(v) : v
 import {
   SideWorkDialog,
   type SideWorkDialogTarget,
@@ -397,8 +402,8 @@ export default function MonthlySchedulePage() {
   const toBoardData = useMemo(() => (r: ScheduleRow): Record<string, unknown> => ({
     날짜:     r.scheduled_date,
     품목명:   r.product_name,
-    코드:     r.product_code ?? '',
-    제조번호: r.batch_no ?? (typeof r.batch_id === 'string' ? r.batch_id.replace(/^pct-/, '') : r.batch_id),
+    코드:     r.product_code ? displayProductCode(String(r.product_code)) : '',
+    제조번호: shownBatchNo(r.batch_no) ?? (typeof r.batch_id === 'string' ? r.batch_id.replace(/^pct-/, '') : r.batch_id),
     담당자:   testerNameById.get(r.tester_id) ?? String(r.tester_id),
     // 공수 정본은 DAY 다(PRD 원칙4). avg_hours(시간)는 레거시라 값이 있을 때만 괄호로 덧붙인다.
     공수:     r.workdays ? `${r.workdays}일` : (r.avg_hours != null && r.avg_hours > 0 ? `${r.avg_hours.toFixed(1)}h` : '—'),
@@ -805,7 +810,7 @@ export default function MonthlySchedulePage() {
                                           key={`${r.id}-${d}`}
                                           type="button"
                                           onClick={() => setCellDetail({ row: r, testerName: t.name, date: d })}
-                                          title={`${r.product_name} (배치 ${r.batch_no ?? r.batch_id})\n시험항목: ${r.test_items?.join(', ') ?? '-'}\n공수: ${workloadText(r)}\n${r.note ?? ''}`}
+                                          title={`${r.product_name} (배치 ${shownBatchNo(r.batch_no) ?? r.batch_id})\n시험항목: ${r.test_items?.join(', ') ?? '-'}\n공수: ${workloadText(r)}\n${r.note ?? ''}`}
                                           aria-label={`${t.name} ${d} ${r.product_name} 배정 상세 보기`}
                                           className={`flex min-h-8 w-full min-w-0 items-center rounded-md border px-1 py-0.5 text-xs leading-normal font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:min-h-0 ${style.bg} ${style.border} ${TXT_PRIMARY}`}
                                         >
@@ -972,7 +977,7 @@ function CellDetailDialog({ detail, onClose }: { detail: CellDetail; onClose: ()
   const { row, testerName, date } = detail
   const style = cellStyle(row)
   const items = row.test_items ?? []
-  const batchNo = row.batch_no ?? (typeof row.batch_id === 'string' ? row.batch_id.replace(/^pct-/, '') : row.batch_id)
+  const batchNo = shownBatchNo(row.batch_no) ?? (typeof row.batch_id === 'string' ? row.batch_id.replace(/^pct-/, '') : row.batch_id)
 
   const fields: { label: string; value: React.ReactNode }[] = [
     {
@@ -984,7 +989,7 @@ function CellDetailDialog({ detail, onClose }: { detail: CellDetail; onClose: ()
       ),
     },
     { label: '제조번호', value: <span className="tabular-nums">{batchNo}</span> },
-    ...(row.product_code ? [{ label: '품목코드', value: <span className="tabular-nums">{row.product_code}</span> }] : []),
+    ...(row.product_code ? [{ label: '품목코드', value: <span className="tabular-nums">{displayProductCode(row.product_code)}</span> }] : []),
     { label: '시험항목', value: items.length > 0 ? items.join(', ') : '—' },
     { label: '공수', value: <span className="tabular-nums">{workloadText(row)}</span> },
     // 아래 둘은 정본(pct_orders)에서 온 행만 아는 값이다. PCT 스냅샷 행에는 없다.
