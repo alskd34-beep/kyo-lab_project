@@ -1,93 +1,59 @@
 'use client'
-
-import { useEffect, useMemo, useState } from 'react'
-import { AlertCircle, RefreshCw, Search } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { AlertCircle, RefreshCw, Search, Send } from 'lucide-react'
 import { Badge } from '@frontend/components/ui/badge'
 import { Button } from '@frontend/components/ui/button'
 import { Card } from '@frontend/components/ui/card'
 import { Input } from '@frontend/components/ui/input'
-import { Skeleton } from '@frontend/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@frontend/components/ui/table'
-import {
-  STABILITY_SHEET_ID,
-  getStabilityStatusClass,
-  isStabilitySummaryRow,
-  mapRow,
-  type StabilitySheetRow,
-} from '@frontend/lib/stability-sheet'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@frontend/components/ui/dialog'
+import { STABILITY_SHEET_ID, isStabilitySummaryRow, mapRow, stabilitySourceKey, type StabilitySheetRow } from '@frontend/lib/stability-sheet'
+import { useAuth } from '@frontend/lib/auth-context'
 
-interface StabilityResponse { rows: Record<string, string>[] }
-
+type PlanStatus = '미전송' | '전송됨' | '완료' | '시트 제외'
+interface PlanRow { id: string; productCode: string; productName: string; batchNo: string; testType: string; period: string; manufacturedAt: string | null; expiryDate: string | null; requestNo: string | null; planStatus: PlanStatus; linkedOrderId: string | null }
+const statusClass: Record<PlanStatus, string> = { 미전송: 'border-amber-200 bg-amber-50 text-amber-700', 전송됨: 'border-blue-200 bg-blue-50 text-blue-700', 완료: 'border-blue-400 bg-blue-100 text-blue-900', '시트 제외': 'border-red-200 bg-red-50 text-red-700' }
 export default function StabPlanPage() {
-  const [rows, setRows] = useState<StabilitySheetRow[]>([])
-  const [query, setQuery] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  const loadRows = async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const response = await fetch(`/api/google-sheet/stability?fileId=${encodeURIComponent(STABILITY_SHEET_ID)}`, { credentials: 'include' })
-      const json = await response.json() as StabilityResponse & { error?: string }
-      if (!response.ok) throw new Error(json.error ?? '안정성 시험계획을 불러오지 못했습니다')
-      setRows((json.rows ?? []).map(mapRow).filter(row => !isStabilitySummaryRow(row) && (row.productCode || row.productName || row.batchNo)))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '안정성 시험계획 연동 오류')
-    } finally {
-      setLoading(false)
+  const { user, loading: authLoading } = useAuth()
+  const userRole = user?.role
+  const isAdmin = userRole === 'admin'
+  const [rows, setRows] = useState<PlanRow[]>([]); const [query, setQuery] = useState(''); const [filter, setFilter] = useState<'전체' | PlanStatus>('전체'); const [selected, setSelected] = useState<string[]>([]); const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null); const [notice, setNotice] = useState<string | null>(null); const [confirmOpen, setConfirmOpen] = useState(false)
+  const load = useCallback(async () => { setLoading(true); setError(null); try {
+    if (isAdmin) {
+      const sheet = await fetch(`/api/google-sheet/stability?fileId=${encodeURIComponent(STABILITY_SHEET_ID)}`, { credentials: 'include' })
+      const sj = await sheet.json() as { rows?: Record<string, string>[]; error?: string }
+      if (!sheet.ok) throw new Error(sj.error ?? '안정성 시트를 불러오지 못했습니다')
+      const mapped = (sj.rows ?? []).map(mapRow).filter(r => !isStabilitySummaryRow(r) && (r.productCode || r.productName || r.batchNo))
+      if (!mapped.length) throw new Error('시트 응답이 비어 있어 동기화를 중단했습니다.')
+      const sync = await fetch('/api/stability-plan', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'sync', rows: mapped.map(toInput) }) })
+      const json = await sync.json() as { rows?: PlanRow[]; error?: string }
+      if (!sync.ok) throw new Error(json.error ?? '시험계획 동기화에 실패했습니다')
+      setRows(json.rows ?? [])
+    } else {
+      const response = await fetch('/api/stability-plan', { credentials: 'include' })
+      const json = await response.json() as { rows?: PlanRow[]; error?: string }
+      if (!response.ok) throw new Error(json.error ?? '시험계획을 불러오지 못했습니다')
+      setRows(json.rows ?? [])
     }
-  }
-
-  useEffect(() => { void loadRows() }, [])
-
-  const filteredRows = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return rows
-    return rows.filter(row => [row.productCode, row.productName, row.testType, row.batchNo, row.period, row.requestNo, row.status, ...(!row.approved ? ['미승인'] : [])].some(value => value.toLowerCase().includes(q)))
-  }, [query, rows])
-
-  return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4 md:p-6">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold text-foreground">안정성시험 · 시험계획</h1>
-          <p className="mt-1 text-xs leading-normal text-muted-foreground">승인 전 품목을 포함한 전체 안정성 시험계획 정보입니다.</p>
-        </div>
-        <Button className="h-9 gap-2" onClick={loadRows} disabled={loading}>
-          <RefreshCw size={15} className={loading ? 'animate-spin' : ''} /> 새로고침
-        </Button>
-      </header>
-      <Card className="shrink-0 gap-0 overflow-hidden py-0 shadow-none">
-        <div className="flex flex-col gap-3 border-b px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
-          <h2 className="text-sm font-semibold">시험계획 목록 {!loading && <span className="ml-1.5 text-xs font-normal text-muted-foreground">{filteredRows.length}건</span>}</h2>
-          <div className="relative w-full lg:w-80">
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input value={query} onChange={event => setQuery(event.target.value)} placeholder="품목코드, 품목, 제조번호, 상태 검색" className="h-9 pl-9" />
-          </div>
-        </div>
-        {error ? (
-          <div className="flex items-center gap-2 px-4 py-8 text-sm text-destructive"><AlertCircle size={18} />{error}</div>
-        ) : (
-          <Table>
-            <TableHeader><TableRow className="hover:bg-transparent"><TableHead>품목</TableHead><TableHead>시험</TableHead><TableHead>제조번호</TableHead><TableHead>기간·의뢰</TableHead><TableHead>상태</TableHead></TableRow></TableHeader>
-            <TableBody>
-              {loading ? Array.from({ length: 5 }).map((_, index) => <TableRow key={index}>{Array.from({ length: 5 }).map((__, cell) => <TableCell key={cell}><Skeleton className="h-8 w-full" /></TableCell>)}</TableRow>)
-                : filteredRows.length === 0 ? <TableRow><TableCell colSpan={5} className="h-32 text-center text-sm text-muted-foreground">표시할 안정성 품목이 없습니다.</TableCell></TableRow>
-                : filteredRows.map(row => <TableRow key={row.id}>
-                  <TableCell><div className="min-w-0"><div className="truncate font-medium">{row.productName || '—'}</div><div className="truncate text-xs leading-normal text-muted-foreground">{row.productCode || '품목코드 없음'}</div></div></TableCell>
-                  <TableCell><div className="truncate">{row.testType || '미분류'}</div><div className="truncate text-xs leading-normal text-muted-foreground">{row.period || '기간 없음'}</div></TableCell>
-                  <TableCell className="text-xs leading-normal">{row.batchNo || '—'}</TableCell>
-                  <TableCell className="text-xs leading-normal text-muted-foreground"><div>{row.manufacturedAt || '제조일 없음'} · {row.expiryDate || '사용기한 없음'}</div><div>{row.requestNo || '의뢰번호 없음'} · {row.requestedAt || '의뢰일 없음'}</div></TableCell>
-                  <TableCell>
-                    <Badge className={getStabilityStatusClass(row.status, row.approved)} variant="outline">{row.status || '미확인'}</Badge>
-                    {!row.approved && <div className="mt-1 text-xs leading-normal text-amber-700 dark:text-amber-300">현재 상태: {row.status} · 계획 수립 가능</div>}
-                  </TableCell>
-                </TableRow>)}
-            </TableBody>
-          </Table>
-        )}
-      </Card>
-    </div>
-  )
+    setSelected([])
+  } catch (e) {
+    if (isAdmin) {
+      try {
+        const fallback = await fetch('/api/stability-plan', { credentials: 'include' })
+        const json = await fallback.json() as { rows?: PlanRow[] }
+        if (fallback.ok) {
+          setRows(json.rows ?? [])
+          setSelected([])
+          setError('시트 동기화에 실패해 저장된 계획을 표시합니다.')
+          return
+        }
+      } catch { /* 저장된 계획 조회도 실패하면 원래 오류를 표시한다. */ }
+    }
+    setError(e instanceof Error ? e.message : '시험계획 연동 오류')
+  } finally { setLoading(false) } }, [isAdmin])
+  useEffect(() => { if (!authLoading && userRole) void load() }, [authLoading, userRole, load])
+  const visible = useMemo(() => { const q = query.trim().toLowerCase(); return rows.filter(r => (filter === '전체' || r.planStatus === filter) && [r.productCode, r.productName, r.batchNo, r.testType, r.period, r.requestNo ?? '', r.planStatus].some(v => v.toLowerCase().includes(q))) }, [rows, filter, query])
+  const transfer = async () => { setConfirmOpen(false); if (!selected.length) return; setBusy(true); setNotice(null); try { const res = await fetch('/api/stability-plan', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'transfer', ids: selected }) }); const json = await res.json() as { results?: Array<{ status: string }>; error?: string }; if (!res.ok) throw new Error(json.error ?? '전송 실패'); const result = json.results ?? []; setNotice(`전송 ${result.filter(x => x.status === '성공').length}건 · 건너뜀 ${result.filter(x => x.status === '건너뜀').length}건 · 실패 ${result.filter(x => x.status === '실패').length}건`); await load() } catch (e) { setError(e instanceof Error ? e.message : 'AI 스케줄 전송 오류') } finally { setBusy(false) } }
+  return <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4 md:p-6"><header className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-lg font-semibold">안정성시험 · 시험계획</h1><p className="mt-1 text-xs leading-normal text-muted-foreground">시트 미완료 품목을 계획으로 보존하고 AI 스케줄 배정을 요청합니다.</p></div>{isAdmin && <div className="flex gap-2"><Button variant="outline" className="h-9 gap-2" onClick={() => void load()} disabled={loading || busy}><RefreshCw size={15} /> 시트 다시 불러오기</Button><Button className="h-9 gap-2" onClick={() => setConfirmOpen(true)} disabled={!selected.length || busy}><Send size={15} /> AI 스케줄로 보내기</Button></div>}</header>{notice && <div className="rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">{notice}</div>}{error && <div className="flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"><AlertCircle size={18} />{error}</div>}<Card className="shrink-0 gap-0 overflow-hidden py-0 shadow-none"><div className="flex flex-col gap-3 border-b px-4 py-3 lg:flex-row lg:items-center lg:justify-between"><div className="flex flex-wrap gap-1">{(['전체', '미전송', '전송됨', '완료', '시트 제외'] as const).map(s => <Button key={s} variant={filter === s ? 'default' : 'outline'} className="h-8 px-3 text-xs" onClick={() => setFilter(s)}>{s}</Button>)}</div><div className="relative w-full lg:w-80"><Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={e => setQuery(e.target.value)} placeholder="품목·제조번호·상태 검색" className="h-9 pl-9" /></div></div><Table><TableHeader><TableRow><TableHead className="w-12">{isAdmin ? '선택' : '구분'}</TableHead><TableHead>품목</TableHead><TableHead>시험·기간</TableHead><TableHead>제조번호</TableHead><TableHead>제조·기한</TableHead><TableHead>상태</TableHead></TableRow></TableHeader><TableBody>{loading ? <TableRow><TableCell colSpan={6} className="h-32 text-center text-sm text-muted-foreground">불러오는 중입니다…</TableCell></TableRow> : visible.length ? visible.map(r => <TableRow key={r.id}><TableCell>{isAdmin && <input type="checkbox" aria-label={`${r.productName} 선택`} checked={selected.includes(r.id)} disabled={r.planStatus !== '미전송'} onChange={() => setSelected(v => v.includes(r.id) ? v.filter(x => x !== r.id) : [...v, r.id])} className="size-4 accent-primary" />}</TableCell><TableCell><div className="font-medium">{r.productName}</div><div className="text-xs leading-normal text-muted-foreground">{r.productCode}</div></TableCell><TableCell>{r.testType}<div className="text-xs leading-normal text-muted-foreground">{r.period}</div></TableCell><TableCell className="text-xs leading-normal">{r.batchNo}</TableCell><TableCell className="text-xs leading-normal text-muted-foreground">{r.manufacturedAt ?? '제조일 없음'} · {r.expiryDate ?? '사용기한 없음'}</TableCell><TableCell><Badge variant="outline" className={statusClass[r.planStatus]}>{r.planStatus}</Badge>{r.linkedOrderId && <div className="mt-1 text-xs leading-normal text-muted-foreground">오더 연결됨</div>}</TableCell></TableRow>) : <TableRow><TableCell colSpan={6} className="h-32 text-center text-sm text-muted-foreground">표시할 안정성 품목이 없습니다.</TableCell></TableRow>}</TableBody></Table></Card>{isAdmin && <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}><DialogContent><DialogHeader><DialogTitle>AI 스케줄 전송</DialogTitle><DialogDescription>{selected.length}건의 안정성 시험계획을 미배정 오더로 생성합니다. 계속하시겠습니까?</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" onClick={() => setConfirmOpen(false)}>취소</Button><Button onClick={() => void transfer()}>전송</Button></DialogFooter></DialogContent></Dialog>}</div>
 }
+function toInput(r: StabilitySheetRow) { return { sourceKey: stabilitySourceKey(r), productCode: r.productCode, productName: r.productName, batchNo: r.batchNo, testType: r.testType, period: r.period, manufacturedAt: r.manufacturedAt, expiryDate: r.expiryDate, periodEndDate: r.periodEndDate, reason: r.reason, requestedAt: r.requestedAt, requestNo: r.requestNo, sheetStatus: r.status, approved: r.approved, source: r.source } }

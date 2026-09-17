@@ -8,6 +8,7 @@ export interface StabilitySheetRow {
   batchNo: string
   manufacturedAt: string
   expiryDate: string
+  periodEndDate: string
   reason: string
   period: string
   requestedAt: string
@@ -15,6 +16,16 @@ export interface StabilitySheetRow {
   status: string
   approved: boolean
   source: Record<string, string>
+}
+
+export function stabilityCompositeKey(row: Pick<StabilitySheetRow, 'productCode' | 'batchNo' | 'testType' | 'period'>): string {
+  const clean = (value: string) => value.trim().replace(/\s+/g, ' ')
+  return `composite:${[row.productCode, row.batchNo, row.testType, row.period].map(clean).join('|')}`
+}
+
+export function stabilitySourceKey(row: Pick<StabilitySheetRow, 'requestNo' | 'productCode' | 'batchNo' | 'testType' | 'period'>): string {
+  const clean = (value: string) => value.trim().replace(/\s+/g, ' ')
+  return row.requestNo.trim() ? `request:${clean(row.requestNo)}` : stabilityCompositeKey(row)
 }
 
 export function pick(row: Record<string, string>, candidates: string[]): string {
@@ -59,6 +70,7 @@ export function mapRow(row: Record<string, string>, idx: number): StabilitySheet
     batchNo,
     manufacturedAt: pick(row, ['상세정보/제조일자', '안정성시험 계획 정보/제조일자', '제조일자', '제조일']),
     expiryDate: pick(row, ['상세정보/사용기한', '안정성시험 계획 정보/사용기한', '사용기한', '유효기간']),
+    periodEndDate: end,
     reason: pick(row, ['상세정보/실시사유', '안정성시험 계획 정보/실시사유', '실시사유', '사유']),
     period,
     requestedAt: pick(row, ['진행정보/의뢰일자', '상세정보/의뢰일자', '의뢰일자', '의뢰일']),

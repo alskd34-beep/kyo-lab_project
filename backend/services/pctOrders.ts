@@ -364,6 +364,7 @@ export async function createOrder(input: {
   testItems?: OrderTestItemInput[]
   /** 만든 사람(users.id) — 담당자 지정 감사 기록에 남는다 */
   createdBy?: string | null
+  stabilityPlanId?: string | null
 }): Promise<PctOrderRow> {
   // 수동 오더 필수 = 품목명 + 완료예정일. 품목코드·제조번호는 비우면(N/A) 서버가 고유 대체값을 만든다
   // (규칙: @shared/order-na). 사용자가 대체값 모양(NA-…)을 직접 넣는 것은 거절한다.
@@ -401,6 +402,7 @@ export async function createOrder(input: {
       note:               input.note?.trim() || null,
       product_synced:     false,       // 수동 등록 — 품목마스터 자동동기화 대상 아님
       ingest_state:       'manual',    // 적재가 아닌 수동 생성 표시
+      ...(input.stabilityPlanId ? { stability_plan_id: input.stabilityPlanId } : {}),
     })
     .select('*')
     .single()

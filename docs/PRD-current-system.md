@@ -161,7 +161,8 @@ qc_jobs + qc_job_items 생성 (QC번호 채번 qcNumber.ts)
 - DB 적재 + 헤더 벨 60s 폴링. 향정신성/차단/마감/클리어/상태변경/장비대기 등 10+ 이벤트. `notifications.ts`, `dashboard/notification-bell`.
 
 ### 6.10 플레이스홀더 / 계획 메뉴
-- **안정성시험** 🧩 (현황/계획/보고) — 구글시트 안정성 연동 API(`google-sheet/stability`)는 존재. 현황(`/stability/stab-status`)·시험계획(`/stability/stab-plan`)은 시트를 읽어 보여 준다(2026-09-17): 상태 정렬은 워크플로우 순서(대기 → 지시 → 시험중 → 승인), 시험계획은 승인 여부와 관계없이 전 품목(합계 행 제외)을 보이고 미승인 품목은 amber `미승인` 라벨로 구분(검색어 '미승인' 가능). 판정 로직은 `frontend/lib/stability-sheet.ts` 공용.
+- **안정성시험** 🟡 (현황/계획 운영, 결과보고 🧩) — 구글시트 안정성 연동 API(`google-sheet/stability`)는 존재. 현황(`/stability/stab-status`)·시험계획(`/stability/stab-plan`)은 시트를 읽어 보여 준다(2026-09-17): 상태 정렬은 워크플로우 순서(대기 → 지시 → 시험중 → 승인), 시험계획은 승인 여부와 관계없이 전 품목(합계 행 제외)을 보이고 미승인 품목은 amber `미승인` 라벨로 구분(검색어 '미승인' 가능). 판정 로직은 `frontend/lib/stability-sheet.ts` 공용.
+  **시험계획 DB·AI 스케줄 전송**(2026-09-18, `0055`): 관리자가 시험계획 화면을 열면(또는 [시트 다시 불러오기]) 시트 미승인 행을 `stability_plans` 에 동기화한다(`POST /api/stability-plan` sync, `backend/services/stabilityPlan.ts`). 계획 키는 의뢰번호가 있으면 `request:<의뢰번호>`, 없으면 `composite:품목코드|제조번호|시험종류|기간` 이고, 의뢰번호가 새로 생긴 행은 조합 키로 등록된(`composite:`) 기존 계획만 이어받는다(같은 조합·다른 의뢰번호는 별도 계획). 상태는 `미전송`·`전송됨`·`완료`(시트 승인)·`시트 제외`(시트에서 사라짐, 전송됨 제외) — 승인 행은 기존 계획이 없으면 만들지 않고, 빈 시트 응답이면 동기화를 중단한다. 관리자가 `미전송` 계획을 골라 [AI 스케줄로 보내기](확인 모달)하면 계획마다 미배정 수동 오더(구분 `STABILITY-<시험종류>-<기간>`, 완료예정일 = 기간 종료일 → 의뢰일 → 오늘, `pct_orders.stability_plan_id` 연결)를 만들고 `전송됨` 으로 바꾼다(결과 "전송 N · 건너뜀 M · 실패 K"). 시험자는 저장된 계획 조회만 한다. 규칙: `intent/2026-09-18-stability-plan-to-schedule-spec.md`. 배포 순서: SQL 0055 → 앱.
 - **일탈관리** 🧩 (OOS/CAPA/조사보고서, 사이드바 배지 3).
 - **문서관리** ⬜ (성적서/기준서/SOP/체크리스트) — 사이드바 `hidden`으로 임시 숨김.
 
@@ -209,6 +210,7 @@ qc_jobs + qc_job_items 생성 (QC번호 채번 qcNumber.ts)
   라우트 `POST /api/qc-jobs/group/[groupId]/review`·`/review-bulk`·`/approve`(requireAdmin), 서비스 `backend/services/qcJobGroupStage.ts`, 결과 토스트 "처리 N · 건너뜀 M". 검토 취소·재실시·직접 변경은 전파하지 않는다.
   규칙: `intent/2026-09-15-group-stage-progress-spec.md`. 배포 순서: SQL 0051 → 앱.
 - **동일 시험항목 그룹의 짝 배치 전파**(2026-09-17, 2026-09-18 범위 축소, 마이그레이션 없음): 그룹 내 취소·삭제되지 않은 모든 배치의 시험항목 이름 집합(trim·중복 제거·순서 무관, 빈 집합 제외)이 같으면(`concurrentGroups.getGroupTestItemSetIdentity`) 개별 경로의 **물리적 진행 전이(항목 시작·완료·시작 취소)만** 짝 배치에도 적용된다(`qcJobGroupStage.ts`). 적합·부적합 판정, 검토 시작·완료·반려·재실시, 승인 단계·승인, 담당자 상태 변경은 배치마다 결과가 다를 수 있어 **개별 경로에서는 원본 배치만** 처리한다(명시적 그룹 검토·승인 버튼은 위 일괄 기능으로 유지). 권한은 원본 배치만 검사하고, 짝 배치가 이미 목표 상태거나 조건이 안 맞으면 건너뛰며, 짝 실패는 원본을 롤백하지 않고 응답 `propagation`(처리·건너뜀·실패)과 화면 안내로 남긴다. 화면 배지는 "시험항목 동일 · 진행 함께 / 판정·검토·승인은 배치별". 집합이 다르면 원본만 처리한다. 결과값 복사는 하지 않는다. 규칙: `intent/2026-09-17-concurrent-identical-item-workflow-spec.md`.
+- **안정성 시험계획**(2026-09-18, `0055`): `stability_plans`(source_key unique · composite_key · plan_status 미전송|전송됨|완료|시트 제외 · linked_order_id → `pct_orders`), `pct_orders.stability_plan_id`.
 - **스케줄 부가**: `operator_schedule`(휴가), `equipment_reservation`(예약), `reassignment_history`(재배정), 동시분석 그룹, `concurrent_product_families`/`concurrent_product_family_members`(동시분석 품목군 마스터, product_code unique), `holidays`/`public_holidays`(source api|manual), `equipment_master`.
 - **마이그레이션**: **0001~0024**. ⚠️ 라이브 DB가 일부 마이그레이션과 불일치 — 특히 **0021~0024는 수동 적용 대상**(Supabase 대시보드 SQL Editor, idempotent). 0011/0014~0018·0020도 수동 적용 필요분 존재(graceful 폴백 내장).
 
@@ -232,7 +234,7 @@ qc_jobs + qc_job_items 생성 (QC번호 채번 qcNumber.ts)
 ## 11. 구현 현황 요약 & 알려진 부채 (부록)
 
 **✅ 운영 중**: 인증/계정(역할 admin·tester, 고객번호, 세션 영속성)·홈·스케줄(월간/AI스케줄/휴가/공휴일/재배정·AI스케줄이력/관리자대시보드)·내 작업·마스터(품목/시험항목/시험자/공수/사전확인/동시분석 품목)·장비(마스터/예약)·운영평가·챗봇·알림·구글시트/크론·공휴일 API.
-**🧩 플레이스홀더**: 안정성시험, 일탈관리, 문서관리(숨김), 결과입력/성적서, 인사이트 대시보드/리포트, 장비 가동/백업/사용/예측, 권한관리/시스템설정.
+**🧩 플레이스홀더**: 안정성 결과보고, 일탈관리, 문서관리(숨김), 결과입력/성적서, 인사이트 대시보드/리포트, 장비 가동/백업/사용/예측, 권한관리/시스템설정.
 **알려진 부채/계획**: ① 상태값 한글→영문 enum 상태머신 전환(데이터 마이그레이션 동반) ② Phase 2 그룹 라우팅(A/B/C group_code + product_group_rules + 자격=역량 AND 그룹) ③ 레거시 정리(products.avg_hours, 구 product_manhours, 미사용 `sidebar.tsx`, 비노출 `/schedule/groups`·`/schedule/weekly*`) ④ 미적용 마이그레이션 정리(0021~0024 등 수동 적용) ⑤ 보안 정리(.env.local 추적 해제, git PAT/HOLIDAY_API_KEY 노출 점검 — 기능 완료 후).
 
 ---

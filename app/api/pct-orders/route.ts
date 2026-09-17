@@ -43,6 +43,7 @@ export async function POST(req: NextRequest) {
       assigneeTesterId?: string | null; note?: string | null
       /** method='개별항목' 일 때 배정할 시험항목 */
       testItems?: Array<{ testItemId?: string | null; testItemName?: string }>
+      stabilityPlanId?: string | null
     }
     // 수동 오더 필수 = 품목명 + 완료예정일. 품목코드·제조번호는 비우면 N/A(서비스가 대체값 생성)
     if (!body.productName?.trim() || !body.dueDate?.trim()) {
@@ -70,6 +71,7 @@ export async function POST(req: NextRequest) {
           sequenceOrder: idx,
         })),
       createdBy: auth.payload.sub ?? null,
+      stabilityPlanId: body.stabilityPlanId ?? null,
     })
     return Response.json({ row }, { status: 201 })
   } catch (err) {
