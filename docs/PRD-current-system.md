@@ -161,7 +161,7 @@ qc_jobs + qc_job_items 생성 (QC번호 채번 qcNumber.ts)
 - DB 적재 + 헤더 벨 60s 폴링. 향정신성/차단/마감/클리어/상태변경/장비대기 등 10+ 이벤트. `notifications.ts`, `dashboard/notification-bell`.
 
 ### 6.10 플레이스홀더 / 계획 메뉴
-- **안정성시험** 🧩 (현황/계획/보고) — 구글시트 안정성 연동 API(`google-sheet/stability`)는 존재.
+- **안정성시험** 🧩 (현황/계획/보고) — 구글시트 안정성 연동 API(`google-sheet/stability`)는 존재. 현황(`/stability/stab-status`)·시험계획(`/stability/stab-plan`)은 시트를 읽어 보여 준다(2026-09-17): 상태 정렬은 워크플로우 순서(대기 → 지시 → 시험중 → 승인), 시험계획은 승인 여부와 관계없이 전 품목(합계 행 제외)을 보이고 미승인 품목은 amber `미승인` 라벨로 구분(검색어 '미승인' 가능). 판정 로직은 `frontend/lib/stability-sheet.ts` 공용.
 - **일탈관리** 🧩 (OOS/CAPA/조사보고서, 사이드바 배지 3).
 - **문서관리** ⬜ (성적서/기준서/SOP/체크리스트) — 사이드바 `hidden`으로 임시 숨김.
 

@@ -24,6 +24,16 @@ import { cn } from '@frontend/lib/utils'
 import { CellStack } from '@frontend/components/ui/table-cell-stack'
 import { SortColumnHeader, sortCol, type SortColumnDef, type SortDir } from '@frontend/components/ui/table-sort'
 import {
+  STABILITY_SHEET_ID,
+  getStabilityStatusClass,
+  getStatusRank,
+  isApprovedStatus,
+  isScheduleCandidate,
+  isStabilitySummaryRow,
+  mapRow,
+  type StabilitySheetRow,
+} from '@frontend/lib/stability-sheet'
+import {
   Table,
   TableBody,
   TableCell,
@@ -32,25 +42,8 @@ import {
   TableRow,
 } from '@frontend/components/ui/table'
 
-const STABILITY_SHEET_ID = '1gvAtB1ETkCol1gM2mmppOUJTgIidEq1IdGaQaiSXdCg'
 const STABILITY_SHEET_URL = `https://docs.google.com/spreadsheets/d/${STABILITY_SHEET_ID}/edit?usp=sharing`
 const STORAGE_KEY = 'kd-stability-sheet-snapshot-v1'
-
-interface StabilitySheetRow {
-  id: string
-  productCode: string
-  productName: string
-  testType: string
-  batchNo: string
-  manufacturedAt: string
-  expiryDate: string
-  reason: string
-  period: string
-  requestedAt: string
-  requestNo: string
-  status: string
-  source: Record<string, string>
-}
 
 interface StabilityResponse {
   fileId: string
@@ -59,50 +52,6 @@ interface StabilityResponse {
 }
 
 type ChangeState = 'new' | 'changed' | 'unchanged'
-
-function pick(row: Record<string, string>, candidates: string[]): string {
-  for (const key of candidates) {
-    const exact = row[key]?.trim()
-    if (exact) return exact
-  }
-
-  for (const candidate of candidates) {
-    const normalized = candidate.includes('/') ? candidate.split('/').at(-1) : candidate
-    const foundKey = Object.keys(row).find(key => {
-      const tail = key.includes('/') ? key.split('/').at(-1) : key
-      return tail?.replace(/\s/g, '') === normalized?.replace(/\s/g, '')
-    })
-    const value = foundKey ? row[foundKey]?.trim() : ''
-    if (value) return value
-  }
-
-  return ''
-}
-
-function mapRow(row: Record<string, string>, idx: number): StabilitySheetRow {
-  const start = pick(row, ['진행정보/시험기간시작일', '시험기간시작일', '기간시작일', '시작일'])
-  const end = pick(row, ['진행정보/시험기간종료일', '시험기간종료일', '기간종료일', '종료일'])
-  const period = pick(row, ['안정성시험 계획 정보/기간', '진행정보/기간', '기간']) || [start, end].filter(Boolean).join(' ~ ')
-  const productCode = pick(row, ['안정성시험 계획 정보/품목코드', '품목코드', '자재코드'])
-  const batchNo = pick(row, ['안정성시험 계획 정보/제조번호', '제조번호', 'Lot', 'Lot No'])
-  const requestNo = pick(row, ['진행정보/의뢰번호', '상세정보/의뢰번호', '의뢰번호', '외뢰번호'])
-
-  return {
-    id: `${productCode || 'unknown'}-${batchNo || 'no-batch'}-${requestNo || 'no-request'}-${idx}`,
-    productCode,
-    productName: pick(row, ['안정성시험 계획 정보/품목', '품목', '품목명', '자재내역']),
-    testType: pick(row, ['안정성시험 계획 정보/시험종류', '시험종류', '시험유형']),
-    batchNo,
-    manufacturedAt: pick(row, ['상세정보/제조일자', '안정성시험 계획 정보/제조일자', '제조일자', '제조일']),
-    expiryDate: pick(row, ['상세정보/사용기한', '안정성시험 계획 정보/사용기한', '사용기한', '유효기간']),
-    reason: pick(row, ['상세정보/실시사유', '안정성시험 계획 정보/실시사유', '실시사유', '사유']),
-    period,
-    requestedAt: pick(row, ['진행정보/의뢰일자', '상세정보/의뢰일자', '의뢰일자', '의뢰일']),
-    requestNo,
-    status: pick(row, ['진행정보/시험상태', '안정성시험 계획 정보/진행상태', '진행상태', '시험상태', '상태']) || '미확인',
-    source: row,
-  }
-}
 
 function makeSignature(rows: StabilitySheetRow[]): string {
   return JSON.stringify(
@@ -122,22 +71,6 @@ function makeSignature(rows: StabilitySheetRow[]): string {
   )
 }
 
-function getStatusClass(status: string): string {
-  const value = status.replace(/\s/g, '')
-  // 완료·승인은 파랑 램프의 끝(짙은 파랑)이다 — 진행(연한 파랑)에서 색이 진해지며 끝난다.
-  // 연한 칩은 밝은 배경 전제라 다크에서 흰 알약처럼 뜬다 — 명도만 뒤집은 `dark:` 짝을 함께 둔다.
-  if (/(완료|종료|승인)/.test(value)) return 'border-blue-400 bg-blue-100 text-blue-900 dark:border-blue-600 dark:bg-blue-900/60 dark:text-blue-200'
-  if (/(진행|시험중|분석중|의뢰)/.test(value)) return 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300'
-  if (/(대기|예정|준비)/.test(value)) return 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300'
-  if (/(보류|지연|중단|취소)/.test(value)) return 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300'
-  // 분류되지 않은 상태는 색을 주지 않고 중립 토큰으로 둔다.
-  return 'border bg-muted/50 text-muted-foreground'
-}
-
-function isScheduleCandidate(row: StabilitySheetRow): boolean {
-  const status = row.status.replace(/\s/g, '')
-  return !!row.productCode && !/(완료|종료|취소|중단)/.test(status)
-}
 
 function formatSyncTime(date: Date | null): string {
   if (!date) return '-'
@@ -216,7 +149,7 @@ export default function StabStatusPage() {
 
       const mapped = (json.rows ?? [])
         .map(mapRow)
-        .filter(row => row.productCode || row.productName || row.batchNo)
+        .filter(row => !isStabilitySummaryRow(row) && (row.productCode || row.productName || row.batchNo))
       const signature = makeSignature(mapped)
       const previous = localStorage.getItem(STORAGE_KEY)
 
@@ -247,6 +180,7 @@ export default function StabStatusPage() {
         row.reason,
         row.requestNo,
         row.status,
+        ...(!row.approved ? ['미승인'] : []),
       ].some(value => value.toLowerCase().includes(q)),
     )
   }, [query, rows])
@@ -254,6 +188,10 @@ export default function StabStatusPage() {
   const sortedRows = useMemo(() => {
     if (!sortField) return filteredRows
     return [...filteredRows].sort((a, b) => {
+      if (sortField === 'status') {
+        const rankDiff = getStatusRank(a.status) - getStatusRank(b.status)
+        if (rankDiff !== 0) return sortDir === 'asc' ? rankDiff : -rankDiff
+      }
       const aVal = a[sortField] ?? ''
       const bVal = b[sortField] ?? ''
       const cmp = aVal.localeCompare(bVal, 'ko')
@@ -263,7 +201,7 @@ export default function StabStatusPage() {
 
   const stats = useMemo(() => {
     const active = rows.filter(isScheduleCandidate).length
-    const completed = rows.filter(row => /(완료|종료|승인)/.test(row.status.replace(/\s/g, ''))).length
+    const completed = rows.filter(isApprovedStatus).length
     const uniqueProducts = new Set(rows.map(row => row.productCode).filter(Boolean)).size
     const requestCount = rows.filter(row => row.requestNo || row.requestedAt).length
     return { active, completed, uniqueProducts, requestCount }
@@ -409,7 +347,8 @@ export default function StabStatusPage() {
                         <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
                           {row.productName || '—'}
                         </p>
-                        <Badge className={getStatusClass(row.status)} variant="outline">{row.status}</Badge>
+                        <Badge className={getStabilityStatusClass(row.status, row.approved)} variant="outline">{row.status || '미확인'}</Badge>
+                        {!row.approved && <span className="text-xs leading-normal text-amber-700 dark:text-amber-300">미승인</span>}
                       </div>
                       <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs leading-normal text-muted-foreground">
                         {row.productCode && <span className="shrink-0 font-mono">{row.productCode}</span>}
@@ -498,9 +437,10 @@ export default function StabStatusPage() {
                     </TableCell>
                     <TableCell className="px-3 py-2.5">
                       <div className="min-w-0">
-                        <Badge className={getStatusClass(row.status)} variant="outline">
-                          {row.status}
+                        <Badge className={getStabilityStatusClass(row.status, row.approved)} variant="outline">
+                          {row.status || '미확인'}
                         </Badge>
+                        {!row.approved && <span className="ml-1 text-xs leading-normal text-amber-700 dark:text-amber-300">미승인</span>}
                         {/* 배지를 두 개 겹치면 무엇이 상태인지 흐려진다.
                             해당될 때만 배지를 달고, 아닐 때는 잔글씨로 남긴다. */}
                         <div className="mt-1">
