@@ -75,8 +75,8 @@ const NAV_SECTIONS: NavSection[] = [
       {
         id: "stability", icon: ShieldCheck, label: "안정성시험",
         subItems: [
-          { id: "stab-status", label: "안정성현황" },
-          { id: "stab-plan", label: "시험계획" },
+          { id: "stab-status", label: "안정성현황", live: true },
+          { id: "stab-plan", label: "시험계획", live: true },
           { id: "stab-report", label: "결과보고" },
         ],
       },
@@ -117,7 +117,7 @@ const NAV_SECTIONS: NavSection[] = [
         subItems: [
           { id: "equip-master", label: "장비 마스터", adminOnly: true, live: true },
           { id: "equip-reservation", label: "장비 예약", live: true },
-          { id: "equip-operation", label: "장비 가동 현황", adminOnly: true },
+          { id: "equip-operation", label: "장비 가동 현황", adminOnly: true, live: true },
           { id: "equip-backup", label: "장비 백업 현황", adminOnly: true },
           { id: "equip-usage", label: "장비 사용현황", adminOnly: true },
           { id: "equip-ai-maint", label: "장비 예측 정비 AI", adminOnly: true },
@@ -147,7 +147,7 @@ const NAV_SECTIONS: NavSection[] = [
         subItems: [
           { id: "users", label: "사용자 관리", adminOnly: true, live: true },
           { id: "roles", label: "권한 관리", adminOnly: true },
-          { id: "sys-settings", label: "시스템 설정" },
+          { id: "sys-settings", label: "시스템 설정", live: true },
         ],
       },
     ],
@@ -402,7 +402,11 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                                   <SidebarMenuSubItem key={sub.id}>
                                     <SidebarMenuSubButton asChild isActive={subIsActive}>
                                       <a href={sub.externalHref} onClick={closeOnMobile}>
-                                        <span title="개발 완료" className="size-1.5 shrink-0 rounded-full bg-muted-foreground" />
+                                        <span
+                                          title="연동 완료"
+                                          aria-label="연동 완료"
+                                          className="size-2 shrink-0 rounded-full bg-sidebar-foreground"
+                                        />
                                         <span>{sub.label}</span>
                                         <ExternalLink className="ml-auto size-3.5 text-muted-foreground" aria-label="사내 외부 화면으로 이동" />
                                       </a>
@@ -414,14 +418,13 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                                 <SidebarMenuSubItem key={sub.id}>
                                   <SidebarMenuSubButton asChild isActive={subIsActive}>
                                     <Link href={subHref(sub.id)} onClick={closeOnMobile}>
-                                      {/* 개발 완료 표시 — 초록을 쓰면 '선택됨(브랜드 파랑)'과
-                                          색이 둘로 갈려 메뉴가 신호등이 된다. 세 상태를 색이 아니라
-                                          농도로 가른다: 선택됨=파랑 · 완료=진한 회색 · 예정=옅은 회색 */}
+                                      {/* 연동 상태 표시 — 선택됨=브랜드 파랑 · 완료=뚜렷한 전경색 · 예정=옅은 전경색 */}
                                       <span
-                                        title={sub.live ? "개발 완료" : "개발 예정"}
+                                        title={sub.live ? "연동 완료" : "개발 예정"}
+                                        aria-label={sub.live ? "연동 완료" : "개발 예정"}
                                         className={cn(
-                                          "size-1.5 shrink-0 rounded-full",
-                                          subIsActive ? "bg-sidebar-primary" : sub.live ? "bg-muted-foreground" : "bg-muted-foreground/30",
+                                          "size-2 shrink-0 rounded-full",
+                                          subIsActive ? "bg-sidebar-primary" : sub.live ? "bg-sidebar-foreground" : "bg-sidebar-foreground/30",
                                         )}
                                       />
                                       <span>{sub.label}</span>

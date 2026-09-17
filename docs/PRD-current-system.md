@@ -90,7 +90,7 @@ qc_jobs + qc_job_items 생성 (QC번호 채번 qcNumber.ts)
 
 ## 6. 기능 요구사항 (메뉴별)
 
-> 사이드바 출처: `frontend/components/dashboard/app-sidebar.tsx`. 각 하위 항목의 녹색 점(`live:true`)이 "개발 완료" 표시, `adminOnly`는 admin 전용, `hidden`은 메뉴 비노출.
+> 사이드바 출처: `frontend/components/dashboard/app-sidebar.tsx`. 각 하위 항목 앞 점(램프)이 연동 상태 — 선택됨=브랜드 파랑 · `live:true`=뚜렷한 전경색("연동 완료") · 그 외=옅은 전경색("개발 예정"), title·aria-label 로도 읽힌다(2026-09-18, 안정성현황·시험계획·장비 가동 현황·시스템 설정을 `live` 로 전환). `adminOnly`는 admin 전용, `hidden`은 메뉴 비노출.
 
 ### 6.1 인증 & 계정 ✅
 - 로그인/로그아웃/비밀번호 변경/세션 갱신 — `app/api/auth/*`, `backend/lib/auth*.ts`.
@@ -234,7 +234,7 @@ qc_jobs + qc_job_items 생성 (QC번호 채번 qcNumber.ts)
 ## 11. 구현 현황 요약 & 알려진 부채 (부록)
 
 **✅ 운영 중**: 인증/계정(역할 admin·tester, 고객번호, 세션 영속성)·홈·스케줄(월간/AI스케줄/휴가/공휴일/재배정·AI스케줄이력/관리자대시보드)·내 작업·마스터(품목/시험항목/시험자/공수/사전확인/동시분석 품목)·장비(마스터/예약)·운영평가·챗봇·알림·구글시트/크론·공휴일 API.
-**🧩 플레이스홀더**: 안정성 결과보고, 일탈관리, 문서관리(숨김), 결과입력/성적서, 인사이트 대시보드/리포트, 장비 가동/백업/사용/예측, 권한관리/시스템설정.
+**🧩 플레이스홀더**: 안정성 결과보고, 일탈관리, 문서관리(숨김), 결과입력/성적서, 인사이트 대시보드/리포트, 장비 백업/사용/예측, 권한관리. (장비 가동 현황·시스템 설정은 2026-09-18 사이드바 `live` 전환)
 **알려진 부채/계획**: ① 상태값 한글→영문 enum 상태머신 전환(데이터 마이그레이션 동반) ② Phase 2 그룹 라우팅(A/B/C group_code + product_group_rules + 자격=역량 AND 그룹) ③ 레거시 정리(products.avg_hours, 구 product_manhours, 미사용 `sidebar.tsx`, 비노출 `/schedule/groups`·`/schedule/weekly*`) ④ 미적용 마이그레이션 정리(0021~0024 등 수동 적용) ⑤ 보안 정리(.env.local 추적 해제, git PAT/HOLIDAY_API_KEY 노출 점검 — 기능 완료 후).
 
 ---
