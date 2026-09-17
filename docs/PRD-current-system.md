@@ -198,6 +198,7 @@ qc_jobs + qc_job_items 생성 (QC번호 채번 qcNumber.ts)
   DB 함수 `reassign_job_item(order, 항목명, 기대 슬롯, 받는 슬롯, user, reason)` 한 트랜잭션이 네 경우(행 이동·A 행 삭제·B 작업에 추가·배분만)와 스냅샷 슬롯·
   `pct_order_edits(testItemAssignee, 이름+QC번호)` 감사·A·B 작업 단계 재도출(`recompute_job_stage`)을 함께 처리하고, 커밋 뒤 오더 상태 동기화·받는 사람 앱 알림(`시험항목 인계`).
   항목 시작·시작 취소·완료는 조건부 update 로 바뀌어 그 사이 넘어간 항목에 0행이면 실패로 응답한다. 규칙: `intent/2026-09-15-in-progress-item-reassign-spec.md`.
+- **담당자·항목 배분 한 번에 저장**(2026-09-17, `0054`): 작업 시작 전 오더 수정 서랍에서 병렬 담당자를 추가하면 곧바로 그 슬롯에 시험항목을 나눌 수 있고, [저장] 한 번에 DB 함수 `set_order_assignment_bundle`(0049 담당자 함수 + `set_order_test_item_slot` 한 트랜잭션)로 반영된다. LOCK 오더는 거절. 규칙: `intent/2026-09-15-parallel-assignment-spec.md` §13. 배포 순서: SQL 0054 → 앱.
 - **동시분석 그룹 단계 일괄 진행**(2026-09-15, `0051`, 테이블 변경 없음): 관리자 작업 패널(`/product-test/prod-status`)·시험현황 서랍(`/test-mgmt/test-status`)이 작업의 동시분석 그룹(오더 2건 이상)을
   "동시분석 N건"(멤버 QC번호·제조번호·단계·담당자, 관리자 응답 `JobDetail.group` 에만)으로 보이고, 작업 현황 레인 카드·시험현황 목록에 "동시 N" 배지(`groupSize`)를 붙인다.
   그룹의 시작된 작업이 2건 이상이면 항목 검토 시작·완료, 완료 항목 전체 검토 시작/검토 중 항목 전체 검토 완료, [승인]의 기본 동작이 **그룹 적용**("그룹 N배치에 적용")이고 보조로 "이 배치만"이다.

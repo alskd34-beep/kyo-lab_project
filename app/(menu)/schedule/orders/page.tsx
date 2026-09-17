@@ -2302,6 +2302,8 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
   const [removedSlots, setRemovedSlots] = useState<number[]>([])
   // 시험항목 섹션이 읽어 온 항목 — 담당자 행 삭제 가능 여부(활성 항목 0개) 판정에 쓴다
   const [itemRows, setItemRows] = useState<OrderTestItemDetailRow[] | null>(null)
+  // 시험항목 배분은 담당자 구성과 함께 저장할 때까지 로컬 초안으로 유지한다.
+  const [itemAssignments, setItemAssignments] = useState<Record<string, AssigneeSlot>>({})
   const [reason, setReason] = useState("")
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -2353,9 +2355,22 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
       return slot ? [...rows, { slot, testerId: "" }] : rows
     })
   }
-  const removeAssigneeRow = (row: AssigneeFormRow) => {
+  const removeAssigneeRow = async (row: AssigneeFormRow) => {
+    const affectedItems = itemRows?.filter(item =>
+      !item.isExcluded && (itemAssignments[item.testItemName] ?? item.assigneeSlot) === row.slot,
+    ).length ?? 0
+    if (affectedItems > 0) {
+      const ok = await requestConfirm({
+        title: `${assigneeSlotLabel(row.slot)} 담당자를 제거할까요?`,
+        description: `${testerName(row.testerId)}에게 배정된 시험항목 ${affectedItems}개가 담당자 1에게 돌아갑니다.`,
+        confirmLabel: "제거",
+        variant: "warning",
+      })
+      if (!ok) return
+    }
     setAssigneeRows(rows => rows.filter(r => r.slot !== row.slot))
     if (savedBySlot.has(row.slot)) setRemovedSlots(prev => (prev.includes(row.slot) ? prev : [...prev, row.slot]))
+    setItemAssignments(prev => Object.fromEntries(Object.entries(prev).map(([name, slot]) => [name, slot === row.slot ? 1 : slot])))
   }
   const setRowTester = (slot: number, testerId: string) =>
     setAssigneeRows(rows => rows.map(r => (r.slot === slot ? { ...r, testerId } : r)))
@@ -2384,6 +2399,7 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
     }
     for (const r of extraRows) if (savedBySlot.has(r.slot)) setRemovedSlots(prev => (prev.includes(r.slot) ? prev : [...prev, r.slot]))
     setAssigneeRows(rows => rows.filter(r => r.slot === 1))
+    setItemAssignments(prev => Object.fromEntries(Object.entries(prev).map(([name]) => [name, 1])))
     setParallel(false)
   }
 
@@ -2392,6 +2408,10 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
     ? assigneeRows.filter(r => r.testerId).map(r => ({ slot: r.slot, testerId: r.testerId }))
     : (primaryRow.testerId ? [{ slot: primaryRow.slot, testerId: primaryRow.testerId }] : [])
   const assignmentChanged = assigneeKey(normalizedAssignees) !== assigneeKey(order.assignees)
+  const changedItemRows = itemRows?.filter(row =>
+    !row.isExcluded && itemAssignments[row.testItemName] !== undefined && itemAssignments[row.testItemName] !== row.assigneeSlot,
+  ) ?? []
+  const itemAssignmentsChanged = changedItemRows.length > 0
 
   // 담당자를 안 바꾸고 날짜만 밀어도 휴가 구간으로 들어갈 수 있으므로 날짜 변경도 확인 대상이다.
   // `|| null` 로 ""를 접고 `?? null` 로 undefined 를 접는다 — 양쪽을 `??` 로 통일하면 안 된다.
@@ -2481,7 +2501,13 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
       const res = await fetch("/api/pct-orders", {
         method: "PATCH", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: order.id, patch, reason, ...(assignmentChanged ? { assignees: normalizedAssignees } : {}) }),
+        body: JSON.stringify({
+          id: order.id, patch, reason,
+          ...((assignmentChanged || itemAssignmentsChanged) ? { assignees: normalizedAssignees } : {}),
+          ...(itemAssignmentsChanged ? {
+            itemAssignments: changedItemRows.map(row => ({ testItemName: row.testItemName, assigneeSlot: itemAssignments[row.testItemName] })),
+          } : {}),
+        }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
@@ -2513,14 +2539,13 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
     </Select>
   )
 
-  // 시험항목 배분 섹션에 넘기는 담당자 목록 — 서버에 **저장된** 슬롯만(배분 API 는 존재하는 슬롯만 받는다).
+  // 시험항목 배분 섹션에 넘기는 담당자 목록 — 편집 중인 슬롯을 선택지로 보여준다.
   // 이름은 편집 중인 값을 보여준다: 저장된 값을 쓰면 담당자 2를 C 로 바꾸는 중에도 B 라고 적혀
   // "B" 에게 배분한 항목이 저장 후 C 에게 가는 것처럼 보인다.
-  const sectionAssignees = order.assignees.map(a => {
-    const editing = assigneeRows.find(r => r.slot === a.slot)
-    const name = editing?.testerId ? (testers.find(t => t.id === editing.testerId)?.name ?? a.name) : a.name
-    return { slot: a.slot, name }
-  })
+  const sectionAssignees = assigneeRows.filter(r => r.testerId).map(r => ({
+    slot: r.slot,
+    name: testers.find(t => t.id === r.testerId)?.name ?? null,
+  }))
   const unsavedNewSlots = normalizedAssignees.filter(a => !savedBySlot.has(a.slot)).length > 0
 
   return (
@@ -2764,12 +2789,10 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
         시험항목 가감 — 위 폼(저장 버튼)과 달리 체크할 때마다 즉시 서버에 반영된다.
         품목 기준은 그대로 두고 이 오더에서만 빼거나 더한다.
       */}
-      {/* 병렬 배정을 막 켰거나 담당자를 막 추가했지만 아직 저장 전이면 서버는 그 슬롯을 모른다 —
-          슬롯 배분 PATCH 는 오더에 실제로 있는 슬롯만 받으므로(400 방지), 여기서는 안내만 하고
-          새 담당자의 항목 배분은 저장 후에 연다. */}
+      {/* 병렬 배정을 막 켰거나 담당자를 막 추가한 경우, 새 슬롯의 항목 배분도 같은 저장에서 반영된다. */}
       {parallel && unsavedNewSlots && !order.hasJob && (
         <p className="mt-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-normal break-keep text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300">
-          새 담당자를 저장하면 항목별로 담당자를 나눌 수 있습니다.
+          항목 배분은 담당자 구성과 함께 저장됩니다.
         </p>
       )}
       <OrderTestItemsSection
@@ -2777,11 +2800,19 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
         productName={order.productName}
         canEdit={isAdmin && !order.locked}
         locked={order.locked}
-        parallel={order.isParallel}
+        parallel={order.hasJob ? order.isParallel : parallel}
         assignees={sectionAssignees}
         jobStarted={order.hasJob}
         canReassign={isAdmin}
-        onRowsChange={setItemRows}
+        draftAssignments={itemAssignments}
+        onDraftAssignmentsChange={setItemAssignments}
+        onRowsChange={rows => {
+          setItemRows(rows)
+          setItemAssignments(prev => Object.fromEntries(rows.map(row => [
+            row.testItemName,
+            order.hasJob ? row.assigneeSlot : (prev[row.testItemName] ?? row.assigneeSlot),
+          ])))
+        }}
       />
 
       <section className="mt-4 rounded-md border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-800 dark:bg-amber-950/20">

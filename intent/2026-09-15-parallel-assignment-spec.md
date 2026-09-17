@@ -374,6 +374,20 @@ F2 `reassign_job_item`(`qc_jobs` → `pct_orders` → `pct_order_test_items` →
 - `can_duo`·`requires_duo`·규칙엔진 듀오 조의 이름·동작.
 - 진행 중 항목 이동 자체(F2 spec 소관).
 
+## 13. 개정 — 담당자 추가와 항목 배분을 한 번에 저장 (2026-09-17, `0054`)
+§9·§12.1 #9 에서는 새 담당자를 저장해야 그 슬롯에 항목을 나눌 수 있었다(배분 API 는 저장된 슬롯만 받는다). 관리자는 병렬 담당자를 추가하고 저장한 뒤 서랍을 다시 열어야 했다.
+사용자 요청(오케스트레이션)에 따라 개정한다.
+
+| 항목 | 개정 후 |
+|---|---|
+| 화면 | 작업 시작 전 오더는 담당자를 추가하는 즉시 시험항목 배분 셀렉트에 새 슬롯이 보인다. 배분은 서랍의 로컬 초안이고 [저장] 한 번에 담당자 구성과 함께 보낸다. 항목이 배정된 담당자 행을 빼면 확인 모달 후 그 항목 초안은 담당자 1 로 돌아간다 |
+| API | `PATCH /api/pct-orders` 에 `itemAssignments[{testItemName, assigneeSlot}]`(바뀐 항목만). 있으면 `assignees` 도 함께 보낸다 |
+| DB | `set_order_assignment_bundle(order, assignees, itemAssignments, user, reason)` 한 트랜잭션이 0049 `set_order_assignees`(또는 병렬 해제 시 슬롯 1 만 남기고 `set_order_primary_assignee`) → 담당자 2명 이상이면 항목마다 `set_order_test_item_slot` 을 부른다. 하나라도 거절되면 전부 롤백. service_role 전용 |
+| LOCK·작업 시작 | LOCK 오더에 항목 배분만 담은 요청도 `LOCKED_ASSIGNEE_MESSAGE` 로 거절. 작업이 시작된 오더는 초안을 늘 저장값으로 되돌려 번들을 보내지 않는다(항목 이동은 0050 [담당자 변경]) |
+| 0054 미적용 | 번들 요청만 `담당자·시험항목 묶음 저장에 필요한 DB 설치(0054_assignment_bundle.sql)…` 안내로 실패. 항목 배분이 없는 저장은 기존 경로 그대로 |
+
+배포 순서: SQL 0054 → 앱.
+
 ---
 
 ## 부록 A. 구현 대상 파일 목록

@@ -29,6 +29,7 @@ import {
   loadAssigneesByOrder,
   normalizeAssigneeInput,
   setOrderAssignees,
+  setOrderAssignmentBundle,
   setOrderPrimaryAssignee,
   type AssigneeSlotRow,
 } from '@backend/services/orderAssignees'
@@ -696,7 +697,7 @@ export async function updateOrderWithReason(
   patch: Partial<Record<EditableField, string | boolean | null>>,
   reason: string,
   editedBy: string | null,
-  opts: { assignees?: unknown } = {},
+  opts: { assignees?: unknown; itemAssignments?: unknown } = {},
 ): Promise<void> {
   const trimmedReason = (reason ?? '').trim()
   if (!trimmedReason) throw new Error('수정 사유는 필수입니다.')
@@ -740,6 +741,7 @@ export async function updateOrderWithReason(
 
   const legacyPrimaryGiven = requestedAssignees === null && 'assigneeTesterId' in patch
   const touchesAssignment = requestedAssignees !== null || legacyPrimaryGiven
+  const hasItemBundle = opts.itemAssignments !== undefined
   const datesTouched = ['packagingDate', 'dueDate', 'plannedStartDate'].some(f => f in patch)
   // 담당자 구성을 건드리는 요청이면 쓰기 경로 조회(0049 미적용 → 설치 안내로 거절).
   // 날짜만 바꾸는 요청은 휴가 알림용 조회라 실패해도 수정 자체를 막지 않는다.
@@ -794,14 +796,14 @@ export async function updateOrderWithReason(
   }
   let { dbPatch, edits } = buildEdits()
 
-  if (edits.length === 0 && plan.kind === 'none') return  // 변경 없음
+  if (edits.length === 0 && plan.kind === 'none' && !hasItemBundle) return  // 변경 없음
 
   const changed = new Set(edits.map(e => e.field))
 
   // [원칙3] 확정(LOCK)된 오더는 담당자뿐 아니라 일정·진행방법·긴급여부까지 잠근다.
   // 담당자 변경도 여기서 먼저 거절한다 — 다른 필드만 저장되고 담당자만 실패하는 부분 반영을 줄인다.
   if (currentRow.locked) {
-    if (plan.kind !== 'none') throw new Error(LOCKED_ASSIGNEE_MESSAGE)
+    if (plan.kind !== 'none' || hasItemBundle) throw new Error(LOCKED_ASSIGNEE_MESSAGE)
     const blocked = LOCKED_IMMUTABLE_FIELDS.filter(f => changed.has(f))
     if (blocked.length > 0) {
       throw new Error(
@@ -888,7 +890,23 @@ export async function updateOrderWithReason(
   let finalSlots: AssigneeSlotRow[] = currentSlots
   let assignmentError: Error | null = null
   try {
-    if (plan.kind === 'primary') {
+    if (hasItemBundle && (plan.kind === 'set' || plan.kind === 'primary' || plan.kind === 'none' || plan.kind === 'clearParallel')) {
+      const bundleAssignees = plan.kind === 'set'
+        ? plan.assignees
+        : plan.kind === 'primary'
+          ? (plan.testerId ? [{ slot: PRIMARY_ASSIGNEE_SLOT, testerId: plan.testerId }] : [])
+          : plan.kind === 'clearParallel'
+            ? []
+          : currentSlots.map(a => ({ slot: a.slot, testerId: a.testerId }))
+      await setOrderAssignmentBundle(id, bundleAssignees, opts.itemAssignments, editedBy, trimmedReason)
+      const beforeBySlot = new Map(currentSlots.map(a => [a.slot, a.testerId]))
+      const afterBySlot = new Map(bundleAssignees.map(a => [a.slot, a.testerId]))
+      const changedSlots = [...new Set([...beforeBySlot.keys(), ...afterBySlot.keys()])].sort((a, b) => a - b)
+      slotChanges = changedSlots
+        .map(slot => ({ slot: slot as AssigneeSlot, before: beforeBySlot.get(slot) ?? null, after: afterBySlot.get(slot) ?? null }))
+        .filter(c => c.before !== c.after)
+      finalSlots = bundleAssignees.map(a => ({ slot: a.slot, testerId: a.testerId }))
+    } else if (plan.kind === 'primary') {
       const res = await setOrderPrimaryAssignee(id, plan.testerId, editedBy, trimmedReason)
       if (res.changed) {
         slotChanges = [{ slot: PRIMARY_ASSIGNEE_SLOT, before: res.beforeTesterId, after: res.afterTesterId }]

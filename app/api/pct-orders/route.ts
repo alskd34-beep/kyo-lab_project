@@ -88,12 +88,15 @@ export async function PATCH(req: NextRequest) {
       reason?: string
       /** 병렬 배정 담당자 구성 — 형식 검증·규칙 판정은 서비스와 DB 함수(0049)가 한다 */
       assignees?: unknown
+      /** 편집 모달에서 함께 저장할 시험항목 슬롯 배분 */
+      itemAssignments?: unknown
     }
     if (!body.id || !body.patch) {
       return Response.json({ error: 'id와 patch는 필수입니다.' }, { status: 400 })
     }
     await updateOrderWithReason(body.id, body.patch, body.reason ?? '', auth.payload.sub ?? null, {
       assignees: body.assignees,
+      itemAssignments: body.itemAssignments,
     })
     return Response.json({ ok: true })
   } catch (err) {

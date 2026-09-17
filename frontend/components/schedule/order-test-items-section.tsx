@@ -52,7 +52,7 @@ const reasonInputCls =
   "mt-1.5 h-8 w-full rounded-md border border-input bg-background px-2.5 text-xs text-foreground shadow-xs " +
   "placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
 
-/** 배분 셀렉트에 보이는 담당자 1명 — 서버에 저장된 슬롯만 넘긴다 */
+/** 배분 셀렉트에 보이는 담당자 1명 — 편집 중인 담당자 슬롯을 넘긴다 */
 export interface SectionAssignee { slot: AssigneeSlot; name: string | null }
 
 /** `담당자 N · 이름` */
@@ -63,6 +63,7 @@ function assigneeOptionLabel(a: SectionAssignee | undefined, slot: number): stri
 export function OrderTestItemsSection({
   orderId, productName, canEdit, locked,
   parallel = false, assignees = [], jobStarted = false, canReassign = false, onRowsChange,
+  draftAssignments, onDraftAssignmentsChange,
 }: {
   orderId: string
   productName: string
@@ -93,6 +94,9 @@ export function OrderTestItemsSection({
   canReassign?: boolean
   /** 항목 목록을 읽거나 다시 읽을 때마다 부른다 — 담당자 행 삭제 가능 여부(활성 항목 수) 판정용 */
   onRowsChange?: (rows: OrderTestItemDetailRow[]) => void
+  /** 편집 모달에서 항목 배분을 로컬에 모아 담당자 구성과 함께 저장한다. */
+  draftAssignments?: Record<string, AssigneeSlot>
+  onDraftAssignmentsChange?: (assignments: Record<string, AssigneeSlot>) => void
 }) {
   const [rows, setRows] = useState<OrderTestItemDetailRow[] | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -181,7 +185,11 @@ export function OrderTestItemsSection({
 
   /** 병렬 배정 오더에서 항목 하나를 어느 담당자(슬롯)에게 줄지 바꾼다 */
   const setSlot = (row: OrderTestItemDetailRow, slot: AssigneeSlot) => {
-    if (row.assigneeSlot === slot) return
+    if ((draftAssignments?.[row.testItemName] ?? row.assigneeSlot) === slot) return
+    if (draftAssignments && onDraftAssignmentsChange) {
+      onDraftAssignmentsChange({ ...draftAssignments, [row.testItemName]: slot })
+      return
+    }
     void run(row.testItemName, () => api.patch(`/api/pct-orders/${orderId}/test-items`, {
       testItemName: row.testItemName, assigneeSlot: slot,
     }))
@@ -203,12 +211,19 @@ export function OrderTestItemsSection({
 
   const total = rows?.length ?? 0
   const activeCount = useMemo(() => (rows ?? []).filter(r => !r.isExcluded).length, [rows])
+  const displayedSlot = useCallback(
+    (row: OrderTestItemDetailRow) => draftAssignments?.[row.testItemName] ?? row.assigneeSlot,
+    [draftAssignments],
+  )
   // 병렬 배정 요약 — 담당자별 활성 항목 수. 제외한 항목은 누구의 몫도 아니므로 세지 않는다
   const slotCounts = useMemo(() => {
     const m = new Map<number, number>()
-    for (const r of rows ?? []) if (!r.isExcluded) m.set(r.assigneeSlot, (m.get(r.assigneeSlot) ?? 0) + 1)
+    for (const r of rows ?? []) if (!r.isExcluded) {
+      const slot = displayedSlot(r)
+      m.set(slot, (m.get(slot) ?? 0) + 1)
+    }
     return m
-  }, [rows])
+  }, [rows, displayedSlot])
   const assigneeBySlot = useMemo(() => new Map(assignees.map(a => [a.slot as number, a])), [assignees])
   const reassignByName = useMemo(
     () => new Map((reassignCtx?.items ?? []).map(i => [i.testItemName, i])),
@@ -333,11 +348,11 @@ export function OrderTestItemsSection({
                     ) : null)}
                   </div>
                   {/* 병렬 배정 — 작업 시작 뒤(관리자)에는 현재 담당자 배지 + 항목별 [담당자 변경](F2).
-                      작업 시작 전에는 항목별 담당자 선택(오더에 저장된 슬롯만), 읽기 전용이면 배지로만 */}
+                      작업 시작 전에는 항목별 담당자 선택(현재 편집 중인 슬롯), 읽기 전용이면 배지로만 */}
                   {parallel && reassignEnabled ? (
                     <div className="mt-0.5 flex shrink-0 items-center gap-1">
                       <Badge variant="outline">
-                        {assigneeOptionLabel(assigneeBySlot.get(row.assigneeSlot), row.assigneeSlot)}
+                        {assigneeOptionLabel(assigneeBySlot.get(displayedSlot(row)), displayedSlot(row))}
                       </Badge>
                       {!row.isExcluded && (() => {
                         const state = reassignByName.get(row.testItemName)
@@ -360,7 +375,7 @@ export function OrderTestItemsSection({
                     </div>
                   ) : parallel && (canEdit ? (
                     <Select
-                      value={String(row.assigneeSlot)}
+                      value={String(displayedSlot(row))}
                       disabled={busy || jobStarted || row.isExcluded}
                       onValueChange={v => setSlot(row, Number(v) as AssigneeSlot)}
                     >
@@ -372,9 +387,9 @@ export function OrderTestItemsSection({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {/* 저장된 슬롯에 없는 번호(비정상)라도 현재 값은 보이게 남긴다 */}
-                        {!assigneeBySlot.has(row.assigneeSlot) && (
-                          <SelectItem value={String(row.assigneeSlot)}>{assigneeSlotLabel(row.assigneeSlot)}</SelectItem>
+                        {/* 현재 슬롯 목록에 없는 번호(비정상)라도 기존 값은 보이게 남긴다 */}
+                        {!assigneeBySlot.has(displayedSlot(row)) && (
+                          <SelectItem value={String(displayedSlot(row))}>{assigneeSlotLabel(displayedSlot(row))}</SelectItem>
                         )}
                         {assignees.map(a => (
                           <SelectItem key={a.slot} value={String(a.slot)}>{assigneeOptionLabel(a, a.slot)}</SelectItem>
@@ -383,7 +398,7 @@ export function OrderTestItemsSection({
                     </Select>
                   ) : (
                     <Badge variant="outline" className="mt-0.5 shrink-0">
-                      {assigneeOptionLabel(assigneeBySlot.get(row.assigneeSlot), row.assigneeSlot)}
+                      {assigneeOptionLabel(assigneeBySlot.get(displayedSlot(row)), displayedSlot(row))}
                     </Badge>
                   ))}
                   {busy ? (

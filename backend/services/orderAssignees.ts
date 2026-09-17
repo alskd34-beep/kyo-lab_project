@@ -186,10 +186,17 @@ export class AssignmentRejectedError extends Error {
  *  - 잘못된 uuid(22P02): "찾을 수 없습니다"
  *  - 그 밖: 원인을 붙인 한국어 메시지 — 설치 안내로 가리지 않는다
  */
-export function translateAssignmentRpcError(error: { code?: string; message?: string }): Error {
+export function translateAssignmentRpcError(
+  error: { code?: string; message?: string },
+  migration = PARALLEL_ASSIGN_MIGRATION,
+): Error {
   if (error.code === 'P0001') return new AssignmentRejectedError(error.message ?? '요청을 처리할 수 없습니다.')
   if (error.code === 'PGRST202' || error.code === '42883' || error.code === '42P01' || error.code === 'PGRST205') {
-    return new Error(PARALLEL_ASSIGN_INSTALL_MESSAGE)
+    return new Error(
+      migration === PARALLEL_ASSIGN_MIGRATION
+        ? PARALLEL_ASSIGN_INSTALL_MESSAGE
+        : `담당자·시험항목 묶음 저장에 필요한 DB 설치(${migration})가 아직 적용되지 않았습니다. 관리자에게 문의하세요.`,
+    )
   }
   if (error.code === '22P02') return new Error('오더 또는 시험자를 찾을 수 없습니다.')
   if (error.code === '23505') return new Error('같은 담당자를 두 번 배정할 수 없습니다.')
@@ -221,6 +228,18 @@ export interface SetPrimaryAssigneeResult {
   changed: boolean
   beforeTesterId: string | null
   afterTesterId: string | null
+}
+
+export interface ItemAssignmentInput { testItemName: string; assigneeSlot: AssigneeSlot }
+
+function normalizeItemAssignments(raw: unknown): ItemAssignmentInput[] {
+  if (!Array.isArray(raw)) throw new Error('시험항목 담당자 구성 형식이 올바르지 않습니다.')
+  return raw.map(item => {
+    const value = item as { testItemName?: unknown; assigneeSlot?: unknown } | null
+    const name = typeof value?.testItemName === 'string' ? value.testItemName.trim() : ''
+    if (!name || !isAssigneeSlot(value?.assigneeSlot)) throw new Error('시험항목 담당자 구성 형식이 올바르지 않습니다.')
+    return { testItemName: name, assigneeSlot: value.assigneeSlot }
+  })
 }
 
 function requireReason(reason: unknown): string {
@@ -296,4 +315,25 @@ export async function setOrderPrimaryAssignee(
   })
   if (error) throw translateAssignmentRpcError(error)
   return data as SetPrimaryAssigneeResult
+}
+
+/** 담당자 구성과 항목 슬롯을 한 DB 함수 호출(한 트랜잭션)로 저장한다. */
+export async function setOrderAssignmentBundle(
+  orderId: string,
+  assignees: readonly OrderAssigneeInput[],
+  itemAssignments: unknown,
+  userId: string | null,
+  reason: string,
+): Promise<void> {
+  const note = requireReason(reason)
+  const payload = assignees.length === 0 ? [] : normalizeAssigneeInput(assignees)
+  const items = normalizeItemAssignments(itemAssignments)
+  const { error } = await rpcWithDeadlockRetry('set_order_assignment_bundle', {
+    p_order_id: orderId,
+    p_assignees: payload.map(a => ({ slot: a.slot, testerId: a.testerId })),
+    p_item_assignments: items.map(item => ({ testItemName: item.testItemName, assigneeSlot: item.assigneeSlot })),
+    p_user_id: userId,
+    p_reason: note,
+  })
+  if (error) throw translateAssignmentRpcError(error, '0054_assignment_bundle.sql')
 }
