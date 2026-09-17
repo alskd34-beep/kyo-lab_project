@@ -1,7 +1,7 @@
 /**
  * [BACKEND] 동시분석 그룹 단계 일괄 진행 (관리자)
  *
- * 한 배치에서 누른 검토·승인을 **조작 시점의 그룹 구성** 전 배치에 같은 판정으로 적용한다.
+ * 물리적으로 한 번 수행하는 항목 진행만 짝 배치에 전파한다. 결과 판정·검토·승인은 배치별이다.
  * 규칙 전문: intent/2026-09-15-group-stage-progress-spec.md
  *
  *  - 그룹 검토(항목 단위·일괄): DB 함수(0051 group_item_review_action / group_item_review_bulk_action) 한 번 =
@@ -11,7 +11,8 @@
  *  - 그룹 승인: **원자적이지 않다.** 작업마다 기존 승인 경로(advanceJobStage — 조건부 update, 전 항목 검토 완료 확인,
  *    오더 동기화·이력·알림)를 차례로 부른다. 조건 불충족 배치는 건너뛴다.
  *
- * 전파하지 않는 것: 검토 취소·재실시·관리자 직접 변경(배치별 사정·사유가 다른 정정 경로).
+ * 개별 경로에서 전파하지 않는 것: 결과 판정, 검토 시작·완료·취소·재실시, 승인 단계·승인,
+ * 담당자 상태 변경, 관리자 직접 변경. 그룹 검토·그룹 승인 버튼은 명시적 일괄 조작으로 별도 유지한다.
  * GMP: 검토 이력·단계 이력은 배치(작업)·항목마다 따로 남는다. 묶이는 것은 조작뿐이다.
  */
 
@@ -19,8 +20,8 @@ import { supabaseAdmin } from '@backend/lib/supabase'
 import { rpcWithDeadlockRetry, type RpcError } from '@backend/lib/rpcRetry'
 import {
   APPROVAL_READY_STATUS, CLOSED_STAGE, isItemReviewBulkAction,
-  ITEM_CLEARED, ITEM_IN_PROGRESS, ITEM_PENDING, ITEM_REVIEW_NONE, ITEM_REVIEW_REVIEWING,
-  ITEM_EDITABLE_JOB_STATUSES, TESTER_STATUS_CHANGE_STATUSES,
+  ITEM_CLEARED, ITEM_IN_PROGRESS, ITEM_PENDING, ITEM_REVIEW_NONE,
+  ITEM_EDITABLE_JOB_STATUSES,
   type ItemReviewBulkAction,
 } from '@shared/qc-status'
 import type {
@@ -48,10 +49,6 @@ export type GroupPropagationTransition =
   | { kind: 'item_start'; itemName: string }
   | { kind: 'item_clear'; itemName: string }
   | { kind: 'item_cancel'; itemName: string }
-  | { kind: 'job_status'; status: string }
-  | { kind: 'stage'; expected?: string }
-  | { kind: 'review'; itemName: string; action: string; reason?: string }
-  | { kind: 'review_bulk'; action: string }
 
 /** 개별 전이 뒤 동일 항목 그룹의 짝 배치에만 재적용한다. 내부 호출은 전파를 끈다. */
 export async function propagateToGroupMates(
@@ -76,12 +73,9 @@ export async function propagateToGroupMates(
       .from('qc_jobs').select('id, status, qc_no').in('order_id', activeOrderIds).neq('id', sourceJobId)
     if (matesError) throw matesError
     if (!mates || mates.length === 0) return undefined
-    const { startItem, clearItem, cancelItemStart, changeJobStatus, advanceJobStage } = await import('@backend/services/qcJobs')
-    const { reviewJobItem, bulkReviewJobItems } = await import('@backend/services/qcJobItemReview')
+    const { startItem, clearItem, cancelItemStart } = await import('@backend/services/qcJobs')
     for (const mate of mates ?? []) {
       try {
-        if (transition.kind === 'job_status' && mate.status === transition.status) { result.skipped++; continue }
-        if (transition.kind === 'stage' && mate.status !== transition.expected) { result.skipped++; continue }
         const isItemTransition = transition.kind === 'item_start' || transition.kind === 'item_clear' || transition.kind === 'item_cancel'
         const { data: item } = isItemTransition
           ? await supabaseAdmin.from('qc_job_items').select('id, status, review_status').eq('qc_job_id', mate.id as string)
@@ -92,34 +86,10 @@ export async function propagateToGroupMates(
         if (transition.kind === 'item_start' && item!.status !== ITEM_PENDING) { result.skipped++; continue }
         if (transition.kind === 'item_clear' && (item!.status === ITEM_CLEARED || item!.review_status !== ITEM_REVIEW_NONE)) { result.skipped++; continue }
         if (transition.kind === 'item_cancel' && item!.status !== ITEM_IN_PROGRESS) { result.skipped++; continue }
-        if (transition.kind === 'job_status' && !TESTER_STATUS_CHANGE_STATUSES.has(mate.status as string)) { result.skipped++; continue }
-        if (transition.kind === 'review' && (mate.status === APPROVAL_READY_STATUS || mate.status === CLOSED_STAGE)) { result.skipped++; continue }
         const propagatedOptions = { propagated: true, propagationSourceQcNo: source.qc_no as string }
         if (transition.kind === 'item_start') await startItem(mate.id as string, item!.id as string, actorSub, propagatedOptions)
         else if (transition.kind === 'item_clear') await clearItem(mate.id as string, item!.id as string, actorSub, propagatedOptions)
         else if (transition.kind === 'item_cancel') await cancelItemStart(mate.id as string, item!.id as string, actorSub, propagatedOptions)
-        else if (transition.kind === 'job_status') await changeJobStatus(mate.id as string, actorSub, transition.status, propagatedOptions)
-        else if (transition.kind === 'stage') await advanceJobStage(mate.id as string, transition.expected, actorSub, propagatedOptions)
-        else if (transition.kind === 'review') {
-          const reviewItem = await supabaseAdmin.from('qc_job_items').select('id, status, review_status').eq('qc_job_id', mate.id as string)
-            .eq('test_item_name', transition.itemName.trim()).maybeSingle()
-          if (!reviewItem.data) { result.skipped++; continue }
-          const expectedReviewStatus = transition.action === 'review_start' ? ITEM_REVIEW_NONE : ITEM_REVIEW_REVIEWING
-          const reviewEligible = transition.action === 'reopen'
-            ? reviewItem.data.status === ITEM_CLEARED
-            : reviewItem.data.status === ITEM_CLEARED && reviewItem.data.review_status === expectedReviewStatus
-          if (!reviewEligible) { result.skipped++; continue }
-          await reviewJobItem(mate.id as string, reviewItem.data.id as string, actorSub, transition.action, transition.reason, { propagated: true, propagationSourceQcNo: source.qc_no as string })
-        }
-        else if (transition.kind === 'review_bulk') {
-          const expectedReviewStatus = transition.action === 'review_start' ? ITEM_REVIEW_NONE : ITEM_REVIEW_REVIEWING
-          const { data: eligibleItems, error: eligibleError } = await supabaseAdmin
-            .from('qc_job_items').select('id').eq('qc_job_id', mate.id as string)
-            .eq('status', ITEM_CLEARED).eq('review_status', expectedReviewStatus)
-          if (eligibleError) throw eligibleError
-          if (!eligibleItems || eligibleItems.length === 0) { result.skipped++; continue }
-          await bulkReviewJobItems(mate.id as string, actorSub, transition.action, { propagated: true })
-        }
         result.applied++
       } catch (error) {
         if (error instanceof Error && error.message.includes('상태가 바뀌었습니다')) result.skipped++
@@ -237,7 +207,7 @@ export async function approveGroup(groupId: string, adminSub: string): Promise<G
     if (job.status !== APPROVAL_READY_STATUS) { skipped.push({ ...base, reason: `"${job.status}" 단계` }); continue }
     try {
       // expected 를 넘겨 그 사이 단계가 바뀐 작업은 조건부로 거절되게 한다(동시 클릭 방지).
-      await advanceJobStage(job.jobId, APPROVAL_READY_STATUS, adminSub, { propagated: true })
+      await advanceJobStage(job.jobId, APPROVAL_READY_STATUS, adminSub)
       processed.push({ ...base, orderId: job.orderId })
     } catch (err) {
       const message = err instanceof Error ? err.message : '승인 실패'

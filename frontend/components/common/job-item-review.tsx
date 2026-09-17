@@ -9,8 +9,8 @@
  * 버튼 노출은 보조 판정일 뿐이다. 최종 허용 판정·기록·작업 단계 도출은 서버(DB 함수 0048)가 한다.
  * 규칙 전문: intent/2026-09-15-item-level-review-spec.md
  *
- * 작업이 동시분석 그룹(시작된 작업 2건 이상)에 속하면 검토 시작·검토 완료와 일괄 버튼의 기본 동작이
- * **그룹 적용**이고, 보조로 "이 배치만"을 둔다(0051). 검토 취소·재실시는 전파하지 않는다.
+ * 검토 시작·완료는 판정 성격이므로 개별 경로에서는 이 배치에만 적용한다.
+ * 관리자가 명시적으로 그룹 버튼을 누른 경우에만 여러 배치에 일괄 적용한다(0051).
  * 규칙 전문: intent/2026-09-15-group-stage-progress-spec.md
  */
 
@@ -29,7 +29,7 @@ import { Input } from "@frontend/components/ui/input"
 import type { GroupReviewResult } from "@shared/qc-group-stage"
 import {
   GroupTargetConfirmDialog, groupApplyLabel, groupReviewItemCount, groupReviewTargets, isGroupActionable,
-  useGroupPropagationResultToast, useGroupStageResultToast, type JobGroupSummary,
+  useGroupStageResultToast, type JobGroupSummary,
 } from "@frontend/components/common/job-group-stage"
 import {
   Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -210,16 +210,16 @@ export function ItemReviewActions({ jobId, jobStatus, item, disabled = false, on
   disabled?: boolean
   /** 검토가 반영된 뒤 호출 — 상세·이력·목록 갱신에 쓴다 */
   onChanged: () => void
-  /** 작업이 속한 동시분석 그룹(관리자 상세 응답). 있으면 검토 시작·완료의 기본 동작이 그룹 적용 */
+  /** 작업이 속한 동시분석 그룹(관리자 상세 응답). 명시적 그룹 검토 버튼의 대상 계산에 쓴다 */
   group?: JobGroupSummary | null
 }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [reasonAction, setReasonAction] = useState<"review_cancel" | "reopen" | null>(null)
   const [confirmComplete, setConfirmComplete] = useState(false)
+  const [confirmGroupStart, setConfirmGroupStart] = useState(false)
   const [confirmGroupComplete, setConfirmGroupComplete] = useState(false)
   const showGroupResult = useGroupStageResultToast()
-  const showPropagationResult = useGroupPropagationResultToast()
 
   if (jobStatus === CLOSED_STAGE || item.status !== ITEM_CLEARED) return null
   const rs = reviewStatusOf(item)
@@ -239,6 +239,7 @@ export function ItemReviewActions({ jobId, jobStatus, item, disabled = false, on
         `/api/qc-jobs/group/${group.groupId}/review`, { testItemName: item.testItemName, action },
       )
       showGroupResult(`"${item.testItemName}" ${ITEM_REVIEW_ACTION_LABEL[action]}(그룹)`, res)
+      setConfirmGroupStart(false)
       setConfirmGroupComplete(false)
       onChanged()
     } catch (e) {
@@ -251,8 +252,7 @@ export function ItemReviewActions({ jobId, jobStatus, item, disabled = false, on
   async function run(action: ItemReviewAction, reason?: string) {
     setBusy(true); setError(null)
     try {
-      const res = await api.post<{ propagation?: { applied: number; skipped: number; failed: number; warnings: string[] } }>(`/api/qc-jobs/${jobId}/items/${item.id}/review`, reason === undefined ? { action } : { action, reason })
-      if (res.propagation) showPropagationResult(`검토 ${ITEM_REVIEW_ACTION_LABEL[action]} 전파`, res.propagation)
+      await api.post(`/api/qc-jobs/${jobId}/items/${item.id}/review`, reason === undefined ? { action } : { action, reason })
       setReasonAction(null)
       setConfirmComplete(false)
       onChanged()
@@ -267,21 +267,21 @@ export function ItemReviewActions({ jobId, jobStatus, item, disabled = false, on
   return (
     <div className="flex flex-col items-end gap-1">
       <div className="flex flex-wrap items-center justify-end gap-1">
-        {/* 그룹 적용이 기본 — 검토 시작은 모달 없이 실행하고 결과를 토스트로 알린다 */}
+        {/* 판정은 배치별이 기본 — 그룹 버튼은 관리자가 명시적으로 누를 때만 실행한다 */}
         {showGroupStart && (
-          <Button size="sm" variant="outline" onClick={() => void runGroup("review_start")} disabled={off}>
+          <Button size="sm" variant="outline" onClick={() => { setError(null); setConfirmGroupStart(true) }} disabled={off}>
             {busy && !reasonAction ? <Loader2 className="animate-spin" /> : <ClipboardCheck />}
             검토 시작 ({groupApplyLabel(startTargets.length)})
           </Button>
         )}
         {rs === ITEM_REVIEW_NONE && (
-          <Button size="sm" variant={showGroupStart ? "ghost" : "outline"} onClick={() => void run("review_start")} disabled={off}>
+          <Button size="sm" variant="default" onClick={() => void run("review_start")} disabled={off}>
             {busy && !reasonAction && !showGroupStart ? <Loader2 className="animate-spin" /> : <ClipboardCheck />}
             {showGroupStart ? "이 배치만" : "검토 시작"}
           </Button>
         )}
         {showGroupComplete && (
-          <Button size="sm" onClick={() => { setError(null); setConfirmGroupComplete(true) }} disabled={off}>
+          <Button size="sm" variant="outline" onClick={() => { setError(null); setConfirmGroupComplete(true) }} disabled={off}>
             <CheckCheck />검토 완료 ({groupApplyLabel(completeTargets.length)})
           </Button>
         )}
@@ -289,7 +289,7 @@ export function ItemReviewActions({ jobId, jobStatus, item, disabled = false, on
           <>
             <Button
               size="sm"
-              variant={showGroupComplete ? "ghost" : "default"}
+              variant="default"
               onClick={() => { setError(null); setConfirmComplete(true) }}
               disabled={off}
             >
@@ -304,12 +304,25 @@ export function ItemReviewActions({ jobId, jobStatus, item, disabled = false, on
           <RotateCcw />재실시
         </Button>
       </div>
-      {error && !reasonAction && !confirmComplete && !confirmGroupComplete && <p className="text-right text-xs leading-normal break-keep text-destructive">{error}</p>}
+      {error && !reasonAction && !confirmComplete && !confirmGroupStart && !confirmGroupComplete && <p className="text-right text-xs leading-normal break-keep text-destructive">{error}</p>}
+      {confirmGroupStart && (
+        <GroupTargetConfirmDialog
+          title="검토 시작 — 동시분석 그룹"
+          description={`시험항목 "${item.testItemName}" 을 그룹 ${startTargets.length}배치에서 검토 시작으로 기록합니다. 검토 기록은 배치마다 남습니다.`}
+          warning="모든 배치에 같은 판정이 적용됩니다."
+          targets={startTargets}
+          busy={busy}
+          error={error}
+          confirmLabel={`검토 시작 ${startTargets.length}배치`}
+          onConfirm={() => void runGroup("review_start")}
+          onClose={() => { setConfirmGroupStart(false); setError(null) }}
+        />
+      )}
       {confirmGroupComplete && (
         <GroupTargetConfirmDialog
           title="검토 완료 — 동시분석 그룹"
           description={`시험항목 "${item.testItemName}" 을 그룹 ${completeTargets.length}배치에서 검토 완료로 기록합니다. 검토 기록은 배치마다 남습니다.`}
-          warning={REVIEW_COMPLETE_WARNING}
+          warning={`모든 배치에 같은 판정이 적용됩니다. ${REVIEW_COMPLETE_WARNING}`}
           targets={completeTargets}
           busy={busy}
           error={error}
@@ -352,15 +365,15 @@ export function BulkReviewBar({ jobId, jobStatus, items, onChanged, className, g
   items: ReviewableItem[]
   onChanged: () => void
   className?: string
-  /** 작업이 속한 동시분석 그룹. 있으면 일괄 버튼의 기본 동작이 그룹 전 배치 적용 */
+  /** 작업이 속한 동시분석 그룹. 그룹 버튼은 명시적으로 선택한 경우에만 여러 배치에 적용 */
   group?: JobGroupSummary | null
 }) {
   const [busy, setBusy] = useState<ItemReviewBulkAction | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [confirmComplete, setConfirmComplete] = useState(false)
+  const [confirmGroupStart, setConfirmGroupStart] = useState(false)
   const [confirmGroupComplete, setConfirmGroupComplete] = useState(false)
   const showGroupResult = useGroupStageResultToast()
-  const showPropagationResult = useGroupPropagationResultToast()
 
   const groupOn = isGroupActionable(group)
   const groupStartTargets = groupOn ? groupReviewTargets(group, "review_start", null) : []
@@ -377,6 +390,7 @@ export function BulkReviewBar({ jobId, jobStatus, items, onChanged, className, g
       showGroupResult(
         action === "review_start" ? "완료 항목 전체 검토 시작(그룹)" : "검토 중 항목 전체 검토 완료(그룹)", res,
       )
+      setConfirmGroupStart(false)
       setConfirmGroupComplete(false)
       onChanged()
     } catch (e) {
@@ -394,8 +408,7 @@ export function BulkReviewBar({ jobId, jobStatus, items, onChanged, className, g
   async function run(action: ItemReviewBulkAction) {
     setBusy(action); setError(null)
     try {
-      const res = await api.post<{ propagation?: { applied: number; skipped: number; failed: number; warnings: string[] } }>(`/api/qc-jobs/${jobId}/review-bulk`, { action })
-      if (res.propagation) showPropagationResult("일괄 검토 전파", res.propagation)
+      await api.post(`/api/qc-jobs/${jobId}/review-bulk`, { action })
       setConfirmComplete(false)
       onChanged()
     } catch (e) {
@@ -419,9 +432,9 @@ export function BulkReviewBar({ jobId, jobStatus, items, onChanged, className, g
         )}
         {!closed && (
           <div className="ml-auto flex flex-wrap items-center gap-1.5">
-            {/* 그룹 적용이 기본 — 검토 시작은 모달 없이, 검토 완료는 대상 배치 확인 모달 */}
+            {/* 배치별 처리가 기본이며, 그룹 처리는 대상 배치 확인 모달 뒤 실행 */}
             {showGroupStart && (
-              <Button size="sm" variant="outline" onClick={() => void runGroup("review_start")} disabled={busy !== null}>
+              <Button size="sm" variant="outline" onClick={() => { setError(null); setConfirmGroupStart(true) }} disabled={busy !== null}>
                 {busy === "review_start" ? <Loader2 className="animate-spin" /> : <ClipboardCheck />}
                 완료 항목 전체 검토 시작 ({groupApplyLabel(groupStartTargets.length)})
               </Button>
@@ -429,7 +442,7 @@ export function BulkReviewBar({ jobId, jobStatus, items, onChanged, className, g
             {waiting > 0 && (
               <Button
                 size="sm"
-                variant={showGroupStart ? "ghost" : "outline"}
+                variant="default"
                 onClick={() => void run("review_start")}
                 disabled={busy !== null}
               >
@@ -438,7 +451,7 @@ export function BulkReviewBar({ jobId, jobStatus, items, onChanged, className, g
               </Button>
             )}
             {showGroupComplete && (
-              <Button size="sm" onClick={() => { setError(null); setConfirmGroupComplete(true) }} disabled={busy !== null}>
+              <Button size="sm" variant="outline" onClick={() => { setError(null); setConfirmGroupComplete(true) }} disabled={busy !== null}>
                 <CheckCheck />
                 검토 중 항목 전체 검토 완료 ({groupApplyLabel(groupCompleteTargets.length)})
               </Button>
@@ -446,7 +459,7 @@ export function BulkReviewBar({ jobId, jobStatus, items, onChanged, className, g
             {reviewing > 0 && (
               <Button
                 size="sm"
-                variant={showGroupComplete ? "ghost" : "default"}
+                variant="default"
                 onClick={() => { setError(null); setConfirmComplete(true) }}
                 disabled={busy !== null}
               >
@@ -457,12 +470,25 @@ export function BulkReviewBar({ jobId, jobStatus, items, onChanged, className, g
           </div>
         )}
       </div>
-      {error && !confirmComplete && !confirmGroupComplete && <p className="mt-2 text-xs font-medium text-destructive">{error}</p>}
+      {error && !confirmComplete && !confirmGroupStart && !confirmGroupComplete && <p className="mt-2 text-xs font-medium text-destructive">{error}</p>}
+      {confirmGroupStart && (
+        <GroupTargetConfirmDialog
+          title="검토 시작 — 동시분석 그룹"
+          description={`그룹 ${groupStartTargets.length}배치의 완료 항목 전체를 검토 시작으로 기록합니다. 검토 기록은 배치·항목마다 남습니다.`}
+          warning="모든 배치에 같은 판정이 적용됩니다."
+          targets={groupStartTargets}
+          busy={busy !== null}
+          error={error}
+          confirmLabel={`검토 시작 ${groupStartTargets.length}배치`}
+          onConfirm={() => void runGroup("review_start")}
+          onClose={() => { setConfirmGroupStart(false); setError(null) }}
+        />
+      )}
       {confirmGroupComplete && (
         <GroupTargetConfirmDialog
           title="검토 중 항목 전체 검토 완료 — 동시분석 그룹"
           description={`그룹 ${groupCompleteTargets.length}배치의 검토 중 시험항목 ${groupCompleteItems}건을 검토 완료로 기록합니다. 검토 기록은 배치·항목마다 남습니다.`}
-          warning={REVIEW_COMPLETE_WARNING}
+          warning={`모든 배치에 같은 판정이 적용됩니다. ${REVIEW_COMPLETE_WARNING}`}
           targets={groupCompleteTargets}
           busy={busy !== null}
           error={error}

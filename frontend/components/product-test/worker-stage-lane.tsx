@@ -136,7 +136,7 @@ export function JobChip({
           <ConcurrentBadge size={job.groupSize} />
           {(job.groupSize ?? 0) > 1 && (
             <Badge variant={job.sameTestItemSet ? "secondary" : "outline"} className="px-1 py-0 text-xs leading-normal">
-              {job.sameTestItemSet ? "시험항목 동일 · 함께 진행" : "시험항목 상이 · 개별 진행"}
+              {job.sameTestItemSet ? "시험항목 동일 · 진행 함께 / 판정·검토·승인은 배치별" : "시험항목 상이 · 개별 진행"}
             </Badge>
           )}
           {job.isUrgent && (

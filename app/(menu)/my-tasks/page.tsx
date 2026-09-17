@@ -626,7 +626,7 @@ export default function MyTasksPage() {
   }
 
   /** 잡 PATCH 코어 — 새로고침/알림 없음 (일괄에서 재사용) */
-  const patchJobCore = async (jobId: string, patch: Record<string, string>): Promise<{ message?: string; propagation?: PropagationResult }> => {
+  const patchJobCore = async (jobId: string, patch: Record<string, string>): Promise<{ message?: string }> => {
     const res = await fetch(`/api/qc-jobs/${jobId}`, {
       method: "PATCH", credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -642,8 +642,7 @@ export default function MyTasksPage() {
       const r = await patchJobCore(jobId, patch)
       await load()
       // 지연 해제는 서버가 항목 상태에 맞는 단계로 되돌린다 — 요청과 다르면 알린다
-      const notices = [r.message, r.propagation && propagationText(r.propagation)].filter(Boolean) as string[]
-      if (notices.length > 0) flash(notices.join(" · "), !!r.propagation?.failed ? "error" : "info")
+      if (r.message) flash(r.message)
     } catch (e) { flash(`저장 실패: ${e instanceof Error ? e.message : ""}`, "error") }
   }
 
@@ -694,8 +693,6 @@ export default function MyTasksPage() {
     setJobBulkBusy(true)
     const nameById = new Map(activeJobs.map(j => [j.id, `QC ${j.qcNo}`] as const))
     let ok = 0
-    let propagated = 0
-    let propagationFailed = 0
     let redirected = 0
     const failed: string[] = []
     try {
@@ -704,7 +701,6 @@ export default function MyTasksPage() {
           const r = await patchJobCore(id, { status: bulkStatus })
           ok++
           if (r.message) redirected++
-          if (r.propagation) { propagated += r.propagation.applied + r.propagation.skipped; propagationFailed += r.propagation.failed }
         }
         catch { failed.push(nameById.get(id) ?? id) }
       }
@@ -713,7 +709,6 @@ export default function MyTasksPage() {
       const parts: string[] = [`${ok}건 '${bulkStatus}' 적용`]
       if (redirected) parts.push(`그중 ${redirected}건은 시험항목 상태에 따라 다른 단계로 복귀`)
       if (failed.length) parts.push(`실패 ${failed.length}건`)
-      if (propagated > 0 || propagationFailed > 0) parts.push(`그룹 전파 ${propagated}건${propagationFailed > 0 ? ` · 실패 ${propagationFailed}건` : ""}`)
       flash(parts.join(" · "), failed.length ? "error" : "info")
     } finally {
       setJobBulkBusy(false)
@@ -1079,7 +1074,7 @@ export default function MyTasksPage() {
               <span className="truncate text-xs text-muted-foreground">· {groupJobs[0].groupLabel}</span>
             )}
             {groupJobs[0].sameTestItemSet ? (
-              <Badge variant="secondary" className="px-1 py-0 text-xs leading-normal">시험항목 동일 · 함께 진행</Badge>
+              <Badge variant="secondary" className="px-1 py-0 text-xs leading-normal">시험항목 동일 · 진행 함께 / 판정·검토·승인은 배치별</Badge>
             ) : (
               <Badge variant="outline" className="px-1 py-0 text-xs leading-normal text-muted-foreground">시험항목 상이 · 개별 진행</Badge>
             )}
@@ -1124,7 +1119,7 @@ export default function MyTasksPage() {
             시험항목 진행 <span className="tabular-nums text-foreground">{allCleared}/{items.length}</span>
             <span className="px-1 text-border">·</span>
             {groupJobs[0].sameTestItemSet
-              ? <>한 번 누르면 <span className="font-medium text-foreground">{groupJobs.length}개 배치</span>에 함께 기록됩니다</>
+              ? <>시작·완료·시작 취소는 한 번 누르면 <span className="font-medium text-foreground">{groupJobs.length}개 배치</span>에 함께 기록됩니다. 판정·검토·승인은 배치별입니다</>
               : <>시험항목 구성이 달라 <span className="font-medium text-foreground">배치별로 개별 진행</span>합니다</>}
           </p>
           {items.length === 0 ? (
@@ -1237,7 +1232,7 @@ export default function MyTasksPage() {
               )}
               {job.groupId && job.groupSize > 1 && (
                 <Badge variant={job.sameTestItemSet ? "secondary" : "outline"} className="ml-1.5 px-1 py-0 text-xs leading-normal">
-                  {job.sameTestItemSet ? "시험항목 동일 · 함께 진행" : "시험항목 상이 · 개별 진행"}
+                  {job.sameTestItemSet ? "시험항목 동일 · 진행 함께 / 판정·검토·승인은 배치별" : "시험항목 상이 · 개별 진행"}
                 </Badge>
               )}
             </p>

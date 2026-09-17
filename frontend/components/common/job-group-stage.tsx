@@ -129,7 +129,7 @@ export function GroupMembersSection({ group, currentJobId, className }: {
         동시분석 <span className="tabular-nums">{group.orderCount}</span>건
         {group.groupLabel && <span className="font-normal text-muted-foreground">· {group.groupLabel}</span>}
         {group.sameTestItemSet ? (
-          <Badge variant="secondary" className="px-1 py-0 text-xs leading-normal">시험항목 동일 · 함께 진행</Badge>
+          <Badge variant="secondary" className="px-1 py-0 text-xs leading-normal">시험항목 동일 · 진행 함께 / 판정·검토·승인은 배치별</Badge>
         ) : (
           <Badge variant="outline" className="px-1 py-0 text-xs leading-normal text-muted-foreground">시험항목 상이 · 개별 진행</Badge>
         )}

@@ -15,8 +15,8 @@
  *
  * 어느 쪽이든 서버가 상태 이력에 남기므로, 바로 아래 이력 타임라인에서 확인할 수 있다.
  *
- * 작업이 동시분석 그룹에 속하고 다른 배치도 "승인전" 이면 [승인]의 기본 동작이 **그룹 승인**이다
- * (POST /api/qc-jobs/group/[groupId]/approve — 배치마다 기존 승인 경로, 원자적이지 않음). 보조로 "이 배치만".
+ * 승인은 판정 성격이므로 개별 경로에서는 이 배치에만 적용한다. 관리자가 그룹 승인 버튼을
+ * 명시적으로 누른 경우에만 (POST /api/qc-jobs/group/[groupId]/approve) 여러 배치에 적용한다.
  * 직접 변경은 그룹으로 전파하지 않는다. 규칙 전문: intent/2026-09-15-group-stage-progress-spec.md §6
  */
 
@@ -30,7 +30,7 @@ import type { GroupApproveResult } from "@shared/qc-group-stage"
 import { api, errorMessage } from "@frontend/lib/api-client"
 import {
   GroupTargetConfirmDialog, groupApplyLabel, groupApproveTargets, isGroupActionable,
-  useGroupPropagationResultToast, useGroupStageResultToast, type JobGroupSummary,
+  useGroupStageResultToast, type JobGroupSummary,
 } from "@frontend/components/common/job-group-stage"
 import { cn } from "@frontend/lib/utils"
 import { Button } from "@frontend/components/ui/button"
@@ -55,13 +55,12 @@ export function JobStatusControl({
   /** 상태가 실제로 바뀐 뒤 호출 — 목록·이력 갱신에 쓴다 */
   onChanged: () => void
   className?: string
-  /** 작업이 속한 동시분석 그룹(관리자 상세 응답). 있으면 [승인]의 기본 동작이 그룹 승인 */
+  /** 작업이 속한 동시분석 그룹(관리자 상세 응답). 명시적 그룹 승인 버튼의 대상 계산에 쓴다 */
   group?: JobGroupSummary | null
 }) {
   const [groupConfirm, setGroupConfirm] = useState(false)
   const [groupError, setGroupError] = useState<string | null>(null)
   const showGroupResult = useGroupStageResultToast()
-  const showPropagationResult = useGroupPropagationResultToast()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // 단계 전이 확인 대기 — 두 패널(확인/직접 변경)은 동시에 열리지 않는다
@@ -76,7 +75,7 @@ export function JobStatusControl({
   const nextStage = canAdvanceByAdmin(status) ? NEXT_STAGE[status] : null
   const nextLabel = canAdvanceByAdmin(status) ? STAGE_ACTION_LABEL[status] : null
 
-  // 그룹 승인 대상(보조 판정) — 이 배치 말고 다른 "승인전" 배치가 있을 때만 그룹 버튼
+  // 그룹 승인 대상(보조 판정) — 명시적으로 그룹 승인을 선택했을 때만 사용
   const groupOn = isGroupActionable(group)
   const approveTargets = groupOn ? groupApproveTargets(group) : []
   const showGroupApprove = !!nextStage && approveTargets.some(m => m.jobId !== jobId)
@@ -108,9 +107,8 @@ export function JobStatusControl({
         // 화면이 보고 있던 단계를 함께 보내 동시 클릭을 막는다
         body: JSON.stringify({ expected: status }),
       })
-      const data = await res.json().catch(() => ({})) as { error?: string; propagation?: { applied: number; skipped: number; failed: number; warnings: string[] } }
+      const data = await res.json().catch(() => ({})) as { error?: string }
       if (!res.ok) throw new Error(data.error ?? "단계 변경 실패")
-      if (data.propagation) showPropagationResult("승인 단계 전파", data.propagation)
       setConfirming(false)
       onChanged()
     } catch (e) {
@@ -130,9 +128,8 @@ export function JobStatusControl({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: target, reason }),
       })
-      const data = await res.json().catch(() => ({})) as { error?: string; message?: string; propagation?: { applied: number; skipped: number; failed: number; warnings: string[] } }
+      const data = await res.json().catch(() => ({})) as { error?: string; message?: string }
       if (!res.ok) throw new Error(data.error ?? "상태 변경 실패")
-      if (data.propagation) showPropagationResult("작업 상태 전파", data.propagation)
       setNotice(data.message ?? null)
       setManualOpen(false); setTarget(""); setReason("")
       setConfirming(false)
@@ -164,6 +161,7 @@ export function JobStatusControl({
             <>
               <Button
                 size="sm"
+                variant="outline"
                 onClick={() => { setGroupConfirm(true); setGroupError(null); setConfirming(false); setManualOpen(false); setError(null) }}
                 disabled={busy}
               >
@@ -171,7 +169,7 @@ export function JobStatusControl({
               </Button>
               <Button
                 size="sm"
-                variant={confirming ? "secondary" : "ghost"}
+                variant="default"
                 aria-expanded={confirming}
                 onClick={() => { setConfirming(c => !c); setManualOpen(false); setError(null) }}
                 disabled={busy}
@@ -272,7 +270,7 @@ export function JobStatusControl({
         <GroupTargetConfirmDialog
           title="승인 — 동시분석 그룹"
           description={`그룹 ${approveTargets.length}배치를 "${nextStage ?? CLOSED_STAGE}" 로 넘깁니다. 배치마다 모든 시험항목의 검토가 끝났는지 확인하고, 완료일이 오늘로 기록됩니다.`}
-          warning={GROUP_APPROVE_WARNING}
+          warning={`모든 배치에 같은 판정이 적용됩니다. ${GROUP_APPROVE_WARNING}`}
           targets={approveTargets}
           busy={busy}
           error={groupError}

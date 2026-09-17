@@ -2,7 +2,7 @@
 
 > 현재 구현된 시스템 전체를 문서화한 기준선(as-built) PRD.
 > 프로세스 정의(요구사항 원본): `.claude/commands/qc-schedule-process.md` · 구현 현황: `docs/qc-schedule-status.md` · 상세 흐름: `docs/WORKFLOW-current-system.md`
-> 최종 갱신: 2026-06-22
+> 최종 갱신: 2026-09-18
 
 **상태 범례**: ✅ 구현·운영 / 🟡 부분 구현 / 🧩 플레이스홀더(화면만) / ⬜ 계획
 
@@ -208,7 +208,7 @@ qc_jobs + qc_job_items 생성 (QC번호 채번 qcNumber.ts)
   검토 이력·단계 이력은 배치마다 따로 남는다. 그룹 승인(`POST /api/qc-jobs/group/[groupId]/approve`)은 **원자적이지 않다** — 작업마다 기존 `advanceJobStage`(전 항목 검토 완료 확인·오더 동기화·이력·알림)를 부르고 불충족 배치는 건너뛴다.
   라우트 `POST /api/qc-jobs/group/[groupId]/review`·`/review-bulk`·`/approve`(requireAdmin), 서비스 `backend/services/qcJobGroupStage.ts`, 결과 토스트 "처리 N · 건너뜀 M". 검토 취소·재실시·직접 변경은 전파하지 않는다.
   규칙: `intent/2026-09-15-group-stage-progress-spec.md`. 배포 순서: SQL 0051 → 앱.
-- **동일 시험항목 그룹의 짝 배치 전파**(2026-09-17, 마이그레이션 없음): 그룹 내 취소·삭제되지 않은 모든 배치의 시험항목 이름 집합(trim·중복 제거·순서 무관, 빈 집합 제외)이 같으면(`concurrentGroups.getGroupTestItemSetIdentity`) 개별 경로의 항목 시작·완료·시작 취소, 작업 상태·단계 변경, 항목 검토·일괄 검토가 짝 배치에도 적용된다(`qcJobGroupStage.ts`). 권한은 원본 배치만 검사하고, 짝 배치가 이미 목표 상태거나 조건이 안 맞으면 건너뛰며, 짝 실패는 원본을 롤백하지 않고 응답 `propagation`(처리·건너뜀·실패)과 화면 안내로 남긴다. 이력에는 "[그룹 전파]"·원본 QC번호가 붙는다. 집합이 다르면 원본만 처리하고 기존 그룹 버튼 동작은 그대로다. 결과값 복사는 하지 않는다. 규칙: `intent/2026-09-17-concurrent-identical-item-workflow-spec.md`.
+- **동일 시험항목 그룹의 짝 배치 전파**(2026-09-17, 2026-09-18 범위 축소, 마이그레이션 없음): 그룹 내 취소·삭제되지 않은 모든 배치의 시험항목 이름 집합(trim·중복 제거·순서 무관, 빈 집합 제외)이 같으면(`concurrentGroups.getGroupTestItemSetIdentity`) 개별 경로의 **물리적 진행 전이(항목 시작·완료·시작 취소)만** 짝 배치에도 적용된다(`qcJobGroupStage.ts`). 적합·부적합 판정, 검토 시작·완료·반려·재실시, 승인 단계·승인, 담당자 상태 변경은 배치마다 결과가 다를 수 있어 **개별 경로에서는 원본 배치만** 처리한다(명시적 그룹 검토·승인 버튼은 위 일괄 기능으로 유지). 권한은 원본 배치만 검사하고, 짝 배치가 이미 목표 상태거나 조건이 안 맞으면 건너뛰며, 짝 실패는 원본을 롤백하지 않고 응답 `propagation`(처리·건너뜀·실패)과 화면 안내로 남긴다. 화면 배지는 "시험항목 동일 · 진행 함께 / 판정·검토·승인은 배치별". 집합이 다르면 원본만 처리한다. 결과값 복사는 하지 않는다. 규칙: `intent/2026-09-17-concurrent-identical-item-workflow-spec.md`.
 - **스케줄 부가**: `operator_schedule`(휴가), `equipment_reservation`(예약), `reassignment_history`(재배정), 동시분석 그룹, `concurrent_product_families`/`concurrent_product_family_members`(동시분석 품목군 마스터, product_code unique), `holidays`/`public_holidays`(source api|manual), `equipment_master`.
 - **마이그레이션**: **0001~0024**. ⚠️ 라이브 DB가 일부 마이그레이션과 불일치 — 특히 **0021~0024는 수동 적용 대상**(Supabase 대시보드 SQL Editor, idempotent). 0011/0014~0018·0020도 수동 적용 필요분 존재(graceful 폴백 내장).
 

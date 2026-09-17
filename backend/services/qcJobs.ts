@@ -1657,8 +1657,7 @@ export async function advanceJobStage(
   expected?: string,
   /** 전이를 실행한 관리자(로그인 사용자) id — 상태 이력에 남긴다 */
   changedBy?: string,
-  options?: { propagated?: boolean; propagationSourceQcNo?: string },
-): Promise<{ from: JobStage; to: JobStage; propagation?: unknown }> {
+): Promise<{ from: JobStage; to: JobStage }> {
   const { data: job } = await supabaseAdmin
     .from('qc_jobs')
     .select('status, order_id, work_end_date, qc_no')
@@ -1698,9 +1697,7 @@ export async function advanceJobStage(
     jobId, orderId: updated.order_id as string,
     fromStatus: current, toStatus: target,
     changedBy: changedBy ?? null, source: 'manual',
-    note: options?.propagationSourceQcNo
-      ? `[그룹 전파 · 원본 QC ${options.propagationSourceQcNo}] ${STAGE_ACTION_LABEL[current] ?? '단계 전이'}`
-      : STAGE_ACTION_LABEL[current] ?? '단계 전이',
+    note: STAGE_ACTION_LABEL[current] ?? '단계 전이',
   })
 
   // 슬랙 알림은 부가 기능이다 — 응답을 붙잡지 않도록 await 하지 않는다.
@@ -1719,12 +1716,7 @@ export async function advanceJobStage(
     severity: 'info',
   })
 
-  let propagation: unknown
-  if (!options?.propagated) {
-    const { propagateToGroupMates } = await import('@backend/services/qcJobGroupStage')
-    propagation = await propagateToGroupMates(jobId, changedBy ?? '', { kind: 'stage', expected: current })
-  }
-  return { from: current, to: target, ...(propagation ? { propagation } : {}) }
+  return { from: current, to: target }
 }
 
 /** 항목을 만지기 전 공통 확인 — 소유권 + 작업 단계 + 항목 존재 + 검토 흔적.
@@ -1934,9 +1926,9 @@ export async function clearItem(
  *  (검토가 이미 시작된 작업이면 진행중이 아니라 검토중·승인전으로 돌아간다).
  */
 export async function changeJobStatus(
-  jobId: string, userSub: string, status: string, options?: { propagated?: boolean; propagationSourceQcNo?: string },
+  jobId: string, userSub: string, status: string,
 ): Promise<{ from: string; to: string; message?: string }> {
-  if (!options?.propagated) await assertOwner(jobId, userSub)
+  await assertOwner(jobId, userSub)
   if (!TESTER_STATUS_CHANGE_STATUSES.has(status)) {
     throw new Error(`"${status}" 는 담당자가 직접 지정할 수 없습니다. 검토·승인은 관리자가 작업 현황에서 진행합니다.`)
   }
@@ -1958,14 +1950,12 @@ export async function changeJobStatus(
 
   // F1-3 — 지연 해제는 도출 단계로 복귀
   let target = status
-  let note = options?.propagationSourceQcNo
-    ? `[그룹 전파 · 원본 QC ${options.propagationSourceQcNo}] 담당자 상태 변경`
-    : '담당자 상태 변경'
+  let note = '담당자 상태 변경'
   if (current === DELAYED_STATUS) {
     const derived = await deriveJobStage(jobId)
     if (!derived) throw new Error('작업을 찾을 수 없습니다.')
     target = derived
-    if (derived !== status) note = `${options?.propagationSourceQcNo ? `[그룹 전파 · 원본 QC ${options.propagationSourceQcNo}] ` : ''}담당자 상태 변경 — 항목 상태에 따라 '${derived}' 로 복귀`
+    if (derived !== status) note = `담당자 상태 변경 — 항목 상태에 따라 '${derived}' 로 복귀`
   }
 
   const patch: Record<string, unknown> = { status: target }
@@ -2000,12 +1990,7 @@ export async function changeJobStatus(
   // 리뷰 M3 — 잠금 밖 도출값의 경합을 수렴시킨다
   const finalStage = await settleDerivedStage(jobId, userSub, target)
   const message = stageDiffMessage(status, finalStage)
-  let propagation: unknown
-  if (!options?.propagated) {
-    const { propagateToGroupMates } = await import('@backend/services/qcJobGroupStage')
-    propagation = await propagateToGroupMates(jobId, userSub, { kind: 'job_status', status })
-  }
-  return { from: current, to: finalStage, ...(message ? { message } : {}), ...(propagation ? { propagation } : {}) }
+  return { from: current, to: finalStage, ...(message ? { message } : {}) }
 }
 
 /**
