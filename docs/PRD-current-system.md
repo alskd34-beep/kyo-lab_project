@@ -61,6 +61,7 @@
 제조팀 Google Sheet
   │ ① 크론(9시/14시) 또는 수동 — pctIngest.ts
   ▼ 신규/수정/삭제 diff 감지 · 미등록 품목 자동등록(product_synced=false) · D-7 마감 알림
+  │   (시트 품목명이 비면 품목코드로 품목마스터 이름을 채움, 마스터에도 없으면 '적재하지 못한 행')
 pct_orders (DB 영속)  ── pct_ingest_log / pct_order_edits(field·before·after)
   │ ② 동시분석 그룹 자동 재생성(잠금 그룹 보존) — concurrentGroups.ts
   ▼

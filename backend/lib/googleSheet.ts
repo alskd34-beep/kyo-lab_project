@@ -195,10 +195,10 @@ export function parsePctCsv(csvText: string): SheetPctResult {
     // 완전히 빈 줄(시트의 메모·구분선)은 세지 않는다 — 그건 누락이 아니다.
     if (!productName && !batchNo && !rawCode) continue
 
-    // 품목명과 제조번호는 만들어 낼 수 없다. 품목명이 없으면 코드를 유도할 근거가 없고,
-    // 제조번호가 없으면 자연키가 성립하지 않는다. 버리되 **사유와 함께 돌려준다** —
-    // 조용히 사라지면 사후 추적이 불가능하다(이 파일의 원칙).
-    if (!productName) { skipped.push({ reason: '품목명 없음', productName, batchNo }); continue }
+    // 제조번호는 만들어 낼 수 없다. 품목명은 코드가 있으면 인제스트 단계에서
+    // 품목마스터와 대조해 보완할 수 있으므로, 코드가 있는 행은 보존한다.
+    // 코드도 없으면 기존처럼 품목명에서 임시 코드를 만들기 위해 품목명이 필요하다.
+    if (!productName && !rawCode) { skipped.push({ reason: '품목명 없음', productName, batchNo }); continue }
     if (!batchNo)     { skipped.push({ reason: '제조번호 없음', productName, batchNo }); continue }
 
     const codeGenerated = !rawCode

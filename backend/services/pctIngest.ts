@@ -171,8 +171,40 @@ function diffChanged(existing: ExistingOrder, row: SheetPctRow, hasValidationCol
 /** 적재 실행 (크론/수동 트리거 공용) */
 export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestResult> {
   const fileId = fileIdOverride || (await resolveSheetFileId())
-  const { rows: sheetRows, skipped: skippedRows } = await fetchPctSheet(fileId)
+  const { rows: parsedSheetRows, skipped: parsedSkippedRows } = await fetchPctSheet(fileId)
   void MUTABLE // 문서용(diff는 diffChanged에서 명시 비교)
+
+  // ── 품목마스터 코드·명 일괄 조회 및 시트 품목명 보완 ────────────────────────
+  // 품목이 1000개를 넘으면 기본 limit 에 잘려 "미동기화" 오탐이 난다 → selectAll.
+  // 품목코드만 있는 행도 여기서 한 번에 이름을 보완해 자연키 계산 전에 확정한다.
+  const { data: prodRows, error: prodErr } = await selectAll(supabaseAdmin, 'products', 'product_code, name')
+  if (prodErr) throw new Error(`품목마스터 조회 실패: ${prodErr.message}`)
+  const productCodes = new Set<string>()
+  const productNamesByCode = new Map<string, string>()
+  for (const p of prodRows ?? []) {
+    const code = String(p.product_code ?? '').trim()
+    if (!code) continue
+    productCodes.add(code)
+    const name = String(p.name ?? '').trim()
+    if (name && !productNamesByCode.has(code)) productNamesByCode.set(code, name)
+  }
+  const skippedRows = [...parsedSkippedRows]
+  const sheetRows: SheetPctRow[] = []
+  for (const row of parsedSheetRows) {
+    if (row.productName.trim()) {
+      sheetRows.push(row)
+      continue
+    }
+    const masterName = productNamesByCode.get(row.productCode.trim())
+    if (masterName) {
+      // 시트에 이름이 있으면 위 분기에서 그대로 유지한다(시트 값 우선).
+      sheetRows.push({ ...row, productName: masterName })
+      continue
+    }
+    const reason = `품목명 없음 — 품목코드 ${row.productCode}가 품목마스터에 없음`
+    console.warn(`[pct-ingest] ${reason} (제조번호: ${row.batchNo})`)
+    skippedRows.push({ reason, productName: '', batchNo: row.batchNo })
+  }
 
   // ── 기존 오더 로드 (전체 — '삭제' 포함) ─────────────────────────────────────
   // Supabase 기본 1000행 상한을 넘기지 않도록 페이지네이션한다. selectAllRange 의
@@ -249,12 +281,6 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
   const hasLockedColumn = firstRow != null && 'locked' in firstRow
   const withLocked = <T extends Record<string, unknown>>(patch: T, lock: boolean) =>
     (hasLockedColumn ? { ...patch, locked: lock, locked_by: null, locked_at: null } : patch)
-
-  // ── 품목마스터 코드 집합 ───────────────────────────────────────────────────
-  // 품목이 1000개를 넘으면 기본 limit 에 잘려 "미동기화" 오탐이 난다 → selectAll
-  const { data: prodRows, error: prodErr } = await selectAll(supabaseAdmin, 'products', 'product_code')
-  if (prodErr) throw new Error(`품목마스터 조회 실패: ${prodErr.message}`)
-  const productCodes = new Set((prodRows ?? []).map(p => String(p.product_code)))
 
   const result: IngestResult = {
     fileId, total: sheetRows.length, created: 0, updated: 0, blocked: 0, deleted: 0, restored: 0, unsynced: 0,
