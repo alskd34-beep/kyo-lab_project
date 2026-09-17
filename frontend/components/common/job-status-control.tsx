@@ -30,7 +30,7 @@ import type { GroupApproveResult } from "@shared/qc-group-stage"
 import { api, errorMessage } from "@frontend/lib/api-client"
 import {
   GroupTargetConfirmDialog, groupApplyLabel, groupApproveTargets, isGroupActionable,
-  useGroupStageResultToast, type JobGroupSummary,
+  useGroupPropagationResultToast, useGroupStageResultToast, type JobGroupSummary,
 } from "@frontend/components/common/job-group-stage"
 import { cn } from "@frontend/lib/utils"
 import { Button } from "@frontend/components/ui/button"
@@ -61,6 +61,7 @@ export function JobStatusControl({
   const [groupConfirm, setGroupConfirm] = useState(false)
   const [groupError, setGroupError] = useState<string | null>(null)
   const showGroupResult = useGroupStageResultToast()
+  const showPropagationResult = useGroupPropagationResultToast()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // 단계 전이 확인 대기 — 두 패널(확인/직접 변경)은 동시에 열리지 않는다
@@ -107,8 +108,9 @@ export function JobStatusControl({
         // 화면이 보고 있던 단계를 함께 보내 동시 클릭을 막는다
         body: JSON.stringify({ expected: status }),
       })
-      const data = await res.json().catch(() => ({})) as { error?: string }
+      const data = await res.json().catch(() => ({})) as { error?: string; propagation?: { applied: number; skipped: number; failed: number; warnings: string[] } }
       if (!res.ok) throw new Error(data.error ?? "단계 변경 실패")
+      if (data.propagation) showPropagationResult("승인 단계 전파", data.propagation)
       setConfirming(false)
       onChanged()
     } catch (e) {
@@ -128,8 +130,9 @@ export function JobStatusControl({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: target, reason }),
       })
-      const data = await res.json().catch(() => ({})) as { error?: string; message?: string }
+      const data = await res.json().catch(() => ({})) as { error?: string; message?: string; propagation?: { applied: number; skipped: number; failed: number; warnings: string[] } }
       if (!res.ok) throw new Error(data.error ?? "상태 변경 실패")
+      if (data.propagation) showPropagationResult("작업 상태 전파", data.propagation)
       setNotice(data.message ?? null)
       setManualOpen(false); setTarget(""); setReason("")
       setConfirming(false)

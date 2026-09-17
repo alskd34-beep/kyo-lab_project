@@ -176,7 +176,7 @@ qc_jobs + qc_job_items 생성 (QC번호 채번 qcNumber.ts)
 - **향정신성**(자이렌정·아디펙스정): 강지윤·김정호 배정 제외 + 관리자 알림.
 - **개별 중금속**: 금요일 주차 순환(박성호→이영남→정예찬), 공수 1DAY 고정(`isoWeekIndex`).
 - **병렬 배정과의 관계**: AI 자동배정은 대표 담당자(슬롯 1)만 채우고 병렬 배정을 만들지 않으며, 병렬 배정 오더(담당자 2명 이상)는 대상에서 뺀다. 현재 부하·고난도 가중은 담당자 N명 모두 센다. (엔진의 solo/duo 조 = `can_duo` 자격 개념은 병렬 배정과 별개)
-- **동시분석 그룹**: 동일/유사 품목을 한 시험자에게 묶어 1회 공수로 배정(대표 오더만 엔진 투입, 멤버 전파). 시작일 = MAX(포장완료일)+1일. 그룹핑은 **동시분석 품목군 마스터(`concurrent_product_families`) 우선 + 유사명/AI 규칙 보완**.
+- **동시분석 그룹**: 동일/유사 품목을 한 시험자에게 묶어 1회 공수로 배정(대표 오더만 엔진 투입, 멤버 전파). 시작일 = MAX(포장완료일)+1일. 그룹핑은 **동시분석 품목군 마스터(`concurrent_product_families`) 우선 + 유사명/AI 규칙 보완**. AI 자동배정도 시작 시 `ensureAutoGroups` 로 아직 그룹이 없는 오더의 자동 그룹을 DB 에 만들고(잠기지 않은 기존 자동 그룹에 이어지면 그 그룹에 추가, 수동·LOCK 그룹은 건드리지 않음, 실패해도 배정은 계속) 오더 화면 동시분석 탭에 바로 보인다(2026-09-17).
 - **개별항목 분산**: 키워드 품목(`INDIVIDUAL_ITEM_PRODUCT_KEYWORDS`)은 시험항목 단위로 여러 시험자에 분산.
 - **휴가 제외 + 가능 품목 제안**: 휴가/출장 기간 시험자는 배정 후보 제외. `leaveSuggestions.ts`가 남은 인원 역량으로 대기 오더를 가능/휴가로불가(복귀시가능)/자격자없음 으로 분류해 휴가 캘린더에서 제안.
 - **엔진 선택**: `ENABLE_CODEX_ASSIGN`이면 Codex CLI(`codexCli.ts`) 우선, 실패/미설정 시 순수 규칙엔진(`scheduleEngine.ts`) 폴백. 양쪽 모두 `withForcedRules`로 특수규칙 강제.
@@ -206,6 +206,7 @@ qc_jobs + qc_job_items 생성 (QC번호 채번 qcNumber.ts)
   검토 이력·단계 이력은 배치마다 따로 남는다. 그룹 승인(`POST /api/qc-jobs/group/[groupId]/approve`)은 **원자적이지 않다** — 작업마다 기존 `advanceJobStage`(전 항목 검토 완료 확인·오더 동기화·이력·알림)를 부르고 불충족 배치는 건너뛴다.
   라우트 `POST /api/qc-jobs/group/[groupId]/review`·`/review-bulk`·`/approve`(requireAdmin), 서비스 `backend/services/qcJobGroupStage.ts`, 결과 토스트 "처리 N · 건너뜀 M". 검토 취소·재실시·직접 변경은 전파하지 않는다.
   규칙: `intent/2026-09-15-group-stage-progress-spec.md`. 배포 순서: SQL 0051 → 앱.
+- **동일 시험항목 그룹의 짝 배치 전파**(2026-09-17, 마이그레이션 없음): 그룹 내 취소·삭제되지 않은 모든 배치의 시험항목 이름 집합(trim·중복 제거·순서 무관, 빈 집합 제외)이 같으면(`concurrentGroups.getGroupTestItemSetIdentity`) 개별 경로의 항목 시작·완료·시작 취소, 작업 상태·단계 변경, 항목 검토·일괄 검토가 짝 배치에도 적용된다(`qcJobGroupStage.ts`). 권한은 원본 배치만 검사하고, 짝 배치가 이미 목표 상태거나 조건이 안 맞으면 건너뛰며, 짝 실패는 원본을 롤백하지 않고 응답 `propagation`(처리·건너뜀·실패)과 화면 안내로 남긴다. 이력에는 "[그룹 전파]"·원본 QC번호가 붙는다. 집합이 다르면 원본만 처리하고 기존 그룹 버튼 동작은 그대로다. 결과값 복사는 하지 않는다. 규칙: `intent/2026-09-17-concurrent-identical-item-workflow-spec.md`.
 - **스케줄 부가**: `operator_schedule`(휴가), `equipment_reservation`(예약), `reassignment_history`(재배정), 동시분석 그룹, `concurrent_product_families`/`concurrent_product_family_members`(동시분석 품목군 마스터, product_code unique), `holidays`/`public_holidays`(source api|manual), `equipment_master`.
 - **마이그레이션**: **0001~0024**. ⚠️ 라이브 DB가 일부 마이그레이션과 불일치 — 특히 **0021~0024는 수동 적용 대상**(Supabase 대시보드 SQL Editor, idempotent). 0011/0014~0018·0020도 수동 적용 필요분 존재(graceful 폴백 내장).
 

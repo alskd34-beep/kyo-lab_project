@@ -66,5 +66,7 @@ export interface JobGroupSummary {
   groupLabel: string | null
   /** 그룹의 오더 수(= "동시분석 N건") */
   orderCount: number
+  /** 시작된 그룹 작업들의 시험항목 집합이 완전히 같은지(전파의 서버 보조 표시) */
+  sameTestItemSet: boolean
   members: GroupMember[]
 }

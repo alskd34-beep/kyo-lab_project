@@ -23,6 +23,8 @@ export interface OverviewJob {
   workEndDate: string | null
   /** 동시분석 그룹의 오더 수 — 2 이상이면 "동시 N" 배지 */
   groupSize?: number
+  /** 시험항목 집합이 같아 그룹 전파가 가능한지 */
+  sameTestItemSet?: boolean
 }
 
 export interface OverviewPending {
@@ -132,6 +134,11 @@ export function JobChip({
         <span className="truncate font-mono text-xs leading-normal font-bold text-blue-700 dark:text-blue-300">QC {job.qcNo}</span>
         <span className="flex shrink-0 items-center gap-1">
           <ConcurrentBadge size={job.groupSize} />
+          {(job.groupSize ?? 0) > 1 && (
+            <Badge variant={job.sameTestItemSet ? "secondary" : "outline"} className="px-1 py-0 text-xs leading-normal">
+              {job.sameTestItemSet ? "시험항목 동일 · 함께 진행" : "시험항목 상이 · 개별 진행"}
+            </Badge>
+          )}
           {job.isUrgent && (
             <Badge variant="outline" className="border-red-200 px-1 py-0 text-xs leading-normal text-red-700 dark:border-red-800 dark:text-red-300">
               긴급

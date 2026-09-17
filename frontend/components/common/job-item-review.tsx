@@ -29,7 +29,7 @@ import { Input } from "@frontend/components/ui/input"
 import type { GroupReviewResult } from "@shared/qc-group-stage"
 import {
   GroupTargetConfirmDialog, groupApplyLabel, groupReviewItemCount, groupReviewTargets, isGroupActionable,
-  useGroupStageResultToast, type JobGroupSummary,
+  useGroupPropagationResultToast, useGroupStageResultToast, type JobGroupSummary,
 } from "@frontend/components/common/job-group-stage"
 import {
   Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -219,6 +219,7 @@ export function ItemReviewActions({ jobId, jobStatus, item, disabled = false, on
   const [confirmComplete, setConfirmComplete] = useState(false)
   const [confirmGroupComplete, setConfirmGroupComplete] = useState(false)
   const showGroupResult = useGroupStageResultToast()
+  const showPropagationResult = useGroupPropagationResultToast()
 
   if (jobStatus === CLOSED_STAGE || item.status !== ITEM_CLEARED) return null
   const rs = reviewStatusOf(item)
@@ -250,7 +251,8 @@ export function ItemReviewActions({ jobId, jobStatus, item, disabled = false, on
   async function run(action: ItemReviewAction, reason?: string) {
     setBusy(true); setError(null)
     try {
-      await api.post(`/api/qc-jobs/${jobId}/items/${item.id}/review`, reason === undefined ? { action } : { action, reason })
+      const res = await api.post<{ propagation?: { applied: number; skipped: number; failed: number; warnings: string[] } }>(`/api/qc-jobs/${jobId}/items/${item.id}/review`, reason === undefined ? { action } : { action, reason })
+      if (res.propagation) showPropagationResult(`검토 ${ITEM_REVIEW_ACTION_LABEL[action]} 전파`, res.propagation)
       setReasonAction(null)
       setConfirmComplete(false)
       onChanged()
@@ -358,6 +360,7 @@ export function BulkReviewBar({ jobId, jobStatus, items, onChanged, className, g
   const [confirmComplete, setConfirmComplete] = useState(false)
   const [confirmGroupComplete, setConfirmGroupComplete] = useState(false)
   const showGroupResult = useGroupStageResultToast()
+  const showPropagationResult = useGroupPropagationResultToast()
 
   const groupOn = isGroupActionable(group)
   const groupStartTargets = groupOn ? groupReviewTargets(group, "review_start", null) : []
@@ -391,7 +394,8 @@ export function BulkReviewBar({ jobId, jobStatus, items, onChanged, className, g
   async function run(action: ItemReviewBulkAction) {
     setBusy(action); setError(null)
     try {
-      await api.post(`/api/qc-jobs/${jobId}/review-bulk`, { action })
+      const res = await api.post<{ propagation?: { applied: number; skipped: number; failed: number; warnings: string[] } }>(`/api/qc-jobs/${jobId}/review-bulk`, { action })
+      if (res.propagation) showPropagationResult("일괄 검토 전파", res.propagation)
       setConfirmComplete(false)
       onChanged()
     } catch (e) {

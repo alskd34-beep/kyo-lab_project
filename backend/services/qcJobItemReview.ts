@@ -70,6 +70,7 @@ function checkReason(action: ItemReviewAction, reason: unknown): string | null {
  */
 export async function reviewJobItem(
   jobId: string, itemId: string, userSub: string, action: unknown, reason: unknown,
+  options?: { propagated?: boolean; propagationSourceQcNo?: string },
 ): Promise<ItemReviewResult> {
   if (!isItemReviewAction(action)) throw new Error('알 수 없는 검토 동작입니다.')
   const note = checkReason(action, reason)
@@ -80,13 +81,23 @@ export async function reviewJobItem(
   if (!owner || (owner.qc_job_id as string) !== jobId) throw new Error('시험항목을 찾을 수 없습니다.')
 
   const { data, error } = await rpcWithDeadlockRetry('item_review_action', {
-    p_item_id: itemId, p_user_id: userSub, p_action: action, p_reason: note,
+    p_item_id: itemId, p_user_id: userSub, p_action: action,
+    p_reason: options?.propagated && note
+      ? `[그룹 전파 · 원본 QC ${options.propagationSourceQcNo ?? '-'}] ${note}`
+      : note,
   })
   if (error) throw translateItemReviewRpcError(error)
 
   const res = data as ItemReviewResult
   // ── 여기부터는 커밋 뒤다. 알림 실패는 검토를 되돌리지 않는다 ──
   await notifyStageRecomputed(res.stage)
+  if (!options?.propagated) {
+    const { propagateToGroupMates } = await import('@backend/services/qcJobGroupStage')
+    const propagation = await propagateToGroupMates(jobId, userSub, {
+      kind: 'review', itemName: res.testItemName, action: String(action), reason: note ?? undefined,
+    })
+    return { ...res, propagation } as ItemReviewResult & { propagation: unknown }
+  }
   return res
 }
 
@@ -95,7 +106,7 @@ export async function reviewJobItem(
  * 한 트랜잭션, 전부 성공 아니면 전부 실패(F1-4). 대상 0건이면 "처리할 시험항목이 없습니다."
  */
 export async function bulkReviewJobItems(
-  jobId: string, userSub: string, action: unknown,
+  jobId: string, userSub: string, action: unknown, options?: { propagated?: boolean; propagationSourceQcNo?: string },
 ): Promise<BulkReviewResult> {
   if (!isItemReviewBulkAction(action)) throw new Error('알 수 없는 검토 동작입니다.')
 
@@ -106,5 +117,10 @@ export async function bulkReviewJobItems(
 
   const res = data as BulkReviewResult
   await notifyStageRecomputed(res.stage)
+  if (!options?.propagated) {
+    const { propagateToGroupMates } = await import('@backend/services/qcJobGroupStage')
+    const propagation = await propagateToGroupMates(jobId, userSub, { kind: 'review_bulk', action: String(action) })
+    return { ...res, propagation } as BulkReviewResult & { propagation: unknown }
+  }
   return res
 }

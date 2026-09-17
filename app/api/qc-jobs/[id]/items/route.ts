@@ -32,8 +32,8 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       return Response.json({ ok: true, ...result })
     }
     if (body.action === 'cancel') {
-      await cancelItemStart(id, body.itemId, auth.payload.sub)
-      return Response.json({ ok: true })
+      const result = await cancelItemStart(id, body.itemId, auth.payload.sub)
+      return Response.json({ ok: true, ...result })
     }
     if (body.action === 'clear') {
       const result = await clearItem(id, body.itemId, auth.payload.sub)

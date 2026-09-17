@@ -63,6 +63,65 @@ export interface BuiltGroup {
   items: GroupItem[]
 }
 
+/**
+ * 워크플로우 전파를 허용할 시험항목 집합 비교.
+ * 순서·중복은 의미가 없고 이름(공백 양끝 제거)의 집합만 비교한다.
+ * 그룹 생성의 '유사 품목' 규칙과 달리, 전파는 이 엄격한 판정만 사용한다.
+ */
+function normalizeTestItemNames(names: readonly string[]): string[] {
+  return [...new Set(names.map(name => name.trim()).filter(Boolean))].sort()
+}
+
+function identityFromItemSets(itemSets: readonly (readonly string[])[]): string | null {
+  // 항목 0건은 실제 동시분석 전파 대상이 아니므로 동일로 취급하지 않는다.
+  if (itemSets.length < 2) return null
+  const first = normalizeTestItemNames(itemSets[0])
+  if (first.length === 0) return null
+  const identity = first.join('\u001f')
+  return itemSets.slice(1).every(names => normalizeTestItemNames(names).join('\u001f') === identity)
+    ? identity
+    : null
+}
+
+/** 표시·전파·항목 조작·검토·승인이 공유하는 시험항목 집합 판정. */
+export async function getGroupTestItemSetIdentity(groupId: string): Promise<string | null>
+export function getGroupTestItemSetIdentity(itemSets: readonly (readonly string[])[]): string | null
+export function getGroupTestItemSetIdentity(
+  input: string | readonly (readonly string[])[],
+): Promise<string | null> | string | null {
+  if (typeof input !== 'string') return identityFromItemSets(input)
+  return (async () => {
+    const { data: members, error: membersError } = await supabaseAdmin
+      .from('concurrent_analysis_group_items').select('order_id').eq('group_id', input)
+    if (membersError) throw membersError
+    const orderIds = (members ?? []).map(row => row.order_id as string)
+    if (orderIds.length < 2) return null
+    // 취소·삭제된 오더는 그룹 판정에서 제외한다. qc_job_items에는 N/A/제외 항목이 생성되지 않는다.
+    const { data: orders, error: ordersError } = await supabaseAdmin
+      .from('pct_orders').select('id, status').in('id', orderIds)
+    if (ordersError) throw ordersError
+    const activeOrderIds = (orders ?? [])
+      .filter(row => !['취소', '삭제', 'cancelled', 'deleted'].includes(String(row.status)))
+      .map(row => row.id as string)
+    if (activeOrderIds.length < 2) return null
+    const { data: jobs, error: jobsError } = await supabaseAdmin
+      .from('qc_jobs').select('id').in('order_id', activeOrderIds)
+    if (jobsError) throw jobsError
+    const jobIds = (jobs ?? []).map(row => row.id as string)
+    if (jobIds.length < 2) return null
+    const { data: items, error: itemsError } = await supabaseAdmin
+      .from('qc_job_items').select('qc_job_id, test_item_name').in('qc_job_id', jobIds)
+    if (itemsError) throw itemsError
+    const namesByJob = new Map<string, string[]>()
+    for (const row of items ?? []) {
+      const names = namesByJob.get(row.qc_job_id as string) ?? []
+      names.push(row.test_item_name as string)
+      namesByJob.set(row.qc_job_id as string, names)
+    }
+    return identityFromItemSets(jobIds.map(id => namesByJob.get(id) ?? []))
+  })()
+}
+
 /** packaging_date(yyyy-MM-dd) + 1일 → yyyy-MM-dd (UTC 기준) */
 function addOneDay(iso: string): string {
   const d = new Date(iso + 'T00:00:00Z')
@@ -242,6 +301,116 @@ async function loadFamilyByCodeRaw(): Promise<Map<string, string>> {
   return m
 }
 
+/**
+ * 자동배정이 메모리에서만 그룹을 계산하던 경로를 DB에도 반영한다.
+ *
+ * 적재 크론은 이미 rebuildGroups()를 호출하지만, 수동 오더나 크론 이후 추가된
+ * 오더를 AI가 바로 배정하는 경우에는 크론을 거치지 않을 수 있다. 기존 멤버는
+ * 건드리지 않고, 아직 어떤 그룹에도 속하지 않은 자동 그룹만 추가한다. 따라서
+ * 수동/LOCK 그룹의 구성과 LOCK 규칙은 변하지 않는다.
+ */
+export async function ensureAutoGroups(): Promise<{ created: number }> {
+  const [ordersRes, groupsRes, itemsRes] = await Promise.all([
+    selectAll(supabaseAdmin, 'pct_orders',
+      'id, product_code, product_name, batch_no, packaging_date, due_date, status'),
+    selectAll(supabaseAdmin, 'concurrent_analysis_groups', '*'),
+    selectAll(supabaseAdmin, 'concurrent_analysis_group_items', 'group_id, order_id'),
+  ])
+  if (ordersRes.error) throw new Error(ordersRes.error.message)
+  if (groupsRes.error) throw new Error(groupsRes.error.message)
+  if (itemsRes.error) throw new Error(itemsRes.error.message)
+
+  const groupRows = groupsRes.data ?? []
+  const groupByOrder = new Map<string, string[]>()
+  for (const row of itemsRes.data ?? []) {
+    const groupId = row.group_id as string
+    const orderId = row.order_id as string
+    const orderGroups = groupByOrder.get(orderId) ?? []
+    orderGroups.push(groupId)
+    groupByOrder.set(orderId, orderGroups)
+  }
+  const groupedOrderIds = new Set(groupByOrder.keys())
+  const eligibleAutoGroupIds = new Set(
+    groupRows
+      .filter(row => !row.group_lock && (row.source ?? 'auto') !== 'manual')
+      .map(row => row.id as string),
+  )
+  const candidates: OrderForGrouping[] = (ordersRes.data ?? [])
+    .filter(row => row.status !== DELETED_STATUS)
+    .map(row => ({
+      id: row.id as string,
+      productCode: (row.product_code as string) ?? '',
+      productName: (row.product_name as string) ?? '',
+      batchNo: (row.batch_no as string) ?? '',
+      packagingDate: (row.packaging_date as string) ?? null,
+      dueDate: (row.due_date as string) ?? null,
+    }))
+  if (candidates.length === 0) return { created: 0 }
+
+  const built = buildGroupsFromOrders(candidates, await loadFamilyByCodeRaw())
+  let created = 0
+  for (const group of built) {
+    const existingAutoGroupIds = new Set<string>()
+    for (const item of group.items) {
+      for (const groupId of groupByOrder.get(item.orderId) ?? []) {
+        if (eligibleAutoGroupIds.has(groupId)) existingAutoGroupIds.add(groupId)
+      }
+    }
+    const ungroupedItems = group.items.filter(item => !groupedOrderIds.has(item.orderId))
+
+    // 새 오더가 이미 존재하는 자동 그룹의 품목군에 연결되면 그 그룹에 편입한다.
+    // 수동 그룹·LOCK 그룹의 멤버는 이동하거나 복제하지 않는다.
+    if (existingAutoGroupIds.size > 0) {
+      const targetGroupId = existingAutoGroupIds.values().next().value as string
+      if (ungroupedItems.length === 0) continue
+      const { error: itemErr } = await supabaseAdmin
+        .from('concurrent_analysis_group_items')
+        .insert(ungroupedItems.map(item => ({
+          group_id: targetGroupId,
+          order_id: item.orderId,
+          packaging_complete_date: item.packagingDate,
+        })))
+      if (itemErr) throw itemErr
+      const { error: updateErr } = await supabaseAdmin
+        .from('concurrent_analysis_groups')
+        .update({ test_start_date: group.testStartDate })
+        .eq('id', targetGroupId)
+      if (updateErr) throw updateErr
+      for (const item of ungroupedItems) groupedOrderIds.add(item.orderId)
+      continue
+    }
+
+    // 기존 그룹이 수동/LOCK 이거나 이미 모든 오더가 소속된 경우에는 건너뛴다.
+    if (ungroupedItems.length !== group.items.length) continue
+    const { data: groupRow, error: groupErr } = await supabaseAdmin
+      .from('concurrent_analysis_groups')
+      .insert({
+        group_key: group.groupKey,
+        test_start_date: group.testStartDate,
+        group_lock: false,
+      })
+      .select('id')
+      .single()
+    if (groupErr) throw groupErr
+    const groupId = (groupRow as Record<string, unknown>).id as string
+    const { error: itemErr } = await supabaseAdmin
+      .from('concurrent_analysis_group_items')
+      .insert(group.items.map(item => ({
+        group_id: groupId,
+        order_id: item.orderId,
+        packaging_complete_date: item.packagingDate,
+      })))
+    if (itemErr) {
+      // 헤더만 남기지 않도록 보정 실패 시 방금 만든 자동 그룹을 정리한다.
+      await supabaseAdmin.from('concurrent_analysis_groups').delete().eq('id', groupId)
+      throw itemErr
+    }
+    for (const item of group.items) groupedOrderIds.add(item.orderId)
+    created++
+  }
+  return { created }
+}
+
 // ─── 조회 ────────────────────────────────────────────────────────────────────
 /** 그룹 + 멤버 조인 반환 (시험 시작일 오름차순) */
 export async function listGroups(): Promise<GroupRow[]> {
@@ -323,13 +492,17 @@ export async function rebuildGroups(): Promise<{ created: number; kept: number }
   if (delErr) throw delErr
 
   // 3) 대상 오더 로드 (status != '삭제'). 취소건도 제외.
-  const { data: orders, error: ordErr } = await supabaseAdmin
-    .from('pct_orders')
-    .select('id, product_code, product_name, batch_no, packaging_date, due_date, status')
-    .neq('status', DELETED_STATUS)
+  const ordersRes = await selectAll(
+    supabaseAdmin,
+    'pct_orders',
+    'id, product_code, product_name, batch_no, packaging_date, due_date, status',
+  )
+  const orders = ordersRes.data
+  const ordErr = ordersRes.error
   if (ordErr) throw ordErr
 
   const candidates: OrderForGrouping[] = ((orders ?? []) as Record<string, unknown>[])
+    .filter(o => o.status !== DELETED_STATUS)
     .filter(o => !lockedOrderIds.has(o.id as string))
     .map(o => ({
       id:            o.id as string,

@@ -47,7 +47,9 @@ import { notifyLeaveConflict, warnIfAssigneeOnLeave } from '@backend/services/le
 import {
   findAbsenceConflicts, orderTestWindow, todayIso, type TesterAbsence,
 } from '@shared/leave'
-import { buildGroupsFromOrders, type OrderForGrouping } from '@backend/services/concurrentGroups'
+import {
+  buildGroupsFromOrders, ensureAutoGroups, type OrderForGrouping,
+} from '@backend/services/concurrentGroups'
 import { loadFamilyByCode } from '@backend/services/concurrentProductFamilies'
 import {
   AssignmentRejectedError, loadAssigneesByOrder, setOrderPrimaryAssignee,
@@ -707,6 +709,15 @@ export async function autoAssign(orderIds?: string[]): Promise<AssignResult> {
   const orders = await loadTargetOrders(orderIds)
   if (orders.length === 0) {
     return { mode: 'rule', assigned: 0, unassigned: 0, details: [], halfDayNotices: [], failures: [] }
+  }
+
+  // AI 경로도 동시분석 실행 단위를 영속화한다. 이 호출은 기존 그룹과 LOCK 그룹을
+  // 건드리지 않고, 아직 그룹이 없는 오더에 대해서만 자동 그룹을 추가한다.
+  try {
+    await ensureAutoGroups()
+  } catch (err) {
+    // 그룹 표시용 보정 실패가 실제 AI/규칙 배정을 막지 않도록 한다.
+    console.warn('[pctAssign] 동시분석 그룹 보정 실패 — 배정은 계속 진행:', err)
   }
 
   // [동시분석] 동일 품목군(기준설정 마스터)/유사 품목명을 한 그룹으로 묶고 대표만 배정 대상으로 삼는다.

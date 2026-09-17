@@ -27,6 +27,7 @@ import {
 import { ASSIGNED_TESTER_FILTER_COLUMN, withAssignedTesterEmbed } from '@backend/lib/assigneeFilter'
 import { PRIMARY_ASSIGNEE_SLOT, isParallelAssignment } from '@shared/assignment'
 import { notifyStageChangeToSlack } from '@backend/services/slackNotify'
+import { getGroupTestItemSetIdentity } from '@backend/services/concurrentGroups'
 import type { GroupMember, JobGroupSummary } from '@shared/qc-group-stage'
 import {
   ACTIVE_JOB_STATUSES,
@@ -180,6 +181,8 @@ export interface QcJobRow {
   groupLabel: string | null
   /** 그 그룹의 전체 오더 수(내 것이 아닌 것 포함). "3건 중 2건이 내 몫" 을 알리기 위해 */
   groupSize: number
+  /** 그룹 전체의 활성 작업 시험항목 집합이 같은 경우에만 함께 진행한다. */
+  sameTestItemSet: boolean
   /** 병렬 배정 오더(담당자 2명 이상)인가 — 할 일 화면의 [넘기기](F2) 노출 판정 */
   isParallel: boolean
   /** 이 오더에서 내 담당자 번호(1~5). 담당자 구성에서 빠졌으면 null */
@@ -338,6 +341,13 @@ export async function listWorkspace(userSub: string): Promise<{
     }
   } catch { /* 그룹 정보가 없으면 예전처럼 낱개로 보인다 */ }
 
+  const groupIdentity = new Map<string, boolean>()
+  try {
+    await Promise.all([...new Set([...groupByOrder.values()].map(group => group.id))].map(async groupId => {
+      groupIdentity.set(groupId, !!await getGroupTestItemSetIdentity(groupId))
+    }))
+  } catch { /* 동일성 표시는 편의 기능이므로 그룹 테이블 미적용 시 개별 진행으로 보인다 */ }
+
   const jobs: QcJobRow[] = (jobRows ?? []).map(j => {
     const o = orderById.get(j.order_id as string)
     return {
@@ -355,6 +365,8 @@ export async function listWorkspace(userSub: string): Promise<{
       groupId:    groupByOrder.get(j.order_id as string)?.id ?? null,
       groupLabel: groupByOrder.get(j.order_id as string)?.label ?? null,
       groupSize:  groupByOrder.get(j.order_id as string)?.size ?? 0,
+      sameTestItemSet: !!groupByOrder.get(j.order_id as string)?.id
+        && !!groupIdentity.get(groupByOrder.get(j.order_id as string)!.id),
       isParallel: isParallelOrder(j.order_id as string),
       mySlot:     mySlotOf(j.order_id as string),
     }
@@ -418,6 +430,8 @@ export interface OverviewJobRow {
   workEndDate: string | null
   /** 이 오더가 속한 동시분석 그룹의 오더 수 — 2 이상이면 카드에 "동시 N" 배지. 그룹이 없거나 1건이면 0 */
   groupSize: number
+  /** 동일 시험항목 그룹이면 전파 가능, 아니면 배치별 진행 */
+  sameTestItemSet: boolean
 }
 export interface OverviewPendingRow {
   orderId: string
@@ -474,6 +488,7 @@ function toOverviewJob(
   o: Record<string, unknown> | undefined,
   itemAgg: Map<string, { total: number; cleared: number }>,
   groupSizeByOrder: Map<string, number>,
+  groupIdentityByOrder: Map<string, boolean>,
 ): OverviewJobRow {
   const agg = itemAgg.get(j.id as string) ?? { total: 0, cleared: 0 }
   return {
@@ -489,6 +504,7 @@ function toOverviewJob(
     workStartDate: (j.work_start_date as string) ?? null,
     workEndDate: (j.work_end_date as string) ?? null,
     groupSize: groupSizeByOrder.get(j.order_id as string) ?? 0,
+    sameTestItemSet: groupIdentityByOrder.get(j.order_id as string) ?? false,
   }
 }
 
@@ -509,6 +525,22 @@ export async function loadGroupSizeByOrder(): Promise<Map<string, number>> {
       if (size >= 2) out.set(it.order_id as string, size)
     }
   } catch { /* 그룹 정보가 없으면 배지 없이 보인다 */ }
+  return out
+}
+
+/** 오더별 동시분석 시험항목 동일성 — 현황 카드의 전파 가능 표시용 */
+export async function loadGroupIdentityByOrder(): Promise<Map<string, boolean>> {
+  const out = new Map<string, boolean>()
+  try {
+    const { data, error } = await supabaseAdmin.from('concurrent_analysis_group_items').select('group_id, order_id')
+    if (error) return out
+    const groups = new Map<string, string[]>()
+    for (const row of data ?? []) groups.set(row.group_id as string, [...(groups.get(row.group_id as string) ?? []), row.order_id as string])
+    await Promise.all([...groups.entries()].filter(([, ids]) => ids.length >= 2).map(async ([groupId, orderIds]) => {
+      const same = !!await getGroupTestItemSetIdentity(groupId)
+      for (const orderId of orderIds) out.set(orderId, same)
+    }))
+  } catch { /* 동일성은 표시 보조 정보이므로 조회 실패 시 개별 진행으로 보인다 */ }
   return out
 }
 
@@ -581,10 +613,18 @@ async function loadJobGroupSummary(orderId: string): Promise<JobGroupSummary | n
       return (a.qcNo ?? '').localeCompare(b.qcNo ?? '') || a.batchNo.localeCompare(b.batchNo)
     })
 
+    const activeOrderIds = new Set(orderIds.filter(oid => {
+      const status = orderById.get(oid)?.status as string | undefined
+      return !['취소', '삭제', 'cancelled', 'deleted'].includes(String(status))
+    }))
+    const activeJobRows = jobRows.filter(j => activeOrderIds.has(j.order_id as string))
+    const itemSets = activeJobRows.map(j => (itemsRes.byJob.get(j.id as string) ?? []).map(it => it.testItemName))
+
     return {
       groupId,
       groupLabel: (groupRes.data?.label as string | null) ?? null,
       orderCount: orderIds.length,
+      sameTestItemSet: !!getGroupTestItemSetIdentity(itemSets),
       members,
     }
   } catch (err) {
@@ -775,7 +815,7 @@ export async function listWorkerOverview(viewerTesterId: string | null = null): 
   const testers = (testerData ?? []) as Record<string, unknown>[]
 
   // 2) 작업 + 3) 오더 (삭제 제외) + 동시분석 그룹 크기("동시 N" 배지) 병렬
-  const [jobsRes, ordersRes, groupSizeByOrder] = await Promise.all([
+  const [jobsRes, ordersRes, groupSizeByOrder, groupIdentityByOrder] = await Promise.all([
     supabaseAdmin
       .from('qc_jobs')
       .select('id, order_id, qc_no, assignee_tester_id, status, work_start_date, work_end_date')
@@ -785,6 +825,7 @@ export async function listWorkerOverview(viewerTesterId: string | null = null): 
       .select('id, product_name, batch_no, due_date, is_urgent, status')
       .neq('status', DELETED_STATUS),
     loadGroupSizeByOrder(),
+    loadGroupIdentityByOrder(),
   ])
   // 예전(0037)에는 error 를 버려 관리자 「작업자 현황」이 안내 없이 통째로 비어 보였다(listWorkspace 와 같은 문제).
   if (jobsRes.error) throw describeSchemaError(jobsRes.error, PARALLEL_ASSIGN_FEATURE, PARALLEL_ASSIGN_MIGRATION)
@@ -884,7 +925,7 @@ export async function listWorkerOverview(viewerTesterId: string | null = null): 
       if ((j.work_end_date as string) === today) completedToday += 1
       // 예전에는 여기서 건너뛰어 화면에서 완료 작업을 아예 볼 수 없었다.
       // 집계만 하지 말고 목록도 함께 내려준다(화면에서 기간으로 좁혀 본다).
-      row.completedJobs.push(toOverviewJob(j, o, itemAgg, groupSizeByOrder))
+      row.completedJobs.push(toOverviewJob(j, o, itemAgg, groupSizeByOrder, groupIdentityByOrder))
       continue
     }
     if (!ACTIVE_JOB_STATUSES.has(status)) continue
@@ -895,7 +936,7 @@ export async function listWorkerOverview(viewerTesterId: string | null = null): 
     else if (status === REVIEW_READY_STATUS || status === REVIEWING_STATUS || status === APPROVAL_READY_STATUS) row.reviewing += 1
     else if (status === DELAYED_STATUS) row.delayed += 1
 
-    row.activeJobs.push(toOverviewJob(j, o, itemAgg, groupSizeByOrder))
+    row.activeJobs.push(toOverviewJob(j, o, itemAgg, groupSizeByOrder, groupIdentityByOrder))
   }
 
   // 시작 대기 오더 집계 (배정됐고 status '대기' & 아직 미시작)
@@ -1616,7 +1657,8 @@ export async function advanceJobStage(
   expected?: string,
   /** 전이를 실행한 관리자(로그인 사용자) id — 상태 이력에 남긴다 */
   changedBy?: string,
-): Promise<{ from: JobStage; to: JobStage }> {
+  options?: { propagated?: boolean; propagationSourceQcNo?: string },
+): Promise<{ from: JobStage; to: JobStage; propagation?: unknown }> {
   const { data: job } = await supabaseAdmin
     .from('qc_jobs')
     .select('status, order_id, work_end_date, qc_no')
@@ -1656,7 +1698,9 @@ export async function advanceJobStage(
     jobId, orderId: updated.order_id as string,
     fromStatus: current, toStatus: target,
     changedBy: changedBy ?? null, source: 'manual',
-    note: STAGE_ACTION_LABEL[current] ?? '단계 전이',
+    note: options?.propagationSourceQcNo
+      ? `[그룹 전파 · 원본 QC ${options.propagationSourceQcNo}] ${STAGE_ACTION_LABEL[current] ?? '단계 전이'}`
+      : STAGE_ACTION_LABEL[current] ?? '단계 전이',
   })
 
   // 슬랙 알림은 부가 기능이다 — 응답을 붙잡지 않도록 await 하지 않는다.
@@ -1675,7 +1719,12 @@ export async function advanceJobStage(
     severity: 'info',
   })
 
-  return { from: current, to: target }
+  let propagation: unknown
+  if (!options?.propagated) {
+    const { propagateToGroupMates } = await import('@backend/services/qcJobGroupStage')
+    propagation = await propagateToGroupMates(jobId, changedBy ?? '', { kind: 'stage', expected: current })
+  }
+  return { from: current, to: target, ...(propagation ? { propagation } : {}) }
 }
 
 /** 항목을 만지기 전 공통 확인 — 소유권 + 작업 단계 + 항목 존재 + 검토 흔적.
@@ -1685,8 +1734,8 @@ export async function advanceJobStage(
  *  항목 단위 검토(0048) 뒤로는 검토전·검토중 작업의 **검토가 시작되지 않은** 항목은 계속 시험한다.
  *  검토 흔적이 있는 항목은 거절한다. 0048 미적용이면 검토 상태를 읽지 못해 **쓰기 전에** 안내로 거절한다.
  */
-async function loadItemForEdit(jobId: string, itemId: string, userSub: string) {
-  await assertOwner(jobId, userSub)
+async function loadItemForEdit(jobId: string, itemId: string, userSub: string, options?: { propagated?: boolean }) {
+  if (!options?.propagated) await assertOwner(jobId, userSub)
 
   const { data: job } = await supabaseAdmin
     .from('qc_jobs').select('work_started_at, created_at, order_id, status').eq('id', jobId).single()
@@ -1718,9 +1767,9 @@ async function loadItemForEdit(jobId: string, itemId: string, userSub: string) {
  *  시작할 수 있고, 오래 걸리는 시험을 걸어둔 채 다른 항목을 함께 시작해도 된다.
  */
 export async function startItem(
-  jobId: string, itemId: string, userSub: string,
-): Promise<{ startedAt: string }> {
-  const { item } = await loadItemForEdit(jobId, itemId, userSub)
+  jobId: string, itemId: string, userSub: string, options?: { propagated?: boolean; propagationSourceQcNo?: string },
+): Promise<{ startedAt: string; propagation?: unknown }> {
+  const { item } = await loadItemForEdit(jobId, itemId, userSub, options)
   // 화면은 완료 항목에 이 버튼을 보이지 않는다 — 옛 화면·다른 탭에서 이미 완료된 경우(L2)
   if (item.status === ITEM_CLEARED) throw new Error(ITEM_STATE_CHANGED_MESSAGE)
   // 이미 진행 중이면 시작 시각을 다시 쓰지 않는다 — 두 번 눌러 소요시간이 깎이면 안 된다.
@@ -1739,14 +1788,19 @@ export async function startItem(
   if (error?.code === '23514') throw new Error(ITEM_STATE_CHANGED_MESSAGE)
   if (error) throw error
   if (!updated || updated.length === 0) throw new Error(ITEM_STATE_CHANGED_MESSAGE)
-  return { startedAt: now }
+  let propagation: unknown
+  if (!options?.propagated) {
+    const { propagateToGroupMates } = await import('@backend/services/qcJobGroupStage')
+    propagation = await propagateToGroupMates(jobId, userSub, { kind: 'item_start', itemName: item.test_item_name as string })
+  }
+  return { startedAt: now, ...(propagation ? { propagation } : {}) }
 }
 
 /** 시작 취소 — 잘못 누른 항목을 대기로 되돌린다. 시작 시각도 함께 지운다. */
 export async function cancelItemStart(
-  jobId: string, itemId: string, userSub: string,
-): Promise<void> {
-  const { item } = await loadItemForEdit(jobId, itemId, userSub)
+  jobId: string, itemId: string, userSub: string, options?: { propagated?: boolean; propagationSourceQcNo?: string },
+): Promise<{ propagation?: unknown }> {
+  const { item } = await loadItemForEdit(jobId, itemId, userSub, options)
   if (item.status === ITEM_CLEARED) {
     throw new Error(ITEM_STATE_CHANGED_MESSAGE)
   }
@@ -1760,6 +1814,12 @@ export async function cancelItemStart(
   if (error?.code === '23514') throw new Error(ITEM_STATE_CHANGED_MESSAGE)
   if (error) throw error
   if (!updated || updated.length === 0) throw new Error(ITEM_STATE_CHANGED_MESSAGE)
+  let propagation: unknown
+  if (!options?.propagated) {
+    const { propagateToGroupMates } = await import('@backend/services/qcJobGroupStage')
+    propagation = await propagateToGroupMates(jobId, userSub, { kind: 'item_cancel', itemName: item.test_item_name as string })
+  }
+  return propagation ? { propagation } : {}
 }
 
 /** 항목 클리어 — 시간 적재 + 감독관 알림 + 작업 단계 재도출(recompute_job_stage)
@@ -1774,9 +1834,9 @@ export async function cancelItemStart(
  *  값이 아예 비는 것보다 낫고, 통계의 과거 데이터와 의미가 이어진다.
  */
 export async function clearItem(
-  jobId: string, itemId: string, userSub: string,
-): Promise<{ allCleared: boolean; statusChangedTo: string | null; stageSyncFailed?: boolean }> {
-  const { job, item } = await loadItemForEdit(jobId, itemId, userSub)
+  jobId: string, itemId: string, userSub: string, options?: { propagated?: boolean; propagationSourceQcNo?: string },
+): Promise<{ allCleared: boolean; statusChangedTo: string | null; stageSyncFailed?: boolean; propagation?: unknown }> {
+  const { job, item } = await loadItemForEdit(jobId, itemId, userSub, options)
   // 화면은 완료 항목에 이 버튼을 보이지 않는다 — 옛 화면·다른 탭에서 이미 완료된 경우(L2)
   if (item.status === ITEM_CLEARED) throw new Error(ITEM_STATE_CHANGED_MESSAGE)
   const now = new Date()
@@ -1825,7 +1885,7 @@ export async function clearItem(
 
   // 작업 단계 재도출 — 항목 완료는 기존 TS 경로를 유지하고 커밋 뒤 DB 함수를 부른다(F1-5).
   // 실패해도 항목 완료는 이미 커밋됐다. 함수는 재실행 안전이라 다음 항목 이벤트 때 단계가 맞춰진다.
-  const note = `시험항목 "${item.test_item_name as string}" 완료로 서버가 자동 전환했습니다.`
+  const note = `${options?.propagationSourceQcNo ? `[그룹 전파 · 원본 QC ${options.propagationSourceQcNo}] ` : ''}시험항목 "${item.test_item_name as string}" 완료로 서버가 자동 전환했습니다.`
   let stage: StageRecomputeResult | null = null
   let stageSyncFailed = false
   try {
@@ -1857,7 +1917,12 @@ export async function clearItem(
 
   // statusChangedTo = 이번 항목 완료로 **도출된 작업 단계가 바뀐 경우** 그 단계(바뀌지 않았으면 null)
   // stageSyncFailed = 항목 완료는 반영됐지만 작업 단계를 맞추지 못함(다음 항목 이벤트·관리자 검토 때 수렴)
-  return { allCleared, statusChangedTo: stage?.changed ? stage.to : null, ...(stageSyncFailed ? { stageSyncFailed } : {}) }
+  let propagation: unknown
+  if (!options?.propagated) {
+    const { propagateToGroupMates } = await import('@backend/services/qcJobGroupStage')
+    propagation = await propagateToGroupMates(jobId, userSub, { kind: 'item_clear', itemName: item.test_item_name as string })
+  }
+  return { allCleared, statusChangedTo: stage?.changed ? stage.to : null, ...(stageSyncFailed ? { stageSyncFailed } : {}), ...(propagation ? { propagation } : {}) }
 }
 
 /** 작업 상태 변경(담당자) — 진행중 ↔ 지연만. 오더 상태 동기화 + 감독관 알림.
@@ -1869,9 +1934,9 @@ export async function clearItem(
  *  (검토가 이미 시작된 작업이면 진행중이 아니라 검토중·승인전으로 돌아간다).
  */
 export async function changeJobStatus(
-  jobId: string, userSub: string, status: string,
+  jobId: string, userSub: string, status: string, options?: { propagated?: boolean; propagationSourceQcNo?: string },
 ): Promise<{ from: string; to: string; message?: string }> {
-  await assertOwner(jobId, userSub)
+  if (!options?.propagated) await assertOwner(jobId, userSub)
   if (!TESTER_STATUS_CHANGE_STATUSES.has(status)) {
     throw new Error(`"${status}" 는 담당자가 직접 지정할 수 없습니다. 검토·승인은 관리자가 작업 현황에서 진행합니다.`)
   }
@@ -1893,12 +1958,14 @@ export async function changeJobStatus(
 
   // F1-3 — 지연 해제는 도출 단계로 복귀
   let target = status
-  let note = '담당자 상태 변경'
+  let note = options?.propagationSourceQcNo
+    ? `[그룹 전파 · 원본 QC ${options.propagationSourceQcNo}] 담당자 상태 변경`
+    : '담당자 상태 변경'
   if (current === DELAYED_STATUS) {
     const derived = await deriveJobStage(jobId)
     if (!derived) throw new Error('작업을 찾을 수 없습니다.')
     target = derived
-    if (derived !== status) note = `담당자 상태 변경 — 항목 상태에 따라 '${derived}' 로 복귀`
+    if (derived !== status) note = `${options?.propagationSourceQcNo ? `[그룹 전파 · 원본 QC ${options.propagationSourceQcNo}] ` : ''}담당자 상태 변경 — 항목 상태에 따라 '${derived}' 로 복귀`
   }
 
   const patch: Record<string, unknown> = { status: target }
@@ -1933,7 +2000,12 @@ export async function changeJobStatus(
   // 리뷰 M3 — 잠금 밖 도출값의 경합을 수렴시킨다
   const finalStage = await settleDerivedStage(jobId, userSub, target)
   const message = stageDiffMessage(status, finalStage)
-  return { from: current, to: finalStage, ...(message ? { message } : {}) }
+  let propagation: unknown
+  if (!options?.propagated) {
+    const { propagateToGroupMates } = await import('@backend/services/qcJobGroupStage')
+    propagation = await propagateToGroupMates(jobId, userSub, { kind: 'job_status', status })
+  }
+  return { from: current, to: finalStage, ...(message ? { message } : {}), ...(propagation ? { propagation } : {}) }
 }
 
 /**
@@ -2135,10 +2207,10 @@ export async function applyGroupItemAction(
     // 그룹 조작에서는 그 배치만 **건너뛰고 계속** 처리한다 — 앞 배치만 기록되고 뒤 배치가 멈추면 다시 누를 때
     // 배치마다 완료 시각이 달라진다(리뷰 F2 M3). 권한·DB 오류 등 진짜 오류는 그대로 실패한다.
     try {
-      if (action === 'start') await startItem(jobId, r.id as string, userSub)
-      else if (action === 'cancel') await cancelItemStart(jobId, r.id as string, userSub)
+      if (action === 'start') await startItem(jobId, r.id as string, userSub, { propagated: true })
+      else if (action === 'cancel') await cancelItemStart(jobId, r.id as string, userSub, { propagated: true })
       else {
-        const res = await clearItem(jobId, r.id as string, userSub)
+        const res = await clearItem(jobId, r.id as string, userSub, { propagated: true })
         if (res.statusChangedTo) advanced.push(jobs.find(j => j.id === jobId)?.qcNo ?? '')
       }
     } catch (err) {

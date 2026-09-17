@@ -51,11 +51,18 @@ interface Job {
   workStartDate: string | null; workEndDate: string | null; status: string
   isUrgent: boolean; dueDate: string | null; items: JobItem[]
   /** 동시분석 그룹 — 같은 그룹의 작업은 카드 하나로 묶어 한 번에 조작한다 */
-  groupId: string | null; groupLabel: string | null; groupSize: number
+  groupId: string | null; groupLabel: string | null; groupSize: number; sameTestItemSet?: boolean
   /** 병렬 배정 오더(담당자 2명 이상)인가 — [넘기기] 노출 판정 */
   isParallel?: boolean
   /** 이 오더에서 내 담당자 번호 */
   mySlot?: number | null
+}
+
+interface PropagationResult {
+  applied: number
+  skipped: number
+  failed: number
+  warnings: string[]
 }
 interface PendingOrder {
   id: string; productCode: string; productName: string; batchNo: string
@@ -431,6 +438,9 @@ export default function MyTasksPage() {
     setMsg(m); setMsgType(type); setTimeout(() => setMsg(null), 4000)
   }
 
+  const propagationText = (p: PropagationResult) =>
+    `동일 시험항목 그룹 전파: 적용 ${p.applied}건 · 건너뜀 ${p.skipped}건${p.failed > 0 ? ` · 실패 ${p.failed}건` : ""}${p.warnings.length > 0 ? ` — ${p.warnings.join(" / ")}` : ""}`
+
   /**
    * 장비 준비상태 조회.
    * 응답이 실패(401 세션만료·500 등)면 body 에 checks 가 없으므로, 그대로 쓰면
@@ -562,15 +572,15 @@ export default function MyTasksPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ itemId, action }),
       })
-      const data = await res.json() as { error?: string; statusChangedTo?: string | null; stageSyncFailed?: boolean }
+      const data = await res.json() as { error?: string; statusChangedTo?: string | null; stageSyncFailed?: boolean; propagation?: PropagationResult }
       if (!res.ok) throw new Error(data.error)
       await load()
       // 항목 완료로 서버가 작업 단계를 다시 도출해 바뀌었으면 — 사용자가 알 수 있게 안내
-      if (data.stageSyncFailed) {
-        flash("시험항목은 완료됐지만 작업 단계를 맞추지 못했습니다. 다음 처리 때 자동으로 맞춰집니다.", "error")
-      } else if (data.statusChangedTo) {
-        flash(`시험항목 완료 — 작업 단계가 "${data.statusChangedTo}" 로 자동 변경되었습니다.`)
-      }
+      const notices: string[] = []
+      if (data.stageSyncFailed) notices.push("시험항목은 완료됐지만 작업 단계를 맞추지 못했습니다. 다음 처리 때 자동으로 맞춰집니다.")
+      if (data.statusChangedTo) notices.push(`시험항목 완료 — 작업 단계가 "${data.statusChangedTo}" 로 자동 변경되었습니다.`)
+      if (data.propagation) notices.push(propagationText(data.propagation))
+      if (notices.length > 0) flash(notices.join(" · "), !!data.stageSyncFailed || data.propagation?.failed ? "error" : "info")
     } catch (e) {
       flash(`처리 실패: ${e instanceof Error ? e.message : ""}`, "error")
       // 그 사이 항목이 다른 담당자에게 넘어갔거나 상태가 바뀐 경우(F2-6) 옛 화면에 머물지 않게 다시 읽는다
@@ -616,7 +626,7 @@ export default function MyTasksPage() {
   }
 
   /** 잡 PATCH 코어 — 새로고침/알림 없음 (일괄에서 재사용) */
-  const patchJobCore = async (jobId: string, patch: Record<string, string>): Promise<{ message?: string }> => {
+  const patchJobCore = async (jobId: string, patch: Record<string, string>): Promise<{ message?: string; propagation?: PropagationResult }> => {
     const res = await fetch(`/api/qc-jobs/${jobId}`, {
       method: "PATCH", credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -632,7 +642,8 @@ export default function MyTasksPage() {
       const r = await patchJobCore(jobId, patch)
       await load()
       // 지연 해제는 서버가 항목 상태에 맞는 단계로 되돌린다 — 요청과 다르면 알린다
-      if (r.message) flash(r.message)
+      const notices = [r.message, r.propagation && propagationText(r.propagation)].filter(Boolean) as string[]
+      if (notices.length > 0) flash(notices.join(" · "), !!r.propagation?.failed ? "error" : "info")
     } catch (e) { flash(`저장 실패: ${e instanceof Error ? e.message : ""}`, "error") }
   }
 
@@ -683,6 +694,8 @@ export default function MyTasksPage() {
     setJobBulkBusy(true)
     const nameById = new Map(activeJobs.map(j => [j.id, `QC ${j.qcNo}`] as const))
     let ok = 0
+    let propagated = 0
+    let propagationFailed = 0
     let redirected = 0
     const failed: string[] = []
     try {
@@ -691,6 +704,7 @@ export default function MyTasksPage() {
           const r = await patchJobCore(id, { status: bulkStatus })
           ok++
           if (r.message) redirected++
+          if (r.propagation) { propagated += r.propagation.applied + r.propagation.skipped; propagationFailed += r.propagation.failed }
         }
         catch { failed.push(nameById.get(id) ?? id) }
       }
@@ -699,6 +713,7 @@ export default function MyTasksPage() {
       const parts: string[] = [`${ok}건 '${bulkStatus}' 적용`]
       if (redirected) parts.push(`그중 ${redirected}건은 시험항목 상태에 따라 다른 단계로 복귀`)
       if (failed.length) parts.push(`실패 ${failed.length}건`)
+      if (propagated > 0 || propagationFailed > 0) parts.push(`그룹 전파 ${propagated}건${propagationFailed > 0 ? ` · 실패 ${propagationFailed}건` : ""}`)
       flash(parts.join(" · "), failed.length ? "error" : "info")
     } finally {
       setJobBulkBusy(false)
@@ -1063,6 +1078,11 @@ export default function MyTasksPage() {
             {groupJobs[0].groupLabel && (
               <span className="truncate text-xs text-muted-foreground">· {groupJobs[0].groupLabel}</span>
             )}
+            {groupJobs[0].sameTestItemSet ? (
+              <Badge variant="secondary" className="px-1 py-0 text-xs leading-normal">시험항목 동일 · 함께 진행</Badge>
+            ) : (
+              <Badge variant="outline" className="px-1 py-0 text-xs leading-normal text-muted-foreground">시험항목 상이 · 개별 진행</Badge>
+            )}
             {dd != null && dd <= 7 && !anyDone && (
               <Badge variant="outline" className="border-red-200 text-red-700 dark:border-red-800 dark:text-red-300">
                 D{dd < 0 ? `+${-dd}` : `-${dd}`}
@@ -1103,7 +1123,9 @@ export default function MyTasksPage() {
           <p className="mb-1 text-xs leading-normal font-semibold text-muted-foreground">
             시험항목 진행 <span className="tabular-nums text-foreground">{allCleared}/{items.length}</span>
             <span className="px-1 text-border">·</span>
-            한 번 누르면 <span className="font-medium text-foreground">{groupJobs.length}개 배치</span>에 함께 기록됩니다
+            {groupJobs[0].sameTestItemSet
+              ? <>한 번 누르면 <span className="font-medium text-foreground">{groupJobs.length}개 배치</span>에 함께 기록됩니다</>
+              : <>시험항목 구성이 달라 <span className="font-medium text-foreground">배치별로 개별 진행</span>합니다</>}
           </p>
           {items.length === 0 ? (
             <p className="py-2 text-xs leading-normal text-muted-foreground">등록된 시험항목이 없습니다.</p>
@@ -1212,6 +1234,11 @@ export default function MyTasksPage() {
                 >
                   <Layers className="size-3" />동시 {job.groupSize}
                 </span>
+              )}
+              {job.groupId && job.groupSize > 1 && (
+                <Badge variant={job.sameTestItemSet ? "secondary" : "outline"} className="ml-1.5 px-1 py-0 text-xs leading-normal">
+                  {job.sameTestItemSet ? "시험항목 동일 · 함께 진행" : "시험항목 상이 · 개별 진행"}
+                </Badge>
               )}
             </p>
             </div>
