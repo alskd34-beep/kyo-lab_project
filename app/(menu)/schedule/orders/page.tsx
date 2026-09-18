@@ -22,7 +22,7 @@ import {
   LeaveChip, LeaveConflictNotice, conflictsFor, useTesterAbsences,
 } from "@frontend/components/schedule/leave-warning"
 import { useLeaveReschedule } from "@frontend/components/schedule/leave-reschedule-dialog"
-import { ConcurrentGroupDialog } from "@frontend/components/schedule/concurrent-group-dialog"
+import { ConcurrentGroupDialog, RepresentativeDialog } from "@frontend/components/schedule/concurrent-group-dialog"
 import { OrderTestItemsSection, type OrderTestItemDetailRow } from "@frontend/components/schedule/order-test-items-section"
 import { NaToggle, OrderInfoTable } from "@frontend/components/schedule/order-info-table"
 import {
@@ -94,6 +94,8 @@ interface OrderRow {
   workdays: number | null
   hasJob: boolean
   locked: boolean
+  /** 안정성 시험계획에서 생성된 오더면 원본 계획 id */
+  stabilityPlanId: string | null
 }
 interface Tester { id: string; name: string; avatarUrl?: string | null; employeeNo?: string | null; isActive?: boolean }
 
@@ -129,19 +131,18 @@ interface ConcurrentGroup {
  * 같은 기준이다. "이 오더가 왜 이 사람에게 갔는지" 를 되짚을 때 실제로 배정을 끌고 간 건이다.
  */
 function groupRepName(g: ConcurrentGroup): string {
-  let rep = g.items[0]
+  let rep = g.items.slice().sort((a, b) => a.orderId.localeCompare(b.orderId, "ko"))[0]
   if (!rep) return ""
   if (g.representativeOrderId) {
     const selected = g.items.find(it => it.orderId === g.representativeOrderId)
     if (selected) rep = selected
   }
-  if (!g.representativeOrderId) for (const it of g.items) if (it.orderId < rep.orderId) rep = it
   return rep.productName
 }
 
 function groupRepBatch(g: ConcurrentGroup): string {
   const rep = g.items.find(it => it.orderId === g.representativeOrderId)
-    ?? g.items.slice().sort((a, b) => a.orderId.localeCompare(b.orderId))[0]
+    ?? g.items.slice().sort((a, b) => a.orderId.localeCompare(b.orderId, "ko"))[0]
   return rep ? displayBatchNo(rep.batchNo) : "-"
 }
 
@@ -380,6 +381,7 @@ export default function OrdersPage() {
   // 그룹 조회 실패 — 배정 근거가 소리 없이 사라지면 안 되므로 배너로 알린다(오더 목록은 그대로 보여 준다)
   const [groupsError, setGroupsError] = useState(false)
   const [groupDialogOpen, setGroupDialogOpen] = useState(false)
+  const [representativeGroup, setRepresentativeGroup] = useState<ConcurrentGroup | null>(null)
   // 지목한 실행 그룹 — 화면을 보는 동안만 유지하고 저장하지 않는다(사람마다 다른 화면이 보이면 안 된다)
   const [focusedGroupId, setFocusedGroupId] = useState<string | null>(null)
   // 자동배정 직후 반차와 겹친 배정 목록 (닫으면 사라지는 확인용 배너)
@@ -950,7 +952,7 @@ export default function OrdersPage() {
                 {secondarySlot !== undefined && <Badge variant="outline" className="border-blue-200 text-blue-700 dark:border-blue-800 dark:text-blue-300">{assigneeSlotLabel(secondarySlot)}</Badge>}
                 {r.isParallel && <Badge variant="outline" className="border-blue-200 text-blue-700 dark:border-blue-800 dark:text-blue-300" title={`병렬 배정 — 담당자 ${r.assignees.length}명`}>{PARALLEL_BADGE_LABEL}</Badge>}
                 <StatusBadge status={r.status} />
-                <SourceBadge source={r.source} />
+                <SourceBadge source={r.source} stabilityPlanId={r.stabilityPlanId} />
                 {r.source === "auto" && !r.productSynced && (
                   <Badge variant="outline" className="border-amber-200 text-amber-700 dark:border-amber-800 dark:text-amber-300">미동기화</Badge>
                 )}
@@ -1006,7 +1008,7 @@ export default function OrdersPage() {
                   >
                     <Layers className="size-3 shrink-0" />
                     <span className="min-w-0 truncate">{groupDisplayName(group)}</span>
-                    {(group.representativeOrderId === r.id || (!group.representativeOrderId && group.source === "auto" && group.items.slice().sort((a, b) => a.orderId.localeCompare(b.orderId))[0]?.orderId === r.id)) && <span className="shrink-0 text-primary">· 대표</span>}
+                    {(group.representativeOrderId === r.id || (!group.representativeOrderId && group.items.slice().sort((a, b) => a.orderId.localeCompare(b.orderId, "ko"))[0]?.orderId === r.id)) && <span className="shrink-0 text-primary">· 대표</span>}
                     <span className="shrink-0 tabular-nums">· 시작 {shortDate(group.testStartDate)}</span>
                     {/* 잠긴 그룹은 재적재 때 삭제·재구성 대상에서 빠져 옛 구성이 남는다 —
                         왜 이 그룹만 안 바뀌는지 화면에서 알 수 있어야 한다. */}
@@ -1393,6 +1395,11 @@ export default function OrdersPage() {
             <span className="px-1 text-primary/50">·</span>
             <span className="tabular-nums">시험시작 {focusedGroup.testStartDate ?? "미정"}</span>
           </span>
+          {isAdmin && (
+            <Button variant="outline" size="sm" onClick={() => setRepresentativeGroup(focusedGroup)} className="shrink-0 border-primary/30 bg-background text-primary hover:bg-primary/10">
+              대표 변경
+            </Button>
+          )}
           <button
             type="button"
             onClick={() => setFocusedGroupId(null)}
@@ -1525,6 +1532,13 @@ export default function OrdersPage() {
         onDone={(msg) => { setGroupDialogOpen(false); setSelected(new Set()); flash(msg); void load() }}
       />
 
+      <RepresentativeDialog
+        open={representativeGroup !== null}
+        group={representativeGroup}
+        onClose={() => setRepresentativeGroup(null)}
+        onDone={(message) => { setRepresentativeGroup(null); flash(message); void load() }}
+      />
+
       {bulkDeleteOpen && (
         <BulkDeleteOrderDialog
           orders={Array.from(selected).map(id => rows.find(r => r.id === id)).filter((r): r is OrderRow => !!r)}
@@ -1593,7 +1607,7 @@ export default function OrdersPage() {
             <div className="pointer-events-auto relative flex w-full max-w-5xl flex-col gap-2 rounded-md border border-background/10 bg-foreground px-3 py-2.5 text-background shadow-lg sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-2 sm:px-4">
               {/* 왼쪽 — 선택 요약. pr-9: 모바일에선 닫기 버튼이 오른쪽 위에 겹쳐 앉는다 */}
               <div className="flex min-w-0 flex-col pr-9 leading-tight sm:flex-1 sm:pr-0">
-                <span className="text-sm font-semibold text-background tabular-nums">{selected.size}건 선택됨</span>
+                <span className="text-sm font-semibold text-background tabular-nums">{selectedRows.length}건 선택됨</span>
                 <span className="text-xs leading-normal text-background/60 tabular-nums">확정 {lockedCount} · 미확정 {unlockedCount}</span>
               </div>
 
@@ -1662,7 +1676,7 @@ export default function OrdersPage() {
                     size="default"
                     variant="destructive"
                     onClick={() => setBulkDeleteOpen(true)}
-                    disabled={busy !== null}
+                    disabled={busy !== null || selectedRows.length === 0}
                     title="선택한 오더를 삭제합니다. 삭제 사유가 필요합니다."
                     className="w-full sm:w-auto"
                   >
@@ -1722,11 +1736,14 @@ function StatusBadge({ status }: { status: string }) {
 
 /* 자동/수동은 좋고 나쁨이 아니라 출처다. 대부분이 자동이므로 자동을 중립색으로 두고,
    드문 쪽인 수동에만 잉크(브랜드 파랑)를 남긴다 — 초록은 여기서 뜻이 없었다. */
-function SourceBadge({ source }: { source: OrderRow["source"] }) {
+function SourceBadge({ source, stabilityPlanId }: { source: OrderRow["source"]; stabilityPlanId: string | null }) {
   return source === "manual" ? (
     <Badge variant="outline" className="h-6 rounded-full border-blue-200 bg-card px-2 text-xs text-blue-700 sm:h-7 sm:px-3 dark:border-blue-800 dark:text-blue-300">수동</Badge>
   ) : (
-    <Badge variant="outline" className="h-6 rounded-full border-border bg-card px-2 text-xs text-muted-foreground sm:h-7 sm:px-3">자동</Badge>
+    <span className="inline-flex items-center gap-1">
+      <Badge variant="outline" className="h-6 rounded-full border-border bg-card px-2 text-xs text-muted-foreground sm:h-7 sm:px-3">자동</Badge>
+      {stabilityPlanId && <Badge variant="outline" title={`안정성 시험계획 ${stabilityPlanId}`} className="h-6 rounded-full border-blue-200 bg-card px-2 text-xs text-blue-700 sm:h-7 sm:px-3 dark:border-blue-800 dark:text-blue-300">안정성</Badge>}
+    </span>
   )
 }
 

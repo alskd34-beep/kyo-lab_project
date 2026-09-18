@@ -135,14 +135,23 @@ async function replicateRepresentativeAssignmentUnsafe(
   const targetIds = (members ?? []).map(row => row.order_id as string)
   if (targetIds.length === 0) return { applied: 0, skipped }
 
-  const [{ data: orders, error: ordersError }, { data: jobs, error: jobsError }] = await Promise.all([
+  const [{ data: orders, error: ordersError }, { data: jobs, error: jobsError }, { data: existingAssignees, error: existingAssigneesError }] = await Promise.all([
     supabaseAdmin.from('pct_orders').select('*').in('id', targetIds),
     supabaseAdmin.from('qc_jobs').select('order_id').in('order_id', targetIds),
+    supabaseAdmin.from('pct_order_assignees').select('order_id, slot, tester_id').in('order_id', targetIds),
   ])
   if (ordersError) throw ordersError
   if (jobsError) throw jobsError
+  if (existingAssigneesError) throw existingAssigneesError
   const started = new Set((jobs ?? []).map(row => row.order_id as string))
   const orderById = new Map((orders ?? []).map(row => [row.id as string, row as Record<string, unknown>]))
+  const beforeByOrderSlot = new Map<string, Map<number, string | null>>()
+  for (const row of existingAssignees ?? []) {
+    const orderId = row.order_id as string
+    const slots = beforeByOrderSlot.get(orderId) ?? new Map<number, string | null>()
+    slots.set(Number(row.slot), (row.tester_id as string | null) ?? null)
+    beforeByOrderSlot.set(orderId, slots)
+  }
 
   let sourceItemNames: string[] | null = null
   let sourceAssignments: Array<{ testItemName: string; assigneeSlot: number }> = []
@@ -204,19 +213,26 @@ async function replicateRepresentativeAssignmentUnsafe(
         // 0054 번들은 병렬 슬롯과 항목 배분을 한 트랜잭션으로 복제한다.
         await setOrderAssignmentBundle(targetId, assignees, targetItemAssignments, userId, replicationReason)
       }
+      // RPC 복제가 성공한 시점부터는 부분 적용으로도 applied 결과를 기록한다.
+      // 이후 슬롯 정리가 실패해도 실제 DB 상태와 결과 요약을 어긋나게 하지 않는다.
+      applied++
       if (assignees.length <= 1) {
         const { error: clearItemSlotsError } = await supabaseAdmin
           .from('pct_order_test_items')
           .update({ assignee_slot: PRIMARY_ASSIGNEE_SLOT })
           .eq('order_id', targetId)
-        if (clearItemSlotsError) throw clearItemSlotsError
+        if (clearItemSlotsError) {
+          skipped.push({ orderId: targetId, batchNo, reason: `담당자 복제는 적용됐지만 시험항목 슬롯 정리에 실패했습니다: ${clearItemSlotsError.message}` })
+        }
       }
-      applied++
       const target = order as Record<string, unknown>
       const targetDates = { packagingDate: (target.packaging_date as string) ?? null, dueDate: (target.due_date as string) ?? null, plannedStartDate: (target.planned_start_date as string) ?? null }
       const replicatedSlots = assignees.length > 0 ? assignees : [{ slot: 1, testerId: null }]
+      const existingSlots = beforeByOrderSlot.get(targetId)
       for (const slot of replicatedSlots) {
-        await logReassignment({ orderId: targetId, beforeUser: null, afterUser: slot.testerId, reason: replicationReason, changedBy: userId }).catch(() => {})
+        const beforeUser = existingSlots?.get(slot.slot)
+          ?? (slot.slot === PRIMARY_ASSIGNEE_SLOT ? ((target.assignee_tester_id as string | null) ?? null) : null)
+        await logReassignment({ orderId: targetId, beforeUser, afterUser: slot.testerId, reason: replicationReason, changedBy: userId }).catch(() => {})
         await warnIfAssigneeOnLeave({ orderId: targetId, testerId: slot.testerId, order: targetDates, productName: (target.product_name as string) ?? '', batchNo, via: `대표 로트 배정 복제(${slot.slot}번)` })
       }
       if (itemAssignments !== undefined && sourceItemNames !== null && assignees.length >= 2 && !itemSetsMatch) {
@@ -553,9 +569,18 @@ export async function ensureAutoGroups(): Promise<{ created: number }> {
           packaging_complete_date: item.packagingDate,
         })))
       if (itemErr) throw itemErr
+      const { data: targetMembers, error: targetMembersErr } = await supabaseAdmin
+        .from('concurrent_analysis_group_items').select('order_id').eq('group_id', targetGroupId)
+      if (targetMembersErr) throw targetMembersErr
+      const targetOrderIds = (targetMembers ?? []).map(item => item.order_id as string)
+      const { data: targetOrders, error: targetOrdersErr } = await supabaseAdmin
+        .from('pct_orders').select('packaging_date').in('id', targetOrderIds)
+      if (targetOrdersErr) throw targetOrdersErr
+      const dates = (targetOrders ?? []).map(item => item.packaging_date as string | null).filter((date): date is string => !!date)
+      const testStartDate = dates.length > 0 ? addOneDay(dates.reduce((a, b) => a > b ? a : b)) : null
       const { error: updateErr } = await supabaseAdmin
         .from('concurrent_analysis_groups')
-        .update({ test_start_date: group.testStartDate })
+        .update({ test_start_date: testStartDate })
         .eq('id', targetGroupId)
       if (updateErr) throw updateErr
       for (const item of ungroupedItems) groupedOrderIds.add(item.orderId)
@@ -603,17 +628,21 @@ export async function listGroups(): Promise<GroupRow[]> {
      멤버가 정상이어도 화면의 동시분석 탭에서 사라지는 원인이 된다. */
   if (error) throw new Error(error.message)
   const groupRows = (groups ?? []) as Record<string, unknown>[]
-  groupRows.sort((a, b) => String(a.test_start_date ?? '9999').localeCompare(String(b.test_start_date ?? '9999')))
+  groupRows.sort((a, b) => String(a.test_start_date ?? '9999').localeCompare(String(b.test_start_date ?? '9999'), 'ko'))
   if (groupRows.length === 0) return []
 
   const groupIds = groupRows.map(g => g.id as string)
   const items: Record<string, unknown>[] = []
   for (let i = 0; i < groupIds.length; i += 150) {
-    const { data, error: itemErr } = await supabaseAdmin.from('concurrent_analysis_group_items')
-      .select('group_id, order_id, pct_orders(product_code, product_name, batch_no, packaging_date)')
-      .in('group_id', groupIds.slice(i, i + 150)).range(0, 9999)
-    if (itemErr) throw itemErr
-    items.push(...((data ?? []) as unknown as Record<string, unknown>[]))
+    const chunk = groupIds.slice(i, i + 150)
+    for (let from = 0; ; from += 1000) {
+      const { data, error: itemErr } = await supabaseAdmin.from('concurrent_analysis_group_items')
+        .select('group_id, order_id, pct_orders(product_code, product_name, batch_no, packaging_date)')
+        .in('group_id', chunk).range(from, from + 999)
+      if (itemErr) throw itemErr
+      items.push(...((data ?? []) as unknown as Record<string, unknown>[]))
+      if (!data || data.length < 1000) break
+    }
   }
 
   const itemsByGroup = new Map<string, GroupItem[]>()

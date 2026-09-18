@@ -210,6 +210,11 @@ async function groupOrders(orders: OrderForAssign[], familyByCode?: Map<string, 
       reps.push(rep)
       for (const id of ids) { memberToRep.set(id, rep); claimed.add(id) }
     }
+  } else {
+    console.error(
+      '[pctAssign] 저장된 동시분석 그룹 조회 실패 — 규칙 그룹핑으로 대체',
+      { groupsError: groupsRes.error?.message, itemsError: itemsRes.error?.message },
+    )
   }
   const forGrouping: OrderForGrouping[] = orders.map(o => ({
     id: o.id,
@@ -466,8 +471,9 @@ async function autoAssignCodex(
 ): Promise<{ mode: 'codex'; pick: PickFn; reasonByKey: Map<string, string>; halfDayNotices: EngineHalfDayNotice[] }> {
   const [allTesters, capabilities, matrix, itemsByCode, workload, equipRes] = await Promise.all([
     listTesters({ activeOnly: true }), listCapabilities(), listCapabilityMatrix(), productItemsByCode(), currentWorkload(),
-      selectAll(supabaseAdmin, 'test_item_equipment', 'test_item, required_equipment, is_universal', { orderBy: 'test_item' }),
+      selectAll(supabaseAdmin, 'test_item_equipment', 'test_item, required_equipment, is_universal', { orderBy: ['test_item', 'required_equipment'] }),
   ])
+  if (equipRes.error) throw equipRes.error
   // 비활성(퇴사·휴직 등) 시험자와 휴가/출장 중인 시험자는 배정 후보에서 제외
   const testers = allTesters.filter(t => t.isActive && !excludedTesterIds.has(t.id))
 
@@ -591,7 +597,7 @@ async function autoAssignRule(
       selectAll(supabaseAdmin, 'products', 'id, product_code', { orderBy: 'id' }),
       selectAll(supabaseAdmin, 'product_test_items', 'product_id, test_item_id', { orderBy: ['product_id', 'test_item_id'] }),
       selectAll(supabaseAdmin, 'test_items', 'id, name, requires_duo', { orderBy: 'id' }),
-      selectAll(supabaseAdmin, 'test_item_equipment', 'test_item, required_equipment, is_universal', { orderBy: 'test_item' }),
+      selectAll(supabaseAdmin, 'test_item_equipment', 'test_item, required_equipment, is_universal', { orderBy: ['test_item', 'required_equipment'] }),
       selectAll(supabaseAdmin, 'product_workload', 'product_code, avg_workdays', { orderBy: 'product_code' }),
     ])
   for (const result of [productsRes, ptiRes, testItemsRes, equipRes, workloadRes]) {

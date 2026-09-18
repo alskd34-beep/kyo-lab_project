@@ -42,7 +42,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       return Response.json({ ok: true })
     }
     return Response.json(
-      { error: 'groupLock · addOrderIds · removeOrderIds 중 하나는 필요합니다.' },
+      { error: 'groupLock · addOrderIds · removeOrderIds · representativeOrderId 중 하나는 필요합니다.' },
       { status: 400 },
     )
   } catch (err) {

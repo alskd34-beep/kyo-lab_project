@@ -41,6 +41,89 @@ export interface GroupCandidate {
 /** 선택이 기존 그룹 하나와 정확히 겹칠 때만 해체를 제안한다 */
 export interface DissolvableGroup { id: string; label: string | null; size: number }
 
+export interface RepresentativeGroup {
+  id: string
+  label: string | null
+  representativeOrderId: string | null
+  items: Pick<GroupCandidate, "orderId" | "productName" | "batchNo">[]
+}
+
+/** 기존 그룹의 대표 로트를 바꾸는 관리자 전용 Dialog. 기존 배정은 소급하지 않는다. */
+export function RepresentativeDialog({
+  open, group, onClose, onDone,
+}: {
+  open: boolean
+  group: RepresentativeGroup | null
+  onClose: () => void
+  onDone: (msg: string) => void
+}) {
+  const [selected, setSelected] = useState("")
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (open && group) {
+      setSelected(group.representativeOrderId ?? group.items.slice().sort((a, b) => a.orderId.localeCompare(b.orderId))[0]?.orderId ?? "")
+      setError(null)
+    }
+  }, [open, group])
+
+  async function submit() {
+    if (!group || !selected) return
+    setSaving(true); setError(null)
+    try {
+      const res = await fetch(`/api/concurrent-groups/${group.id}`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ representativeOrderId: selected }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error ?? "대표 로트 변경 실패")
+      onDone("대표 로트를 변경했습니다. 기존 배정에는 소급 적용되지 않습니다.")
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "대표 로트 변경 실패")
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={next => { if (!next && !saving) onClose() }}>
+      <DialogContent size="md">
+        <DialogHeader>
+          <DialogTitle>대표 로트 변경</DialogTitle>
+          <DialogDescription>
+            {group?.label ?? "동시분석 그룹"}의 이후 담당자 복제 기준을 선택합니다. 이미 적용된 배정은 소급 변경되지 않습니다.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogBody className="grid gap-2">
+          {group?.items.map(item => (
+            <button
+              key={item.orderId}
+              type="button"
+              role="radio"
+              aria-checked={selected === item.orderId}
+              onClick={() => setSelected(item.orderId)}
+              className={cn(
+                "flex items-center gap-3 rounded-md border px-3 py-2 text-left text-xs leading-normal transition-colors",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                selected === item.orderId ? "border-primary bg-primary/5 text-foreground" : "border-border hover:border-primary/50",
+              )}
+            >
+              <span aria-hidden className={cn("size-4 shrink-0 rounded-full border-2", selected === item.orderId ? "border-primary bg-primary ring-2 ring-primary/20" : "border-muted-foreground/50")} />
+              <span className="min-w-0 flex-1 truncate font-medium">{item.productName}</span>
+              <span className="shrink-0 text-muted-foreground">{displayBatchNo(item.batchNo)}</span>
+            </button>
+          ))}
+          {error && <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs leading-normal text-destructive">{error}</p>}
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>취소</Button>
+          <Button onClick={() => void submit()} disabled={saving || !selected}>{saving ? <Loader2 className="animate-spin" /> : null}변경</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export function ConcurrentGroupDialog({
   open, orderIds, dissolvable, onClose, onDone,
 }: {
@@ -149,9 +232,11 @@ export function ConcurrentGroupDialog({
                         <span className="shrink-0 text-muted-foreground">/ {displayBatchNo(c.batchNo)}</span>
                       </span>
                       <span className="flex shrink-0 items-center gap-2 tabular-nums text-muted-foreground">
-                        <label className="inline-flex items-center gap-1 text-xs font-medium text-primary">
-                          <input className="accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" type="radio" name="concurrent-representative" checked={representativeOrderId === c.orderId} onChange={() => setRepresentativeOrderId(c.orderId)} /> 대표
-                        </label>
+                        <button type="button" role="radio" aria-checked={representativeOrderId === c.orderId}
+                          onClick={() => setRepresentativeOrderId(c.orderId)}
+                          className="inline-flex items-center gap-1 rounded-md px-1 text-xs font-medium text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                          <span aria-hidden className={cn("size-3.5 rounded-full border-2", representativeOrderId === c.orderId ? "border-primary bg-primary ring-1 ring-primary/20" : "border-muted-foreground/50")} /> 대표
+                        </button>
                         포장 {c.packagingDate ?? "-"}
                         {c.hasJob && <span className="ml-1.5 text-amber-700 dark:text-amber-300">시험 시작됨</span>}
                       </span>
