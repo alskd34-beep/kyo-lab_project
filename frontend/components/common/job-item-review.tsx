@@ -219,6 +219,7 @@ export function ItemReviewActions({ jobId, jobStatus, item, disabled = false, on
   const [confirmComplete, setConfirmComplete] = useState(false)
   const [confirmGroupStart, setConfirmGroupStart] = useState(false)
   const [confirmGroupComplete, setConfirmGroupComplete] = useState(false)
+  const [busySource, setBusySource] = useState<"group" | "single" | null>(null)
   const showGroupResult = useGroupStageResultToast()
 
   if (jobStatus === CLOSED_STAGE || item.status !== ITEM_CLEARED) return null
@@ -233,7 +234,7 @@ export function ItemReviewActions({ jobId, jobStatus, item, disabled = false, on
 
   async function runGroup(action: ItemReviewBulkAction) {
     if (!group) return
-    setBusy(true); setError(null)
+    setBusy(true); setBusySource("group"); setError(null)
     try {
       const res = await api.post<GroupReviewResult>(
         `/api/qc-jobs/group/${group.groupId}/review`, { testItemName: item.testItemName, action },
@@ -245,12 +246,12 @@ export function ItemReviewActions({ jobId, jobStatus, item, disabled = false, on
     } catch (e) {
       setError(errorMessage(e))
     } finally {
-      setBusy(false)
+      setBusy(false); setBusySource(null)
     }
   }
 
   async function run(action: ItemReviewAction, reason?: string) {
-    setBusy(true); setError(null)
+    setBusy(true); setBusySource("single"); setError(null)
     try {
       await api.post(`/api/qc-jobs/${jobId}/items/${item.id}/review`, reason === undefined ? { action } : { action, reason })
       setReasonAction(null)
@@ -259,7 +260,7 @@ export function ItemReviewActions({ jobId, jobStatus, item, disabled = false, on
     } catch (e) {
       setError(errorMessage(e))
     } finally {
-      setBusy(false)
+      setBusy(false); setBusySource(null)
     }
   }
 
@@ -270,13 +271,13 @@ export function ItemReviewActions({ jobId, jobStatus, item, disabled = false, on
         {/* 판정은 배치별이 기본 — 그룹 버튼은 관리자가 명시적으로 누를 때만 실행한다 */}
         {showGroupStart && (
           <Button size="sm" variant="outline" onClick={() => { setError(null); setConfirmGroupStart(true) }} disabled={off}>
-            {busy && !reasonAction ? <Loader2 className="animate-spin" /> : <ClipboardCheck />}
+            {busySource === "group" ? <Loader2 className="animate-spin" /> : <ClipboardCheck />}
             검토 시작 ({groupApplyLabel(startTargets.length)})
           </Button>
         )}
         {rs === ITEM_REVIEW_NONE && (
           <Button size="sm" variant="default" onClick={() => void run("review_start")} disabled={off}>
-            {busy && !reasonAction && !showGroupStart ? <Loader2 className="animate-spin" /> : <ClipboardCheck />}
+            {busySource === "single" ? <Loader2 className="animate-spin" /> : <ClipboardCheck />}
             {showGroupStart ? "이 배치만" : "검토 시작"}
           </Button>
         )}
@@ -293,7 +294,7 @@ export function ItemReviewActions({ jobId, jobStatus, item, disabled = false, on
               onClick={() => { setError(null); setConfirmComplete(true) }}
               disabled={off}
             >
-              <CheckCheck />{showGroupComplete ? "이 배치만 검토 완료" : "검토 완료"}
+              {busySource === "single" ? <Loader2 className="animate-spin" /> : <CheckCheck />}{showGroupComplete ? "이 배치만 검토 완료" : "검토 완료"}
             </Button>
             <Button size="sm" variant="ghost" onClick={() => { setError(null); setReasonAction("review_cancel") }} disabled={off}>
               <Undo2 />검토 취소
@@ -369,6 +370,7 @@ export function BulkReviewBar({ jobId, jobStatus, items, onChanged, className, g
   group?: JobGroupSummary | null
 }) {
   const [busy, setBusy] = useState<ItemReviewBulkAction | null>(null)
+  const [busySource, setBusySource] = useState<"group" | "single" | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [confirmComplete, setConfirmComplete] = useState(false)
   const [confirmGroupStart, setConfirmGroupStart] = useState(false)
@@ -384,7 +386,7 @@ export function BulkReviewBar({ jobId, jobStatus, items, onChanged, className, g
 
   async function runGroup(action: ItemReviewBulkAction) {
     if (!group) return
-    setBusy(action); setError(null)
+    setBusy(action); setBusySource("group"); setError(null)
     try {
       const res = await api.post<GroupReviewResult>(`/api/qc-jobs/group/${group.groupId}/review-bulk`, { action })
       showGroupResult(
@@ -396,7 +398,7 @@ export function BulkReviewBar({ jobId, jobStatus, items, onChanged, className, g
     } catch (e) {
       setError(errorMessage(e))
     } finally {
-      setBusy(null)
+      setBusy(null); setBusySource(null)
     }
   }
 
@@ -406,7 +408,7 @@ export function BulkReviewBar({ jobId, jobStatus, items, onChanged, className, g
   const closed = jobStatus === CLOSED_STAGE
 
   async function run(action: ItemReviewBulkAction) {
-    setBusy(action); setError(null)
+    setBusy(action); setBusySource("single"); setError(null)
     try {
       await api.post(`/api/qc-jobs/${jobId}/review-bulk`, { action })
       setConfirmComplete(false)
@@ -414,7 +416,7 @@ export function BulkReviewBar({ jobId, jobStatus, items, onChanged, className, g
     } catch (e) {
       setError(errorMessage(e))
     } finally {
-      setBusy(null)
+      setBusy(null); setBusySource(null)
     }
   }
 
@@ -435,7 +437,7 @@ export function BulkReviewBar({ jobId, jobStatus, items, onChanged, className, g
             {/* 배치별 처리가 기본이며, 그룹 처리는 대상 배치 확인 모달 뒤 실행 */}
             {showGroupStart && (
               <Button size="sm" variant="outline" onClick={() => { setError(null); setConfirmGroupStart(true) }} disabled={busy !== null}>
-                {busy === "review_start" ? <Loader2 className="animate-spin" /> : <ClipboardCheck />}
+                {busySource === "group" ? <Loader2 className="animate-spin" /> : <ClipboardCheck />}
                 완료 항목 전체 검토 시작 ({groupApplyLabel(groupStartTargets.length)})
               </Button>
             )}
@@ -446,13 +448,13 @@ export function BulkReviewBar({ jobId, jobStatus, items, onChanged, className, g
                 onClick={() => void run("review_start")}
                 disabled={busy !== null}
               >
-                {busy === "review_start" && !showGroupStart ? <Loader2 className="animate-spin" /> : <ClipboardCheck />}
+                {busySource === "single" ? <Loader2 className="animate-spin" /> : <ClipboardCheck />}
                 {showGroupStart ? "이 배치만" : "완료 항목 전체 검토 시작"}
               </Button>
             )}
             {showGroupComplete && (
               <Button size="sm" variant="outline" onClick={() => { setError(null); setConfirmGroupComplete(true) }} disabled={busy !== null}>
-                <CheckCheck />
+                {busySource === "group" ? <Loader2 className="animate-spin" /> : <CheckCheck />}
                 검토 중 항목 전체 검토 완료 ({groupApplyLabel(groupCompleteTargets.length)})
               </Button>
             )}
@@ -463,7 +465,7 @@ export function BulkReviewBar({ jobId, jobStatus, items, onChanged, className, g
                 onClick={() => { setError(null); setConfirmComplete(true) }}
                 disabled={busy !== null}
               >
-                <CheckCheck />
+                {busySource === "single" ? <Loader2 className="animate-spin" /> : <CheckCheck />}
                 {showGroupComplete ? "이 배치만 검토 완료" : "검토 중 항목 전체 검토 완료"}
               </Button>
             )}

@@ -97,25 +97,6 @@ export function useGroupStageResultToast() {
   }
 }
 
-/** 개별 경로에서 짝 배치 전파 결과를 표시한다. 적용·건너뜀·실패를 모두 알려 준다. */
-export function useGroupPropagationResultToast() {
-  const { showToast } = useToastMessage()
-  return (title: string, propagation: {
-    applied: number
-    skipped: number
-    failed: number
-    warnings: string[]
-  }) => {
-    const hasWarning = propagation.failed > 0 || propagation.warnings.length > 0
-    showToast({
-      title: `${title} — 적용 ${propagation.applied} · 건너뜀 ${propagation.skipped} · 실패 ${propagation.failed}`,
-      description: propagation.warnings.length > 0 ? propagation.warnings.join(" / ") : undefined,
-      variant: hasWarning ? "warning" : "success",
-      duration: hasWarning ? 8000 : 3500,
-    })
-  }
-}
-
 /** 관리자 상세 상단의 "동시분석 N건" 섹션 — 멤버 QC번호·제조번호·단계·담당자 */
 export function GroupMembersSection({ group, currentJobId, className }: {
   group: JobGroupSummary

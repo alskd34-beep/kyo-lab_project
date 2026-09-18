@@ -405,6 +405,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                                         <span
                                           title="연동 완료"
                                           aria-label="연동 완료"
+                                          role="img"
                                           className="size-2 shrink-0 rounded-full bg-sidebar-foreground"
                                         />
                                         <span>{sub.label}</span>
@@ -422,6 +423,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                                       <span
                                         title={sub.live ? "연동 완료" : "개발 예정"}
                                         aria-label={sub.live ? "연동 완료" : "개발 예정"}
+                                        role="img"
                                         className={cn(
                                           "size-2 shrink-0 rounded-full",
                                           subIsActive ? "bg-sidebar-primary" : sub.live ? "bg-sidebar-foreground" : "bg-sidebar-foreground/30",
