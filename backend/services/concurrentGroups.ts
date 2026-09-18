@@ -25,6 +25,11 @@ import { supabaseAdmin } from '@backend/lib/supabase'
 import { selectAll } from '@backend/lib/supabasePage'
 import { DELETED_STATUS } from '@shared/qc-status'
 import { isNaProductCode } from '@shared/order-na'
+import { setOrderAssignmentBundle, setOrderPrimaryAssignee } from '@backend/services/orderAssignees'
+import { logReassignment } from '@backend/services/reassignmentHistory'
+import { warnIfAssigneeOnLeave } from '@backend/services/leaveConflicts'
+import { describeSchemaError } from '@backend/lib/schemaError'
+import { isAssigneeSlot, PRIMARY_ASSIGNEE_SLOT, type OrderAssigneeInput } from '@shared/assignment'
 
 export interface GroupItem {
   orderId: string
@@ -44,7 +49,184 @@ export interface GroupRow {
   source: 'auto' | 'manual'
   /** 왜 이렇게 묶었는지 (수동 그룹) */
   note: string | null
+  representativeOrderId: string | null
   items: GroupItem[]
+}
+
+export interface AssignmentReplicationSkip {
+  orderId: string
+  batchNo: string
+  reason: string
+}
+
+export interface AssignmentReplicationResult {
+  applied: number
+  skipped: AssignmentReplicationSkip[]
+}
+
+/** 복제 확인 오류의 원시 DB 메시지를 화면에 노출하지 않는다. */
+function representativeReplicationFailureMessage(error: unknown): string {
+  const dbError = error as { code?: string; message?: string } | null
+  const missingSchema = dbError?.code === 'PGRST204' || dbError?.code === '42703' || dbError?.code === '42P01'
+    || dbError?.code === 'PGRST205' || /does not exist|Could not find the .*column/i.test(dbError?.message ?? '')
+  return missingSchema
+    ? '동시분석 대표 로트 설정(0057)이 아직 DB에 반영되지 않아 그룹 복제를 건너뛰었습니다. 관리자에게 문의하세요.'
+    : '대표 오더 저장은 완료되었지만 그룹 담당자 복제를 확인하지 못했습니다. 관리자에게 문의하세요.'
+}
+
+/**
+ * 대표 로트의 담당자 구성(필요하면 시험항목 슬롯 배분)을 같은 그룹에 복제한다.
+ *
+ * 이 함수는 대표 오더 저장이 끝난 뒤 호출한다. 대상별로 오더 행을 다시 확인해
+ * LOCK/작업 시작을 건너뛰고, 대상 시험항목 집합이 대표와 다르면 슬롯만 적용한다.
+ * 대표가 아닌 오더에서 호출하면 복제하지 않는다(그 오더만 배정하는 직접 배정 규칙).
+ */
+export async function replicateRepresentativeAssignment(
+  sourceOrderId: string,
+  assignees: readonly OrderAssigneeInput[],
+  itemAssignments: unknown,
+  userId: string | null,
+  reason: string,
+): Promise<AssignmentReplicationResult> {
+  try {
+    return await replicateRepresentativeAssignmentUnsafe(sourceOrderId, assignees, itemAssignments, userId, reason)
+  } catch (error) {
+    // 대표 저장은 이미 커밋된 뒤다. 복제 확인 조회 실패를 전체 수정 실패(400)로
+    // 바꾸지 않고, 대상 복제가 확인되지 않았다는 결과로 돌려준다.
+    return {
+      applied: 0,
+      skipped: [{ orderId: sourceOrderId, batchNo: sourceOrderId, reason: representativeReplicationFailureMessage(error) }],
+    }
+  }
+}
+
+async function replicateRepresentativeAssignmentUnsafe(
+  sourceOrderId: string,
+  assignees: readonly OrderAssigneeInput[],
+  itemAssignments: unknown,
+  userId: string | null,
+  reason: string,
+): Promise<AssignmentReplicationResult> {
+  const skipped: AssignmentReplicationSkip[] = []
+  const { data: membership, error: membershipError } = await supabaseAdmin
+    .from('concurrent_analysis_group_items')
+    .select('group_id')
+    .eq('order_id', sourceOrderId)
+    .maybeSingle()
+  if (membershipError) throw membershipError
+  if (!membership?.group_id) return { applied: 0, skipped }
+
+  const { data: group, error: groupError } = await supabaseAdmin
+    .from('concurrent_analysis_groups')
+    .select('representative_order_id')
+    .eq('id', membership.group_id as string)
+    .maybeSingle()
+  if (groupError) throw groupError
+  if ((group?.representative_order_id as string | null) !== sourceOrderId) {
+    return { applied: 0, skipped: [{ orderId: sourceOrderId, batchNo: sourceOrderId, reason: '대표 로트가 아니므로 이 오더만 배정했습니다. 그룹 일괄 배정은 대표 로트에서 실행하세요.' }] }
+  }
+
+  const { data: members, error: membersError } = await supabaseAdmin
+    .from('concurrent_analysis_group_items')
+    .select('order_id')
+    .eq('group_id', membership.group_id as string)
+    .neq('order_id', sourceOrderId)
+  if (membersError) throw membersError
+  const targetIds = (members ?? []).map(row => row.order_id as string)
+  if (targetIds.length === 0) return { applied: 0, skipped }
+
+  const [{ data: orders, error: ordersError }, { data: jobs, error: jobsError }] = await Promise.all([
+    supabaseAdmin.from('pct_orders').select('*').in('id', targetIds),
+    supabaseAdmin.from('qc_jobs').select('order_id').in('order_id', targetIds),
+  ])
+  if (ordersError) throw ordersError
+  if (jobsError) throw jobsError
+  const started = new Set((jobs ?? []).map(row => row.order_id as string))
+  const orderById = new Map((orders ?? []).map(row => [row.id as string, row as Record<string, unknown>]))
+
+  let sourceItemNames: string[] | null = null
+  let sourceAssignments: Array<{ testItemName: string; assigneeSlot: number }> = []
+  if (itemAssignments !== undefined) {
+    const { data: sourceItems, error: sourceItemsError } = await supabaseAdmin
+      .from('pct_order_test_items').select('test_item_name, assignee_slot').eq('order_id', sourceOrderId).eq('is_excluded', false)
+    if (sourceItemsError) throw sourceItemsError
+    sourceItemNames = (sourceItems ?? []).map(row => row.test_item_name as string)
+    sourceAssignments = (sourceItems ?? [])
+      .map(row => ({
+        testItemName: row.test_item_name as string,
+        // 대표 항목의 슬롯이 비어 있어도 대상에 남아 있던 슬롯을 방치하지 않고
+        // 병렬 배정 해제와 같은 기준(담당자 1)으로 정리한다.
+        assigneeSlot: isAssigneeSlot(Number(row.assignee_slot)) ? Number(row.assignee_slot) : PRIMARY_ASSIGNEE_SLOT,
+      }))
+  }
+
+  let applied = 0
+  for (const targetId of targetIds) {
+    const order = orderById.get(targetId)
+    const batchNo = (order?.batch_no as string) ?? targetId
+    if (!order) {
+      skipped.push({ orderId: targetId, batchNo, reason: '오더를 찾을 수 없습니다.' })
+      continue
+    }
+    if (order.locked === true) {
+      skipped.push({ orderId: targetId, batchNo, reason: '확정(LOCK) 오더라서 건너뛰었습니다.' })
+      continue
+    }
+    if (started.has(targetId)) {
+      skipped.push({ orderId: targetId, batchNo, reason: '이미 시험이 시작된 오더라서 건너뛰었습니다.' })
+      continue
+    }
+
+    let targetItemAssignments: unknown = []
+    let itemSetsMatch = false
+    if (itemAssignments !== undefined && sourceItemNames !== null && assignees.length >= 2) {
+      const { data: targetItems, error: targetItemsError } = await supabaseAdmin
+        .from('pct_order_test_items').select('test_item_name').eq('order_id', targetId).eq('is_excluded', false)
+      if (targetItemsError) throw targetItemsError
+      const targetNames = (targetItems ?? []).map(row => row.test_item_name as string)
+      const sameItems = getGroupTestItemSetIdentity([sourceItemNames, targetNames]) !== null
+      if (sameItems) {
+        // 이번 저장에서 바뀐 항목만 복제하면 대상 오더의 기존 슬롯과 섞인다.
+        // 대표 오더의 현재 전체 배분을 기준으로 항상 다시 만든다.
+        targetItemAssignments = sourceAssignments
+        itemSetsMatch = true
+      }
+    }
+
+    try {
+      const replicationReason = `${reason} (대표 로트 배정 복제)`
+      if (assignees.length === 0) {
+        await setOrderPrimaryAssignee(targetId, null, userId, replicationReason)
+      } else if (assignees.length === 1 && assignees[0].slot === 1) {
+        // 단건 배정은 0049 대표 전용 RPC를 사용한다. set_order_assignees는 병렬 구성 전용이다.
+        await setOrderPrimaryAssignee(targetId, assignees[0].testerId, userId, replicationReason)
+      } else {
+        // 0054 번들은 병렬 슬롯과 항목 배분을 한 트랜잭션으로 복제한다.
+        await setOrderAssignmentBundle(targetId, assignees, targetItemAssignments, userId, replicationReason)
+      }
+      if (assignees.length <= 1) {
+        const { error: clearItemSlotsError } = await supabaseAdmin
+          .from('pct_order_test_items')
+          .update({ assignee_slot: PRIMARY_ASSIGNEE_SLOT })
+          .eq('order_id', targetId)
+        if (clearItemSlotsError) throw clearItemSlotsError
+      }
+      applied++
+      const target = order as Record<string, unknown>
+      const targetDates = { packagingDate: (target.packaging_date as string) ?? null, dueDate: (target.due_date as string) ?? null, plannedStartDate: (target.planned_start_date as string) ?? null }
+      const replicatedSlots = assignees.length > 0 ? assignees : [{ slot: 1, testerId: null }]
+      for (const slot of replicatedSlots) {
+        await logReassignment({ orderId: targetId, beforeUser: null, afterUser: slot.testerId, reason: replicationReason, changedBy: userId }).catch(() => {})
+        await warnIfAssigneeOnLeave({ orderId: targetId, testerId: slot.testerId, order: targetDates, productName: (target.product_name as string) ?? '', batchNo, via: `대표 로트 배정 복제(${slot.slot}번)` })
+      }
+      if (itemAssignments !== undefined && sourceItemNames !== null && assignees.length >= 2 && !itemSetsMatch) {
+        skipped.push({ orderId: targetId, batchNo, reason: '시험항목 구성이 달라 슬롯만 적용하고 항목 배분은 건너뛰었습니다.' })
+      }
+    } catch (error) {
+      skipped.push({ orderId: targetId, batchNo, reason: error instanceof Error ? error.message : '담당자 복제에 실패했습니다.' })
+    }
+  }
+  return { applied, skipped }
 }
 
 // ─── 순수 그룹핑 (테스트 용이하도록 분리) ────────────────────────────────────
@@ -290,7 +472,7 @@ export function buildGroupsFromOrders(
 async function loadFamilyByCodeRaw(): Promise<Map<string, string>> {
   const m = new Map<string, string>()
   try {
-    const { data, error } = await selectAll(supabaseAdmin, 'concurrent_product_family_members', 'family_id, product_code')
+    const { data, error } = await selectAll(supabaseAdmin, 'concurrent_product_family_members', 'family_id, product_code', { orderBy: ['family_id', 'product_code'] })
     if (error) return m
     for (const r of (data ?? []) as Record<string, unknown>[]) {
       m.set(r.product_code as string, r.family_id as string)
@@ -312,9 +494,9 @@ async function loadFamilyByCodeRaw(): Promise<Map<string, string>> {
 export async function ensureAutoGroups(): Promise<{ created: number }> {
   const [ordersRes, groupsRes, itemsRes] = await Promise.all([
     selectAll(supabaseAdmin, 'pct_orders',
-      'id, product_code, product_name, batch_no, packaging_date, due_date, status'),
-    selectAll(supabaseAdmin, 'concurrent_analysis_groups', '*'),
-    selectAll(supabaseAdmin, 'concurrent_analysis_group_items', 'group_id, order_id'),
+      'id, product_code, product_name, batch_no, packaging_date, due_date, status', { orderBy: 'id' }),
+    selectAll(supabaseAdmin, 'concurrent_analysis_groups', '*', { orderBy: 'id' }),
+    selectAll(supabaseAdmin, 'concurrent_analysis_group_items', 'group_id, order_id', { orderBy: ['group_id', 'order_id'] }),
   ])
   if (ordersRes.error) throw new Error(ordersRes.error.message)
   if (groupsRes.error) throw new Error(groupsRes.error.message)
@@ -414,23 +596,25 @@ export async function ensureAutoGroups(): Promise<{ created: number }> {
 // ─── 조회 ────────────────────────────────────────────────────────────────────
 /** 그룹 + 멤버 조인 반환 (시험 시작일 오름차순) */
 export async function listGroups(): Promise<GroupRow[]> {
-  const { data: groups, error } = await supabaseAdmin
-    .from('concurrent_analysis_groups')
-    // select('*') 로 읽는다. source·note 는 0044 에서 붙는 컬럼이라, 이름을 명시하면
-    // 마이그레이션 적용 전에는 42703 으로 목록 전체가 500 이 된다(AI 스케줄 화면이 깨진다).
-    // '*' 면 없는 컬럼은 그냥 빠지고 아래 ?? 기본값이 받는다.
-    .select('*')
-    .order('test_start_date', { ascending: true, nullsFirst: false })
-  if (error) throw error
+  const groupsRes = await selectAll(supabaseAdmin, 'concurrent_analysis_groups', '*', { orderBy: 'id' })
+  const groups = groupsRes.data
+  const error = groupsRes.error
+  /* 정렬은 페이지를 모두 읽은 뒤 적용한다. Supabase 기본 1000행에서 그룹을 자르면
+     멤버가 정상이어도 화면의 동시분석 탭에서 사라지는 원인이 된다. */
+  if (error) throw new Error(error.message)
   const groupRows = (groups ?? []) as Record<string, unknown>[]
+  groupRows.sort((a, b) => String(a.test_start_date ?? '9999').localeCompare(String(b.test_start_date ?? '9999')))
   if (groupRows.length === 0) return []
 
   const groupIds = groupRows.map(g => g.id as string)
-  const { data: items, error: itemErr } = await supabaseAdmin
-    .from('concurrent_analysis_group_items')
-    .select('group_id, order_id, pct_orders(product_code, product_name, batch_no, packaging_date)')
-    .in('group_id', groupIds)
-  if (itemErr) throw itemErr
+  const items: Record<string, unknown>[] = []
+  for (let i = 0; i < groupIds.length; i += 150) {
+    const { data, error: itemErr } = await supabaseAdmin.from('concurrent_analysis_group_items')
+      .select('group_id, order_id, pct_orders(product_code, product_name, batch_no, packaging_date)')
+      .in('group_id', groupIds.slice(i, i + 150)).range(0, 9999)
+    if (itemErr) throw itemErr
+    items.push(...((data ?? []) as unknown as Record<string, unknown>[]))
+  }
 
   const itemsByGroup = new Map<string, GroupItem[]>()
   for (const it of (items ?? []) as Record<string, unknown>[]) {
@@ -455,6 +639,7 @@ export async function listGroups(): Promise<GroupRow[]> {
     // 0044 미적용 DB 에서는 키가 없다 — 자동으로 취급해 화면이 깨지지 않게 한다.
     source:        (g.source as 'auto' | 'manual') ?? 'auto',
     note:          (g.note as string) ?? null,
+    representativeOrderId: (g.representative_order_id as string) ?? null,
     items:         itemsByGroup.get(g.id as string) ?? [],
   }))
 }
@@ -495,7 +680,7 @@ export async function rebuildGroups(): Promise<{ created: number; kept: number }
   const ordersRes = await selectAll(
     supabaseAdmin,
     'pct_orders',
-    'id, product_code, product_name, batch_no, packaging_date, due_date, status',
+    'id, product_code, product_name, batch_no, packaging_date, due_date, status', { orderBy: 'id' },
   )
   const orders = ordersRes.data
   const ordErr = ordersRes.error
@@ -614,11 +799,11 @@ async function loadCandidates(orderIds: string[]): Promise<GroupCandidate[]> {
     status:        o.status as string,
     currentGroupId: groupOf.get(o.id as string) ?? null,
     hasJob:        withJob.has(o.id as string),
-  }))
+  })).sort((a, b) => a.orderId.localeCompare(b.orderId))
 }
 
 /**
- * 묶기 검증. 관리자 판단을 막지 않는 것이 원칙이라 대부분 'warn' 이다.
+ * 동시분석 그룹 지정 검증. 관리자 판단을 막지 않는 것이 원칙이라 대부분 'warn' 이다.
  * 'block' 은 데이터가 성립하지 않는 경우뿐 — 오더가 없거나, 삭제됐거나, 2건 미만.
  */
 export function validateGrouping(candidates: GroupCandidate[], requestedIds: string[]): GroupWarning[] {
@@ -628,7 +813,7 @@ export function validateGrouping(candidates: GroupCandidate[], requestedIds: str
 
   const alive = candidates.filter(c => c.status !== DELETED_STATUS)
   const deleted = candidates.length - alive.length
-  if (deleted > 0) out.push({ level: 'block', message: `삭제된 오더 ${deleted}건은 묶을 수 없습니다.` })
+  if (deleted > 0) out.push({ level: 'block', message: `삭제된 오더 ${deleted}건은 동시분석 그룹으로 지정할 수 없습니다.` })
   if (alive.length < 2) out.push({ level: 'block', message: '동시분석 그룹은 오더 2건 이상이어야 합니다.' })
   if (out.some(w => w.level === 'block')) return out
 
@@ -659,7 +844,7 @@ export function validateGrouping(candidates: GroupCandidate[], requestedIds: str
   if (started.length > 0) {
     out.push({
       level: 'warn',
-      message: `이미 시험이 시작된 오더 ${started.length}건이 포함됩니다 (${started.map(c => c.batchNo).join(', ')}). 지금 묶어도 이미 진행된 부분은 합쳐지지 않습니다.`,
+      message: `이미 시험이 시작된 오더 ${started.length}건이 포함됩니다 (${started.map(c => c.batchNo).join(', ')}). 지금 동시분석 그룹으로 지정해도 이미 진행된 부분은 합쳐지지 않습니다.`,
     })
   }
   const moved = alive.filter(c => c.currentGroupId)
@@ -694,10 +879,19 @@ async function detachOrders(orderIds: string[]): Promise<void> {
   if (error) throw error
 }
 
-/** 멤버가 0건이 된 그룹은 남겨 두지 않는다 — 빈 그룹은 화면에서 유령 행이 된다. */
+/**
+ * 멤버가 0건이 된 그룹은 남겨 두지 않는다 — 빈 그룹은 화면에서 유령 행이 된다.
+ * 원래 단일 조회(각각 최대 1000행)가 방금 생성한 멤버를 잘라 헤더를 삭제할 수
+ * 있었고, 목록도 같은 제한으로 정상 그룹을 숨겼다. 두 조회 모두 전체 페이지를 읽는다.
+ */
 async function purgeEmptyGroups(): Promise<void> {
-  const { data: groups } = await supabaseAdmin.from('concurrent_analysis_groups').select('id')
-  const { data: items } = await supabaseAdmin.from('concurrent_analysis_group_items').select('group_id')
+  const [groupsRes, itemsRes] = await Promise.all([
+    selectAll(supabaseAdmin, 'concurrent_analysis_groups', 'id', { orderBy: 'id' }),
+    selectAll(supabaseAdmin, 'concurrent_analysis_group_items', 'group_id', { orderBy: ['group_id', 'order_id'] }),
+  ])
+  if (groupsRes.error || itemsRes.error) return
+  const groups = groupsRes.data ?? []
+  const items = itemsRes.data ?? []
   const used = new Set((items ?? []).map(i => i.group_id as string))
   const empty = (groups ?? []).map(g => g.id as string).filter(id => !used.has(id))
   if (empty.length === 0) return
@@ -705,7 +899,7 @@ async function purgeEmptyGroups(): Promise<void> {
 }
 
 export async function createManualGroup(
-  orderIds: string[], opts: { label?: string | null; note?: string | null }, userId: string | null,
+  orderIds: string[], opts: { label?: string | null; note?: string | null; representativeOrderId?: string | null }, userId: string | null,
 ): Promise<{ groupId: string; warnings: GroupWarning[] }> {
   const candidates = await loadCandidates(orderIds)
   const warnings = validateGrouping(candidates, orderIds)
@@ -713,6 +907,9 @@ export async function createManualGroup(
   if (blocked.length > 0) throw new Error(blocked.map(b => b.message).join(' '))
 
   const alive = candidates.filter(c => c.status !== DELETED_STATUS)
+  const representativeOrderId = opts.representativeOrderId && alive.some(c => c.orderId === opts.representativeOrderId)
+    ? opts.representativeOrderId
+    : alive.map(c => c.orderId).sort()[0]
   await detachOrders(alive.map(c => c.orderId))
 
   // 키는 결정적으로: 그룹 내 최소 order_id 앞 8자리. 자동 그룹과 구분되게 접두사를 다르게 둔다.
@@ -728,15 +925,36 @@ export async function createManualGroup(
       group_lock:      true,
       source:          'manual',
       created_by:      userId,
+      representative_order_id: representativeOrderId,
     })
     .select('id').single()
-  if (insErr) throw insErr
+  if (insErr) {
+    // 0057 선적용 전에도 그룹 지정 자체는 동작해야 한다. 대표 기능만 폴백한다.
+    if (insErr.code === 'PGRST204' || insErr.code === '42703') {
+      const fallback = await supabaseAdmin.from('concurrent_analysis_groups').insert({
+        group_key: `mgrp-${minId.slice(0, 8)}`, label: opts.label?.trim() || null, note: opts.note?.trim() || null,
+        test_start_date: startDateOf(alive), group_lock: true, source: 'manual', created_by: userId,
+      }).select('id').single()
+      if (fallback.error) throw describeSchemaError(fallback.error, '동시분석 대표 로트', '0057_concurrent_group_representative.sql')
+      const groupId = (fallback.data as Record<string, unknown>).id as string
+      const { error: itemErr } = await supabaseAdmin.from('concurrent_analysis_group_items').insert(alive.map(c => ({ group_id: groupId, order_id: c.orderId, packaging_complete_date: c.packagingDate })))
+      if (itemErr) { await supabaseAdmin.from('concurrent_analysis_groups').delete().eq('id', groupId); throw itemErr }
+      await purgeEmptyGroups()
+      return { groupId, warnings: warnings.filter(w => w.level === 'warn') }
+    }
+    throw insErr
+  }
   const groupId = (groupRow as Record<string, unknown>).id as string
 
   const { error: itemErr } = await supabaseAdmin
     .from('concurrent_analysis_group_items')
     .insert(alive.map(c => ({ group_id: groupId, order_id: c.orderId, packaging_complete_date: c.packagingDate })))
-  if (itemErr) throw itemErr
+  if (itemErr) {
+    // 헤더만 남으면 GET 목록에서는 빈 그룹으로 보여 "성공했는데 묶이지 않은" 것처럼
+    // 보인다. 멤버 삽입 실패 시 방금 만든 헤더도 즉시 정리한다.
+    await supabaseAdmin.from('concurrent_analysis_groups').delete().eq('id', groupId)
+    throw itemErr
+  }
 
   await purgeEmptyGroups()
   return { groupId, warnings: warnings.filter(w => w.level === 'warn') }
@@ -758,6 +976,8 @@ export async function addGroupMembers(groupId: string, orderIds: string[]): Prom
 
 /** 그룹에서 오더를 뺀다. 남은 멤버가 1건 이하가 되면 그룹을 해체한다(1건짜리 동시분석은 뜻이 없다). */
 export async function removeGroupMembers(groupId: string, orderIds: string[]): Promise<{ removed: number; dissolved: boolean }> {
+  const { data: beforeGroup } = await supabaseAdmin.from('concurrent_analysis_groups').select('representative_order_id').eq('id', groupId).maybeSingle()
+  const oldRepresentativeId = (beforeGroup?.representative_order_id as string | null) ?? null
   const { error } = await supabaseAdmin
     .from('concurrent_analysis_group_items').delete().eq('group_id', groupId).in('order_id', orderIds)
   if (error) throw error
@@ -767,8 +987,23 @@ export async function removeGroupMembers(groupId: string, orderIds: string[]): P
     await supabaseAdmin.from('concurrent_analysis_groups').delete().eq('id', groupId)
     return { removed: orderIds.length, dissolved: true }
   }
+  if (oldRepresentativeId && orderIds.includes(oldRepresentativeId)) {
+    const { data: remaining } = await supabaseAdmin.from('concurrent_analysis_group_items').select('order_id').eq('group_id', groupId).order('order_id', { ascending: true }).limit(1)
+    const nextRep = (remaining?.[0]?.order_id as string | undefined) ?? null
+    const { error: repErr } = await supabaseAdmin.from('concurrent_analysis_groups').update({ representative_order_id: nextRep }).eq('id', groupId)
+    if (repErr && (repErr.code === 'PGRST204' || repErr.code === '42703')) throw describeSchemaError(repErr, '동시분석 대표 로트', '0057_concurrent_group_representative.sql')
+    if (repErr) throw repErr
+  }
   await refreshGroupStartDate(groupId)
   return { removed: orderIds.length, dissolved: false }
+}
+
+/** 대표를 관리자가 명시적으로 교체한다. 0057 미적용 DB에서는 안내 오류를 낸다. */
+export async function setGroupRepresentative(groupId: string, orderId: string): Promise<void> {
+  const { data: member } = await supabaseAdmin.from('concurrent_analysis_group_items').select('order_id').eq('group_id', groupId).eq('order_id', orderId).maybeSingle()
+  if (!member) throw new Error('대표 로트는 해당 동시분석 그룹의 멤버여야 합니다.')
+  const { error } = await supabaseAdmin.from('concurrent_analysis_groups').update({ representative_order_id: orderId }).eq('id', groupId)
+  if (error) throw describeSchemaError(error, '동시분석 대표 로트', '0057_concurrent_group_representative.sql')
 }
 
 /** 그룹 해체 — 멤버는 on delete cascade 로 함께 사라진다(오더 자체는 그대로). */

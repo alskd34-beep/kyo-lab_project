@@ -12,7 +12,7 @@
 import { NextRequest } from 'next/server'
 import { requireAdmin } from '@backend/lib/guard'
 import {
-  addGroupMembers, dissolveGroup, removeGroupMembers, setGroupLock,
+  addGroupMembers, dissolveGroup, removeGroupMembers, setGroupLock, setGroupRepresentative,
 } from '@backend/services/concurrentGroups'
 
 export const runtime = 'nodejs'
@@ -23,7 +23,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   try {
     const { id } = await ctx.params
     const body = await req.json() as {
-      groupLock?: boolean; addOrderIds?: string[]; removeOrderIds?: string[]
+      groupLock?: boolean; addOrderIds?: string[]; removeOrderIds?: string[]; representativeOrderId?: string
     }
     if (Array.isArray(body.addOrderIds) && body.addOrderIds.length > 0) {
       const added = await addGroupMembers(id, body.addOrderIds)
@@ -35,6 +35,10 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     }
     if (typeof body.groupLock === 'boolean') {
       await setGroupLock(id, body.groupLock)
+      return Response.json({ ok: true })
+    }
+    if (body.representativeOrderId) {
+      await setGroupRepresentative(id, body.representativeOrderId)
       return Response.json({ ok: true })
     }
     return Response.json(

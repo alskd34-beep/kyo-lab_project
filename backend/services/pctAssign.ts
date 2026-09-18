@@ -48,7 +48,7 @@ import {
   findAbsenceConflicts, orderTestWindow, todayIso, type TesterAbsence,
 } from '@shared/leave'
 import {
-  buildGroupsFromOrders, ensureAutoGroups, type OrderForGrouping,
+  buildGroupsFromOrders, ensureAutoGroups, replicateRepresentativeAssignment, type OrderForGrouping,
 } from '@backend/services/concurrentGroups'
 import { loadFamilyByCode } from '@backend/services/concurrentProductFamilies'
 import {
@@ -181,10 +181,36 @@ async function loadTargetOrders(orderIds?: string[]): Promise<OrderForAssign[]> 
  *
  * @returns reps 대표 오더 목록, memberToRep 멤버 orderId → 대표 오더
  */
-function groupOrders(orders: OrderForAssign[], familyByCode?: Map<string, string>): {
+async function groupOrders(orders: OrderForAssign[], familyByCode?: Map<string, string>): Promise<{
   reps: OrderForAssign[]
   memberToRep: Map<string, OrderForAssign>
-} {
+}> {
+  // DB에 저장된 동시분석 그룹은 규칙 그룹핑보다 우선한다. 수동 그룹뿐 아니라
+  // 이미 생성된 자동 그룹도 저장된 대표 로트 기준 배정을 유지해야 한다.
+  const [groupsRes, itemsRes] = await Promise.all([
+    selectAll(supabaseAdmin, 'concurrent_analysis_groups', '*', { orderBy: 'id' }),
+    selectAll(supabaseAdmin, 'concurrent_analysis_group_items', 'group_id, order_id', { orderBy: ['group_id', 'order_id'] }),
+  ])
+  const orderById = new Map(orders.map(o => [o.id, o]))
+  const memberToRep = new Map<string, OrderForAssign>()
+  const reps: OrderForAssign[] = []
+  const claimed = new Set<string>()
+  const itemsByGroup = new Map<string, string[]>()
+  for (const row of itemsRes.data ?? []) {
+    const ids = itemsByGroup.get(String(row.group_id)) ?? []
+    ids.push(String(row.order_id)); itemsByGroup.set(String(row.group_id), ids)
+  }
+  if (!groupsRes.error && !itemsRes.error) {
+    for (const group of groupsRes.data ?? []) {
+      const ids = (itemsByGroup.get(String(group.id)) ?? []).filter(id => orderById.has(id))
+      if (ids.length < 2) continue
+      const repId = String(group.representative_order_id ?? ids.slice().sort()[0])
+      const rep = orderById.get(repId) ?? orderById.get(ids.slice().sort()[0])
+      if (!rep) continue
+      reps.push(rep)
+      for (const id of ids) { memberToRep.set(id, rep); claimed.add(id) }
+    }
+  }
   const forGrouping: OrderForGrouping[] = orders.map(o => ({
     id: o.id,
     productCode: o.product_code,
@@ -194,15 +220,14 @@ function groupOrders(orders: OrderForAssign[], familyByCode?: Map<string, string
     dueDate: o.due_date,
   }))
   const built = buildGroupsFromOrders(forGrouping, familyByCode)
-  const orderById = new Map(orders.map(o => [o.id, o]))
-  const reps: OrderForAssign[] = []
-  const memberToRep = new Map<string, OrderForAssign>()
   for (const g of built) {
-    const repId = g.items.map(i => i.orderId).reduce((a, b) => (a < b ? a : b))
+    const unclaimed = g.items.filter(item => !claimed.has(item.orderId))
+    if (unclaimed.length === 0) continue
+    const repId = unclaimed.map(i => i.orderId).reduce((a, b) => (a < b ? a : b))
     const rep = orderById.get(repId)
     if (!rep) continue
     reps.push(rep)
-    for (const it of g.items) memberToRep.set(it.orderId, rep)
+    for (const it of unclaimed) memberToRep.set(it.orderId, rep)
   }
   return { reps, memberToRep }
 }
@@ -255,10 +280,13 @@ async function currentWorkload(): Promise<Map<string, number>> {
 /** 품목코드 → 시험항목명 목록 */
 async function productItemsByCode(): Promise<Map<string, string[]>> {
   const [productsRes, ptiRes, testItemsRes] = await Promise.all([
-    selectAll(supabaseAdmin, 'products', 'id, product_code'),
-    selectAll(supabaseAdmin, 'product_test_items', 'product_id, test_item_id'),
-    selectAll(supabaseAdmin, 'test_items', 'id, name'),
+      selectAll(supabaseAdmin, 'products', 'id, product_code', { orderBy: 'id' }),
+      selectAll(supabaseAdmin, 'product_test_items', 'product_id, test_item_id', { orderBy: ['product_id', 'test_item_id'] }),
+    selectAll(supabaseAdmin, 'test_items', 'id, name', { orderBy: 'id' }),
   ])
+  if (productsRes.error) throw productsRes.error
+  if (ptiRes.error) throw ptiRes.error
+  if (testItemsRes.error) throw testItemsRes.error
   const codeById = new Map<string, string>()
   for (const p of productsRes.data ?? []) codeById.set(p.id as string, String(p.product_code))
   const nameById = new Map<string, string>()
@@ -317,17 +345,18 @@ function withForcedRules(
  */
 async function highDifficultyPenalty(): Promise<Record<string, number>> {
   const twoWeeksAgoIso = new Date(Date.now() - 14 * 86400000).toISOString()
-  const [{ data: orders }, { data: prods }] = await Promise.all([
+  const [{ data: orders }, productsResult] = await Promise.all([
     supabaseAdmin
       .from('pct_orders')
       .select('id, product_code')
       .not('assignee_tester_id', 'is', null)
       .neq('status', DELETED_STATUS)
       .gte('created_at', twoWeeksAgoIso),   // [규칙4] 최근 2주(14일)
-    supabaseAdmin.from('products').select('product_code, difficulty'),
+    selectAll(supabaseAdmin, 'products', 'product_code, difficulty', { orderBy: 'id' }),
   ])
+  if (productsResult.error) throw productsResult.error
   const diffByCode = new Map<string, string>()
-  for (const p of prods ?? []) diffByCode.set(String(p.product_code), (p.difficulty as string) ?? '')
+  for (const p of productsResult.data ?? []) diffByCode.set(String(p.product_code), (p.difficulty as string) ?? '')
   // [병렬 배정] 담당자 1~5 모두 그 HIGH 품목을 나눠 맡는다 — 대표만 세던 틈을 함께 고친다.
   const highOrderIds = (orders ?? [])
     .filter(o => diffByCode.get(String(o.product_code)) === 'High')
@@ -437,7 +466,7 @@ async function autoAssignCodex(
 ): Promise<{ mode: 'codex'; pick: PickFn; reasonByKey: Map<string, string>; halfDayNotices: EngineHalfDayNotice[] }> {
   const [allTesters, capabilities, matrix, itemsByCode, workload, equipRes] = await Promise.all([
     listTesters({ activeOnly: true }), listCapabilities(), listCapabilityMatrix(), productItemsByCode(), currentWorkload(),
-    selectAll(supabaseAdmin, 'test_item_equipment', 'test_item, required_equipment, is_universal'),
+      selectAll(supabaseAdmin, 'test_item_equipment', 'test_item, required_equipment, is_universal', { orderBy: 'test_item' }),
   ])
   // 비활성(퇴사·휴직 등) 시험자와 휴가/출장 중인 시험자는 배정 후보에서 제외
   const testers = allTesters.filter(t => t.isActive && !excludedTesterIds.has(t.id))
@@ -559,12 +588,15 @@ async function autoAssignRule(
       listTesters({ activeOnly: true }),
       listCapabilities(),
       listCapabilityMatrix(),
-      selectAll(supabaseAdmin, 'products', 'id, product_code'),
-      selectAll(supabaseAdmin, 'product_test_items', 'product_id, test_item_id'),
-      selectAll(supabaseAdmin, 'test_items', 'id, name, requires_duo'),
-      selectAll(supabaseAdmin, 'test_item_equipment', 'test_item, required_equipment, is_universal'),
-      selectAll(supabaseAdmin, 'product_workload', 'product_code, avg_workdays'),
+      selectAll(supabaseAdmin, 'products', 'id, product_code', { orderBy: 'id' }),
+      selectAll(supabaseAdmin, 'product_test_items', 'product_id, test_item_id', { orderBy: ['product_id', 'test_item_id'] }),
+      selectAll(supabaseAdmin, 'test_items', 'id, name, requires_duo', { orderBy: 'id' }),
+      selectAll(supabaseAdmin, 'test_item_equipment', 'test_item, required_equipment, is_universal', { orderBy: 'test_item' }),
+      selectAll(supabaseAdmin, 'product_workload', 'product_code, avg_workdays', { orderBy: 'product_code' }),
     ])
+  for (const result of [productsRes, ptiRes, testItemsRes, equipRes, workloadRes]) {
+    if (result.error) throw result.error
+  }
 
   // 비활성(퇴사·휴직) 시험자만 여기서 거른다.
   // 휴가·출장은 엔진이 실제 근무일과 대조해 판정한다(반차는 제외 대신 공수 차감).
@@ -725,7 +757,7 @@ export async function autoAssign(orderIds?: string[]): Promise<AssignResult> {
   // [후보 구성] 포장일 없는 오더는 그룹 구성·엔진·LLM 입력에서 뺀다 — 포장일 있는 대표와 같은 그룹이 되면
   // 대표 결과를 전파받아 배정되기 때문이다. 결과 목록에는 applyAssignments 가 사유와 함께 남긴다.
   const familyByCode = await loadFamilyByCode().catch(() => new Map<string, string>())
-  const { reps, memberToRep } = groupOrders(orders.filter(o => !!o.packaging_date), familyByCode)
+  const { reps, memberToRep } = await groupOrders(orders.filter(o => !!o.packaging_date), familyByCode)
 
   // 부재(휴가/출장) 로드.
   //  - 연차·출장: 배정 제외 (엔진이 근무일 단위로 판정)
@@ -900,7 +932,7 @@ export async function assignManually(
   orderId: string,
   testerId: string | null,
   opts: { changedBy?: string | null; reason?: string | null } = {},
-): Promise<void> {
+): Promise<{ applied: number; skipped: Array<{ orderId: string; batchNo: string; reason: string }> }> {
   // 비활성 시험자에게는 수동으로도 배정할 수 없다(계정 비활성 = 업무 제외). 최종 판정은 DB 함수.
   await assertTesterAssignable(testerId)
 
@@ -910,7 +942,7 @@ export async function assignManually(
     opts.changedBy ?? null,
     opts.reason?.trim() || (testerId ? '수동 배정' : '수동 배정 해제'),
   )
-  if (!result.changed) return
+  if (!result.changed) return { applied: 0, skipped: [] }
 
   // 알림 문구용 오더 정보(커밋 뒤 읽기). select('*') — 0042(planned_start_date) 미적용 환경에서도 깨지지 않게
   const { data: order } = await supabaseAdmin
@@ -942,4 +974,12 @@ export async function assignManually(
     batchNo: (order?.batch_no as string) ?? '',
     via: '수동 배정',
   })
+
+  return replicateRepresentativeAssignment(
+    orderId,
+    testerId ? [{ slot: 1, testerId }] : [],
+    undefined,
+    opts.changedBy ?? null,
+    opts.reason?.trim() || (testerId ? '수동 배정' : '수동 배정 해제'),
+  )
 }

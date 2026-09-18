@@ -1,9 +1,9 @@
 "use client"
 
 /**
- * 동시분석 그룹 묶기 — AI 스케줄에서 오더를 고르고 「동시분석 묶기」를 눌렀을 때.
+ * 동시분석 그룹 지정 — AI 스케줄에서 오더를 고르고 「동시분석 그룹 지정」을 눌렀을 때.
  *
- * 이 화면이 지켜야 하는 것: **묶기 전에 무엇이 걸리는지 다 보여준다.**
+ * 이 화면이 지켜야 하는 것: **동시분석 그룹 지정 전에 무엇이 걸리는지 다 보여준다.**
  * 관리자의 판단이 규칙보다 우선하므로 막지 않는다. 대신 품목코드가 섞였는지, 포장일이
  * 얼마나 벌어졌는지, 이미 시작된 시험이 끼었는지를 눌러 보기 전에 알려준다.
  * 경고 판정은 서버(previewGrouping)가 하고 화면은 그대로 옮긴다 — 두 곳에서 판단하면
@@ -54,6 +54,7 @@ export function ConcurrentGroupDialog({
   const [warnings, setWarnings] = useState<GroupWarning[]>([])
   const [label, setLabel] = useState("")
   const [note, setNote] = useState("")
+  const [representativeOrderId, setRepresentativeOrderId] = useState("")
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -69,6 +70,7 @@ export function ConcurrentGroupDialog({
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? "확인 실패")
       setCandidates(json.candidates ?? [])
+      setRepresentativeOrderId((json.candidates ?? [])[0]?.orderId ?? "")
       setWarnings(json.warnings ?? [])
     } catch (e) {
       setError(e instanceof Error ? e.message : "확인 실패")
@@ -86,13 +88,13 @@ export function ConcurrentGroupDialog({
       const res = await fetch("/api/concurrent-groups/manual", {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderIds, label: label.trim() || null, note: note.trim() || null }),
+        body: JSON.stringify({ orderIds, label: label.trim() || null, note: note.trim() || null, representativeOrderId: representativeOrderId || null }),
       })
       const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? "묶기 실패")
-      onDone(`동시분석 그룹으로 묶었습니다 (${candidates.length}건).`)
+      if (!res.ok) throw new Error(json.error ?? "그룹 지정 실패")
+      onDone(`동시분석 그룹을 지정했습니다 (${candidates.length}건).`)
     } catch (e) {
-      setError(e instanceof Error ? e.message : "묶기 실패")
+      setError(e instanceof Error ? e.message : "그룹 지정 실패")
     } finally { setSaving(false) }
   }
 
@@ -119,10 +121,10 @@ export function ConcurrentGroupDialog({
             <span className="flex size-8 items-center justify-center rounded-md bg-primary/10 text-primary">
               <Layers className="size-4" />
             </span>
-            동시분석 그룹으로 묶기
+            동시분석 그룹 지정
           </DialogTitle>
           <DialogDescription>
-            함께 시험할 오더를 한 묶음으로 만듭니다. 제조번호별 시험 기록과 성적서는 그대로 분리됩니다.
+            함께 시험할 오더를 하나의 동시분석 그룹으로 지정합니다. 제조번호별 시험 기록과 성적서는 그대로 분리됩니다.
           </DialogDescription>
         </DialogHeader>
 
@@ -133,10 +135,10 @@ export function ConcurrentGroupDialog({
             </p>
           ) : (
             <>
-              {/* 무엇을 묶는가 */}
+              {/* 동시분석 그룹으로 지정할 오더 */}
               <section className="rounded-md border bg-card p-4 shadow-sm">
                 <h3 className="mb-3 border-b pb-2 text-sm font-semibold text-foreground">
-                  묶을 오더 <span className="tabular-nums text-muted-foreground">{candidates.length}건</span>
+                  동시분석 그룹으로 지정할 오더 <span className="tabular-nums text-muted-foreground">{candidates.length}건</span>
                 </h3>
                 <ul className="flex flex-col divide-y">
                   {candidates.map(c => (
@@ -146,7 +148,10 @@ export function ConcurrentGroupDialog({
                         <span className="min-w-0 truncate font-medium text-foreground">{c.productName}</span>
                         <span className="shrink-0 text-muted-foreground">/ {displayBatchNo(c.batchNo)}</span>
                       </span>
-                      <span className="shrink-0 tabular-nums text-muted-foreground">
+                      <span className="flex shrink-0 items-center gap-2 tabular-nums text-muted-foreground">
+                        <label className="inline-flex items-center gap-1 text-xs font-medium text-primary">
+                          <input className="accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" type="radio" name="concurrent-representative" checked={representativeOrderId === c.orderId} onChange={() => setRepresentativeOrderId(c.orderId)} /> 대표
+                        </label>
                         포장 {c.packagingDate ?? "-"}
                         {c.hasJob && <span className="ml-1.5 text-amber-700 dark:text-amber-300">시험 시작됨</span>}
                       </span>
@@ -184,12 +189,12 @@ export function ConcurrentGroupDialog({
                       <Input value={label} onChange={e => setLabel(e.target.value)} placeholder="예: 경옥고 9월 2주" />
                     </label>
                     <label className="grid gap-1.5">
-                      <span className="text-xs font-medium text-muted-foreground">묶은 이유 (선택)</span>
+                      <span className="text-xs font-medium text-muted-foreground">동시분석 그룹 지정 이유 (선택)</span>
                       <Input value={note} onChange={e => setNote(e.target.value)} placeholder="예: 포장일 하루 차이 — 함께 진행" />
                     </label>
                   </div>
                   <p className="mt-2 text-xs leading-normal text-muted-foreground">
-                    이유를 남겨 두면 나중에 이 묶음이 타당했는지 되짚을 수 있습니다.
+                    대표 로트의 담당자 구성이 그룹 배정의 기준이 됩니다. 이유를 남겨 두면 나중에 이 동시분석 그룹 지정이 타당했는지 되짚을 수 있습니다.
                   </p>
                 </section>
               )}
@@ -214,7 +219,7 @@ export function ConcurrentGroupDialog({
             <Button variant="outline" onClick={onClose} disabled={saving}>취소</Button>
             <Button onClick={() => void submit()} disabled={saving || loading || blocked.length > 0 || candidates.length < 2}>
               {saving ? <Loader2 className="animate-spin" /> : <Layers />}
-              {candidates.length >= 2 ? `${candidates.length}건 묶기` : "묶기"}
+              {candidates.length >= 2 ? `${candidates.length}건 동시분석 그룹 지정` : "동시분석 그룹 지정"}
             </Button>
           </span>
         </DialogFooter>

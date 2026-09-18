@@ -58,7 +58,7 @@ export function isMissingAssigneeSchema(err: unknown): boolean {
   const msg = e?.message ?? ''
   if (!/pct_order_assignees/.test(msg)) return false
   return e?.code === 'PGRST205' || e?.code === 'PGRST200' || e?.code === '42P01'
-    || /does not exist|Could not find/i.test(msg)
+    || /(?:relation|table).*pct_order_assignees.*does not exist|Could not find.*pct_order_assignees/i.test(msg)
 }
 
 /** 담당자 슬롯 조회 오류 → 설치 안내가 붙은 Error */
@@ -111,7 +111,7 @@ export async function loadAssigneesByOrder(
   }
 
   if (orderIds === undefined) {
-    const { data, error } = await selectAll(supabaseAdmin, 'pct_order_assignees', 'order_id, slot, tester_id')
+    const { data, error } = await selectAll(supabaseAdmin, 'pct_order_assignees', 'order_id, slot, tester_id', { orderBy: ['order_id', 'slot'] })
     if (error) return fail(error)
     for (const r of data ?? []) push(r)
   } else {

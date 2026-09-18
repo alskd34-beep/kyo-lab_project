@@ -52,13 +52,19 @@ export async function listByOrder(orderId: string): Promise<OrderTestItemRow[]> 
 export async function mapByOrders(orderIds: string[]): Promise<Map<string, string[]>> {
   const out = new Map<string, string[]>()
   if (orderIds.length === 0) return out
-  const { data, error } = await supabaseAdmin
-    .from('pct_order_test_items')
-    .select('order_id, test_item_name, sequence_order')
-    .in('order_id', orderIds)
-    .order('sequence_order', { ascending: true })
-  if (error) throw error
-  for (const r of data ?? []) {
+  const rows: Record<string, unknown>[] = []
+  for (let i = 0; i < orderIds.length; i += 150) {
+    const { data, error } = await supabaseAdmin
+      .from('pct_order_test_items')
+      .select('order_id, test_item_name, sequence_order')
+      .in('order_id', orderIds.slice(i, i + 150))
+      .order('sequence_order', { ascending: true })
+      .range(0, 9999)
+    if (error) throw error
+    rows.push(...((data ?? []) as Record<string, unknown>[]))
+  }
+  rows.sort((a, b) => Number(a.sequence_order ?? 0) - Number(b.sequence_order ?? 0))
+  for (const r of rows) {
     const id = r.order_id as string
     const arr = out.get(id) ?? []
     arr.push(r.test_item_name as string)
