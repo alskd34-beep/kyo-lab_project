@@ -15,7 +15,7 @@ import {
 import { assertTesterAssignable } from '@backend/services/testers'
 import { logReassignment } from '@backend/services/reassignmentHistory'
 import { warnIfAssigneeOnLeave } from '@backend/services/leaveConflicts'
-import { removeGroupMembers } from '@backend/services/concurrentGroups'
+import { removeGroupMembers, replicateRepresentativeAssignment, type AssignmentReplicationResult } from '@backend/services/concurrentGroups'
 import { ASSIGNED_TESTER_FILTER_COLUMN, withAssignedTesterEmbed } from '@backend/lib/assigneeFilter'
 import { describeSchemaError } from '@backend/lib/schemaError'
 import { generateNaBatchNo, generateNaProductCode } from '@backend/lib/orderNa'
@@ -500,19 +500,19 @@ export async function createOrder(input: {
 }
 
 /**
- * 수동 오더 삭제 — **소프트 삭제**(status='삭제', deleted_at). 행을 지우지 않는다(GMP 이력 보존).
+ * 오더 삭제 — **소프트 삭제**(status='삭제', deleted_at). 행을 지우지 않는다(GMP 이력 보존).
  *
  * 적재의 삭제 감지(pctIngest.ts)와 같은 표현이라 목록 기본 필터·대시보드·배정 대상에서 똑같이 빠진다.
  * 다른 점:
- *  - ingest_state 는 'manual' 을 그대로 둔다 — 적재 삭제처럼 'deleted' 로 덮으면 수동 오더였다는 표시를 잃는다.
+ *  - ingest_state 는 그대로 둔다. 사용자 삭제 표식으로 적재 삭제·사용자 삭제를 구분한다.
  *  - 사유 필수. pct_order_edits 에 status 변경 이력을 **먼저** 남기고 값을 바꾼다(updateOrderWithReason 과 같은 순서).
  *  - 동시분석 그룹에서 뺀다. 적재 삭제는 재생성(rebuildGroups)이 삭제 오더를 걸러 자동 그룹에서 빠지지만,
  *    수동·잠긴 그룹은 재생성 대상이 아니라 삭제 오더가 멤버로 남는다 — 여기서 직접 뺀다(남은 멤버 1건 이하면 그룹 해체).
  *  - 담당자 구성은 건드리지 않는다(적재 삭제와 같음). 삭제 오더는 목록·할 일·부하 집계에서 상태로 걸러진다.
  *
- * 막는 조건(서버 최종 판정): 자동 적재 오더 · 이미 삭제됨 · 확정(LOCK) · 작업(qc_jobs)이 하나라도 있음.
+ * 막는 조건(서버 최종 판정): 이미 삭제됨 · 확정(LOCK) · 작업(qc_jobs)이 하나라도 있음.
  */
-export async function deleteManualOrder(id: string, reason: string, deletedBy: string | null): Promise<void> {
+export async function deleteOrder(id: string, reason: string, deletedBy: string | null): Promise<void> {
   const trimmedReason = (reason ?? '').trim()
   if (!trimmedReason) throw new Error('삭제 사유는 필수입니다.')
 
@@ -521,9 +521,6 @@ export async function deleteManualOrder(id: string, reason: string, deletedBy: s
   if (curErr) throw curErr
   if (!current) throw new Error('오더를 찾을 수 없습니다.')
   const row = current as Record<string, unknown>
-  if (row.ingest_state !== 'manual') {
-    throw new Error('자동 적재 오더는 삭제할 수 없습니다. 제조팀 시트가 원본입니다.')
-  }
   if (row.status === DELETED_STATUS) throw new Error('이미 삭제된 오더입니다.')
   if (row.locked) throw new Error('확정(LOCK)된 오더는 삭제할 수 없습니다. 확정 해제 후 다시 시도해 주세요.')
 
@@ -531,6 +528,13 @@ export async function deleteManualOrder(id: string, reason: string, deletedBy: s
     .from('qc_jobs').select('id', { count: 'exact', head: true }).eq('order_id', id)
   if (jobErr) throw jobErr
   if ((jobCount ?? 0) > 0) throw new Error('이미 시험이 시작된 오더는 삭제할 수 없습니다.')
+
+  // 0056 미적용 운영 DB에서는 수동 오더의 기존 삭제는 계속 허용하되, 자동 오더는
+  // 사용자 삭제 표식 없이 적재 때 되살아날 수 있으므로 적용 순서를 명확히 안내한다.
+  const hasUserDeletedColumn = 'user_deleted' in row
+  if (!hasUserDeletedColumn && row.ingest_state !== 'manual') {
+    throw new Error('자동 오더 삭제를 사용하려면 데이터베이스 업데이트 0056을 먼저 적용해 주세요.')
+  }
 
   // ① 이력 먼저
   const { data: edit, error: logErr } = await supabaseAdmin
@@ -541,11 +545,18 @@ export async function deleteManualOrder(id: string, reason: string, deletedBy: s
   if (logErr) throw new Error(`삭제 이력 기록 실패로 삭제를 취소했습니다: ${logErr.message}`)
 
   // ② 조건부 소프트 삭제 — 이력을 쓰는 사이 상태가 바뀌었으면(삭제·확정) 0행이 되어 되돌린다
+  const updateValues: Record<string, unknown> = {
+    status: DELETED_STATUS,
+    deleted_at: new Date().toISOString(),
+  }
+  if (hasUserDeletedColumn) {
+    updateValues.user_deleted = true
+    updateValues.user_deleted_by = deletedBy
+  }
   const { data: updated, error: updErr } = await supabaseAdmin
     .from('pct_orders')
-    .update({ status: DELETED_STATUS, deleted_at: new Date().toISOString() })
+    .update(updateValues)
     .eq('id', id)
-    .eq('ingest_state', 'manual')
     .neq('status', DELETED_STATUS)
     .select('id')
   const rollbackEdit = () => supabaseAdmin.from('pct_order_edits').delete().eq('id', edit.id as string).then(
@@ -566,6 +577,31 @@ export async function deleteManualOrder(id: string, reason: string, deletedBy: s
   } catch (err) {
     console.error('[pctOrders] 삭제 오더의 동시분석 그룹 정리 실패 — 삭제는 반영됨:', id, err)
   }
+}
+
+export interface DeleteOrdersResult {
+  succeeded: string[]
+  skipped: Array<{ id: string; reason: string }>
+}
+
+/** 선택 오더를 독립적으로 삭제해 가능한 오더는 계속 처리한다. */
+export async function deleteOrders(ids: string[], reason: string, deletedBy: string | null): Promise<DeleteOrdersResult> {
+  const succeeded: string[] = []
+  const skipped: DeleteOrdersResult['skipped'] = []
+  for (const id of Array.from(new Set(ids.filter(Boolean)))) {
+    try {
+      await deleteOrder(id, reason, deletedBy)
+      succeeded.push(id)
+    } catch (err) {
+      const message = err instanceof Error
+        ? err.message
+        : typeof err === 'object' && err !== null && 'message' in err && typeof err.message === 'string'
+          ? err.message
+          : '삭제 실패'
+      skipped.push({ id, reason: message })
+    }
+  }
+  return { succeeded, skipped }
 }
 
 /**
@@ -700,7 +736,7 @@ export async function updateOrderWithReason(
   reason: string,
   editedBy: string | null,
   opts: { assignees?: unknown; itemAssignments?: unknown } = {},
-): Promise<void> {
+): Promise<AssignmentReplicationResult | null> {
   const trimmedReason = (reason ?? '').trim()
   if (!trimmedReason) throw new Error('수정 사유는 필수입니다.')
 
@@ -798,7 +834,7 @@ export async function updateOrderWithReason(
   }
   let { dbPatch, edits } = buildEdits()
 
-  if (edits.length === 0 && plan.kind === 'none' && !hasItemBundle) return  // 변경 없음
+  if (edits.length === 0 && plan.kind === 'none' && !hasItemBundle) return null  // 변경 없음
 
   const changed = new Set(edits.map(e => e.field))
 
@@ -995,6 +1031,18 @@ export async function updateOrderWithReason(
     }
     throw assignmentError
   }
+
+  let replication: AssignmentReplicationResult | null = null
+  if (touchesAssignment || hasItemBundle) {
+    replication = await replicateRepresentativeAssignment(
+      id,
+      finalSlots.map(a => ({ slot: a.slot, testerId: a.testerId })),
+      hasItemBundle ? opts.itemAssignments : undefined,
+      editedBy,
+      trimmedReason,
+    )
+  }
+  return replication
 }
 
 /** 수정 후 실제 값 — 패치에 그 컬럼이 있으면(null 로 비우는 경우 포함) 패치값이 이긴다. */

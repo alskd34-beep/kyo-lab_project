@@ -151,6 +151,8 @@ interface ExistingOrder {
   locked?: boolean
   /** 0039 미적용 환경에서는 이 키 자체가 없다(undefined) — hasValidationColumn 참고 */
   validation_type?: string | null
+  /** 0056: 관리자가 삭제한 오더는 동일 자연키가 시트에 재등장해도 복구하지 않는다. */
+  user_deleted?: boolean
 }
 
 function diffChanged(existing: ExistingOrder, row: SheetPctRow, hasValidationColumn: boolean): boolean {
@@ -177,7 +179,7 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
   // ── 품목마스터 코드·명 일괄 조회 및 시트 품목명 보완 ────────────────────────
   // 품목이 1000개를 넘으면 기본 limit 에 잘려 "미동기화" 오탐이 난다 → selectAll.
   // 품목코드만 있는 행도 여기서 한 번에 이름을 보완해 자연키 계산 전에 확정한다.
-  const { data: prodRows, error: prodErr } = await selectAll(supabaseAdmin, 'products', 'product_code, name')
+  const { data: prodRows, error: prodErr } = await selectAll(supabaseAdmin, 'products', 'product_code, name', { orderBy: 'id' })
   if (prodErr) throw new Error(`품목마스터 조회 실패: ${prodErr.message}`)
   const productCodes = new Set<string>()
   const productNamesByCode = new Map<string, string>()
@@ -220,6 +222,7 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
   // 행이 하나도 없으면 판정할 수 없으므로 넣지 않는다 — 다음 적재부터 자연히 켜진다.
   const firstRow = (existingRows ?? [])[0]
   const hasValidationColumn = firstRow != null && 'validation_type' in firstRow
+  const hasUserDeletedColumn = firstRow != null && 'user_deleted' in firstRow
   // 구분 컬럼이 없는 DB 에서는 구분을 키에 넣지 않는다(시트 값만 있고 DB 는 늘 비어 있어 매 회차 신규로 오판된다)
   const keyOfOrder = (o: ExistingOrder) =>
     keyOf(o.batch_no, o.product_code, o.product_name, hasValidationColumn ? o.validation_type : null)
@@ -232,6 +235,8 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
   //   activeByBatchCode : 품목명·구분이 시트에서 바뀐 행을 "새 오더 + 옛 오더 삭제" 가 아니라 "변경" 으로 잇는 보조 색인
   const existingByKey = new Map<string, ExistingOrder>()
   const deletedByKey = new Map<string, ExistingOrder>()
+  const userDeletedByKey = new Set<string>()
+  const userDeletedByBatchCode = new Set<string>()
   const activeByBatchCode = new Map<string, ExistingOrder[]>()
   for (const r of existingRows ?? []) {
     const row = r as unknown as ExistingOrder
@@ -240,6 +245,13 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
     if (row.ingest_state === 'manual') continue
     const key = keyOfOrder(row)
     if (row.status === DELETED_STATUS) {
+      // 관리자가 삭제한 오더는 시트가 다시 보내도 복구하지 않는다. 자연키를 계속 점유해야
+      // 신규 insert로 되살아나는 것도 막을 수 있다.
+      if (hasUserDeletedColumn && row.user_deleted === true) {
+        userDeletedByKey.add(key)
+        userDeletedByBatchCode.add(batchCodeOf(row.batch_no, row.product_code))
+        continue
+      }
       deletedByKey.set(key, row)
     } else {
       existingByKey.set(key, row)
@@ -472,6 +484,26 @@ export async function ingestPctSheet(fileIdOverride?: string): Promise<IngestRes
     // 네 값이 그대로인 기존 오더 → 없으면 품목명·구분만 바뀐 기존 오더(보조 매칭) 순서로 찾는다.
     // 보조 매칭된 오더는 자기 네 값 키로도 seen 에 넣어 아래 삭제 감지에서 "시트에서 사라짐" 으로 잡히지 않게 한다.
     const exactExisting = existingByKey.get(key)
+    // 사용자 삭제 행은 삭제 상태와 자연키를 그대로 보존한다. 이 분기를 빠뜨리면
+    // deletedByKey에서 제외한 행이 신규 insert로 다시 생성되거나 중복 오류를 낸다.
+    if (userDeletedByKey.has(key)) {
+      skippedRows.push({
+        reason: '관리자가 삭제한 오더라서 시트 행을 건너뛰었습니다.',
+        productName: row.productName,
+        batchNo: row.batchNo,
+      })
+      continue
+    }
+    // 품목명·구분이 바뀐 시트 행도 사용자 삭제 오더의 제조번호·품목코드와 같으면
+    // 삭제 오더가 새 오더로 되살아나는 것을 막고, 운영자가 적재 결과에서 확인할 수 있게 남긴다.
+    if (userDeletedByBatchCode.has(batchCodeOf(row.batchNo, row.productCode))) {
+      skippedRows.push({
+        reason: '같은 제조번호·품목코드의 사용자 삭제 오더가 있어 시트 행을 건너뛰었습니다.',
+        productName: row.productName,
+        batchNo: row.batchNo,
+      })
+      continue
+    }
     const existing = exactExisting ?? (deletedByKey.has(key) ? undefined : fallbackMatch(row))
     if (existing && !exactExisting) seen.add(keyOfOrder(existing))
     // 기존(삭제 아님)에 없을 때만 삭제 맵을 본다 — 네 값 키가 유일해 둘 다에 있을 수는 없지만, 순서를 명시해 의도를 남긴다.

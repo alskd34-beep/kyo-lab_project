@@ -118,6 +118,7 @@ interface ConcurrentGroup {
   groupLock: boolean
   source: "auto" | "manual"
   note: string | null
+  representativeOrderId: string | null
   items: { orderId: string; productCode: string; productName: string; batchNo: string }[]
 }
 
@@ -130,8 +131,18 @@ interface ConcurrentGroup {
 function groupRepName(g: ConcurrentGroup): string {
   let rep = g.items[0]
   if (!rep) return ""
-  for (const it of g.items) if (it.orderId < rep.orderId) rep = it
+  if (g.representativeOrderId) {
+    const selected = g.items.find(it => it.orderId === g.representativeOrderId)
+    if (selected) rep = selected
+  }
+  if (!g.representativeOrderId) for (const it of g.items) if (it.orderId < rep.orderId) rep = it
   return rep.productName
+}
+
+function groupRepBatch(g: ConcurrentGroup): string {
+  const rep = g.items.find(it => it.orderId === g.representativeOrderId)
+    ?? g.items.slice().sort((a, b) => a.orderId.localeCompare(b.orderId))[0]
+  return rep ? displayBatchNo(rep.batchNo) : "-"
 }
 
 /**
@@ -160,6 +171,7 @@ function groupTooltip(g: ConcurrentGroup, selfOrderId: string): string {
     `시험시작일 ${g.testStartDate ?? "미정"}`,
   ]
   if (g.groupLock) lines.push("잠긴 그룹 — 재적재해도 구성이 바뀌지 않습니다")
+  lines.push(`대표 로트 ${groupRepBatch(g)}`)
   const others = g.items.filter(i => i.orderId !== selfOrderId).map(i => displayBatchNo(i.batchNo))
   if (others.length > 0) lines.push(`함께: ${others.join(", ")}`)
   if (g.note) lines.push(g.note)
@@ -360,6 +372,7 @@ export default function OrdersPage() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const collapseInited = useRef(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [bulkTester, setBulkTester] = useState("")
   // 동시분석 실행 그룹(오더 단위) — '이 오더들을 실제로 함께 돌린다' 는 배정의 실행 단위다.
   // 품목군(concurrent_product_families)은 그룹을 만드는 입력 중 하나지 결과가 아니라 화면에서 다루지 않는다.
@@ -514,7 +527,8 @@ export default function OrdersPage() {
 
     setBusy(opts.busyKey)
     try {
-      const results = await Promise.all(targets.map(async ({ id }) => {
+      const results: Array<{ id: string; ok: boolean; replication?: { applied?: number; skipped?: Array<{ orderId: string; batchNo: string; reason: string }> } }> = []
+      for (const { id } of targets) {
         const res = await fetch("/api/pct-orders", {
           method: "PATCH", credentials: "include",
           headers: { "Content-Type": "application/json" },
@@ -525,8 +539,11 @@ export default function OrdersPage() {
             reason: opts.reason,
           }),
         })
-        return { id, ok: res.ok }
-      }))
+        const data = await res.json().catch(() => ({})) as {
+          replication?: { applied?: number; skipped?: Array<{ orderId: string; batchNo: string; reason: string }> }
+        }
+        results.push({ id, ok: res.ok, replication: data.replication })
+      }
       const okIds = new Set(results.filter(r => r.ok).map(r => r.id))
       const failed = results.length - okIds.size
       const name = testerId ? (testers.find(t => t.id === testerId)?.name ?? "") : "미배정"
@@ -542,8 +559,12 @@ export default function OrdersPage() {
       setSelected(new Set())
       setBulkTester("")
       const done = testerId ? `담당자 '${name}' 배정 완료` : "배정 해제 완료"
+      const replicated = results.flatMap(r => r.replication?.skipped ?? [])
+      const replicationNotice = replicated.length > 0
+        ? ` · 그룹 복제 건너뜀 ${replicated.length}건: ${replicated.map(s => `${s.batchNo}(${s.reason})`).join(", ")}`
+        : ""
       // 제외한 병렬 배정 건이 있으면 함께 알린다 — 안 알리면 "왜 몇 건이 빠졌지?" 가 된다
-      flash(`${okIds.size}건 ${done}${failed > 0 ? ` (실패 ${failed}건)` : ""}${parallelNotice ? ` · ${parallelNotice}` : ""}`)
+      flash(`${okIds.size}건 ${done}${failed > 0 ? ` (실패 ${failed}건)` : ""}${parallelNotice ? ` · ${parallelNotice}` : ""}${replicationNotice}`)
     } catch (e) {
       const what = testerId ? "담당자 배정" : "배정 해제"
       flash(`${what} 실패: ${e instanceof Error ? e.message : ""}`)
@@ -811,7 +832,8 @@ export default function OrdersPage() {
   const toggleGroup = (key: string) =>
     setCollapsed(prev => {
       const next = new Set(prev)
-      next.has(key) ? next.delete(key) : next.add(key)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
       return next
     })
 
@@ -984,6 +1006,7 @@ export default function OrdersPage() {
                   >
                     <Layers className="size-3 shrink-0" />
                     <span className="min-w-0 truncate">{groupDisplayName(group)}</span>
+                    {(group.representativeOrderId === r.id || (!group.representativeOrderId && group.source === "auto" && group.items.slice().sort((a, b) => a.orderId.localeCompare(b.orderId))[0]?.orderId === r.id)) && <span className="shrink-0 text-primary">· 대표</span>}
                     <span className="shrink-0 tabular-nums">· 시작 {shortDate(group.testStartDate)}</span>
                     {/* 잠긴 그룹은 재적재 때 삭제·재구성 대상에서 빠져 옛 구성이 남는다 —
                         왜 이 그룹만 안 바뀌는지 화면에서 알 수 있어야 한다. */}
@@ -1502,6 +1525,28 @@ export default function OrdersPage() {
         onDone={(msg) => { setGroupDialogOpen(false); setSelected(new Set()); flash(msg); void load() }}
       />
 
+      {bulkDeleteOpen && (
+        <BulkDeleteOrderDialog
+          orders={Array.from(selected).map(id => rows.find(r => r.id === id)).filter((r): r is OrderRow => !!r)}
+          onClose={() => setBulkDeleteOpen(false)}
+          onDeleted={(succeeded, skipped) => {
+            setBulkDeleteOpen(false)
+            setRows(prev => prev.filter(r => !succeeded.includes(r.id)))
+            setSelected(new Set())
+            const orderById = new Map(rows.filter(row => selected.has(row.id)).map(order => [order.id, order]))
+            const detail = skipped.length > 0
+              ? ` · 건너뜀 ${skipped.length}건: ${skipped.map(s => {
+                const order = orderById.get(s.id)
+                const identity = order ? `${order.productName} (${displayBatchNo(order.batchNo)})` : `오더 ${s.id}`
+                return `${identity} — ${s.reason}`
+              }).join("; ")}`
+              : ""
+            flash(`삭제 성공 ${succeeded.length}건 · 건너뜀 ${skipped.length}건${detail}`)
+            void load()
+          }}
+        />
+      )}
+
       {createOpen && (
         <CreateModal
           testers={testers}
@@ -1598,7 +1643,7 @@ export default function OrdersPage() {
 
               <span className="hidden h-8 w-px shrink-0 bg-background/15 sm:block" />
 
-              {/* 동시분석 묶기 — 배정·확정과 달리 오더의 '구조' 를 바꾸는 작업이라 구획을 나눈다.
+              {/* 동시분석 그룹 지정 — 배정·확정과 달리 오더의 '구조' 를 바꾸는 작업이라 구획을 나눈다.
                   버튼 하나뿐이라 flex-1 로 같은 몫을 가져가지 않는다(그러면 배정 구획이 눌린다).
                   실제 판정(경고)은 다이얼로그가 서버에 물어본다. */}
               <div className="flex w-full min-w-0 shrink-0 items-center justify-center sm:w-auto">
@@ -1607,11 +1652,23 @@ export default function OrdersPage() {
                   variant="outline"
                   onClick={() => setGroupDialogOpen(true)}
                   disabled={busy !== null || selected.size < 2}
-                  title={selected.size < 2 ? "오더를 2건 이상 선택하세요" : "선택한 오더를 함께 시험하는 묶음으로 만듭니다"}
+                  title={selected.size < 2 ? "오더를 2건 이상 선택하세요" : "선택한 오더를 동시분석 그룹으로 지정합니다"}
                   className="w-full border-background/20 bg-transparent text-background hover:bg-background/10 hover:text-background sm:w-auto"
                 >
-                  <Layers />동시분석 묶기
+                  <Layers />동시분석 그룹 지정
                 </Button>
+                {isAdmin && (
+                  <Button
+                    size="default"
+                    variant="destructive"
+                    onClick={() => setBulkDeleteOpen(true)}
+                    disabled={busy !== null}
+                    title="선택한 오더를 삭제합니다. 삭제 사유가 필요합니다."
+                    className="w-full sm:w-auto"
+                  >
+                    <Trash2 />삭제
+                  </Button>
+                )}
               </div>
 
               {/* 오른쪽 — 확정 / 확정 해제 */}
@@ -2179,7 +2236,7 @@ function CreateModal({ testers, absences, onClose, onCreated }: {
   )
 }
 
-// ─── 수동 오더 삭제 확인 (사유 필수) ──────────────────────────────────────────
+// ─── 단건 오더 삭제 확인 (사유 필수) ──────────────────────────────────────────
 function DeleteOrderDialog({ order, onClose, onDeleted }: { order: OrderRow; onClose: () => void; onDeleted: () => void }) {
   const uid = useId()
   const [reason, setReason] = useState("")
@@ -2207,7 +2264,7 @@ function DeleteOrderDialog({ order, onClose, onDeleted }: { order: OrderRow; onC
     <Dialog open onOpenChange={next => { if (!next && !busy) onClose() }}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>수동 오더를 삭제할까요?</DialogTitle>
+          <DialogTitle>오더를 삭제할까요?</DialogTitle>
           <DialogDescription className="break-keep">
             {order.productName} ({displayBatchNo(order.batchNo)}) 오더를 삭제 상태로 바꿉니다. 목록·배정 대상에서 빠지고,
             삭제 사유는 수정 이력에 남습니다. 동시분석 그룹에 들어 있으면 그룹에서도 빠집니다.
@@ -2230,6 +2287,70 @@ function DeleteOrderDialog({ order, onClose, onDeleted }: { order: OrderRow; onC
               {err}
             </p>
           )}
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={busy}>취소</Button>
+          <Button variant="destructive" onClick={submit} disabled={busy || !reason.trim()}>
+            {busy ? <Loader2 className="animate-spin" /> : <Trash2 />}삭제
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function BulkDeleteOrderDialog({
+  orders, onClose, onDeleted,
+}: {
+  orders: OrderRow[]
+  onClose: () => void
+  onDeleted: (succeeded: string[], skipped: Array<{ id: string; reason: string }>) => void
+}) {
+  const uid = useId()
+  const [reason, setReason] = useState("")
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  const submit = async () => {
+    if (!reason.trim()) { setErr("삭제 사유는 필수입니다."); return }
+    setBusy(true); setErr(null)
+    try {
+      const res = await fetch("/api/pct-orders", {
+        method: "DELETE", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: orders.map(order => order.id), reason: reason.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? "삭제 실패")
+      onDeleted(data.succeeded ?? [], data.skipped ?? [])
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "삭제 실패")
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <Dialog open onOpenChange={next => { if (!next && !busy) onClose() }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>선택한 오더를 삭제할까요?</DialogTitle>
+          <DialogDescription className="break-keep">
+            선택한 {orders.length}건에 같은 삭제 사유를 적용합니다. 삭제된 오더는 목록·배정 대상에서 빠지며,
+            확정(LOCK)·시험 시작 오더는 건너뜁니다.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogBody>
+          <label htmlFor={`${uid}-deleteReason`} className="mb-1 block text-xs font-semibold text-foreground">
+            삭제 사유 <span className="text-red-500">*</span>
+          </label>
+          <textarea
+            id={`${uid}-deleteReason`}
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+            rows={3}
+            placeholder="삭제하는 이유를 입력하세요 (필수)"
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+          />
+          {err && <p className="mt-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs leading-normal break-keep text-destructive">{err}</p>}
         </DialogBody>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={busy}>취소</Button>
@@ -2308,7 +2429,7 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [deleteOpen, setDeleteOpen] = useState(false)
-  // 삭제를 막는 이유(서버 deleteManualOrder 와 같은 기준의 화면 보조 판정) — null 이면 삭제 가능
+  // 삭제를 막는 이유(서버 deleteOrder 와 같은 기준의 화면 보조 판정) — null 이면 삭제 가능
   const deleteBlockReason = order.locked
     ? "확정(LOCK)된 오더는 삭제할 수 없습니다. 확정 해제 후 삭제하세요."
     : order.hasJob
@@ -2505,7 +2626,10 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
           id: order.id, patch, reason,
           ...((assignmentChanged || itemAssignmentsChanged) ? { assignees: normalizedAssignees } : {}),
           ...(itemAssignmentsChanged ? {
-            itemAssignments: changedItemRows.map(row => ({ testItemName: row.testItemName, assigneeSlot: itemAssignments[row.testItemName] })),
+            // 복제는 대표 오더의 현재 전체 항목 배분을 기준으로 해야 대상의
+            // 기존 슬롯과 섞이지 않는다. changedItemRows만 보내면 부분 복제가 된다.
+            itemAssignments: (itemRows ?? []).filter(row => !row.isExcluded && itemAssignments[row.testItemName] !== undefined)
+              .map(row => ({ testItemName: row.testItemName, assigneeSlot: itemAssignments[row.testItemName] })),
           } : {}),
         }),
       })
@@ -2554,10 +2678,10 @@ function EditModal({ order, testers, absences, onClose, onSaved }: {
       onClose={onClose}
       footer={
         <>
-          {/* 수동 오더만 삭제(소프트 삭제, 사유 필수) — [취소] 왼쪽. 최종 판정은 서버(deleteManualOrder). */}
+          {/* 관리자만 삭제(소프트 삭제, 사유 필수) — [취소] 왼쪽. 최종 판정은 서버(deleteOrder). */}
           {/* 비활성 버튼은 pointer-events 가 꺼져 title 이 안 뜨므로 감싼 span 에 이유를 단다 */}
-          {!isAutoOrder && isAdmin && (
-            <span title={deleteBlockReason ?? "이 수동 오더를 삭제합니다"} className="inline-flex">
+          {isAdmin && (
+            <span title={deleteBlockReason ?? "이 오더를 삭제합니다"} className="inline-flex">
               <Button
                 variant="destructive" size="lg"
                 onClick={() => setDeleteOpen(true)}

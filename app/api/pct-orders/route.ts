@@ -5,12 +5,12 @@
  *         필수: productName·dueDate. productCode·batchNo 를 비우면 N/A(서버가 NA-… 대체값 생성)
  *   PATCH /api/pct-orders  { id, patch, reason, assignees? }         — 사유 필수 수정 (admin)
  *         assignees: [{ slot: 1~5, testerId }] 병렬 배정 담당자 구성(빈 배열 = 미배정). 없으면 구성은 그대로.
- *   DELETE /api/pct-orders { id, reason }                          — 수동 오더 소프트 삭제 (admin, 사유 필수)
+ *   DELETE /api/pct-orders { id|ids, reason }                      — 선택 오더 소프트 삭제 (admin, 사유 필수)
  */
 
 import { NextRequest } from 'next/server'
 import { requireAuth, requireAdmin } from '@backend/lib/guard'
-import { listOrders, createOrder, updateOrderWithReason, deleteManualOrder } from '@backend/services/pctOrders'
+import { listOrders, createOrder, updateOrderWithReason, deleteOrders } from '@backend/services/pctOrders'
 
 export const runtime = 'nodejs'
 
@@ -96,11 +96,11 @@ export async function PATCH(req: NextRequest) {
     if (!body.id || !body.patch) {
       return Response.json({ error: 'id와 patch는 필수입니다.' }, { status: 400 })
     }
-    await updateOrderWithReason(body.id, body.patch, body.reason ?? '', auth.payload.sub ?? null, {
+    const replication = await updateOrderWithReason(body.id, body.patch, body.reason ?? '', auth.payload.sub ?? null, {
       assignees: body.assignees,
       itemAssignments: body.itemAssignments,
     })
-    return Response.json({ ok: true })
+    return Response.json({ ok: true, replication })
   } catch (err) {
     const msg = err instanceof Error ? err.message : '서버 오류'
     return Response.json({ error: msg }, { status: 400 })
@@ -111,10 +111,11 @@ export async function DELETE(req: NextRequest) {
   const auth = await requireAdmin(req)
   if (!auth.ok) return auth.response
   try {
-    const body = await req.json().catch(() => ({})) as { id?: string; reason?: string }
-    if (!body.id) return Response.json({ error: 'id 필수' }, { status: 400 })
-    await deleteManualOrder(body.id, body.reason ?? '', auth.payload.sub ?? null)
-    return Response.json({ ok: true })
+    const body = await req.json().catch(() => ({})) as { id?: string; ids?: string[]; reason?: string }
+    const ids = Array.from(new Set([...(body.ids ?? []), ...(body.id ? [body.id] : [])].filter(Boolean)))
+    if (ids.length === 0) return Response.json({ error: 'id 또는 ids 필수' }, { status: 400 })
+    const { succeeded, skipped } = await deleteOrders(ids, body.reason ?? '', auth.payload.sub ?? null)
+    return Response.json({ ok: true, succeeded, skipped })
   } catch (err) {
     const msg = err instanceof Error ? err.message : '서버 오류'
     return Response.json({ error: msg }, { status: 400 })
