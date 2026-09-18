@@ -71,6 +71,7 @@ export interface PctOrderRow {
   workdays: number | null   // 품목코드 기준 공수(일, DAY) — product_workload.avg_workdays
   hasJob: boolean           // QC 작업 시작 여부
   locked: boolean           // 관리자 확정/LOCK (원칙1·3). 컬럼 미적용 환경에서는 false
+  stabilityPlanId: string | null // 안정성 시험계획에서 생성된 오더면 원본 계획 id
   createdAt: string
   updatedAt: string
 }
@@ -314,6 +315,7 @@ export async function listOrders(filters: {
       workdays: workdaysByCode.get(o.product_code as string) ?? null,
       hasJob: jobOrderIds.has(id),
       locked: !!o.locked,   // select('*') 결과. 컬럼 미적용 시 undefined → false
+      stabilityPlanId: (o.stability_plan_id as string) ?? null,
       createdAt: o.created_at as string,
       updatedAt: o.updated_at as string,
     }
@@ -494,6 +496,7 @@ export async function createOrder(input: {
     workdays: null,
     hasJob: false,
     locked: !!o.locked,
+    stabilityPlanId: (o.stability_plan_id as string) ?? null,
     createdAt: o.created_at as string,
     updatedAt: o.updated_at as string,
   }
@@ -558,6 +561,7 @@ export async function deleteOrder(id: string, reason: string, deletedBy: string 
     .update(updateValues)
     .eq('id', id)
     .neq('status', DELETED_STATUS)
+    .eq('locked', false)
     .select('id')
   const rollbackEdit = () => supabaseAdmin.from('pct_order_edits').delete().eq('id', edit.id as string).then(
     undefined,
