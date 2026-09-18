@@ -13,14 +13,14 @@ export async function selectAll(
   client: SupabaseClient,
   table: string,
   columns: string,
-  opts: { orderBy?: string | readonly string[] } = {},
+  opts: { orderBy: string | readonly string[] },
 ): Promise<{ data: Record<string, unknown>[] | null; error: { message: string } | null }> {
   const PAGE = 1000
   const all: Record<string, unknown>[] = []
   for (let from = 0; ; from += PAGE) {
     // 호출부가 지정한 실제 컬럼으로만 정렬한다. 복합 PK 테이블은 id 컬럼이 없을 수 있다.
     let query = client.from(table).select(columns)
-    for (const column of opts.orderBy === undefined ? [] : typeof opts.orderBy === 'string' ? [opts.orderBy] : opts.orderBy) {
+    for (const column of typeof opts.orderBy === 'string' ? [opts.orderBy] : opts.orderBy) {
       query = query.order(column, { ascending: true })
     }
     const res = await query.range(from, from + PAGE - 1)

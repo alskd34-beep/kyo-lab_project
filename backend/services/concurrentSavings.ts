@@ -128,9 +128,10 @@ export async function listGroupSavings(opts: { from?: string; to?: string } = {}
   const [orderResults, wlRes, jobResults, testersRes] = await Promise.all([
     Promise.all(chunks(memberIds).map(ids => supabaseAdmin.from('pct_orders')
       .select('id, product_code, product_name, batch_no, status, assignee_tester_id')
-      .in('id', ids))),
+      .in('id', ids)
+      .range(0, 9999))),
     selectAll(supabaseAdmin, 'product_workload', 'product_code, avg_workdays', { orderBy: 'product_code' }),
-    Promise.all(chunks(memberIds).map(ids => supabaseAdmin.from('qc_jobs').select('id, order_id').in('order_id', ids))),
+    Promise.all(chunks(memberIds).map(ids => supabaseAdmin.from('qc_jobs').select('id, order_id').in('order_id', ids).range(0, 9999))),
     selectAll(supabaseAdmin, 'testers', 'id, name', { orderBy: 'id' }),
   ])
   const ordersError = orderResults.find(result => result.error)?.error

@@ -87,7 +87,7 @@ export async function listSchedules(opts: {
   const hasFilters = !!opts.userId || !!opts.from || !!opts.to
   const { data, error } = hasFilters
     ? await q.range(0, 9999)
-    : await selectAll(supabaseAdmin, 'operator_schedule', SELECT, { orderBy: ['user_id', 'start_date'] })
+    : await selectAll(supabaseAdmin, 'operator_schedule', SELECT, { orderBy: ['user_id', 'start_date', 'id'] })
   if (error) throw error
   const rows = hasFilters ? (data ?? []) : [...(data ?? [])].sort((a, b) =>
     String(b.start_date ?? '').localeCompare(String(a.start_date ?? ''), 'ko'),

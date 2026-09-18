@@ -262,7 +262,7 @@ export async function autoCancelStaleWaiting(): Promise<number> {
 /** 기존 예약의 distinct equipment_id 목록(화면 datalist 용). */
 export async function listEquipmentIds(): Promise<string[]> {
   // 예약은 계속 쌓이는 테이블 — 1000행 절단 시 장비 목록이 누락된다 → selectAll
-  const { data, error } = await selectAll(supabaseAdmin, 'equipment_reservation', 'equipment_id', { orderBy: ['equipment_id', 'start_date'] })
+  const { data, error } = await selectAll(supabaseAdmin, 'equipment_reservation', 'equipment_id', { orderBy: ['equipment_id', 'start_date', 'id'] })
   if (error) throw new Error(error.message)
   const ids = new Set<string>()
   for (const r of data ?? []) {

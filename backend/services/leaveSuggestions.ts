@@ -108,7 +108,7 @@ export async function suggestForLeaveWindow(from: string, to: string): Promise<L
       selectAll(supabaseAdmin, 'products', 'id, product_code', { orderBy: 'id' }),
       selectAll(supabaseAdmin, 'product_test_items', 'product_id, test_item_id', { orderBy: ['product_id', 'test_item_id'] }),
       selectAll(supabaseAdmin, 'test_items', 'id, name, requires_duo', { orderBy: 'id' }),
-      selectAll(supabaseAdmin, 'test_item_equipment', 'test_item, required_equipment, is_universal', { orderBy: 'test_item' }),
+      selectAll(supabaseAdmin, 'test_item_equipment', 'test_item, required_equipment, is_universal', { orderBy: ['test_item', 'required_equipment'] }),
     ])
   for (const result of [productsRes, ptiRes, testItemsRes, equipRes]) {
     if (result.error) throw result.error

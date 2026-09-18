@@ -46,6 +46,13 @@ const OPEN_STATUSES = SHARED_OPEN_STATUSES
 const PSYCHOTROPIC_NAMES = new Set(['자이렌정', '아디펙스정'])
 // 공수(DAY) 미등록 품목 근사치
 const DEFAULT_WORKDAYS = 1
+const IN_CHUNK = 150
+
+function chunks<T>(values: readonly T[]): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < values.length; i += IN_CHUNK) out.push(values.slice(i, i + IN_CHUNK) as T[])
+  return out
+}
 
 export async function getQcDashboard(): Promise<QcDashboard> {
   // 1) 오더 (삭제 제외)
@@ -63,17 +70,23 @@ export async function getQcDashboard(): Promise<QcDashboard> {
   const workdaysByCode = new Map<string, number>()
   const difficultyByCode = new Map<string, string>()
   if (codes.length > 0) {
-    const [wlRes, prodRes] = await Promise.all([
-      supabaseAdmin.from('product_workload').select('product_code, avg_workdays').in('product_code', codes),
-      supabaseAdmin.from('products').select('product_code, difficulty').in('product_code', codes),
+    const [wlResults, prodResults] = await Promise.all([
+      Promise.all(chunks(codes).map(codeChunk =>
+        supabaseAdmin.from('product_workload').select('product_code, avg_workdays').in('product_code', codeChunk),
+      )),
+      Promise.all(chunks(codes).map(codeChunk =>
+        supabaseAdmin.from('products').select('product_code, difficulty').in('product_code', codeChunk),
+      )),
     ])
-    if (wlRes.error) throw wlRes.error
-    if (prodRes.error) throw prodRes.error
-    for (const w of wlRes.data ?? []) {
+    const wlError = wlResults.find(result => result.error)?.error
+    const prodError = prodResults.find(result => result.error)?.error
+    if (wlError) throw wlError
+    if (prodError) throw prodError
+    for (const w of wlResults.flatMap(result => result.data ?? [])) {
       const days = Number(w.avg_workdays)
       if (days > 0) workdaysByCode.set(w.product_code as string, days)
     }
-    for (const p of prodRes.data ?? []) {
+    for (const p of prodResults.flatMap(result => result.data ?? [])) {
       const diff = (p.difficulty as string | null)?.toUpperCase()
       if (diff) difficultyByCode.set(p.product_code as string, diff)
     }
@@ -88,7 +101,7 @@ export async function getQcDashboard(): Promise<QcDashboard> {
   // 4) 재배정 이력 (after_user 별)
   // 누적 테이블 — 1000행 절단 시 재배정 건수가 조용히 틀려진다 → selectAll
   const { data: reassignData, error: reassignErr } =
-    await selectAll(supabaseAdmin, 'reassignment_history', 'after_user', { orderBy: ['order_id', 'changed_at'] })
+    await selectAll(supabaseAdmin, 'reassignment_history', 'after_user', { orderBy: ['order_id', 'changed_at', 'id'] })
   if (reassignErr) throw new Error(reassignErr.message)
   const reassigns = (reassignData ?? []) as Record<string, unknown>[]
 
