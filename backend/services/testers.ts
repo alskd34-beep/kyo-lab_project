@@ -266,7 +266,7 @@ export async function listCapabilities(): Promise<CapabilityRow[]> {
 
 export async function listCapabilityMatrix(): Promise<CapabilityMatrixRow[]> {
   // 시험자 x 역량 조합이라 행 수가 빠르게 늘어난다 → 1000행 절단 방지
-  const { data, error } = await selectAll(supabase, 'tester_capability_matrix', 'tester_id, capability_id, proficiency_level')
+  const { data, error } = await selectAll(supabase, 'tester_capability_matrix', 'tester_id, capability_id, proficiency_level', { orderBy: ['tester_id', 'capability_id'] })
   if (error) throw new Error(error.message)
   return (data ?? []).map(r => ({
     testerId:         (r as Record<string, unknown>).tester_id as string,
@@ -331,7 +331,7 @@ function rethrowCapabilityError(err: { code?: string; message?: string } | null,
 export async function listCapabilityMaster(): Promise<CapabilityMasterRow[]> {
   const caps = await listCapabilities()
   // 역량 수 x 시험자 수라 1000행을 넘길 수 있다 → selectAll 로 전량 조회
-  const { data, error } = await selectAll(supabase, 'tester_capability_matrix', 'capability_id')
+  const { data, error } = await selectAll(supabase, 'tester_capability_matrix', 'capability_id', { orderBy: ['tester_id', 'capability_id'] })
   if (error) throw new Error(error.message)
   const countById = new Map<string, number>()
   for (const r of (data ?? []) as Record<string, unknown>[]) {

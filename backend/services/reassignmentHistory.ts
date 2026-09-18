@@ -102,7 +102,7 @@ export async function reassignmentStats(topN = 10): Promise<{
   byProduct: { name: string; count: number }[]
 }> {
   // 누적 테이블이라 1000행 기본 limit 에 잘리면 통계가 조용히 축소된다 → selectAll
-  const { data, error } = await selectAll(supabaseAdmin, 'reassignment_history', 'order_id, after_user')
+  const { data, error } = await selectAll(supabaseAdmin, 'reassignment_history', 'order_id, after_user', { orderBy: ['order_id', 'changed_at'] })
   if (error) throw new Error(error.message)
   const raw = (data ?? []) as Record<string, unknown>[]
   if (raw.length === 0) return { byTester: [], byProduct: [] }

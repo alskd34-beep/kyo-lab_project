@@ -1,4 +1,5 @@
 import { supabaseAdmin as supabase } from '@backend/lib/supabase'
+import { selectAll } from '@backend/lib/supabasePage'
 import { sanitizeFilterTerm } from '@backend/lib/postgrestFilter'
 import type { BatchSummary, DashboardStats } from '@shared/pqm'
 
@@ -10,20 +11,36 @@ function calcDday(dateStr: string | null): number | null {
 export async function listBatches(q: {
   status?: string; from?: string; to?: string; search?: string; productId?: string
 } = {}): Promise<BatchSummary[]> {
-  let query = supabase.from('production_batches').select('*').order('qc_planned_completion_date')
-  if (q.status && q.status !== 'all') query = query.eq('status', q.status)
-  if (q.productId) query = query.eq('product_id', q.productId)
-  if (q.from) query = query.gte('packaging_planned_date', q.from)
-  if (q.to)   query = query.lte('packaging_planned_date', q.to)
-  // 검색어는 PostgREST 필터 DSL 에 문자열로 삽입되므로 문법 문자를 제거한다(필터 인젝션 방지).
-  const search = sanitizeFilterTerm(q.search)
-  if (search) query = query.or(`product_name.ilike.%${search}%,batch_no.ilike.%${search}%,product_code.ilike.%${search}%`)
-  const { data, error } = await query
+  const hasFilters = !!(q.status && q.status !== 'all') || !!q.productId || !!q.from || !!q.to || !!q.search
+  let data: Array<Record<string, unknown>> | null
+  let error: { message: string } | null
+  if (hasFilters) {
+    let query = supabase.from('production_batches').select('*').order('qc_planned_completion_date')
+    if (q.status && q.status !== 'all') query = query.eq('status', q.status)
+    if (q.productId) query = query.eq('product_id', q.productId)
+    if (q.from) query = query.gte('packaging_planned_date', q.from)
+    if (q.to)   query = query.lte('packaging_planned_date', q.to)
+    // 필터 경로도 기본 1000행 상한을 넘을 수 있다.
+    query = query.range(0, 9999)
+    // 검색어는 PostgREST 필터 DSL 에 문자열로 삽입되므로 문법 문자를 제거한다(필터 인젝션 방지).
+    const search = sanitizeFilterTerm(q.search)
+    if (search) query = query.or(`product_name.ilike.%${search}%,batch_no.ilike.%${search}%,product_code.ilike.%${search}%`)
+    const result = await query
+    data = result.data as Array<Record<string, unknown>> | null
+    error = result.error
+  } else {
+    const result = await selectAll(supabase, 'production_batches', '*', { orderBy: 'id' })
+    data = result.data
+    error = result.error
+  }
   if (error) throw error
-  return (data ?? []).map(r => ({
+  const rows = hasFilters ? (data ?? []) : [...(data ?? [])].sort((a, b) =>
+    String(a.qc_planned_completion_date ?? '9999').localeCompare(String(b.qc_planned_completion_date ?? '9999'), 'ko'),
+  )
+  return rows.map(r => ({
     ...(r as unknown as BatchSummary),
-    dDayRecord: calcDday(r.record_review_deadline),
-    dDayQc: calcDday(r.qc_planned_completion_date),
+    dDayRecord: calcDday(r.record_review_deadline as string | null),
+    dDayQc: calcDday(r.qc_planned_completion_date as string | null),
   }))
 }
 

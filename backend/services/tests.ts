@@ -10,6 +10,7 @@
  */
 
 import { supabaseAdmin } from '@backend/lib/supabase'
+import { selectAll } from '@backend/lib/supabasePage'
 import { DELETED_STATUS } from '@shared/qc-status'
 import { METHOD_PARTIAL, mapByOrders } from '@backend/services/pctOrderTestItems'
 import { loadAssigneesByOrder } from '@backend/services/orderAssignees'
@@ -62,15 +63,23 @@ interface ProductMeta {
   items: string[]
 }
 
+const IN_CHUNK = 150
+
 /** 품목코드 → { 구분(product_type), 예정 시험항목명 } 매핑. 미착수 오더 표시용. */
 async function productMetaByCode(productCodes: string[]): Promise<Map<string, ProductMeta>> {
   const out = new Map<string, ProductMeta>()
   if (productCodes.length === 0) return out
 
-  const { data: prods } = await supabaseAdmin
-    .from('products')
-    .select('id, product_code, product_type')
-    .in('product_code', productCodes)
+  const prods: Record<string, unknown>[] = []
+  for (let i = 0; i < productCodes.length; i += IN_CHUNK) {
+    const { data, error } = await supabaseAdmin
+      .from('products')
+      .select('id, product_code, product_type')
+      .in('product_code', productCodes.slice(i, i + IN_CHUNK))
+      .range(0, 9999)
+    if (error) throw error
+    prods.push(...((data ?? []) as Record<string, unknown>[]))
+  }
   const idToCode = new Map<string, string>()
   for (const p of prods ?? []) {
     const code = p.product_code as string
@@ -80,16 +89,27 @@ async function productMetaByCode(productCodes: string[]): Promise<Map<string, Pr
   const productIds = [...idToCode.keys()]
   if (productIds.length === 0) return out
 
-  const { data: links } = await supabaseAdmin
-    .from('product_test_items')
-    .select('product_id, test_item_id, sequence_order')
-    .in('product_id', productIds)
-    .order('sequence_order', { ascending: true })
+  const links: Record<string, unknown>[] = []
+  for (let i = 0; i < productIds.length; i += IN_CHUNK) {
+    const { data, error } = await supabaseAdmin
+      .from('product_test_items')
+      .select('product_id, test_item_id, sequence_order')
+      .in('product_id', productIds.slice(i, i + IN_CHUNK))
+      .order('sequence_order', { ascending: true })
+      .range(0, 9999)
+    if (error) throw error
+    links.push(...((data ?? []) as Record<string, unknown>[]))
+  }
+  links.sort((a, b) => Number(a.sequence_order ?? 0) - Number(b.sequence_order ?? 0))
   const itemIds = [...new Set((links ?? []).map(l => l.test_item_id as string))]
-  const { data: items } = itemIds.length
-    ? await supabaseAdmin.from('test_items').select('id, name').in('id', itemIds)
-    : { data: [] as { id: string; name: string }[] }
-  const nameById = new Map<string, string>((items ?? []).map(i => [i.id as string, i.name as string]))
+  const items: Record<string, unknown>[] = []
+  for (let i = 0; i < itemIds.length; i += IN_CHUNK) {
+    const { data, error } = await supabaseAdmin
+      .from('test_items').select('id, name').in('id', itemIds.slice(i, i + IN_CHUNK)).range(0, 9999)
+    if (error) throw error
+    items.push(...((data ?? []) as Record<string, unknown>[]))
+  }
+  const nameById = new Map<string, string>(items.map(i => [i.id as string, i.name as string]))
 
   for (const l of links ?? []) {
     const code = idToCode.get(l.product_id as string)
@@ -107,6 +127,8 @@ export async function listTests(q: TestsQuery = {}): Promise<TestRow[]> {
     .select('id, product_code, product_name, batch_no, dosage_form, method, due_date, status, is_urgent, assignee_tester_id, created_at')
     .neq('status', DELETED_STATUS)
     .order('created_at', { ascending: false })
+    // Supabase 기본 1000행 상한 회피. pct_orders는 소프트 삭제만 하므로 단조 증가한다.
+    .range(0, 9999)
   if (error) throw error
   const orders = (orderData ?? []) as OrderLite[]
   if (orders.length === 0) return []
@@ -114,9 +136,13 @@ export async function listTests(q: TestsQuery = {}): Promise<TestRow[]> {
   const orderIds = orders.map(o => o.id)
 
   // 2) 작업(QC번호·상태), 담당자명, 품목 메타(구분·예정항목) — 병렬
-  const [jobsRes, testersRes, productMeta, orderItems, assigneeMap, groupSizeByOrder] = await Promise.all([
-    supabaseAdmin.from('qc_jobs').select('id, order_id, qc_no, status').in('order_id', orderIds),
-    supabaseAdmin.from('testers').select('id, name'),
+  const jobResults = await Promise.all(Array.from({ length: Math.ceil(orderIds.length / IN_CHUNK) }, (_, i) =>
+    supabaseAdmin.from('qc_jobs').select('id, order_id, qc_no, status').in('order_id', orderIds.slice(i * IN_CHUNK, (i + 1) * IN_CHUNK)).range(0, 9999)))
+  const jobsError = jobResults.find(result => result.error)?.error
+  if (jobsError) throw jobsError
+  const jobsRes = { data: jobResults.flatMap(result => result.data ?? []), error: null }
+  const [testersRes, productMeta, orderItems, assigneeMap, groupSizeByOrder] = await Promise.all([
+    selectAll(supabaseAdmin, 'testers', 'id, name', { orderBy: 'id' }),
     productMetaByCode([...new Set(orders.map(o => o.product_code))]),
     // 개별항목 오더는 품목 전체가 아니라 오더에서 고른 항목만 보여준다
     mapByOrders(orders.filter(o => o.method === METHOD_PARTIAL).map(o => o.id)),

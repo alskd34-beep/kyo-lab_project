@@ -1,4 +1,5 @@
 import { supabaseAdmin as supabase } from '@backend/lib/supabase'
+import { selectAll } from '@backend/lib/supabasePage'
 import { supportsColumn, supportsColumns } from '@backend/lib/columnSupport'
 
 /**
@@ -84,28 +85,16 @@ const supportsProvenance = () =>
   supportsColumns('test_items', PROVENANCE_COLUMNS, '0046 마이그레이션을 적용하면 공수 출처가 기록됩니다')
 
 export async function listTestItems(): Promise<TestItemRow[]> {
-  const { data, error } = await supabase
-    .from('test_items')
-    // 0045/0046 의 새 컬럼을 이름으로 적으면 미적용 DB 에서 42703 이 나고 목록 전체가
-    // 500 이 된다. '*' 면 없는 컬럼은 빠지고 mapRow 의 폴백이 받는다.
-    .select('*')
-    .order('category', { ascending: true })
-    .order('name',     { ascending: true })
-  if (error) {
-    // category 컬럼 미적용 DB에 대한 fallback (마이그레이션 0007 미실행 환경)
-    const code = (error as { code?: string }).code
-    const msg = (error as { message?: string }).message ?? ''
-    if (code === '42703' || /category/i.test(msg)) {
-      const { data: data2, error: error2 } = await supabase
-        .from('test_items')
-        .select('*')
-        .order('name', { ascending: true })
-      if (error2) throw error2
-      return (data2 ?? []).map(r => mapRow(r as Record<string, unknown>))
-    }
-    throw error
-  }
-  return (data ?? []).map(r => mapRow(r as Record<string, unknown>))
+  // 0045/0046 의 새 컬럼을 이름으로 적으면 미적용 DB 에서 42703 이 나고 목록 전체가
+  // 500 이 된다. '*' 면 없는 컬럼은 빠지고 mapRow 의 폴백이 받는다.
+  const { data, error } = await selectAll(supabase, 'test_items', '*', { orderBy: 'id' })
+  if (error) throw error
+  return [...(data ?? [])]
+    .sort((a, b) => {
+      const categoryOrder = String(a.category ?? '').localeCompare(String(b.category ?? ''), 'ko')
+      return categoryOrder || String(a.name ?? '').localeCompare(String(b.name ?? ''), 'ko')
+    })
+    .map(r => mapRow(r as Record<string, unknown>))
 }
 
 export async function createTestItem(input: {

@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@backend/lib/supabase'
+import { selectAll } from '@backend/lib/supabasePage'
 import { createOrder } from '@backend/services/pctOrders'
 
 export type StabilityPlanStatus = '미전송' | '전송됨' | '완료' | '시트 제외'
@@ -33,9 +34,11 @@ const mapRow = (r: Record<string, unknown>): StabilityPlanRow => ({
 })
 
 export async function listStabilityPlans(): Promise<StabilityPlanRow[]> {
-  const { data, error } = await supabaseAdmin.from('stability_plans').select('*').order('updated_at', { ascending: false })
+  const { data, error } = await selectAll(supabaseAdmin, 'stability_plans', '*', { orderBy: 'id' })
   if (error) throw error
-  return (data ?? []).map(r => mapRow(r as Record<string, unknown>))
+  return (data ?? [])
+    .sort((a, b) => String(b.updated_at ?? '').localeCompare(String(a.updated_at ?? '')))
+    .map(r => mapRow(r as Record<string, unknown>))
 }
 
 export async function syncStabilityPlans(inputs: StabilityPlanInput[]): Promise<StabilityPlanRow[]> {
@@ -72,7 +75,9 @@ export async function syncStabilityPlans(inputs: StabilityPlanInput[]): Promise<
       : await supabaseAdmin.from('stability_plans').insert(payload)
     if (error) throw error
   }
-  const { data: all, error: allError } = await supabaseAdmin.from('stability_plans').select('id, source_key, composite_key, plan_status')
+  const { data: all, error: allError } = await selectAll(
+    supabaseAdmin, 'stability_plans', 'id, source_key, composite_key, plan_status', { orderBy: 'id' },
+  )
   if (allError) throw allError
   for (const row of all ?? []) if (!keys.has(row.source_key as string) && !keys.has(row.composite_key as string) && row.plan_status !== '전송됨') {
     await supabaseAdmin.from('stability_plans').update({ plan_status: '시트 제외', updated_at: now }).eq('id', row.id)

@@ -34,6 +34,14 @@ import { selectAll } from '@backend/lib/supabasePage'
 import { loadAssigneesByOrder } from '@backend/services/orderAssignees'
 import { DELETED_STATUS } from '@shared/qc-status'
 
+const IN_CHUNK = 150
+
+function chunks<T>(values: readonly T[]): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < values.length; i += IN_CHUNK) out.push(values.slice(i, i + IN_CHUNK) as T[])
+  return out
+}
+
 export interface SavingMember {
   orderId: string
   productCode: string
@@ -106,8 +114,8 @@ export function unionMinutes(intervals: Array<{ start: number; end: number }>): 
  */
 export async function listGroupSavings(opts: { from?: string; to?: string } = {}): Promise<GroupSaving[]> {
   const [groupsRes, itemsRes] = await Promise.all([
-    supabaseAdmin.from('concurrent_analysis_groups').select('*'),
-    supabaseAdmin.from('concurrent_analysis_group_items').select('group_id, order_id'),
+    selectAll(supabaseAdmin, 'concurrent_analysis_groups', '*', { orderBy: 'id' }),
+    selectAll(supabaseAdmin, 'concurrent_analysis_group_items', 'group_id, order_id', { orderBy: ['group_id', 'order_id'] }),
   ])
   if (groupsRes.error) throw groupsRes.error
   if (itemsRes.error) throw itemsRes.error
@@ -117,21 +125,25 @@ export async function listGroupSavings(opts: { from?: string; to?: string } = {}
   const memberIds = (itemsRes.data ?? []).map(i => i.order_id as string)
   if (memberIds.length === 0) return []
 
-  const [ordersRes, wlRes, jobsRes, testersRes] = await Promise.all([
-    supabaseAdmin.from('pct_orders')
+  const [orderResults, wlRes, jobResults, testersRes] = await Promise.all([
+    Promise.all(chunks(memberIds).map(ids => supabaseAdmin.from('pct_orders')
       .select('id, product_code, product_name, batch_no, status, assignee_tester_id')
-      .in('id', memberIds),
-    selectAll(supabaseAdmin, 'product_workload', 'product_code, avg_workdays'),
-    supabaseAdmin.from('qc_jobs').select('id, order_id').in('order_id', memberIds),
-    supabaseAdmin.from('testers').select('id, name'),
+      .in('id', ids))),
+    selectAll(supabaseAdmin, 'product_workload', 'product_code, avg_workdays', { orderBy: 'product_code' }),
+    Promise.all(chunks(memberIds).map(ids => supabaseAdmin.from('qc_jobs').select('id, order_id').in('order_id', ids))),
+    selectAll(supabaseAdmin, 'testers', 'id, name', { orderBy: 'id' }),
   ])
-  if (ordersRes.error) throw ordersRes.error
-  if (jobsRes.error) throw jobsRes.error
+  const ordersError = orderResults.find(result => result.error)?.error
+  const jobsError = jobResults.find(result => result.error)?.error
+  if (ordersError) throw ordersError
+  if (jobsError) throw jobsError
+  const orderRows = orderResults.flatMap(result => result.data ?? [])
+  const jobRows = jobResults.flatMap(result => result.data ?? [])
 
-  const orderById = new Map((ordersRes.data ?? []).map(o => [o.id as string, o]))
+  const orderById = new Map(orderRows.map(o => [o.id as string, o]))
   // 담당 표시는 담당자 N명 모두(병렬 배정, 0049) — 미적용이면 대표 미러만
   const assigneeMap = await loadAssigneesByOrder(memberIds, {
-    mirror: (ordersRes.data ?? []).map(o => ({ id: o.id as string, assignee_tester_id: (o.assignee_tester_id as string | null) ?? null })),
+    mirror: orderRows.map(o => ({ id: o.id as string, assignee_tester_id: (o.assignee_tester_id as string | null) ?? null })),
   })
   const nameOf = new Map((testersRes.data ?? []).map(t => [t.id as string, t.name as string]))
   const workdaysOf = new Map<string, number>()
@@ -141,7 +153,7 @@ export async function listGroupSavings(opts: { from?: string; to?: string } = {}
   }
 
   // 작업 → 오더, 그리고 완료된 항목의 구간
-  const jobToOrder = new Map((jobsRes.data ?? []).map(j => [j.id as string, j.order_id as string]))
+  const jobToOrder = new Map(jobRows.map(j => [j.id as string, j.order_id as string]))
   const jobIds = [...jobToOrder.keys()]
   const itemsByOrder = new Map<string, Array<{ start: number; end: number; minutes: number }>>()
   if (jobIds.length > 0) {

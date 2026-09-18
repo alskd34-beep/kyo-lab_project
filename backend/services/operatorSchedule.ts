@@ -9,6 +9,7 @@
  */
 
 import { supabaseAdmin } from '@backend/lib/supabase'
+import { selectAll } from '@backend/lib/supabasePage'
 
 export type ScheduleType = 'ANNUAL' | 'HALF_DAY' | 'BUSINESS_TRIP'
 
@@ -83,9 +84,15 @@ export async function listSchedules(opts: {
   if (opts.to)   q = q.lte('start_date', opts.to)
   if (opts.from) q = q.gte('end_date', opts.from)
 
-  const { data, error } = await q
+  const hasFilters = !!opts.userId || !!opts.from || !!opts.to
+  const { data, error } = hasFilters
+    ? await q.range(0, 9999)
+    : await selectAll(supabaseAdmin, 'operator_schedule', SELECT, { orderBy: ['user_id', 'start_date'] })
   if (error) throw error
-  return (data ?? []).map(r => mapRow(r as Record<string, unknown>))
+  const rows = hasFilters ? (data ?? []) : [...(data ?? [])].sort((a, b) =>
+    String(b.start_date ?? '').localeCompare(String(a.start_date ?? ''), 'ko'),
+  )
+  return rows.map(r => mapRow(r as Record<string, unknown>))
 }
 
 export async function createSchedule(input: CreateScheduleInput): Promise<OperatorScheduleRow> {

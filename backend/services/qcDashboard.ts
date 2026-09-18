@@ -80,9 +80,7 @@ export async function getQcDashboard(): Promise<QcDashboard> {
   }
 
   // 3) 시험자 이름
-  const { data: testerData, error: testerErr } = await supabaseAdmin
-    .from('testers')
-    .select('id, name')
+  const { data: testerData, error: testerErr } = await selectAll(supabaseAdmin, 'testers', 'id, name', { orderBy: 'id' })
   if (testerErr) throw testerErr
   const nameByTester = new Map<string, string>()
   for (const t of testerData ?? []) nameByTester.set(t.id as string, t.name as string)
@@ -90,7 +88,7 @@ export async function getQcDashboard(): Promise<QcDashboard> {
   // 4) 재배정 이력 (after_user 별)
   // 누적 테이블 — 1000행 절단 시 재배정 건수가 조용히 틀려진다 → selectAll
   const { data: reassignData, error: reassignErr } =
-    await selectAll(supabaseAdmin, 'reassignment_history', 'after_user')
+    await selectAll(supabaseAdmin, 'reassignment_history', 'after_user', { orderBy: ['order_id', 'changed_at'] })
   if (reassignErr) throw new Error(reassignErr.message)
   const reassigns = (reassignData ?? []) as Record<string, unknown>[]
 

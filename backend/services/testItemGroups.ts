@@ -49,7 +49,7 @@ export async function listGroups(): Promise<GroupRow[]> {
       .select('id, name, description, sort_order, is_active')
       .order('sort_order', { ascending: true })
       .order('name', { ascending: true }),
-    selectAll(supabaseAdmin, 'test_item_group_items', 'group_id'),
+    selectAll(supabaseAdmin, 'test_item_group_items', 'group_id', { orderBy: ['group_id', 'test_item_id'] }),
   ])
   if (groupRes.error) throw describeSchemaError(groupRes.error, '시험항목 그룹')
   if (memberRes.error) throw describeSchemaError(memberRes.error, '시험항목 그룹')

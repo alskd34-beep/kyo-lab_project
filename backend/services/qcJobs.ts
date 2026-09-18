@@ -28,6 +28,7 @@ import { ASSIGNED_TESTER_FILTER_COLUMN, withAssignedTesterEmbed } from '@backend
 import { PRIMARY_ASSIGNEE_SLOT, isParallelAssignment } from '@shared/assignment'
 import { notifyStageChangeToSlack } from '@backend/services/slackNotify'
 import { getGroupTestItemSetIdentity } from '@backend/services/concurrentGroups'
+import { selectAll } from '@backend/lib/supabasePage'
 import type { GroupMember, JobGroupSummary } from '@shared/qc-group-stage'
 import {
   ACTIVE_JOB_STATUSES,
@@ -55,6 +56,70 @@ import {
   isJobStage,
   type JobStage,
 } from '@shared/qc-status'
+
+const GROUP_QUERY_CHUNK = 150
+
+function queryChunks<T>(values: readonly T[]): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < values.length; i += GROUP_QUERY_CHUNK) out.push(values.slice(i, i + GROUP_QUERY_CHUNK) as T[])
+  return out
+}
+
+/** 그룹 동일성은 그룹마다 4회 조회하지 않고 전체 그룹을 배치로 읽는다. */
+async function groupIdentityByGroup(
+  groupItems: readonly Record<string, unknown>[],
+): Promise<Map<string, boolean>> {
+  const out = new Map<string, boolean>()
+  const groups = new Map<string, string[]>()
+  for (const row of groupItems) {
+    const groupId = row.group_id as string
+    const ids = groups.get(groupId) ?? []
+    ids.push(row.order_id as string)
+    groups.set(groupId, ids)
+  }
+  const eligible = [...groups.entries()].filter(([, ids]) => ids.length >= 2)
+  if (eligible.length === 0) return out
+  const orderIds = [...new Set(eligible.flatMap(([, ids]) => ids))]
+  const orderResults = await Promise.all(queryChunks(orderIds).map(ids =>
+    supabaseAdmin.from('pct_orders').select('id, status').in('id', ids),
+  ))
+  const orderError = orderResults.find(result => result.error)?.error
+  if (orderError) throw orderError
+  const activeOrderIds = new Set(orderResults.flatMap(result => result.data ?? [])
+    .filter(row => !['취소', '삭제', 'cancelled', 'deleted'].includes(String(row.status)))
+    .map(row => row.id as string))
+  const validOrderIds = orderIds.filter(id => activeOrderIds.has(id))
+  const jobResults = await Promise.all(queryChunks(validOrderIds).map(ids =>
+    supabaseAdmin.from('qc_jobs').select('id, order_id').in('order_id', ids),
+  ))
+  const jobError = jobResults.find(result => result.error)?.error
+  if (jobError) throw jobError
+  const jobs = jobResults.flatMap(result => result.data ?? [])
+  const jobIds = jobs.map(row => row.id as string)
+  const itemResults = await Promise.all(queryChunks(jobIds).map(ids =>
+    supabaseAdmin.from('qc_job_items').select('qc_job_id, test_item_name').in('qc_job_id', ids),
+  ))
+  const itemError = itemResults.find(result => result.error)?.error
+  if (itemError) throw itemError
+  const namesByJob = new Map<string, string[]>()
+  for (const row of itemResults.flatMap(result => result.data ?? [])) {
+    const names = namesByJob.get(row.qc_job_id as string) ?? []
+    names.push(row.test_item_name as string)
+    namesByJob.set(row.qc_job_id as string, names)
+  }
+  const jobsByOrder = new Map<string, string[]>()
+  for (const job of jobs) {
+    const ids = jobsByOrder.get(job.order_id as string) ?? []
+    ids.push(job.id as string)
+    jobsByOrder.set(job.order_id as string, ids)
+  }
+  for (const [groupId, ids] of eligible) {
+    const activeIds = ids.filter(id => activeOrderIds.has(id))
+    const itemSets = activeIds.flatMap(id => (jobsByOrder.get(id) ?? []).map(jobId => namesByJob.get(jobId) ?? []))
+    out.set(groupId, activeIds.length >= 2 && itemSets.length >= 2 && getGroupTestItemSetIdentity(itemSets) !== null)
+  }
+  return out
+}
 
 /** 0048 미적용 안내에 쓰는 기능 이름·마이그레이션 파일 */
 export const ITEM_REVIEW_FEATURE = '시험항목 검토'
@@ -320,18 +385,21 @@ export async function listWorkspace(userSub: string): Promise<{
   // 동시분석 그룹 — 화면이 같은 그룹의 작업을 카드 하나로 묶는다.
   // 0044 미적용이나 테이블 부재에도 화면이 죽지 않게 실패를 삼킨다(묶기는 편의 기능이다).
   const groupByOrder = new Map<string, { id: string; label: string | null; size: number }>()
+  let groupItems: Record<string, unknown>[] = []
   try {
-    const { data: gItems } = await supabaseAdmin
-      .from('concurrent_analysis_group_items').select('group_id, order_id')
-    const { data: gRows } = await supabaseAdmin
-      .from('concurrent_analysis_groups').select('id, label')
-    const labelOf = new Map((gRows ?? []).map(g => [g.id as string, (g.label as string) ?? null]))
+    const [{ data: gItems, error: gItemsError }, { data: gRows, error: gRowsError }] = await Promise.all([
+      selectAll(supabaseAdmin, 'concurrent_analysis_group_items', 'group_id, order_id', { orderBy: ['group_id', 'order_id'] }),
+      selectAll(supabaseAdmin, 'concurrent_analysis_groups', 'id, label', { orderBy: 'id' }),
+    ])
+    groupItems = gItemsError ? [] : (gItems ?? [])
+    const groupRows = gRowsError ? [] : (gRows ?? [])
+    const labelOf = new Map(groupRows.map(g => [g.id as string, (g.label as string) ?? null]))
     const sizeOf = new Map<string, number>()
-    for (const it of gItems ?? []) {
+    for (const it of groupItems) {
       const gid = it.group_id as string
       sizeOf.set(gid, (sizeOf.get(gid) ?? 0) + 1)
     }
-    for (const it of gItems ?? []) {
+    for (const it of groupItems) {
       const gid = it.group_id as string
       // 혼자 남은 그룹은 묶을 것이 없다 — 화면이 1건짜리 그룹 카드를 그리지 않게 여기서 거른다.
       if ((sizeOf.get(gid) ?? 0) < 2) continue
@@ -343,9 +411,8 @@ export async function listWorkspace(userSub: string): Promise<{
 
   const groupIdentity = new Map<string, boolean>()
   try {
-    await Promise.all([...new Set([...groupByOrder.values()].map(group => group.id))].map(async groupId => {
-      groupIdentity.set(groupId, !!await getGroupTestItemSetIdentity(groupId))
-    }))
+    const identities = await groupIdentityByGroup(groupItems)
+    for (const [groupId, same] of identities) groupIdentity.set(groupId, same)
   } catch { /* 동일성 표시는 편의 기능이므로 그룹 테이블 미적용 시 개별 진행으로 보인다 */ }
 
   const jobs: QcJobRow[] = (jobRows ?? []).map(j => {
@@ -515,8 +582,7 @@ function toOverviewJob(
 export async function loadGroupSizeByOrder(): Promise<Map<string, number>> {
   const out = new Map<string, number>()
   try {
-    const { data, error } = await supabaseAdmin
-      .from('concurrent_analysis_group_items').select('group_id, order_id')
+    const { data, error } = await selectAll(supabaseAdmin, 'concurrent_analysis_group_items', 'group_id, order_id', { orderBy: ['group_id', 'order_id'] })
     if (error) return out
     const sizeOf = new Map<string, number>()
     for (const it of data ?? []) sizeOf.set(it.group_id as string, (sizeOf.get(it.group_id as string) ?? 0) + 1)
@@ -532,14 +598,13 @@ export async function loadGroupSizeByOrder(): Promise<Map<string, number>> {
 export async function loadGroupIdentityByOrder(): Promise<Map<string, boolean>> {
   const out = new Map<string, boolean>()
   try {
-    const { data, error } = await supabaseAdmin.from('concurrent_analysis_group_items').select('group_id, order_id')
+    const { data, error } = await selectAll(supabaseAdmin, 'concurrent_analysis_group_items', 'group_id, order_id', { orderBy: ['group_id', 'order_id'] })
     if (error) return out
-    const groups = new Map<string, string[]>()
-    for (const row of data ?? []) groups.set(row.group_id as string, [...(groups.get(row.group_id as string) ?? []), row.order_id as string])
-    await Promise.all([...groups.entries()].filter(([, ids]) => ids.length >= 2).map(async ([groupId, orderIds]) => {
-      const same = !!await getGroupTestItemSetIdentity(groupId)
-      for (const orderId of orderIds) out.set(orderId, same)
-    }))
+    const identities = await groupIdentityByGroup(data ?? [])
+    for (const row of data ?? []) {
+      const same = identities.get(row.group_id as string)
+      if (same !== undefined) out.set(row.order_id as string, same)
+    }
   } catch { /* 동일성은 표시 보조 정보이므로 조회 실패 시 개별 진행으로 보인다 */ }
   return out
 }

@@ -11,6 +11,7 @@
 
 import { supabaseAdmin } from '@backend/lib/supabase'
 import { codexAssignEnabled, runCodexJson } from '@backend/lib/codexCli'
+import { selectAll } from '@backend/lib/supabasePage'
 
 export interface FamilyMember {
   productCode: string
@@ -57,9 +58,9 @@ export async function listFamilies(): Promise<FamilyRow[]> {
 
 /** 품목코드 → 품목군 id 매핑 (그룹핑 통합용) */
 export async function loadFamilyByCode(): Promise<Map<string, string>> {
-  const { data, error } = await supabaseAdmin
-    .from('concurrent_product_family_members')
-    .select('family_id, product_code')
+  const { data, error } = await selectAll(
+    supabaseAdmin, 'concurrent_product_family_members', 'family_id, product_code', { orderBy: ['family_id', 'product_code'] },
+  )
   if (error) throw error
   const m = new Map<string, string>()
   for (const r of (data ?? []) as Record<string, unknown>[]) {

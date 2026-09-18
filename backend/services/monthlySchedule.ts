@@ -120,7 +120,7 @@ export async function getMonthlySchedule(month: string): Promise<MonthlySchedule
 
   const [orders, testerRes, holidays] = await Promise.all([
     listOrders(),
-    selectAll(supabaseAdmin, 'testers', 'id, name, employee_no, is_active'),
+    selectAll(supabaseAdmin, 'testers', 'id, name, employee_no, is_active', { orderBy: 'id' }),
     getHolidaySet(),
   ])
   if (testerRes.error) throw new Error(`시험자 조회 실패: ${testerRes.error.message}`)

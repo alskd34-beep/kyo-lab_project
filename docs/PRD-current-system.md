@@ -228,6 +228,7 @@ qc_jobs + qc_job_items 생성 (QC번호 채번 qcNumber.ts)
 ## 10. 비기능 요구사항
 - **보안**: JWT httpOnly 쿠키, requireAuth/requireAdmin, service-role는 서버 전용. RLS 테이블은 service-role로 읽기.
 - **성능/안정성**: PostgREST 1000행 캡 → `selectAll` 페이지네이션, 신규 테이블 부재(42P01) graceful 폴백.
+  필터 없는 전체 조회는 `backend/lib/supabasePage.ts` 의 `selectAll` 로 일원화했다(2026-09-18) — 페이지 경계가 흔들리지 않게 호출부가 **실제 존재하는 컬럼**을 `orderBy` 로 넘기고(복합 PK 테이블은 `id` 가 없으므로 `['group_id','order_id']` 처럼 복합 키), 조회 오류는 삼키지 않고 그대로 드러낸다.
 - **검증 규칙**: `npm run typecheck`(필수)·`npm run lint`·운영 영향 시 `npm run build`. dev 포트 3300.
 
 ---

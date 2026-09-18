@@ -105,11 +105,14 @@ export async function suggestForLeaveWindow(from: string, to: string): Promise<L
       testersOnLeave(from, to).catch(() => new Set<string>()),
       // 대기·미배정·미잠금 오더만 (실제 배정 백로그). select('*') 후 locked 필터(0015 미적용 안전).
       supabaseAdmin.from('pct_orders').select('*').eq('status', PENDING_STATUS).is('assignee_tester_id', null),
-      selectAll(supabaseAdmin, 'products', 'id, product_code'),
-      selectAll(supabaseAdmin, 'product_test_items', 'product_id, test_item_id'),
-      selectAll(supabaseAdmin, 'test_items', 'id, name, requires_duo'),
-      selectAll(supabaseAdmin, 'test_item_equipment', 'test_item, required_equipment, is_universal'),
+      selectAll(supabaseAdmin, 'products', 'id, product_code', { orderBy: 'id' }),
+      selectAll(supabaseAdmin, 'product_test_items', 'product_id, test_item_id', { orderBy: ['product_id', 'test_item_id'] }),
+      selectAll(supabaseAdmin, 'test_items', 'id, name, requires_duo', { orderBy: 'id' }),
+      selectAll(supabaseAdmin, 'test_item_equipment', 'test_item, required_equipment, is_universal', { orderBy: 'test_item' }),
     ])
+  for (const result of [productsRes, ptiRes, testItemsRes, equipRes]) {
+    if (result.error) throw result.error
+  }
 
   const activeTesters = allTesters.filter(t => t.isActive)
   const excludedTesters = activeTesters.filter(t => excludedIds.has(t.id))
