@@ -27,12 +27,14 @@ import {
   NEXT_STAGE, STAGE_ACTION_LABEL, canAdvanceByAdmin,
 } from "@shared/qc-status"
 import type { GroupApproveResult } from "@shared/qc-group-stage"
+import { DELAY_REASON_CATEGORIES, type DelayReasonCategory, type DelayReasonKind } from "@shared/delay-reason"
 import { api, errorMessage } from "@frontend/lib/api-client"
 import {
   GroupTargetConfirmDialog, groupApplyLabel, groupApproveTargets, isGroupActionable,
   useGroupStageResultToast, type JobGroupSummary,
 } from "@frontend/components/common/job-group-stage"
 import { cn } from "@frontend/lib/utils"
+import { DelayReasonDialog } from "@frontend/components/common/delay-reason-dialog"
 import { Button } from "@frontend/components/ui/button"
 import { Input } from "@frontend/components/ui/input"
 import {
@@ -68,6 +70,8 @@ export function JobStatusControl({
   const [manualOpen, setManualOpen] = useState(false)
   const [target, setTarget] = useState<string>("")
   const [reason, setReason] = useState("")
+  const [reasonCategoryId, setReasonCategoryId] = useState("")
+  const [reasonDialogKind, setReasonDialogKind] = useState<DelayReasonKind | null>(null)
   // 서버가 요청과 다른 단계로 맞춘 경우의 안내(지연 해제·재도출)
   const [notice, setNotice] = useState<string | null>(null)
 
@@ -126,12 +130,12 @@ export function JobStatusControl({
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: target, reason }),
+        body: JSON.stringify({ status: target, reason, reasonCategoryId: reasonCategoryId || undefined }),
       })
       const data = await res.json().catch(() => ({})) as { error?: string; message?: string }
       if (!res.ok) throw new Error(data.error ?? "상태 변경 실패")
       setNotice(data.message ?? null)
-      setManualOpen(false); setTarget(""); setReason("")
+      setManualOpen(false); setTarget(""); setReason(""); setReasonCategoryId("")
       setConfirming(false)
       onChanged()
     } catch (e) {
@@ -238,7 +242,7 @@ export function JobStatusControl({
             순서를 벗어난 상태 변경입니다. 사유는 상태 이력에 그대로 남습니다.
           </p>
           <div className="flex flex-col gap-2 sm:flex-row">
-            <Select value={target} onValueChange={setTarget}>
+            <Select value={target} onValueChange={value => { setTarget(value); setReasonCategoryId("") }}>
               <SelectTrigger className="h-9 w-full sm:w-40">
                 <SelectValue placeholder="변경할 상태" />
               </SelectTrigger>
@@ -248,17 +252,23 @@ export function JobStatusControl({
                 ))}
               </SelectContent>
             </Select>
+            {(target === DELAYED_STATUS || status === DELAYED_STATUS) && (
+              <Button type="button" size="sm" variant="outline" className="h-9 w-full sm:w-52" onClick={() => setReasonDialogKind(target === DELAYED_STATUS ? "delay" : "resume")}>
+                {reasonCategoryId ? `${DELAY_REASON_CATEGORIES.find(c => c.id === reasonCategoryId)?.label ?? "분류"} · 사유 수정` : target === DELAYED_STATUS ? "지연 분류·사유 입력" : "복귀 분류·사유 입력"}
+              </Button>
+            )}
             <Input
               value={reason}
               onChange={e => setReason(e.target.value)}
               placeholder="변경 사유 (필수)"
               className="h-9 flex-1"
+              disabled={target === DELAYED_STATUS || status === DELAYED_STATUS}
             />
             <Button
               size="sm"
               className="h-9"
               onClick={() => void applyManual()}
-              disabled={busy || !target || reason.trim().length < 2}
+              disabled={busy || !target || reason.trim().length < 2 || ((target === DELAYED_STATUS || status === DELAYED_STATUS) && !reasonCategoryId)}
             >
               {busy ? <LoaderCircle className="animate-spin" /> : null}적용
             </Button>
@@ -279,6 +289,17 @@ export function JobStatusControl({
           onClose={() => { setGroupConfirm(false); setGroupError(null) }}
         />
       )}
+
+      <DelayReasonDialog
+        open={reasonDialogKind !== null}
+        kind={reasonDialogKind ?? "delay"}
+        onClose={() => setReasonDialogKind(null)}
+        onSubmit={async (category: DelayReasonCategory, value: string) => {
+          setReasonCategoryId(category.id)
+          setReason(value)
+          setReasonDialogKind(null)
+        }}
+      />
 
       {notice && <p className="mt-2 text-xs font-medium text-blue-700 dark:text-blue-300">{notice}</p>}
       {error && <p className="mt-2 text-xs font-medium text-destructive">{error}</p>}

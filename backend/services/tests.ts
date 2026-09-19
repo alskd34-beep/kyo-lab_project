@@ -46,7 +46,7 @@ const CONTRACTOR = '광동제약(주)'
 const STATUS_MAP: Record<string, StatusKey> = {
   대기:     'waiting',     // 배정만 되고 아직 시작 전 — 승인 대기와 다르다
   진행중:   'inprogress',
-  지연:     'inprogress',
+  지연:     'delayed',
   검토전:   'prereview',   // 시험 끝나고 검토 대기
   검토중:   'reviewing',
   승인전:   'pending',     // 검토 끝나고 승인 대기

@@ -16,6 +16,7 @@ import { cn } from "@frontend/lib/utils"
 import { Badge } from "@frontend/components/ui/badge"
 import { Button } from "@frontend/components/ui/button"
 import { Skeleton } from "@frontend/components/ui/skeleton"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@frontend/components/ui/select"
 
 export interface JobStatusHistoryRow {
   id: string
@@ -27,6 +28,9 @@ export interface JobStatusHistoryRow {
   changedByName: string | null
   source: "manual" | "auto" | "system" | "backfill"
   note: string | null
+  reasonCategoryId: string | null
+  reasonCategoryName: string | null
+  attribution: "external" | "internal" | "unknown" | null
   createdAt: string
 }
 
@@ -59,16 +63,21 @@ function StatusChip({ status }: { status: string }) {
 }
 
 export function JobStatusHistory({
-  jobId, reloadKey = 0, className,
+  jobId, reloadKey = 0, className, delayOnly = false, isAdmin = false,
 }: {
   jobId: string | null
   /** 상태를 바꾼 뒤 이 값을 올리면 이력을 다시 읽는다 */
   reloadKey?: number
   className?: string
+  /** 지연 지정·해제만 별도 표시해 상세 상단에 배치한다. */
+  delayOnly?: boolean
+  /** 관리자만 지연 이력의 통제 범위를 수정할 수 있다. */
+  isAdmin?: boolean
 }) {
   const [rows, setRows] = useState<JobStatusHistoryRow[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [savingId, setSavingId] = useState<string | null>(null)
 
   const load = useCallback(async (id: string) => {
     setLoading(true)
@@ -91,13 +100,34 @@ export function JobStatusHistory({
     void load(jobId)
   }, [jobId, reloadKey, load])
 
+  const visibleRows = delayOnly ? rows.filter(r => r.toStatus === "지연" || r.fromStatus === "지연") : rows
+
+  async function updateAttribution(row: JobStatusHistoryRow, attribution: string) {
+    if (!jobId || !isAdmin || row.toStatus !== "지연") return
+    setSavingId(row.id); setError(null)
+    try {
+      const res = await fetch(`/api/qc-jobs/${jobId}/history`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ historyId: row.id, attribution }),
+      })
+      const data = await res.json().catch(() => ({})) as { error?: string }
+      if (!res.ok) throw new Error(data.error ?? "통제 범위를 수정하지 못했습니다.")
+      await load(jobId)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "통제 범위를 수정하지 못했습니다.")
+    } finally {
+      setSavingId(null)
+    }
+  }
+
   return (
     <section className={cn("rounded-md border bg-card p-3 shadow-sm", className)}>
       <div className="flex items-center gap-1.5">
         <History className="size-3.5 text-muted-foreground" />
         <span className="text-xs font-semibold text-foreground">상태 변경 이력</span>
-        {rows.length > 0 && (
-          <Badge variant="secondary" className="tabular-nums">{rows.length}건</Badge>
+        {visibleRows.length > 0 && (
+          <Badge variant="secondary" className="tabular-nums">{visibleRows.length}건</Badge>
         )}
         {jobId && (
           <Button
@@ -125,15 +155,15 @@ export function JobStatusHistory({
         <p className="mt-3 flex items-center justify-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 py-6 text-center text-xs font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
           <TriangleAlert className="size-3.5 text-amber-500" />{error}
         </p>
-      ) : rows.length === 0 ? (
+      ) : visibleRows.length === 0 ? (
         <p className="mt-3 rounded-md border border-dashed py-6 text-center text-xs text-muted-foreground">
           기록된 상태 변경이 없습니다.
         </p>
       ) : (
         <ol className="mt-3 flex flex-col">
-          {rows.map((r, idx) => {
+          {visibleRows.map((r, idx) => {
             const src = SOURCE_META[r.source] ?? SOURCE_META.manual
-            const last = idx === rows.length - 1
+            const last = idx === visibleRows.length - 1
             return (
               <li key={r.id} className="flex gap-2.5">
                 {/* 타임라인 축 */}
@@ -154,6 +184,25 @@ export function JobStatusHistory({
                     )}
                     <StatusChip status={r.toStatus} />
                     <Badge variant="outline" className={cn("text-xs leading-normal", src.cls)}>{src.label}</Badge>
+                    {r.reasonCategoryName && <Badge variant="secondary" className="text-xs leading-normal">{r.reasonCategoryName}</Badge>}
+                    {delayOnly && r.toStatus === "지연" && (
+                      isAdmin ? (
+                        <Select value={r.attribution ?? "unknown"} onValueChange={value => void updateAttribution(r, value)} disabled={savingId === r.id}>
+                          <SelectTrigger className="h-6 w-32 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="external">시험자 통제 밖</SelectItem>
+                            <SelectItem value="internal">시험자 통제 안</SelectItem>
+                            <SelectItem value="unknown">미확인</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Badge variant="outline" className="text-xs leading-normal">
+                          {r.attribution === "external" ? "시험자 통제 밖" : r.attribution === "internal" ? "시험자 통제 안" : "미확인"}
+                        </Badge>
+                      )
+                    )}
                   </div>
                   <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs leading-normal text-muted-foreground">
                     <span className="font-mono tabular-nums">{formatDateTime(r.createdAt)}</span>

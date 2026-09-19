@@ -187,6 +187,9 @@ export function TestDetailDrawer({
             )}
           </section>
 
+          {/* 지연·복귀 사유 — 상태 막대 바로 아래에서 시간순으로 확인한다. */}
+          <JobStatusHistory jobId={row.jobId} reloadKey={reloadKey} delayOnly isAdmin={isAdmin} />
+
           {/* 시험 요약 */}
           <section className="rounded-md border bg-card p-3 shadow-sm">
             <p className="truncate text-sm font-semibold text-foreground">

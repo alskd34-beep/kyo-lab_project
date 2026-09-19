@@ -6,6 +6,7 @@ import { Button } from '@frontend/components/ui/button'
 import { Card, CardContent } from '@frontend/components/ui/card'
 import { Skeleton } from '@frontend/components/ui/skeleton'
 import { DateRangeField } from '@frontend/components/ui/date-range-field'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@frontend/components/ui/select'
 import {
   Table,
   TableBody,
@@ -47,6 +48,7 @@ const ALL_TABS = ['시험현황', '제품시험', '안정성시험', '일탈관�
 const STATUS_CONFIG: Record<StatusKey, { label: string; cls: string }> = {
   waiting:    { label: '시작대기', cls: 'bg-slate-50 text-slate-600 border border-slate-200 dark:bg-muted dark:text-muted-foreground dark:border-border' },
   inprogress: { label: '진행중',   cls: 'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800' },
+  delayed:    { label: '지연',     cls: 'bg-red-50 text-red-700 border border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800' },
   prereview:  { label: '검토대기', cls: 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800' },
   reviewing:  { label: '검토중',   cls: 'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800' },
   // 승인대기는 파랑 램프의 '승인전'이다(types/qc-status.ts STAGE_STYLE 과 같은 값)
@@ -81,6 +83,7 @@ function buildKpis(rows: TestRow[]): KpiItem[] {
     { label: '전체시험', value: String(rows.length),     unit: '건', sub: '조회 기간 전체', accent: 'text-foreground',        bg: 'bg-foreground',  border: 'border' },
     { label: '시작대기', value: String(by('waiting')),    unit: '건', sub: '배정 후 미착수', accent: 'text-muted-foreground',  bg: 'bg-slate-400',   border: 'border' },
     { label: '진행중',   value: String(by('inprogress')), unit: '건', sub: '처리 진행 중',   accent: 'text-blue-600 dark:text-blue-300',   bg: 'bg-blue-500',    border: 'border' },
+    { label: '지연',     value: String(by('delayed')),    unit: '건', sub: '지연 사유 확인 필요', accent: 'text-red-600 dark:text-red-300', bg: 'bg-red-500', border: 'border' },
     { label: '검토',     value: String(by('prereview') + by('reviewing')), unit: '건', sub: '검토대기·검토중', accent: 'text-blue-600 dark:text-blue-300', bg: 'bg-blue-600', border: 'border' },
     { label: '승인대기', value: String(by('pending')),    unit: '건', sub: '검토 후 승인 대기', accent: 'text-blue-800 dark:text-blue-200', bg: 'bg-blue-700',    border: 'border' },
     { label: '완료',     value: String(by('completed')),  unit: '건', sub: '승인 완료',      accent: 'text-blue-900 dark:text-blue-200',   bg: 'bg-blue-800',    border: 'border' },
@@ -150,6 +153,7 @@ export default function TestStatusPage() {
   const [searchValue, setSearchValue]     = useState('')
   const [dateFrom, setDateFrom]           = useState('')
   const [dateTo, setDateTo]               = useState('')
+  const [statusFilter, setStatusFilter]   = useState<StatusKey | 'all'>('all')
 
   useEffect(() => {
     // 서버·클라이언트 타임존 차이로 인한 하이드레이션 불일치를 피하려 마운트 후(클라이언트)에만 기본 기간 설정
@@ -176,6 +180,7 @@ export default function TestStatusPage() {
     if (dateFrom) params.set('from', dateFrom)
     if (dateTo)   params.set('to',   dateTo)
     if (searchValue)     params.set('search', searchValue)
+    if (statusFilter !== 'all') params.set('status', statusFilter)
 
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 데이터 페치(외부 시스템) 시작 시 로딩 표시
     setIsLoading(true)
@@ -198,7 +203,7 @@ export default function TestStatusPage() {
       .finally(() => { if (!cancelled) setIsLoading(false) })
 
     return () => { cancelled = true }
-  }, [dateFrom, dateTo, searchValue, reloadKey])
+  }, [dateFrom, dateTo, searchValue, statusFilter, reloadKey])
 
   const toggleTab = (tab: string) => {
     setPinnedTabs(prev => {
@@ -247,7 +252,7 @@ export default function TestStatusPage() {
   /* 접힌 요약 막대에 남길 한 줄. 일곱 칸을 다 적을 수 없으니 전체 규모와
      지금 손이 가 있는 곳(진행중), 조치가 필요한 곳(부적합)만 남긴다. */
   const kpiAt = (label: string) => kpis.find(k => k.label === label)?.value ?? '0'
-  const kpiSummary = `전체 ${sortedData.length}건 · 진행중 ${kpiAt('진행중')} · 부적합 ${kpiAt('부적합')}`
+  const kpiSummary = `전체 ${sortedData.length}건 · 진행중 ${kpiAt('진행중')} · 지연 ${kpiAt('지연')} · 부적합 ${kpiAt('부적합')}`
 
   const closeTab = (tab: string) => {
     setClosedTabs(prev => {
@@ -438,6 +443,23 @@ export default function TestStatusPage() {
                 <Button size="sm" className="h-7 px-4 text-xs font-medium rounded-md shadow-none">
                   조회
                 </Button>
+
+                <Select value={statusFilter} onValueChange={value => setStatusFilter(value as StatusKey | 'all')}>
+                  <SelectTrigger className="h-7 w-full text-xs sm:w-32">
+                    <SelectValue placeholder="상태 전체" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">상태 전체</SelectItem>
+                    <SelectItem value="waiting">시작대기</SelectItem>
+                    <SelectItem value="inprogress">진행중</SelectItem>
+                    <SelectItem value="delayed">지연</SelectItem>
+                    <SelectItem value="prereview">검토대기</SelectItem>
+                    <SelectItem value="reviewing">검토중</SelectItem>
+                    <SelectItem value="pending">승인대기</SelectItem>
+                    <SelectItem value="completed">완료</SelectItem>
+                    <SelectItem value="fail">부적합</SelectItem>
+                  </SelectContent>
+                </Select>
 
                 <div className="flex items-center gap-1.5 sm:ml-auto">
                   <Button size="sm" variant="outline" className="h-7 gap-1.5 px-3 text-xs text-muted-foreground rounded-md shadow-none">

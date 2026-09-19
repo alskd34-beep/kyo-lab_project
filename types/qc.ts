@@ -12,7 +12,7 @@
  *   reviewing(검토중) / pending(승인전) / completed(승인완료) / fail(부적합)
  */
 export type StatusKey =
-  | 'waiting' | 'inprogress' | 'prereview' | 'reviewing' | 'pending' | 'completed' | 'fail'
+  | 'waiting' | 'inprogress' | 'delayed' | 'prereview' | 'reviewing' | 'pending' | 'completed' | 'fail'
 
 // ─── 테이블 행 ────────────────────────────────────────────────────────────────
 export interface TestRow {
