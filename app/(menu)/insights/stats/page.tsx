@@ -39,6 +39,10 @@ import {
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@frontend/components/ui/table"
 import { Skeleton } from "@frontend/components/ui/skeleton"
 import { TesterAvatar } from "@frontend/lib/tester-profiles"
+import type { TesterPerformanceResponse } from "@shared/tester-performance"
+import { BalanceSection, ContextSection, DelayReasonSection, RecoverySection, ScheduleAdherenceSection } from "@frontend/components/insights/insights-sections"
+import { MetricInfo } from "@frontend/components/insights/metric-info"
+import type { MetricKey } from "@frontend/lib/metric-help"
 
 // ─── 서버 응답(성과) ──────────────────────────────────────────────────────────
 interface EvalTesterRow {
@@ -104,6 +108,10 @@ const fmtPct = (v: number | null) => (v == null ? "—" : `${v}%`)
 /** 분 → "1시간 20분". 동시분석 절감처럼 시간·분이 섞이는 값에 쓴다 */
 const fmtMin = (v: number) => formatMinutes(v, "0분")
 const fmtDay = (v: number | null) => (v == null ? "—" : `${v}일`)
+const metricForColumn: Record<string, MetricKey[]> = {
+  completed: ["completedJobs"], adherenceRate: ["adherence"], avgActualDays: ["avgDays"],
+  test: ["testWork"], side: ["sideWork"], sideRatio: ["sideRatio"], util: ["actualUtilization", "plannedUtilization"],
+}
 
 // ─── 정렬 ─────────────────────────────────────────────────────────────────────
 type SortField =
@@ -156,10 +164,13 @@ export default function OperationAnalysisPage() {
   const [to, setTo] = useState("")
   const [evalData, setEvalData] = useState<EvalData | null>(null)
   const [report, setReport] = useState<OperationReport | null>(null)
+  const [performance, setPerformance] = useState<TesterPerformanceResponse | null>(null)
   const [loading, setLoading] = useState(true)
+  const [settledCount, setSettledCount] = useState(0)
   /** 두 집계는 따로 실패할 수 있다 — 한쪽이 죽어도 나머지는 보여준다 */
   const [perfError, setPerfError] = useState<string | null>(null)
   const [timeError, setTimeError] = useState<string | null>(null)
+  const [performanceError, setPerformanceError] = useState<string | null>(null)
   /**
    * 사용자가 직접 고르기 전에는 null 로 두고, 데이터가 있는 쪽을 연다.
    * 완료 작업이 0건인 기간(지금 운영 DB 가 그렇다)에 '성과' 탭을 기본으로 열면
@@ -192,8 +203,10 @@ export default function OperationAnalysisPage() {
   const load = useCallback(async () => {
     if (!from || !to) return
     setLoading(true)
+    setSettledCount(0)
     setPerfError(null)
     setTimeError(null)
+    setPerformanceError(null)
 
     const get = async (url: string) => {
       const r = await fetch(url, { credentials: "include" })
@@ -202,18 +215,13 @@ export default function OperationAnalysisPage() {
       return json
     }
 
-    // allSettled — 부업무 스키마가 없는 환경에서도 성과 지표는 읽혀야 한다.
-    const [perf, time] = await Promise.allSettled([
-      get(`/api/insights/tester-evaluation?from=${from}&to=${to}`),
-      get(`/api/insights/operation-report?from=${from}&to=${to}`),
-    ])
-
-    if (perf.status === "fulfilled") setEvalData(perf.value as EvalData)
-    else { setEvalData(null); setPerfError(perf.reason instanceof Error ? perf.reason.message : "성과 집계 조회 실패") }
-
-    if (time.status === "fulfilled") setReport(time.value as OperationReport)
-    else { setReport(null); setTimeError(time.reason instanceof Error ? time.reason.message : "시간 배분 집계 조회 실패") }
-
+    // 세 집계를 독립적으로 반영해 가장 빠른 섹션부터 먼저 그린다.
+    const requests = [
+      get(`/api/insights/tester-evaluation?from=${from}&to=${to}`).then(value => setEvalData(value as EvalData)).catch(reason => { setEvalData(null); setPerfError(reason instanceof Error ? reason.message : "성과 집계 조회 실패") }),
+      get(`/api/insights/operation-report?from=${from}&to=${to}`).then(value => setReport(value as OperationReport)).catch(reason => { setReport(null); setTimeError(reason instanceof Error ? reason.message : "시간 배분 집계 조회 실패") }),
+      get(`/api/insights/tester-performance?from=${from}&to=${to}`).then(value => setPerformance(value as TesterPerformanceResponse)).catch(reason => { setPerformance(null); setPerformanceError(reason instanceof Error ? reason.message : "확장 운영 지표 조회 실패") }),
+    ].map(request => request.finally(() => setSettledCount(count => count + 1)))
+    await Promise.all(requests)
     setLoading(false)
   }, [from, to])
 
@@ -282,7 +290,7 @@ export default function OperationAnalysisPage() {
   }, [merged, sortField, sortDir])
 
   /** 어느 한쪽이라도 실적이 있으면 화면을 그린다 — 완료 작업 0건이 곧 '아무 일도 없었다'는 아니다 */
-  const hasData = merged.length > 0
+  const hasData = merged.length > 0 || (performance?.byTester.length ?? 0) > 0
 
   // ── 차트 데이터 ────────────────────────────────────────────────────────────
   // 시간 축은 '시간'으로 환산한다. 분 단위 막대는 4자리가 되어 눈금이 읽히지 않는다.
@@ -348,16 +356,17 @@ export default function OperationAnalysisPage() {
       </header>
 
       {/* 한쪽만 실패한 경우 — 어느 쪽이 빈 것인지 말해 준다. 화면 전체를 막지 않는다 */}
-      {(perfError || timeError) && (
+      {(perfError || timeError || performanceError) && (
         <div className="flex shrink-0 flex-col gap-1.5">
           {perfError && <PartialError label="성과 지표" message={perfError} />}
           {timeError && <PartialError label="시간 배분" message={timeError} />}
+          {performanceError && <PartialError label="확장 운영 지표" message={performanceError} />}
         </div>
       )}
 
-      {loading ? (
+      {loading && settledCount === 0 ? (
         <LoadingSkeleton />
-      ) : !hasData ? (
+      ) : !hasData && settledCount === 3 ? (
         /* 빈 상태에 테두리를 두르지 않는다 — 없는 것을 상자로 강조할 이유가 없다 */
         <div className="shrink-0 px-3 py-16 text-center">
           <p className="text-sm font-medium break-keep text-muted-foreground">이 기간에 집계할 실적이 없습니다.</p>
@@ -371,45 +380,49 @@ export default function OperationAnalysisPage() {
               위 세 칸은 시간 배분, 아래(오른쪽) 세 칸은 성과다. 합친 화면이라는 것이
               맨 윗줄에서 바로 보이도록 두 계열을 나란히 둔다. */}
           <div className="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            <KpiCard
+            <KpiCard metric="testWork"
               icon={<FlaskConical size={16} />}
               label="시험업무"
               value={formatMinutes(timeTotals?.testMinutes, "—")}
               hint={timeTotals ? `시험항목 ${timeTotals.testItems}건` : undefined}
             />
-            <KpiCard
+            <KpiCard metric="sideWork"
               icon={<Wrench size={16} />}
               label="부업무"
               value={formatMinutes(timeTotals?.sideMinutes, "—")}
               hint={timeTotals ? `기록 ${timeTotals.sideCount}건` : undefined}
             />
-            <KpiCard
+            <KpiCard metric="sideRatio"
               icon={<Percent size={16} />}
               label="부업무 비중"
               value={fmtPct(timeTotals?.sideRatio ?? null)}
               hint="전체 기록 시간 중"
               valueClass={ratioTextClass(timeTotals?.sideRatio ?? null)}
             />
-            <KpiCard
+            <KpiCard metric="adherence"
               icon={<CheckCircle2 size={16} />}
               label="공수 준수율"
               value={fmtPct(evalTotals?.adherenceRate ?? null)}
               hint="지정 공수 이내 완료"
               valueClass={rateTextClass(evalTotals?.adherenceRate ?? null)}
             />
-            <KpiCard
+            <KpiCard metric="avgDays"
               icon={<CalendarDays size={16} />}
               label="평균 소요일"
               value={fmtDay(evalTotals?.avgActualDays ?? null)}
               hint="시작~종료 근무일"
             />
-            <KpiCard
+            <KpiCard metric="completedJobs"
               icon={<ChartColumn size={16} />}
               label="완료 작업"
               value={`${evalTotals?.completedJobs ?? timeTotals?.completedJobs ?? 0}건`}
               hint="승인완료 기준"
             />
+            <KpiCard metric="dueCompliance" icon={<CalendarDays size={16} />} label="납기 준수율" value={performance?.totals.dueComplianceRate == null ? "—" : `${performance.totals.dueComplianceRate}%`} hint="납기 이내 완료" />
+            <KpiCard metric="delayRate" icon={<AlertCircle size={16} />} label="지연 발생률" value={performance && performance.fairness.completedJobs >= 3 ? `${Math.round(performance.fairness.delayedCompletedJobs / performance.fairness.completedJobs * 100)}%` : "—"} hint="승인완료 3건 미만 숨김" />
+            <KpiCard metric="avgDelay" icon={<Clock size={16} />} label="평균 지연일" value={performance?.totals.avgDelayDays == null ? "—" : `${performance.totals.avgDelayDays}일`} hint="지연 구간 평균 · 진행 중 별도" />
           </div>
+          {performance && <p className="text-xs leading-normal text-muted-foreground">이 화면은 운영 기록이며 인사 평가 자료가 아닙니다.</p>}
 
           {/* ── 통합 시험자 표 ───────────────────────────────────────────────
               이 화면을 합친 이유가 이 표다. 준수율과 부업무 비중이 한 행에 있어야
@@ -439,23 +452,23 @@ export default function OperationAnalysisPage() {
                       <span className="min-w-0 truncate text-sm font-medium text-foreground">{t.name}</span>
                     </span>
                     <span className={cn("shrink-0 text-sm font-semibold tabular-nums", ratioTextClass(t.sideRatio))}>
-                      부업무 {fmtPct(t.sideRatio)}
+                      부업무 {fmtPct(t.sideRatio)}<MetricInfo metric="sideRatio" />
                     </span>
                   </div>
                   <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs leading-normal tabular-nums text-muted-foreground">
-                    <span>시험 {formatMinutes(t.testMinutes, "0분")}</span>
+                    <span>시험 {formatMinutes(t.testMinutes, "0분")}<MetricInfo metric="testWork" /></span>
                     <span className="text-border">·</span>
-                    <span>부업무 {formatMinutes(t.sideMinutes, "0분")}</span>
+                    <span>부업무 {formatMinutes(t.sideMinutes, "0분")}<MetricInfo metric="sideWork" /></span>
                     <span className="text-border">·</span>
-                    <span>항목 {t.testItems}건</span>
+                    <span>항목 {t.testItems}건<MetricInfo metric="testItemCount" /></span>
                   </div>
                   <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs leading-normal tabular-nums text-muted-foreground">
-                    <span>완료 {t.completed}건</span>
+                    <span>완료 {t.completed}건<MetricInfo metric="completedJobs" /></span>
                     <span className="text-border">·</span>
-                    <span className={rateTextClass(t.adherenceRate)}>준수율 {fmtPct(t.adherenceRate)}</span>
+                    <span className={rateTextClass(t.adherenceRate)}>준수율 {fmtPct(t.adherenceRate)}<MetricInfo metric="adherence" /></span>
                     <span className="text-border">·</span>
-                    <span>평균 {fmtDay(t.avgActualDays)}</span>
-                    <span className="ml-auto">가동률 {fmtPct(t.coverage)}</span>
+                    <span>평균 {fmtDay(t.avgActualDays)}<MetricInfo metric="avgDays" /></span>
+                    <span className="ml-auto">가동률 {fmtPct(t.coverage)}<MetricInfo metric="actualUtilization" /></span>
                   </div>
                 </div>
               ))}
@@ -494,6 +507,7 @@ export default function OperationAnalysisPage() {
                       >
                         <div className={numeric ? "flex justify-end" : undefined}>
                           <SortColumnHeader col={col} sortField={sortField} sortDir={sortDir} onPick={pickSort} />
+                          {(metricForColumn[col.key] ?? []).map(metric => <MetricInfo key={metric} metric={metric} />)}
                         </div>
                       </TableHead>
                     ))}
@@ -552,7 +566,7 @@ export default function OperationAnalysisPage() {
             <section className="flex shrink-0 flex-col gap-2 rounded-md border bg-card p-4">
               <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                 <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-                  <Layers className="size-4 text-primary" />동시분석 효과
+                  <Layers className="size-4 text-primary" />동시분석 효과<MetricInfo metric="concurrent" />
                 </h2>
                 <span className="text-xs leading-normal break-keep text-muted-foreground">
                   묶음 {report.concurrent.groups}개 · 실적 집계 가능 {report.concurrent.groupsWithActual}개
@@ -691,7 +705,8 @@ export default function OperationAnalysisPage() {
               <>
                 <ChartCard
                   title="시험자별 공수 준수율 (%)"
-                  hint="지정 공수 이내에 끝낸 비율 · 90↑ 파랑 / 70↑ 황색 / 그 외 적색"
+                  metric="adherence"
+                  hint="공수가 등록된 완료 작업 중 기준 이내 비율 · 90↑ 파랑 / 70↑ 황색 / 그 외 적색"
                 >
                   <ResponsiveContainer width="100%" height={Math.max(160, perfChartRows.length * 38)}>
                     <BarChart data={perfChartRows} layout="vertical" margin={{ left: 8, right: 24, top: 4, bottom: 4 }}>
@@ -708,6 +723,7 @@ export default function OperationAnalysisPage() {
 
                 <ChartCard
                   title="시험자별 처리량 / 난이도 가중"
+                  metric="weightedThroughput"
                   hint="완료 건수와 난이도 가중(High3·Med2·Low1) 처리량"
                 >
                   <ResponsiveContainer width="100%" height={Math.max(160, perfChartRows.length * 38)}>
@@ -743,6 +759,7 @@ export default function OperationAnalysisPage() {
               <>
                 <ChartCard
                   title="시험자별 시험업무 vs 부업무 (시간)"
+                  metric="testWork"
                   hint={
                     timeChart.length === 0
                       ? "기록된 실측 시간이 없습니다"
@@ -772,6 +789,7 @@ export default function OperationAnalysisPage() {
                 <div className="grid shrink-0 gap-4 lg:grid-cols-2">
                   <ChartCard
                     title="부업무 분류별 소요 (시간)"
+                    metric="sideWork"
                     hint={
                       report.byCategory.length === 0
                         ? "기록된 부업무가 없습니다"
@@ -804,6 +822,7 @@ export default function OperationAnalysisPage() {
 
                   <ChartCard
                     title="일자별 추이 (시간)"
+                    metric="testWork"
                     hint="몰리면 그 주 배정을 줄이고, 고르게 깔리면 1인당 가용 공수를 낮춰 잡아야 한다"
                   >
                     {dailyChart.length === 0 ? (
@@ -812,8 +831,8 @@ export default function OperationAnalysisPage() {
                       <ResponsiveContainer width="100%" height={220}>
                         <BarChart data={dailyChart} margin={{ left: 0, right: 8, top: 4, bottom: 4 }}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-                          <XAxis dataKey="label" tick={{ fontSize: 12, fill: "#64748b" }} minTickGap={24} />
-                          <YAxis tick={{ fontSize: 12, fill: "#64748b" }} unit="h" />
+                          <XAxis dataKey="label" tick={{ fontSize: 13.5, fill: "#64748b" }} minTickGap={24} />
+                          <YAxis tick={{ fontSize: 13.5, fill: "#64748b" }} unit="h" />
                           <Tooltip formatter={(v, n) => [`${v}시간`, n]} cursor={{ fill: "#f8fafc" }} />
                           <Legend
                             wrapperStyle={{ fontSize: "0.75rem" }}
@@ -831,7 +850,7 @@ export default function OperationAnalysisPage() {
                     건수와 총소요를 함께 둬야 "무엇을 얼마나 쳤는가"가 읽힌다. */}
                 <section className="min-w-0 shrink-0 overflow-hidden rounded-md border bg-card">
                   <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b px-4 py-3">
-                    <h2 className="text-sm font-semibold text-foreground">시험 진행 항목</h2>
+                    <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">시험 진행 항목<MetricInfo metric="testWork" /></h2>
                     <p className="text-xs leading-normal break-keep tabular-nums text-muted-foreground">
                       완료된 시험항목 {timeTotals?.testItems ?? 0}건 · 소요 많은 순
                     </p>
@@ -845,10 +864,10 @@ export default function OperationAnalysisPage() {
                       <Table className="text-sm">
                         <TableHeader>
                           <TableRow className="hover:bg-transparent">
-                            <TableHead className="px-3 text-muted-foreground">시험항목</TableHead>
-                            <TableHead className="px-3 text-right text-muted-foreground">진행 건수</TableHead>
-                            <TableHead className="px-3 text-right text-muted-foreground">총 소요</TableHead>
-                            <TableHead className="px-3 text-right text-muted-foreground">평균 소요</TableHead>
+                            <TableHead className="px-3 text-muted-foreground">시험항목<MetricInfo metric="testWork" /></TableHead>
+                            <TableHead className="px-3 text-right text-muted-foreground">진행 건수<MetricInfo metric="testItemCount" /></TableHead>
+                            <TableHead className="px-3 text-right text-muted-foreground">총 소요<MetricInfo metric="totalTestMinutes" /></TableHead>
+                            <TableHead className="px-3 text-right text-muted-foreground">평균 소요<MetricInfo metric="avgTestMinutes" /></TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -873,6 +892,17 @@ export default function OperationAnalysisPage() {
               </>
             )
           )}
+          {performance ? (
+            <div className="flex shrink-0 flex-col gap-4">
+              <ScheduleAdherenceSection data={performance} />
+              <DelayReasonSection data={performance} />
+              <RecoverySection data={performance} />
+              <BalanceSection data={performance} />
+              <ContextSection data={performance} />
+            </div>
+          ) : !performanceError && settledCount > 0 ? (
+            <section className="min-w-0 shrink-0 rounded-md border bg-card p-4"><div className="flex items-center gap-2"><Skeleton className="h-4 w-40" /><Loader2 size={15} className="animate-spin text-muted-foreground" /></div><Skeleton className="mt-4 h-32 w-full" /></section>
+          ) : null}
         </>
       )}
     </div>
@@ -908,13 +938,14 @@ function EmptyPanel({ title, desc }: { title: string; desc: string }) {
  * 의미를 잃는다. 위계는 숫자 크기가 만들고, 색은 경보(준수율·부업무 비중)에만 쓴다.
  */
 function KpiCard({
-  icon, label, value, hint, valueClass,
+  icon, label, value, hint, valueClass, metric,
 }: {
   icon: React.ReactNode
   label: string
   value: string
   hint?: string
   valueClass?: string
+  metric?: import("@frontend/lib/metric-help").MetricKey
 }) {
   return (
     /* 모바일은 라벨·숫자를 한 줄로 눕혀 타일 높이를 절반으로 줄인다 —
@@ -924,6 +955,7 @@ function KpiCard({
         {/* 좁은 칸에서 아이콘 22px 를 빼야 '전체 공수 준수율' 같은 라벨이 잘리지 않는다 */}
         <span className="hidden shrink-0 items-center sm:flex">{icon}</span>
         <span className="min-w-0 truncate" title={label}>{label}</span>
+        {metric && <MetricInfo metric={metric} />}
       </div>
       {/* 320px 2열 격자에서 "125분" 같은 값이 칸을 밀어내지 않게 모바일에서 한 단 줄인다 */}
       <p
@@ -941,19 +973,20 @@ function KpiCard({
 }
 
 function ChartCard({
-  title, hint, children, className,
+  title, hint, children, className, metric,
 }: {
   title: string
   hint?: string
   children: React.ReactNode
   className?: string
+  metric?: MetricKey
 }) {
   return (
     /* overflow-hidden: recharts 는 툴팁을 절대위치 요소로 차트 옆에 남겨 두는데,
        좁은 폭에서 그 요소가 부모의 스크롤 폭을 587px 까지 늘려 페이지가 옆으로 밀렸다.
        카드 안에서 잘라 내면 툴팁 동작은 그대로면서 폭만 갇힌다. */
     <div className={cn("min-w-0 shrink-0 overflow-hidden rounded-md border bg-card p-4", className)}>
-      <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+      <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">{title}{metric && <MetricInfo metric={metric} />}</h2>
       {hint && <p className="mt-0.5 mb-3 text-xs leading-normal break-keep text-muted-foreground">{hint}</p>}
       {children}
     </div>

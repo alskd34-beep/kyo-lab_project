@@ -13,13 +13,23 @@ export async function selectAll(
   client: SupabaseClient,
   table: string,
   columns: string,
-  opts: { orderBy: string | readonly string[] },
-): Promise<{ data: Record<string, unknown>[] | null; error: { message: string } | null }> {
+  opts: {
+    orderBy: string | readonly string[]
+    filters?: readonly { column: string; operator: 'eq' | 'gte' | 'lte' | 'not' | 'in'; value: string | number | boolean | null | readonly string[] }[]
+  },
+): Promise<{ data: Record<string, unknown>[] | null; error: { message: string; code?: string } | null }> {
   const PAGE = 1000
   const all: Record<string, unknown>[] = []
   for (let from = 0; ; from += PAGE) {
     // 호출부가 지정한 실제 컬럼으로만 정렬한다. 복합 PK 테이블은 id 컬럼이 없을 수 있다.
     let query = client.from(table).select(columns)
+    for (const filter of opts.filters ?? []) {
+      if (filter.operator === 'eq') query = query.eq(filter.column, filter.value)
+      else if (filter.operator === 'gte') query = query.gte(filter.column, filter.value)
+      else if (filter.operator === 'lte') query = query.lte(filter.column, filter.value)
+      else if (filter.operator === 'not') query = query.not(filter.column, 'is', filter.value)
+      else query = query.in(filter.column, filter.value as readonly string[])
+    }
     for (const column of typeof opts.orderBy === 'string' ? [opts.orderBy] : opts.orderBy) {
       query = query.order(column, { ascending: true })
     }
