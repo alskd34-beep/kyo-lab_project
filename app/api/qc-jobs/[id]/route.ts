@@ -41,10 +41,14 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       workStartDate?: string | null
       workEndDate?: string | null
       status?: string
+      reasonCategoryId?: string
+      reason?: string
     }
     let statusResult: { from: string; to: string; message?: string } | null = null
     if (body.status !== undefined) {
-      statusResult = await changeJobStatus(id, auth.payload.sub, body.status)
+      statusResult = await changeJobStatus(id, auth.payload.sub, body.status, {
+        reasonCategoryId: body.reasonCategoryId, reason: body.reason,
+      })
     }
     if ('workStartDate' in body || 'workEndDate' in body) {
       await updateJobDates(id, auth.payload.sub, { workStartDate: body.workStartDate, workEndDate: body.workEndDate })

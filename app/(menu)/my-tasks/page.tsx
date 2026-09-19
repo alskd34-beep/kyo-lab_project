@@ -28,6 +28,8 @@ import {
 import { ManagementDrawer } from "@frontend/components/common/management-drawer"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@frontend/components/ui/select"
 import { formatElapsedMinutes, formatItemElapsed } from "@frontend/lib/elapsed-format"
+import { DelayReasonDialog } from "@frontend/components/common/delay-reason-dialog"
+import type { DelayReasonCategory, DelayReasonKind } from "@shared/delay-reason"
 
 interface JobItem {
   id: string; testItemName: string; sequenceOrder: number
@@ -381,6 +383,7 @@ export default function MyTasksPage() {
   const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set())
   const [jobBulkBusy, setJobBulkBusy] = useState(false)
   const [bulkStatus, setBulkStatus] = useState<string>("진행중")
+  const [statusDialog, setStatusDialog] = useState<{ ids: string[]; status: string } | null>(null)
 
   /** 장비 준비상태 모달 상태 */
   const [readinessModal, setReadinessModal] = useState<{
@@ -638,6 +641,10 @@ export default function MyTasksPage() {
   }
 
   const patchJob = async (jobId: string, patch: Record<string, string>) => {
+    if (patch.status && (patch.status === "지연" || jobs.find(j => j.id === jobId)?.status === "지연")) {
+      setStatusDialog({ ids: [jobId], status: patch.status })
+      return
+    }
     try {
       const r = await patchJobCore(jobId, patch)
       await load()
@@ -690,6 +697,10 @@ export default function MyTasksPage() {
   const applyBulkStatus = async () => {
     const ids = activeJobs.filter(j => selectedJobs.has(j.id)).map(j => j.id)
     if (ids.length === 0) return
+    if (bulkStatus === "지연" || ids.some(id => jobs.find(j => j.id === id)?.status === "지연")) {
+      setStatusDialog({ ids, status: bulkStatus })
+      return
+    }
     setJobBulkBusy(true)
     const nameById = new Map(activeJobs.map(j => [j.id, `QC ${j.qcNo}`] as const))
     let ok = 0
@@ -713,6 +724,24 @@ export default function MyTasksPage() {
     } finally {
       setJobBulkBusy(false)
     }
+  }
+
+  const submitStatusDialog = async (category: DelayReasonCategory, reason: string) => {
+    if (!statusDialog) return
+    const ids = statusDialog.ids
+    setJobBulkBusy(true)
+    const failed: string[] = []
+    try {
+      for (const id of ids) {
+        try {
+          await patchJobCore(id, { status: statusDialog.status, reasonCategoryId: category.id, reason })
+        } catch { failed.push(id) }
+      }
+      await load()
+      setSelectedJobs(prev => new Set([...prev].filter(id => !ids.includes(id))))
+      setStatusDialog(null)
+      flash(failed.length ? `${ids.length - failed.length}건 적용 · 실패 ${failed.length}건(상태가 바뀌었거나 설치 안내를 확인하세요)` : `${ids.length}건 '${statusDialog.status}' 적용`, failed.length ? "error" : "info")
+    } finally { setJobBulkBusy(false) }
   }
 
   if (loading) return (
@@ -794,6 +823,7 @@ export default function MyTasksPage() {
 
   return (
     <>
+      {statusDialog && <DelayReasonDialog open kind={(statusDialog.status === "지연" ? "delay" : "resume") as DelayReasonKind} count={statusDialog.ids.length} onClose={() => setStatusDialog(null)} onSubmit={submitStatusDialog} />}
       {readinessModal && (
         <ReadinessModal
           result={readinessModal.result}

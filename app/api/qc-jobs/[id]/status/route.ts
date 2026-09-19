@@ -18,9 +18,9 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   if (!auth.ok) return auth.response
   try {
     const { id } = await ctx.params
-    const body = await req.json().catch(() => ({})) as { status?: string; reason?: string }
+    const body = await req.json().catch(() => ({})) as { status?: string; reason?: string; reasonCategoryId?: string }
     if (!body.status) return Response.json({ error: '변경할 상태를 지정하세요.' }, { status: 400 })
-    const result = await setJobStatusByAdmin(id, auth.payload.sub, body.status, body.reason ?? '')
+    const result = await setJobStatusByAdmin(id, auth.payload.sub, body.status, body.reason ?? '', body.reasonCategoryId)
     return Response.json({ ok: true, ...result })
   } catch (err) {
     const msg = err instanceof Error ? err.message : '서버 오류'

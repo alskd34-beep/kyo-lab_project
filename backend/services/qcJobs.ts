@@ -20,6 +20,7 @@ import {
   METHOD_PARTIAL, listByOrder as listOrderTestItems, activeItemsForSlot, countActiveBySlot,
 } from '@backend/services/pctOrderTestItems'
 import { logJobStatusChange } from '@backend/services/qcJobStatusHistory'
+import { assertDelayReasonCategory, assertDelayReasonSchema } from '@backend/services/delayReasons'
 import {
   PARALLEL_ASSIGN_FEATURE, PARALLEL_ASSIGN_MIGRATION,
   assigneesOfOrderForWrite, isOrderCoAssignee, loadAssigneesByOrder,
@@ -1992,6 +1993,7 @@ export async function clearItem(
  */
 export async function changeJobStatus(
   jobId: string, userSub: string, status: string,
+  reason?: { reasonCategoryId?: string; reason?: string },
 ): Promise<{ from: string; to: string; message?: string }> {
   await assertOwner(jobId, userSub)
   if (!TESTER_STATUS_CHANGE_STATUSES.has(status)) {
@@ -2013,14 +2015,26 @@ export async function changeJobStatus(
   }
   if (current === status) return { from: current, to: status }   // 변경 없음
 
+  const needsDelayReason = status === DELAYED_STATUS || current === DELAYED_STATUS
+  const reasonText = reason?.reason?.trim() ?? ''
+  let reasonCategoryId: string | undefined
+  let attribution: 'external' | 'internal' | 'unknown' | undefined
+  if (needsDelayReason) {
+    await assertDelayReasonSchema()
+    const category = assertDelayReasonCategory(reason?.reasonCategoryId ?? '', status === DELAYED_STATUS ? 'delay' : 'resume')
+    if (reasonText.length < 2) throw new Error('지연·복귀 사유를 2자 이상 입력해 주세요.')
+    reasonCategoryId = category.id
+    attribution = category.attribution
+  }
+
   // F1-3 — 지연 해제는 도출 단계로 복귀
   let target = status
-  let note = '담당자 상태 변경'
+  let note = reasonText || '담당자 상태 변경'
   if (current === DELAYED_STATUS) {
     const derived = await deriveJobStage(jobId)
     if (!derived) throw new Error('작업을 찾을 수 없습니다.')
     target = derived
-    if (derived !== status) note = `담당자 상태 변경 — 항목 상태에 따라 '${derived}' 로 복귀`
+    if (derived !== status) note = `${note} — 항목 상태에 따라 '${derived}' 로 복귀`
   }
 
   const patch: Record<string, unknown> = { status: target }
@@ -2034,7 +2048,7 @@ export async function changeJobStatus(
   await logJobStatusChange({
     jobId, orderId: job.order_id as string,
     fromStatus: current, toStatus: target,
-    changedBy: userSub, source: 'manual', note,
+    changedBy: userSub, source: 'manual', note, reasonCategoryId, attribution,
   })
 
   // 슬랙 알림은 부가 기능이다 — 응답을 붙잡지 않도록 await 하지 않는다.
@@ -2077,6 +2091,7 @@ export async function changeJobStatus(
  */
 export async function setJobStatusByAdmin(
   jobId: string, adminUserSub: string, status: string, reason: string,
+  reasonCategoryId?: string,
 ): Promise<{ from: string; to: string; message?: string }> {
   if (!JOB_STATUSES.includes(status)) {
     throw new Error(`"${status}" 는 작업에 지정할 수 없는 상태입니다.`)
@@ -2091,6 +2106,16 @@ export async function setJobStatusByAdmin(
   if (!before) throw new Error('작업을 찾을 수 없습니다.')
   const current = before.status as string
   if (current === status) return { from: current, to: status }
+
+  const needsDelayReason = status === DELAYED_STATUS || current === DELAYED_STATUS
+  let categoryId: string | undefined
+  let attribution: 'external' | 'internal' | 'unknown' | undefined
+  if (needsDelayReason) {
+    await assertDelayReasonSchema()
+    const category = assertDelayReasonCategory(reasonCategoryId ?? '', status === DELAYED_STATUS ? 'delay' : 'resume')
+    categoryId = category.id
+    attribution = category.attribution
+  }
 
   // F1-6 — 승인완료는 승인전과만 오간다
   if ((status === CLOSED_STAGE && current !== APPROVAL_READY_STATUS)
@@ -2136,6 +2161,7 @@ export async function setJobStatusByAdmin(
     jobId, orderId: updated.order_id as string,
     fromStatus: current, toStatus: target,
     changedBy: adminUserSub, source: 'manual', note: `관리자 직접 변경 — ${note}${restoreNote}`,
+    reasonCategoryId: categoryId, attribution,
   })
 
   // 슬랙 알림은 부가 기능이다 — 응답을 붙잡지 않도록 await 하지 않는다.

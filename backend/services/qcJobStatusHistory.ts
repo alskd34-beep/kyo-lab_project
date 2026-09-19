@@ -10,6 +10,8 @@
  */
 
 import { supabaseAdmin } from '@backend/lib/supabase'
+import type { DelayReasonAttribution } from '@shared/delay-reason'
+import { getDelayReasonCategory } from '@shared/delay-reason'
 
 export type JobStatusSource = 'manual' | 'auto' | 'system' | 'backfill'
 
@@ -23,10 +25,13 @@ export interface JobStatusHistoryRow {
   changedByName: string | null
   source: JobStatusSource
   note: string | null
+  reasonCategoryId: string | null
+  reasonCategoryName: string | null
+  attribution: DelayReasonAttribution | null
   createdAt: string
 }
 
-interface LogInput {
+export interface LogInput {
   jobId: string
   orderId?: string | null
   /** 최초 생성(작업 시작)이면 null */
@@ -36,6 +41,8 @@ interface LogInput {
   changedBy?: string | null
   source?: JobStatusSource
   note?: string | null
+  reasonCategoryId?: string | null
+  attribution?: DelayReasonAttribution | null
 }
 
 /** users.display_name ?? username — 사용자가 지워져도 이력에 남도록 스냅샷으로 저장한다. */
@@ -50,7 +57,7 @@ async function resolveUserName(userId: string): Promise<string | null> {
 export async function logJobStatusChange(input: LogInput): Promise<void> {
   try {
     const changedByName = input.changedBy ? await resolveUserName(input.changedBy) : null
-    const { error } = await supabaseAdmin.from('qc_job_status_history').insert({
+    const payload = {
       qc_job_id: input.jobId,
       order_id: input.orderId ?? null,
       from_status: input.fromStatus ?? null,
@@ -59,7 +66,21 @@ export async function logJobStatusChange(input: LogInput): Promise<void> {
       changed_by_name: changedByName,
       source: input.source ?? 'manual',
       note: input.note ?? null,
-    })
+      reason_category_id: input.reasonCategoryId ?? null,
+      attribution: input.attribution ?? null,
+    }
+    let { error } = await supabaseAdmin.from('qc_job_status_history').insert(payload)
+    // 0058 미적용 환경에서는 기존 상태 전이의 note 기록을 보존한다.
+    if (error && (error.code === 'PGRST204' || error.code === '42703')) {
+      const legacyPayload = {
+        qc_job_id: payload.qc_job_id, order_id: payload.order_id,
+        from_status: payload.from_status, to_status: payload.to_status,
+        changed_by: payload.changed_by, changed_by_name: payload.changed_by_name,
+        source: payload.source, note: payload.note,
+      }
+      const fallback = await supabaseAdmin.from('qc_job_status_history').insert(legacyPayload)
+      error = fallback.error
+    }
     if (error) throw error
   } catch (err) {
     console.error('[qcJobStatusHistory] 이력 적재 실패 — 상태 전이는 그대로 유지됩니다:', input, err)
@@ -78,12 +99,20 @@ function isMissingTable(err: { code?: string; message?: string } | null): boolea
 
 /** 작업 1건의 상태 이력 (오래된 순 — 화면에서 위→아래로 흐름을 읽는다) */
 export async function listJobStatusHistory(jobId: string): Promise<JobStatusHistoryRow[]> {
-  const { data, error } = await supabaseAdmin
+  let { data, error } = await supabaseAdmin
     .from('qc_job_status_history')
-    .select('id, qc_job_id, order_id, from_status, to_status, changed_by, changed_by_name, source, note, created_at')
+    .select('id, qc_job_id, order_id, from_status, to_status, changed_by, changed_by_name, source, note, reason_category_id, attribution, created_at')
     .eq('qc_job_id', jobId)
     .order('created_at', { ascending: true })
   if (error) {
+    // 0058 미적용 환경에서도 기존 상태 이력은 계속 열람한다.
+    if (error.code === 'PGRST204' || error.code === '42703') {
+      const fallback = await supabaseAdmin.from('qc_job_status_history')
+        .select('id, qc_job_id, order_id, from_status, to_status, changed_by, changed_by_name, source, note, created_at')
+        .eq('qc_job_id', jobId).order('created_at', { ascending: true })
+      data = fallback.data?.map(r => ({ ...r, reason_category_id: null, attribution: null })) ?? null
+      error = fallback.error
+    }
     if (isMissingTable(error)) {
       throw new Error('상태 이력 테이블이 아직 없습니다. supabase/migrations/0035_qc_job_status_history.sql 을 적용하세요.')
     }
@@ -99,6 +128,39 @@ export async function listJobStatusHistory(jobId: string): Promise<JobStatusHist
     changedByName: (r.changed_by_name as string) ?? null,
     source: ((r.source as string) ?? 'manual') as JobStatusSource,
     note: (r.note as string) ?? null,
+    reasonCategoryId: (r.reason_category_id as string) ?? null,
+    reasonCategoryName: getDelayReasonCategory((r.reason_category_id as string) ?? '')?.label ?? null,
+    attribution: (r.attribution as DelayReasonAttribution) ?? null,
     createdAt: r.created_at as string,
   }))
+}
+
+/** 관리자가 개별 이력의 attribution을 확인·수정한다. 원래 분류와 note는 보존한다. */
+export async function updateHistoryAttribution(
+  historyId: string,
+  attribution: DelayReasonAttribution,
+  adminUserId: string,
+): Promise<void> {
+  const { data, error } = await supabaseAdmin
+    .from('qc_job_status_history')
+    .select('qc_job_id, order_id, to_status, attribution')
+    .eq('id', historyId).maybeSingle()
+  if (error) throw error
+  if (!data) throw new Error('상태 이력을 찾을 수 없습니다.')
+  if (data.to_status !== '지연') throw new Error('지연 상태 이력만 통제 범위를 수정할 수 있습니다.')
+  if (data.attribution === attribution) return
+  const { error: updateError } = await supabaseAdmin
+    .from('qc_job_status_history').update({ attribution }).eq('id', historyId)
+  if (updateError) throw updateError
+  // 변경 자체도 감사 가능한 상태 이력으로 남긴다. 원래 지연 행은 그대로 보존한다.
+  await logJobStatusChange({
+    jobId: data.qc_job_id as string,
+    orderId: data.order_id as string | null,
+    fromStatus: '지연 사유 attribution',
+    toStatus: '지연 사유 attribution 변경',
+    changedBy: adminUserId,
+    source: 'system',
+    note: `관리자 확인: ${String(data.attribution ?? 'unknown')} → ${attribution}`,
+    attribution,
+  })
 }
