@@ -109,6 +109,7 @@ const NAV_SECTIONS: NavSection[] = [
           // 「운영평가」와 「운영 결과 리포트」를 합친 화면이다(2026-09-08).
           // 둘이 같은 기간·같은 시험자를 두 벌로 재고 '가동률'이 서로 다른 뜻이었다.
           { id: "stats", label: "시험자 운영 분석", adminOnly: true, live: true },
+          { id: "tester-report", label: "연말 성과 보고서", live: true },
           { id: "workload", label: "품목별 시험공수 관리", adminOnly: true, live: true },
         ],
       },
@@ -189,6 +190,7 @@ const PATH_MAP: Record<string, string> = {
   "doc-checklist": "/documents/doc-checklist",
   dash: "/insights/dash",
   stats: "/insights/stats",
+  "tester-report": "/insights/tester-report",
   workload: "/insights/workload",
   // 메뉴에서는 내렸지만 경로는 살아 있다(stats 로 리다이렉트) — 공유된 링크 보호.
   "ins-report": "/insights/ins-report",

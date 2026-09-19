@@ -124,7 +124,8 @@ qc_jobs + qc_job_items 생성 (QC번호 채번 qcNumber.ts)
 - 항목별 시작/완료(`cleared_at`, `elapsed_minutes`), 상태 진행중→검토전→검토중→승인전→승인완료. `qcJobs.ts`, `/api/qc-jobs/*`.
 - **상태 변경 이력**(2026-08-23) — 모든 전이를 `qc_job_status_history` 에 적재(변경자·사유·자동/수동 구분).
   조회 `GET /api/qc-jobs/[id]/history`(관리자 전체·담당자 본인), 관리자 직접 변경 `PATCH /api/qc-jobs/[id]/status`(사유 필수).
-  마이그레이션 `supabase/migrations/0035_qc_job_status_history.sql`.
+  지연·복귀 전이는 분류와 사유를 함께 기록하고 관리자 시험현황에서 지연 건과 이력을 구분해 본다.
+  마이그레이션 `supabase/migrations/0035_qc_job_status_history.sql`, `0058_delay_reason.sql`.
 
 ### 6.5 시험관리 & 기준 설정 (마스터)
 사이드바상 **"시험관리"**(작업/시험 현황·결과·성적서·시험자)와 **"기준 설정"**(마스터) 2개 그룹으로 분리돼 있다.
@@ -132,7 +133,7 @@ qc_jobs + qc_job_items 생성 (QC번호 채번 qcNumber.ts)
 | 화면(라벨) | 경로 | 그룹 | 상태 | 내용 |
 |------|------|------|------|------|
 | 작업 현황 | `/product-test/prod-status` | 시험관리 | ✅ | 작업자별 진행 현황 + **완료 작업 보기**(작업 있는 인원/전체/완료 작업 · 오늘~전체 기간, 작업자당 최근 50건). 카드 클릭 → 작업 상세(시험항목·단계·상태 이력) |
-| 시험현황 | `/test-mgmt/test-status` | 시험관리 | ✅ | 시험 상태 현황(`tests.ts`). 행 클릭 → **미리보기 패널**(요약·시험항목·상태 변경·상태 이력), 관리자는 단계 전이·상태 직접 변경(사유 필수) |
+| 시험현황 | `/test-mgmt/test-status` | 시험관리 | ✅ | 시험 상태 현황(`tests.ts`). 지연 상태를 별도 구분·필터링하고, 행 클릭 → **미리보기 패널**(요약·시험항목·상태 변경·지연·복귀 사유 및 상태 이력), 관리자는 단계 전이·상태 직접 변경(사유 필수) |
 | 시험자 관리 | `/test-mgmt/testers` | 시험관리 | ✅ | 시험자 CRUD, can_solo/can_duo, 역량 매트릭스(Y/N/X/O) |
 | 결과입력 | `/test-mgmt/test-result` | 시험관리 | 🧩 | 화면만 |
 | 성적서관리 | `/test-mgmt/test-cert` | 시험관리 | 🧩 | 화면만 |
@@ -152,7 +153,8 @@ qc_jobs + qc_job_items 생성 (QC번호 채번 qcNumber.ts)
 | 가동/백업/사용현황·예측정비 AI | `/equipment/equip-*` | 🧩 | 화면만 |
 
 ### 6.7 인사이트
-- **시험자 운영평가**(admin) ✅ — 공수 준수율·처리량·가동률. `/insights/stats`, `testerEvaluation.ts`, `/api/insights/tester-evaluation`.
+- **시험자 운영평가**(admin) ✅ — 기존 공수 준수율·평균 소요일·처리량·가동률·부업무 지표에 일정 준수, 지연 발생·사유 구성, 지연 후 만회, 기준 초과일, 휴일 완료, 주업무/부업무 균형을 확장하고 각 지표에 `?` 계산 설명을 제공한다. `/insights/stats`, `testerPerformance.ts`, `/api/insights/tester-performance`.
+- **연말 시험자 성과 보고서** ✅ — 기간·시험자별 운영 기록을 출력한다. 관리자는 전원을 조회하고 시험자는 본인 지표와 팀 평균만 조회한다(`/insights/tester-report`).
 - 대시보드 🧩 `/insights/dash`, 리포트 🧩 `/insights/ins-report`. (Tableau 요약 API `tableau.ts` 보조)
 
 ### 6.8 AI 챗봇 ✅

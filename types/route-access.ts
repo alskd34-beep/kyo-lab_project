@@ -56,5 +56,7 @@ export const ADMIN_ONLY_ROUTES: readonly string[] = [
 
 /** 해당 경로가 관리자 전용인지 — 목록에 있는 경로와 그 하위 경로 전부를 뜻한다. */
 export function isAdminOnlyPath(pathname: string): boolean {
+  // 연말 성과 보고서는 시험자 본인의 보고서와 팀 평균을 허용한다.
+  if (pathname === '/insights/tester-report' || pathname.startsWith('/insights/tester-report/')) return false
   return ADMIN_ONLY_ROUTES.some(base => pathname === base || pathname.startsWith(base + '/'))
 }
